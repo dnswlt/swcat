@@ -146,6 +146,19 @@ func (r *Repository) FindSystems(query string) []*System {
 	return result
 }
 
+func (r *Repository) FindAPIs(query string) []*API {
+	var result []*API
+	for _, a := range r.apis {
+		if strings.Contains(a.GetQName(), query) {
+			result = append(result, a)
+		}
+	}
+	slices.SortFunc(result, func(a1, a2 *API) int {
+		return cmp.Compare(a1.GetQName(), a2.GetQName())
+	})
+	return result
+}
+
 var (
 	validNameRE = regexp.MustCompile("^[A-Za-z_][A-Za-z0-9_-]*$")
 )

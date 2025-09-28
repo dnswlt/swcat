@@ -138,6 +138,8 @@ type API struct {
 func (a *API) GetKind() string        { return a.Kind }
 func (a *API) GetMetadata() *Metadata { return a.Metadata }
 func (a *API) GetQName() string       { return a.Metadata.GetQName() }
+func (a *API) Providers() []string    { return a.Spec.providers }
+func (a *API) Consumers() []string    { return a.Spec.consumers }
 
 // Resource
 

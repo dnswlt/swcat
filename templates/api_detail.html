@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    {{ template "head.html" }}
+</head>
+
+<body class="min-h-screen bg-gray-50 p-4" data-page="api">
+    <!-- Navbar -->
+    {{template "nav.html" .}}
+
+    <main class="w-full max-w-screen-lg mx-auto space-y-6 bg-white shadow rounded-xl p-6">
+        <h1 class="text-2xl font-semibold text-center">API Details</h1>
+
+        {{ with .API }}
+        <div class="space-y-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-semibold">{{ .Metadata.Name }}</h2>
+                <span class="text-gray-500">{{ .Spec.Type }}</span>
+            </div>
+            <p class="text-gray-700">{{ .Metadata.Description }}</p>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <h3 class="font-semibold">Owner</h3>
+                    <p>{{ .Spec.Owner }}</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold">Lifecycle</h3>
+                    <p>{{ .Spec.Lifecycle }}</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold">System</h3>
+                    <p><a href="/ui/systems/{{ .Spec.System }}" class="text-blue-600 hover:underline">{{ .Spec.System }}</a></p>
+                </div>
+            </div>
+            <div>
+                <h3 class="font-semibold">Definition</h3>
+                <pre class="bg-gray-100 p-4 rounded-md">{{ .Spec.Definition }}</pre>
+            </div>
+        </div>
+
+        {{ if .Providers }}
+        <div>
+            <h3 class="text-lg font-semibold">Providers</h3>
+            <ul class="list-disc list-inside">
+                {{ range .Providers }}
+                <li><a href="/ui/components/{{ . }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                {{ end }}
+            </ul>
+        </div>
+        {{ end }}
+
+        {{ if .Consumers }}
+        <div>
+            <h3 class="text-lg font-semibold">Consumers</h3>
+            <ul class="list-disc list-inside">
+                {{ range .Consumers }}
+                <li><a href="/ui/components/{{ . }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                {{ end }}
+            </ul>
+        </div>
+        {{ end }}
+
+        {{ else }}
+        <p class="text-center text-gray-500">API not found</p>
+        {{ end }}
+
+    </main>
+
+    <script type="module" src="/static/dist/main.js"></script>
+
+</body>
+
+</html>

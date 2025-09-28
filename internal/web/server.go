@@ -145,6 +145,32 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 	s.serveHTMLPage(w, r, "component_detail.html", params)
 }
 
+func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
+	params := map[string]any{}
+	q := r.URL.Query()
+	apis := s.repo.FindAPIs(q.Get("q"))
+	params["APIs"] = apis
+
+	if r.Header.Get("HX-Request") == "true" {
+		// htmx request: only render rows
+		s.serveHTMLPage(w, r, "apis_rows.html", params)
+		return
+	}
+	// full page
+	s.serveHTMLPage(w, r, "apis.html", params)
+}
+
+func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) {
+	params := map[string]any{}
+	api := s.repo.API(apiID)
+	if api == nil {
+		http.Error(w, "Invalid API", http.StatusBadRequest)
+		return
+	}
+	params["API"] = api
+	s.serveHTMLPage(w, r, "api_detail.html", params)
+}
+
 func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateFile string, params map[string]any) {
 	var output bytes.Buffer
 
@@ -196,7 +222,11 @@ func (s *Server) Serve() error {
 		s.serveHTMLPage(w, r, "resources.html", nil)
 	})
 	mux.HandleFunc("GET /ui/apis", func(w http.ResponseWriter, r *http.Request) {
-		s.serveHTMLPage(w, r, "apis.html", nil)
+		s.serveAPIs(w, r)
+	})
+	mux.HandleFunc("GET /ui/apis/{apiID}", func(w http.ResponseWriter, r *http.Request) {
+		apiID := r.PathValue("apiID")
+		s.serveAPI(w, r, apiID)
 	})
 
 	// Health check. Useful for cloud deployments.
