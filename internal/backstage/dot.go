@@ -33,15 +33,35 @@ func runDot(ctx context.Context, dotSource string) ([]byte, error) {
 		return output, fmt.Errorf("dot failed: %w; output: %s", err, output)
 	}
 
+	// Cut off <?xml ?> header and only return the <svg>
+	if idx := bytes.Index(output, []byte("<svg")); idx > 0 {
+		output = output[idx:]
+	}
+
 	return output, nil
 }
 
 type DotNode struct {
-	QName     string
-	Kind      string
-	Label     string
-	FillColor string
-	Shape     string
+	QName string
+	Kind  string
+	Label string
+	Shape string
+}
+
+func (n *DotNode) FillColor() string {
+	switch n.Kind {
+	case "component":
+		return "lightblue"
+	case "system":
+		return "lightsteelblue"
+	case "api":
+		return "plum"
+	case "resource":
+		return "azure"
+	case "group":
+		return "sandybrown"
+	}
+	return "lightgray"
 }
 
 type DotEdge struct {
@@ -88,7 +108,7 @@ func (dw *DotWriter) addNode(node DotNode) {
 		node.Shape = "box"
 	}
 	fmt.Fprintf(dw.w, `"%s"[id="%s:%s",label="%s",fillcolor="%s",shape="%s",class="clickable-node"]`,
-		node.QName, node.Kind, node.QName, node.Label, node.FillColor, node.Shape)
+		node.QName, node.Kind, node.QName, node.Label, node.FillColor(), node.Shape)
 	fmt.Fprintln(dw.w)
 	dw.nodes[node.QName] = true
 }
@@ -115,7 +135,7 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	dw.start()
 
 	// Component
-	dw.addNode(DotNode{QName: qn, Kind: "component", Label: qn, FillColor: "lightblue"})
+	dw.addNode(DotNode{QName: qn, Kind: "component", Label: qn})
 
 	// "Incoming" dependencies
 	// - Owner
@@ -125,19 +145,19 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	owner := r.Group(component.Spec.Owner)
 	if owner != nil {
 		ownerQn := owner.GetQName()
-		dw.addNode(DotNode{QName: ownerQn, Kind: "group", Label: ownerQn, FillColor: "sandybrown", Shape: "ellipse"})
+		dw.addNode(DotNode{QName: ownerQn, Kind: "group", Label: ownerQn, Shape: "ellipse"})
 		dw.addEdge(DotEdge{From: ownerQn, To: qn})
 	}
 	system := r.System(component.Spec.System)
 	if system != nil {
 		systemQn := system.GetQName()
-		dw.addNode(DotNode{QName: systemQn, Kind: "system", Label: systemQn, FillColor: "lightsteelblue"})
+		dw.addNode(DotNode{QName: systemQn, Kind: "system", Label: systemQn})
 		dw.addEdge(DotEdge{From: systemQn, To: qn})
 	}
 	for _, a := range component.Spec.ProvidesAPIs {
 		api := r.API(a)
 		apiQn := api.GetQName()
-		dw.addNode(DotNode{QName: apiQn, Kind: "api", Label: apiQn, FillColor: "plum"})
+		dw.addNode(DotNode{QName: apiQn, Kind: "api", Label: apiQn})
 		dw.addEdge(DotEdge{From: apiQn, To: qn, Style: "provides"})
 	}
 	for _, d := range component.Spec.dependents {
@@ -145,11 +165,11 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 		switch x := e.(type) {
 		case *Component:
 			xQn := x.GetQName()
-			dw.addNode(DotNode{QName: xQn, Kind: "component", Label: xQn, FillColor: "lightblue"})
+			dw.addNode(DotNode{QName: xQn, Kind: "component", Label: xQn})
 			dw.addEdge(DotEdge{From: xQn, To: qn})
 		case *Resource:
 			xQn := x.GetQName()
-			dw.addNode(DotNode{QName: xQn, Kind: "resource", Label: xQn, FillColor: "azure"})
+			dw.addNode(DotNode{QName: xQn, Kind: "resource", Label: xQn})
 			dw.addEdge(DotEdge{From: xQn, To: qn})
 		}
 	}
@@ -160,7 +180,7 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	for _, a := range component.Spec.ConsumesAPIs {
 		api := r.API(a)
 		apiQn := api.GetQName()
-		dw.addNode(DotNode{QName: apiQn, Kind: "api", Label: apiQn, FillColor: "plum"})
+		dw.addNode(DotNode{QName: apiQn, Kind: "api", Label: apiQn})
 		dw.addEdge(DotEdge{From: qn, To: apiQn})
 	}
 	for _, d := range component.Spec.DependsOn {
@@ -168,11 +188,11 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 		switch x := e.(type) {
 		case *Component:
 			xQn := x.GetQName()
-			dw.addNode(DotNode{QName: xQn, Kind: "component", Label: xQn, FillColor: "lightblue"})
+			dw.addNode(DotNode{QName: xQn, Kind: "component", Label: xQn})
 			dw.addEdge(DotEdge{From: qn, To: xQn})
 		case *Resource:
 			xQn := x.GetQName()
-			dw.addNode(DotNode{QName: xQn, Kind: "resource", Label: xQn, FillColor: "azure"})
+			dw.addNode(DotNode{QName: xQn, Kind: "resource", Label: xQn})
 			dw.addEdge(DotEdge{From: qn, To: xQn})
 		}
 	}
@@ -181,15 +201,6 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	output, err := runDot(ctx, dw.String())
-	if err != nil {
-		return nil, err
-	}
-	// Cut off <?xml ?> header and only return the <svg>
-	if idx := bytes.Index(output, []byte("<svg")); idx > 0 {
-		output = output[idx:]
-	}
-
-	return output, nil
+	return runDot(ctx, dw.String())
 
 }

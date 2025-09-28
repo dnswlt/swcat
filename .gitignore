@@ -1,5 +1,5 @@
 catalogs/
 /web/node_modules/
-/web/dist/
-/web/.vite/
+/static/dist/
+/static/.vite/
 swcat
