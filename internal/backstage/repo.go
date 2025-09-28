@@ -133,6 +133,19 @@ func (r *Repository) FindComponents(query string) []*Component {
 	return result
 }
 
+func (r *Repository) FindSystems(query string) []*System {
+	var result []*System
+	for _, s := range r.systems {
+		if strings.Contains(s.GetQName(), query) {
+			result = append(result, s)
+		}
+	}
+	slices.SortFunc(result, func(s1, s2 *System) int {
+		return cmp.Compare(s1.GetQName(), s2.GetQName())
+	})
+	return result
+}
+
 var (
 	validNameRE = regexp.MustCompile("^[A-Za-z_][A-Za-z0-9_-]*$")
 )
@@ -219,6 +232,11 @@ func (r *Repository) Validate() error {
 		if s.Lifecycle == "" {
 			return fmt.Errorf("API %s has no spec.lifecycle", qn)
 		}
+		if s.System != "" {
+			if system := r.System(s.System); system == nil {
+				return fmt.Errorf("system %q for API %s is undefined", s.System, qn)
+			}
+		}
 		if g := r.Group(s.Owner); g == nil {
 			return fmt.Errorf("owner %q for API %s is undefined", s.Owner, qn)
 		}
@@ -285,13 +303,13 @@ func (r *Repository) Validate() error {
 	}
 
 	// Validation succeeded: populated computed fields
-	r.populateDependents()
+	r.populateRelationships()
 	return nil
 }
 
-// populateDependents populates the .dependents fields of entities.
+// populateRelationships populates the "inverse relationship" fields of entities.
 // Assumes that the repository has been validated already.
-func (r *Repository) populateDependents() {
+func (r *Repository) populateRelationships() {
 
 	registerDependent := func(entityRef, depName string) {
 		dep := r.Entity(depName)
@@ -317,6 +335,10 @@ func (r *Repository) populateDependents() {
 			api := r.API(a)
 			api.Spec.providers = append(api.Spec.providers, qn)
 		}
+		if s := c.Spec.System; s != "" {
+			system := r.System(s)
+			system.Spec.components = append(system.Spec.components, qn)
+		}
 
 		// Register in "DependsOn" dependencies.
 		for _, d := range c.Spec.DependsOn {
@@ -327,9 +349,22 @@ func (r *Repository) populateDependents() {
 	// Resources
 	for _, res := range r.resources {
 		qn := res.GetQName()
+		if s := res.Spec.System; s != "" {
+			system := r.System(s)
+			system.Spec.resources = append(system.Spec.resources, qn)
+		}
 		// Register in "DependsOn" dependencies.
 		for _, d := range res.Spec.DependsOn {
 			registerDependent("resource:"+qn, d)
+		}
+	}
+
+	// APIs
+	for _, api := range r.apis {
+		qn := api.GetQName()
+		if s := api.Spec.System; s != "" {
+			system := r.System(s)
+			system.Spec.apis = append(system.Spec.apis, qn)
 		}
 	}
 

@@ -99,6 +99,33 @@ func (s *Server) serveComponents(w http.ResponseWriter, r *http.Request) {
 	s.serveHTMLPage(w, r, "components.html", params)
 }
 
+func (s *Server) serveSystems(w http.ResponseWriter, r *http.Request) {
+	params := map[string]any{}
+	q := r.URL.Query()
+	systems := s.repo.FindSystems(q.Get("q"))
+	params["Systems"] = systems
+
+	if r.Header.Get("HX-Request") == "true" {
+		// htmx request: only render rows
+		s.serveHTMLPage(w, r, "systems_rows.html", params)
+		return
+	}
+	// full page
+	s.serveHTMLPage(w, r, "systems.html", params)
+}
+
+func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID string) {
+	params := map[string]any{}
+	system := s.repo.System(systemID)
+	if system == nil {
+		http.Error(w, "Invalid system", http.StatusBadRequest)
+		return
+	}
+	params["System"] = system
+	params["Components"] = system.Components()
+	s.serveHTMLPage(w, r, "system_detail.html", params)
+}
+
 func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componentID string) {
 	params := map[string]any{}
 	component := s.repo.Component(componentID)
@@ -150,7 +177,11 @@ func (s *Server) Serve() error {
 
 	// APIs / Components / Systems pages
 	mux.HandleFunc("GET /ui/systems", func(w http.ResponseWriter, r *http.Request) {
-		s.serveHTMLPage(w, r, "systems.html", nil)
+		s.serveSystems(w, r)
+	})
+	mux.HandleFunc("GET /ui/systems/{systemID}", func(w http.ResponseWriter, r *http.Request) {
+		systemID := r.PathValue("systemID")
+		s.serveSystem(w, r, systemID)
 	})
 	mux.HandleFunc("GET /ui/components", func(w http.ResponseWriter, r *http.Request) {
 		s.serveComponents(w, r)

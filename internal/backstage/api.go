@@ -74,6 +74,10 @@ type SystemSpec struct {
 	Owner  string `yaml:"owner"`
 	Domain string `yaml:"domain"`
 	Type   string `yaml:"type"`
+
+	components []string
+	apis       []string
+	resources  []string
 }
 
 type System struct {
@@ -86,6 +90,9 @@ type System struct {
 func (s *System) GetKind() string        { return s.Kind }
 func (s *System) GetMetadata() *Metadata { return s.Metadata }
 func (s *System) GetQName() string       { return s.Metadata.GetQName() }
+func (s *System) Components() []string   { return s.Spec.components }
+func (s *System) APIs() []string         { return s.Spec.apis }
+func (s *System) Resources() []string    { return s.Spec.resources }
 
 // Domain
 
