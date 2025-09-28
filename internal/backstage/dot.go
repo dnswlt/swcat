@@ -36,6 +36,73 @@ func runDot(ctx context.Context, dotSource string) ([]byte, error) {
 	return output, nil
 }
 
+type DotNode struct {
+	QName     string
+	Kind      string
+	Label     string
+	FillColor string
+	Shape     string
+}
+
+type DotEdge struct {
+	From  string
+	To    string
+	Style string
+}
+
+type DotWriter struct {
+	w     *strings.Builder
+	nodes map[string]bool
+}
+
+func NewDotWriter() *DotWriter {
+	return &DotWriter{
+		w:     &strings.Builder{},
+		nodes: make(map[string]bool),
+	}
+}
+
+func (dw *DotWriter) start() {
+	dw.w.WriteString("digraph {\n")
+	dw.w.WriteString("rankdir=\"LR\"\n")
+	dw.w.WriteString("fontname=\"sans-serif\"\n")
+	dw.w.WriteString("splines=\"spline\"\n")
+	dw.w.WriteString("fontsize=\"11\"\n")
+	dw.w.WriteString("node[shape=\"box\",fontname=\"sans-serif\",fontsize=\"11\",style=\"filled,rounded\"]\n")
+	dw.w.WriteString("edge[fontname=\"sans-serif\",fontsize=\"11\",minlen=\"4\"]\n")
+}
+
+func (dw *DotWriter) end() {
+	dw.w.WriteString("}\n")
+}
+
+func (dw *DotWriter) String() string {
+	return dw.w.String()
+}
+
+func (dw *DotWriter) addNode(node DotNode) {
+	if dw.nodes[node.QName] {
+		return
+	}
+	if node.Shape == "" {
+		node.Shape = "box"
+	}
+	fmt.Fprintf(dw.w, `"%s"[id="%s:%s",label="%s",fillcolor="%s",shape="%s",class="clickable-node"]`,
+		node.QName, node.Kind, node.QName, node.Label, node.FillColor, node.Shape)
+	fmt.Fprintln(dw.w)
+	dw.nodes[node.QName] = true
+}
+
+func (dw *DotWriter) addEdge(edge DotEdge) {
+	switch edge.Style {
+	case "provides":
+		fmt.Fprintf(dw.w, `"%s" -> "%s"[dir="back",arrowtail="empty"]`, edge.From, edge.To)
+	default:
+		fmt.Fprintf(dw.w, `"%s" -> "%s"`, edge.From, edge.To)
+	}
+	fmt.Fprintln(dw.w)
+}
+
 // GenerateComponentSVG generates an SVG for the given component.
 func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	component := r.Component(name)
@@ -44,16 +111,11 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	}
 	qn := component.GetQName()
 
-	var sb strings.Builder
-	sb.WriteString(`digraph {`)
-	sb.WriteString(`rankdir="LR"`)
-	sb.WriteString(`fontname="sans-serif"`)
-	sb.WriteString(`splines="spline"`)
-	sb.WriteString(`fontsize="11"`)
-	sb.WriteString(`node[shape="box",fontname="sans-serif",fontsize="11",style="filled,rounded"]`)
-	sb.WriteString(`edge[fontname="sans-serif",fontsize="11",minlen="4"]`)
+	dw := NewDotWriter()
+	dw.start()
+
 	// Component
-	fmt.Fprintf(&sb, `"%s"[id="%s",label="%s",fillcolor="lightblue"]`, qn, qn, qn)
+	dw.addNode(DotNode{QName: qn, Kind: "component", Label: qn, FillColor: "lightblue"})
 
 	// "Incoming" dependencies
 	// - Owner
@@ -63,32 +125,32 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	owner := r.Group(component.Spec.Owner)
 	if owner != nil {
 		ownerQn := owner.GetQName()
-		fmt.Fprintf(&sb, `"%s"[id="%s",label="%s",fillcolor="sandybrown",shape="ellipse"]`, ownerQn, ownerQn, ownerQn)
-		fmt.Fprintf(&sb, `"%s" -> "%s"`, ownerQn, qn)
+		dw.addNode(DotNode{QName: ownerQn, Kind: "group", Label: ownerQn, FillColor: "sandybrown", Shape: "ellipse"})
+		dw.addEdge(DotEdge{From: ownerQn, To: qn})
 	}
 	system := r.System(component.Spec.System)
 	if system != nil {
 		systemQn := system.GetQName()
-		fmt.Fprintf(&sb, `"%s"[id="%s",label="%s",fillcolor="lightsteelblue"]`, systemQn, systemQn, systemQn)
-		fmt.Fprintf(&sb, `"%s" -> "%s"`, systemQn, qn)
+		dw.addNode(DotNode{QName: systemQn, Kind: "system", Label: systemQn, FillColor: "lightsteelblue"})
+		dw.addEdge(DotEdge{From: systemQn, To: qn})
 	}
 	for _, a := range component.Spec.ProvidesAPIs {
 		api := r.API(a)
 		apiQn := api.GetQName()
-		fmt.Fprintf(&sb, `"%s"[id="%s",label="%s",fillcolor="plum"]`, apiQn, apiQn, apiQn)
-		fmt.Fprintf(&sb, `"%s" -> "%s"[dir="back",arrowtail="empty"]`, apiQn, qn)
+		dw.addNode(DotNode{QName: apiQn, Kind: "api", Label: apiQn, FillColor: "plum"})
+		dw.addEdge(DotEdge{From: apiQn, To: qn, Style: "provides"})
 	}
 	for _, d := range component.Spec.dependents {
 		e := r.Entity(d)
 		switch x := e.(type) {
 		case *Component:
 			xQn := x.GetQName()
-			fmt.Fprintf(&sb, `"%s"[id="%s",label="%s",fillcolor="lightblue"]`, xQn, xQn, xQn)
-			fmt.Fprintf(&sb, `"%s" -> "%s"`, xQn, qn)
+			dw.addNode(DotNode{QName: xQn, Kind: "component", Label: xQn, FillColor: "lightblue"})
+			dw.addEdge(DotEdge{From: xQn, To: qn})
 		case *Resource:
 			xQn := x.GetQName()
-			fmt.Fprintf(&sb, `"%s"[id="%s",label="%s",fillcolor="azure"]`, xQn, xQn, xQn)
-			fmt.Fprintf(&sb, `"%s" -> "%s"`, xQn, qn)
+			dw.addNode(DotNode{QName: xQn, Kind: "resource", Label: xQn, FillColor: "azure"})
+			dw.addEdge(DotEdge{From: xQn, To: qn})
 		}
 	}
 
@@ -98,28 +160,28 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	for _, a := range component.Spec.ConsumesAPIs {
 		api := r.API(a)
 		apiQn := api.GetQName()
-		fmt.Fprintf(&sb, `"%s"[id="%s",label="%s",fillcolor="plum"]`, apiQn, apiQn, apiQn)
-		fmt.Fprintf(&sb, `"%s" -> "%s"[dir="back",arrowtail="empty"]`, qn, apiQn)
+		dw.addNode(DotNode{QName: apiQn, Kind: "api", Label: apiQn, FillColor: "plum"})
+		dw.addEdge(DotEdge{From: qn, To: apiQn})
 	}
 	for _, d := range component.Spec.DependsOn {
 		e := r.Entity(d)
 		switch x := e.(type) {
 		case *Component:
 			xQn := x.GetQName()
-			fmt.Fprintf(&sb, `"%s"[id="%s",label="%s",fillcolor="lightblue"]`, xQn, xQn, xQn)
-			fmt.Fprintf(&sb, `"%s" -> "%s"`, qn, xQn)
+			dw.addNode(DotNode{QName: xQn, Kind: "component", Label: xQn, FillColor: "lightblue"})
+			dw.addEdge(DotEdge{From: qn, To: xQn})
 		case *Resource:
 			xQn := x.GetQName()
-			fmt.Fprintf(&sb, `"%s"[id="%s",label="%s",fillcolor="azure"]`, xQn, xQn, xQn)
-			fmt.Fprintf(&sb, `"%s" -> "%s"`, qn, xQn)
+			dw.addNode(DotNode{QName: xQn, Kind: "resource", Label: xQn, FillColor: "azure"})
+			dw.addEdge(DotEdge{From: qn, To: xQn})
 		}
 	}
 
-	sb.WriteString("}")
+	dw.end()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	output, err := runDot(ctx, sb.String())
+	output, err := runDot(ctx, dw.String())
 	if err != nil {
 		return nil, err
 	}

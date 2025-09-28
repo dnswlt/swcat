@@ -5,15 +5,40 @@ function addSVGListener() {
     if (!svg) return;
 
     svg.addEventListener("click", e => {
-        const el = e.target.closest("[id]");
+        const el = e.target.closest(".clickable-node");
         if (!el) return;
 
-        const query = new URLSearchParams(window.location.search);
-        query.set("highlight", el.id);
+        const id = el.id;
+        if (!id) return;
 
-        htmx.ajax("GET",
-            window.location.pathname + "?" + query.toString(),
-            { target: "#component-view", swap: "innerHTML", pushUrl: true });
+        const parts = id.split(":");
+        if (parts.length !== 2) return;
+
+        const kind = parts[0];
+        const name = parts[1];
+
+        if (!kind || !name) return;
+
+        let path = "";
+        switch (kind) {
+            case "component":
+                path = "/ui/components/";
+                break;
+            case "resource":
+                path = "/ui/resources/";
+                break;
+            case "api":
+                path = "/ui/apis/";
+                break;
+            case "system":
+                path = "/ui/systems/";
+                break;
+            default:
+                console.log(`Unhandled kind ${kind} in SVG.`);
+                return;
+        }
+
+        window.location.href = path + encodeURIComponent(name);
     });
 }
 
@@ -28,7 +53,11 @@ switch (page) {
     case 'components':
     case 'component':
     case 'systems':
+    case 'system':
     case 'apis':
+    case 'api':
+    case 'resources':
+    case 'resource':
         initPage();
         break;
     default:
