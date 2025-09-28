@@ -19,7 +19,7 @@ func main() {
 	// We need dot to render SVG graphs.
 	path, err := exec.LookPath("dot")
 	if err != nil {
-		log.Fatalf("dot was not found in your PATH")
+		log.Fatalf("dot was not found in your PATH. Please install Graphviz and add it to the PATH.")
 	}
 	log.Printf("Found dot program at %s", path)
 

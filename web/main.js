@@ -64,6 +64,8 @@ switch (page) {
     case 'api':
     case 'resources':
     case 'resource':
+    case 'groups':
+    case 'group':
         initPage();
         break;
     default:

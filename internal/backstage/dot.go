@@ -170,22 +170,102 @@ func GenerateSystemSVG(r *Repository, name string) ([]byte, error) {
 	dw := NewDotWriter()
 	dw.start()
 
+	type extDep struct {
+		source       Entity
+		targetSystem string
+		direction    string // "incoming" or "outgoing"
+	}
+	var externalDeps []extDep
+
 	dw.startCluster(name)
 
+	// Components
 	for _, c := range system.Components() {
 		comp := r.Component(c)
 		dw.addNode(DotNode{QName: comp.GetQName(), Kind: "component", Label: comp.GetQName()})
+
+		// Add links to external systems of which the component consumes APIs.
+		for _, a := range comp.Spec.ConsumesAPIs {
+			api := r.API(a)
+			if api.GetSystem() != comp.GetSystem() {
+				externalDeps = append(externalDeps, extDep{
+					source: comp, targetSystem: api.GetSystem(), direction: "outgoing",
+				})
+			}
+		}
+		// Add links for direct dependencies of the component.
+		for _, d := range comp.Spec.DependsOn {
+			entity := r.Entity(d)
+			if se, ok := entity.(SystemPart); ok && se.GetSystem() != comp.GetSystem() {
+				externalDeps = append(externalDeps, extDep{
+					source: comp, targetSystem: se.GetSystem(), direction: "outgoing",
+				})
+			}
+		}
+		// Add links for direct dependents of the component.
+		for _, d := range comp.Spec.dependents {
+			entity := r.Entity(d)
+			if se, ok := entity.(SystemPart); ok && se.GetSystem() != comp.GetSystem() {
+				externalDeps = append(externalDeps, extDep{
+					source: comp, targetSystem: se.GetSystem(), direction: "incoming",
+				})
+			}
+		}
 	}
+
+	// APIs
 	for _, a := range system.APIs() {
 		api := r.API(a)
 		dw.addNode(DotNode{QName: api.GetQName(), Kind: "api", Label: api.GetQName()})
+
+		// Add links for consumers of any API of this system.
+		for _, c := range api.Spec.consumers {
+			consumer := r.Component(c)
+			if consumer.GetSystem() != api.GetSystem() {
+				externalDeps = append(externalDeps, extDep{
+					source: api, targetSystem: consumer.GetSystem(), direction: "incoming",
+				})
+
+			}
+		}
 	}
+
+	// Resources
 	for _, res := range system.Resources() {
 		resource := r.Resource(res)
 		dw.addNode(DotNode{QName: resource.GetQName(), Kind: "resource", Label: resource.GetQName()})
+
+		// Add links to external systems that the resource depends on.
+		for _, d := range resource.Spec.DependsOn {
+			entity := r.Entity(d)
+			if se, ok := entity.(SystemPart); ok && se.GetSystem() != resource.GetSystem() {
+				externalDeps = append(externalDeps, extDep{
+					source: resource, targetSystem: se.GetSystem(), direction: "outgoing",
+				})
+			}
+		}
+		// Add links for direct dependents of the resource.
+		for _, d := range resource.Spec.dependents {
+			entity := r.Entity(d)
+			if se, ok := entity.(SystemPart); ok && se.GetSystem() != resource.GetSystem() {
+				externalDeps = append(externalDeps, extDep{
+					source: resource, targetSystem: se.GetSystem(), direction: "incoming",
+				})
+			}
+		}
 	}
 
 	dw.endCluster()
+
+	// Draw edges for all collected external dependencies
+	for _, extDep := range externalDeps {
+		dw.addNode(DotNode{QName: extDep.targetSystem, Kind: "system", Label: extDep.targetSystem})
+		if extDep.direction == "outgoing" {
+			dw.addEdge(DotEdge{From: extDep.source.GetQName(), To: extDep.targetSystem, Style: "cluster:out"})
+		} else {
+			dw.addEdge(DotEdge{From: extDep.targetSystem, To: extDep.source.GetQName(), Style: "cluster:in"})
+		}
+	}
 
 	dw.end()
 
