@@ -196,6 +196,15 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 		return
 	}
 	params["API"] = api
+
+	svg, err := backstage.GenerateAPISVG(s.repo, apiID)
+	if err != nil {
+		http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
+		log.Printf("Failed to render SVG: %v", err)
+		return
+	}
+	params["SVG"] = template.HTML(svg)
+
 	s.serveHTMLPage(w, r, "api_detail.html", params)
 }
 

@@ -247,3 +247,44 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	return runDot(ctx, dw.String())
 
 }
+
+// GenerateAPISVG generates an SVG for the given API.
+func GenerateAPISVG(r *Repository, name string) ([]byte, error) {
+	api := r.API(name)
+	if api == nil {
+		return nil, fmt.Errorf("API %s does not exist", name)
+	}
+	qn := api.GetQName()
+
+	dw := NewDotWriter()
+	dw.start()
+
+	// API
+	dw.addNode(DotNode{QName: qn, Kind: "api", Label: qn})
+
+	// Providers
+	for _, p := range api.Providers() {
+		provider := r.Component(p)
+		if provider != nil {
+			providerQn := provider.GetQName()
+			dw.addNode(DotNode{QName: providerQn, Kind: "component", Label: providerQn})
+			dw.addEdge(DotEdge{From: qn, To: providerQn, Style: "provides"})
+		}
+	}
+
+	// Consumers
+	for _, c := range api.Consumers() {
+		consumer := r.Component(c)
+		if consumer != nil {
+			consumerQn := consumer.GetQName()
+			dw.addNode(DotNode{QName: consumerQn, Kind: "component", Label: consumerQn})
+			dw.addEdge(DotEdge{From: consumerQn, To: qn})
+		}
+	}
+
+	dw.end()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return runDot(ctx, dw.String())
+}
