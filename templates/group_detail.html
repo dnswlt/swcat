@@ -24,6 +24,18 @@
                     <h3 class="font-semibold">Type</h3>
                     <p>{{ .Spec.Type }}</p>
                 </div>
+                {{ if .Spec.Profile.DisplayName }}
+                <div>
+                    <h3 class="font-semibold">Display Name</h3>
+                    <p>{{ .Spec.Profile.DisplayName }}</p>
+                </div>
+                {{ end }}
+                {{ if .Spec.Profile.Email }}
+                <div>
+                    <h3 class="font-semibold">Email</h3>
+                    <p>{{ .Spec.Profile.Email }}</p>
+                </div>
+                {{ end }}
                 {{ if .Spec.Parent }}
                 <div>
                     <h3 class="font-semibold">Parent</h3>

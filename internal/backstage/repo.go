@@ -225,6 +225,10 @@ func (r *Repository) Validate() error {
 		if g.Spec == nil {
 			return fmt.Errorf("group %s has no spec", qn)
 		}
+		if g.Spec.Profile == nil {
+			// Avoid nil checks elsewhere. Profile is optional according to the spec.
+			g.Spec.Profile = &GroupSpecProfile{}
+		}
 	}
 
 	// Components
