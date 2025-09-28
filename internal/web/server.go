@@ -23,12 +23,14 @@ type Server struct {
 	opts     ServerOptions
 	template *template.Template
 	repo     *backstage.Repository
+	svgCache map[string][]byte
 }
 
 func NewServer(opts ServerOptions, repo *backstage.Repository) (*Server, error) {
 	s := &Server{
-		opts: opts,
-		repo: repo,
+		opts:     opts,
+		repo:     repo,
+		svgCache: make(map[string][]byte),
 	}
 	if err := s.reloadTemplates(); err != nil {
 		return nil, err
@@ -142,11 +144,17 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	}
 	params["System"] = system
 
-	svg, err := backstage.GenerateSystemSVG(s.repo, systemID)
-	if err != nil {
-		http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
-		log.Printf("Failed to render SVG: %v", err)
-		return
+	cacheKey := "system:" + systemID
+	svg, ok := s.svgCache[cacheKey]
+	if !ok {
+		var err error
+		svg, err = backstage.GenerateSystemSVG(s.repo, systemID)
+		if err != nil {
+			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
+			log.Printf("Failed to render SVG: %v", err)
+			return
+		}
+		s.svgCache[cacheKey] = svg
 	}
 	params["SVG"] = template.HTML(svg)
 
@@ -163,11 +171,17 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 	}
 	params["Component"] = component
 
-	svg, err := backstage.GenerateComponentSVG(s.repo, componentID)
-	if err != nil {
-		http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
-		log.Printf("Failed to render SVG: %v", err)
-		return
+	cacheKey := "component:" + componentID
+	svg, ok := s.svgCache[cacheKey]
+	if !ok {
+		var err error
+		svg, err = backstage.GenerateComponentSVG(s.repo, componentID)
+		if err != nil {
+			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
+			log.Printf("Failed to render SVG: %v", err)
+			return
+		}
+		s.svgCache[cacheKey] = svg
 	}
 	params["SVG"] = template.HTML(svg)
 	s.serveHTMLPage(w, r, "component_detail.html", params)
@@ -197,11 +211,17 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 	}
 	params["API"] = api
 
-	svg, err := backstage.GenerateAPISVG(s.repo, apiID)
-	if err != nil {
-		http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
-		log.Printf("Failed to render SVG: %v", err)
-		return
+	cacheKey := "api:" + apiID
+	svg, ok := s.svgCache[cacheKey]
+	if !ok {
+		var err error
+		svg, err = backstage.GenerateAPISVG(s.repo, apiID)
+		if err != nil {
+			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
+			log.Printf("Failed to render SVG: %v", err)
+			return
+		}
+		s.svgCache[cacheKey] = svg
 	}
 	params["SVG"] = template.HTML(svg)
 
@@ -232,11 +252,17 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 	}
 	params["Resource"] = resource
 
-	svg, err := backstage.GenerateResourceSVG(s.repo, resourceID)
-	if err != nil {
-		http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
-		log.Printf("Failed to render SVG: %v", err)
-		return
+	cacheKey := "resource:" + resourceID
+	svg, ok := s.svgCache[cacheKey]
+	if !ok {
+		var err error
+		svg, err = backstage.GenerateResourceSVG(s.repo, resourceID)
+		if err != nil {
+			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
+			log.Printf("Failed to render SVG: %v", err)
+			return
+		}
+		s.svgCache[cacheKey] = svg
 	}
 	params["SVG"] = template.HTML(svg)
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os/exec"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 func runDot(ctx context.Context, dotSource string) ([]byte, error) {
 	// Command: dot -Tsvg
+	log.Printf("Running 'dot -Tsvg' to generate SVG")
 	cmd := exec.CommandContext(ctx, "dot", "-Tsvg")
 
 	// Provide the DOT source on stdin and capture stdout/stderr

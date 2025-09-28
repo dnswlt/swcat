@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"os/exec"
 
 	"github.com/dnswlt/swcat/internal/backstage"
 	"github.com/dnswlt/swcat/internal/web"
@@ -14,9 +15,18 @@ func main() {
 	baseDir := flag.String("base-dir", ".", "Base directory")
 	flag.Parse()
 
+	// Check if dot (graphviz) is in the PATH, else abort.
+	// We need dot to render SVG graphs.
+	path, err := exec.LookPath("dot")
+	if err != nil {
+		log.Fatalf("dot was not found in your PATH")
+	}
+	log.Printf("Found dot program at %s", path)
+
 	repo := backstage.NewRepository()
 
 	for _, arg := range flag.Args() {
+		log.Printf("Reading input file %s", arg)
 		es, err := backstage.ReadEntities(arg)
 		if err != nil {
 			log.Fatalf("Failed to read %s: %v", arg, err)
@@ -34,7 +44,7 @@ func main() {
 	if err := repo.Validate(); err != nil {
 		log.Fatalf("Repository validation failed: %v", err)
 	}
-	log.Println("Entity validation successful.")
+	log.Println("Entity validation successful")
 
 	if *serverAddrFlag != "" {
 		server, err := web.NewServer(
