@@ -31,6 +31,17 @@
             </div>
         </div>
 
+        {{ if .Metadata.Links }}
+        <div>
+            <h3 class="text-lg font-semibold">Links</h3>
+            <ul class="list-disc list-inside">
+                {{ range .Metadata.Links }}
+                <li><a href="{{ .URL }}" class="text-blue-600 hover:underline">{{ .Title }}</a></li>
+                {{ end }}
+            </ul>
+        </div>
+        {{ end }}
+
         {{ if .Spec.DependsOn }}
         <div>
             <h3 class="text-lg font-semibold">Depends On</h3>
