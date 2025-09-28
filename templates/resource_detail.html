@@ -57,6 +57,13 @@
         <p class="text-center text-gray-500">Resource not found</p>
         {{ end }}
 
+
+        {{ if .SVG }}
+        <div id="relationships-svg">
+            {{ .SVG }}
+        </div>
+        {{ end }}
+
     </main>
 
     <script type="module" src="/static/dist/main.js"></script>

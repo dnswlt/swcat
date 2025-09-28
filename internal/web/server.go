@@ -231,6 +231,15 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 		return
 	}
 	params["Resource"] = resource
+
+	svg, err := backstage.GenerateResourceSVG(s.repo, resourceID)
+	if err != nil {
+		http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
+		log.Printf("Failed to render SVG: %v", err)
+		return
+	}
+	params["SVG"] = template.HTML(svg)
+
 	params["Dependents"] = resource.Dependents()
 	s.serveHTMLPage(w, r, "resource_detail.html", params)
 }

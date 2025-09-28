@@ -205,14 +205,9 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	}
 	for _, d := range component.Spec.dependents {
 		e := r.Entity(d)
-		switch x := e.(type) {
-		case *Component:
-			xQn := x.GetQName()
-			dw.addNode(DotNode{QName: xQn, Kind: "component", Label: xQn})
-			dw.addEdge(DotEdge{From: xQn, To: qn})
-		case *Resource:
-			xQn := x.GetQName()
-			dw.addNode(DotNode{QName: xQn, Kind: "resource", Label: xQn})
+		if e != nil {
+			xQn := e.GetQName()
+			dw.addNode(DotNode{QName: xQn, Kind: strings.ToLower(e.GetKind()), Label: xQn})
 			dw.addEdge(DotEdge{From: xQn, To: qn})
 		}
 	}
@@ -228,14 +223,9 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	}
 	for _, d := range component.Spec.DependsOn {
 		e := r.Entity(d)
-		switch x := e.(type) {
-		case *Component:
-			xQn := x.GetQName()
-			dw.addNode(DotNode{QName: xQn, Kind: "component", Label: xQn})
-			dw.addEdge(DotEdge{From: qn, To: xQn})
-		case *Resource:
-			xQn := x.GetQName()
-			dw.addNode(DotNode{QName: xQn, Kind: "resource", Label: xQn})
+		if e != nil {
+			xQn := e.GetQName()
+			dw.addNode(DotNode{QName: xQn, Kind: strings.ToLower(e.GetKind()), Label: xQn})
 			dw.addEdge(DotEdge{From: qn, To: xQn})
 		}
 	}
@@ -279,6 +269,37 @@ func GenerateAPISVG(r *Repository, name string) ([]byte, error) {
 			consumerQn := consumer.GetQName()
 			dw.addNode(DotNode{QName: consumerQn, Kind: "component", Label: consumerQn})
 			dw.addEdge(DotEdge{From: consumerQn, To: qn})
+		}
+	}
+
+	dw.end()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return runDot(ctx, dw.String())
+}
+
+// GenerateResourceSVG generates an SVG for the given resource.
+func GenerateResourceSVG(r *Repository, name string) ([]byte, error) {
+	resource := r.Resource(name)
+	if resource == nil {
+		return nil, fmt.Errorf("resource %s does not exist", name)
+	}
+	qn := resource.GetQName()
+
+	dw := NewDotWriter()
+	dw.start()
+
+	// Resource
+	dw.addNode(DotNode{QName: qn, Kind: "resource", Label: qn})
+
+	// Dependents
+	for _, d := range resource.Dependents() {
+		dependent := r.Entity(d)
+		if dependent != nil {
+			dependentQn := dependent.GetQName()
+			dw.addNode(DotNode{QName: dependentQn, Kind: strings.ToLower(dependent.GetKind()), Label: dependentQn})
+			dw.addEdge(DotEdge{From: dependentQn, To: qn})
 		}
 	}
 
