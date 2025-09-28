@@ -1,0 +1,59 @@
+applications:
+  - name: ApplicationOne
+    description: >
+      The first application. Super cool.
+    modules:
+      - name: Timetable
+        description: >
+          The timetable module does foo and bar in high quality.
+          It is a core process, nothing works without it.
+        processes:
+          - name: timetable-dataprovider
+            description: >
+              This process is wonderful. It does many useful things.
+            interfaces:
+              consumed:
+                topology-data:
+                  producers: 
+                    - any
+              produced:
+                timetable-data:
+                  visibility: public
+            datastores:
+              timetable-oracle:
+                mode: read
+            changes:
+              cloud-migration: &cloud-migration-ref
+                type: cloud-migration
+                planned_release: "1.2.0"
+          - name: timetable-exporter
+            description: >
+              This process is almost entirely unspecified.
+            changes:
+              cloud-migration:
+                *cloud-migration-ref
+      - name: ODA
+  - name: ApplicationTwo
+    description: >
+      The second application. Empty.
+# Interfaces are abstract communication channels between applications, modules, processes.
+interfaces:
+  - name: timetable-data
+    protocol: solace
+    schema: https://example.com/schemas/timetable-data/service.proto
+  - name: topology-data
+    protocol: kafka
+    schema: https://example.com/schemas/topology-data/service.proto
+datastores:
+  - name: legacy-db
+    schemas:
+      - name: legacy-timetable
+    location: legacy
+  - name: timetable-oracle
+    schemas: 
+      - name: timetable
+    location: aws
+releases:
+  - name: "1.2.0"
+    freeze_date: "2026-06-30"
+    golive_date: "2026-10-01"

@@ -1,2 +1,3 @@
 # swcat
-Manage and visualize your software catalog.
+
+A simple tool to define and visualize applications, their modules, processes, and interfaces.
