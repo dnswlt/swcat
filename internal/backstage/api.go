@@ -164,6 +164,7 @@ type Resource struct {
 func (r *Resource) GetKind() string        { return r.Kind }
 func (r *Resource) GetMetadata() *Metadata { return r.Metadata }
 func (r *Resource) GetQName() string       { return r.Metadata.GetQName() }
+func (r *Resource) Dependents() []string { return r.Spec.dependents }
 
 // Group
 
