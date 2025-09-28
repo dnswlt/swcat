@@ -30,7 +30,7 @@
                 </div>
                 <div>
                     <h3 class="font-semibold">System</h3>
-                    <p><a href="/ui/systems/{{ .Spec.System }}" class="text-blue-600 hover:underline">{{ .Spec.System }}</a></p>
+                    <p><a href="/ui/systems/{{ .Spec.System | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.System }}</a></p>
                 </div>
             </div>
         </div>
@@ -40,7 +40,7 @@
             <h3 class="text-lg font-semibold">Provides APIs</h3>
             <ul class="list-disc list-inside">
                 {{ range .Spec.ProvidesAPIs }}
-                <li><a href="/ui/apis/{{ . }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                <li><a href="/ui/apis/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
                 {{ end }}
             </ul>
         </div>
@@ -51,7 +51,7 @@
             <h3 class="text-lg font-semibold">Consumes APIs</h3>
             <ul class="list-disc list-inside">
                 {{ range .Spec.ConsumesAPIs }}
-                <li><a href="/ui/apis/{{ . }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                <li><a href="/ui/apis/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
                 {{ end }}
             </ul>
         </div>
@@ -62,7 +62,7 @@
             <h3 class="text-lg font-semibold">Depends On</h3>
             <ul class="list-disc list-inside">
                 {{ range .Spec.DependsOn }}
-                <li><a href="/ui/components/{{ . }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                <li><a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
                 {{ end }}
             </ul>
         </div>

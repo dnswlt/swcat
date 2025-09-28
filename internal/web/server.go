@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/dnswlt/swcat/internal/backstage"
@@ -77,7 +78,25 @@ func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 func (s *Server) reloadTemplates() error {
 	tmpl := template.New("root")
 	tmpl = tmpl.Funcs(map[string]any{
-		"one": func() string { return "1" },
+		"toURL": func(ref string) string {
+			kind, name, found := strings.Cut(ref, ":")
+			if !found {
+				return "#"
+			}
+			switch kind {
+			case "component":
+				return "/ui/components/" + url.PathEscape(name)
+			case "resource":
+				return "/ui/resources/" + url.PathEscape(name)
+			case "system":
+				return "/ui/systems/" + url.PathEscape(name)
+			default:
+				return "#"
+			}
+		},
+		"urlencode": func(s string) string {
+			return url.PathEscape(s)
+		},
 	})
 	var err error
 	s.template, err = tmpl.ParseGlob(path.Join(s.opts.BaseDir, "templates/*.html"))
@@ -244,6 +263,9 @@ func (s *Server) Serve() error {
 	mux.HandleFunc("GET /ui/components/{componentID}", func(w http.ResponseWriter, r *http.Request) {
 		componentID := r.PathValue("componentID")
 		s.serveComponent(w, r, componentID)
+	})
+	mux.HandleFunc("GET /ui/apis", func(w http.ResponseWriter, r *http.Request) {
+		s.serveAPIs(w, r)
 	})
 	mux.HandleFunc("GET /ui/apis/{apiID}", func(w http.ResponseWriter, r *http.Request) {
 		apiID := r.PathValue("apiID")

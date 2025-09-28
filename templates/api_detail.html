@@ -30,7 +30,7 @@
                 </div>
                 <div>
                     <h3 class="font-semibold">System</h3>
-                    <p><a href="/ui/systems/{{ .Spec.System }}" class="text-blue-600 hover:underline">{{ .Spec.System }}</a></p>
+                    <p><a href="/ui/systems/{{ .Spec.System | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.System }}</a></p>
                 </div>
             </div>
             <div>
@@ -44,7 +44,7 @@
             <h3 class="text-lg font-semibold">Providers</h3>
             <ul class="list-disc list-inside">
                 {{ range .Providers }}
-                <li><a href="/ui/components/{{ . }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                <li><a href="/ui/components/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
                 {{ end }}
             </ul>
         </div>
@@ -55,7 +55,7 @@
             <h3 class="text-lg font-semibold">Consumers</h3>
             <ul class="list-disc list-inside">
                 {{ range .Consumers }}
-                <li><a href="/ui/components/{{ . }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                <li><a href="/ui/components/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
                 {{ end }}
             </ul>
         </div>

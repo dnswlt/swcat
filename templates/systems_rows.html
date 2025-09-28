@@ -3,7 +3,7 @@
 {{- range .Systems }}
 <tr class="border-t">
     <td class="px-4 py-2">
-        <a href="/ui/systems/{{ .Metadata.Name }}" class="text-blue-600 hover:underline">
+        <a href="/ui/systems/{{ .Metadata.Name | urlencode }}" class="text-blue-600 hover:underline">
             {{ .Metadata.Name }}
         </a>
     </td>
