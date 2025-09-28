@@ -123,6 +123,49 @@ func (dw *DotWriter) addEdge(edge DotEdge) {
 	fmt.Fprintln(dw.w)
 }
 
+func (dw *DotWriter) startCluster(name string) {
+	fmt.Fprintf(dw.w, "subgraph \"cluster_%s\" {\n", name)
+	fmt.Fprintf(dw.w, "label=\"%s\"\n", name)
+}
+
+func (dw *DotWriter) endCluster() {
+	dw.w.WriteString("}\n")
+}
+
+// GenerateSystemSVG generates an SVG for the given system.
+func GenerateSystemSVG(r *Repository, name string) ([]byte, error) {
+	system := r.System(name)
+	if system == nil {
+		return nil, fmt.Errorf("system %s does not exist", name)
+	}
+
+	dw := NewDotWriter()
+	dw.start()
+
+	dw.startCluster(name)
+
+	for _, c := range system.Components() {
+		comp := r.Component(c)
+		dw.addNode(DotNode{QName: comp.GetQName(), Kind: "component", Label: comp.GetQName()})
+	}
+	for _, a := range system.APIs() {
+		api := r.API(a)
+		dw.addNode(DotNode{QName: api.GetQName(), Kind: "api", Label: api.GetQName()})
+	}
+	for _, res := range system.Resources() {
+		resource := r.Resource(res)
+		dw.addNode(DotNode{QName: resource.GetQName(), Kind: "resource", Label: resource.GetQName()})
+	}
+
+	dw.endCluster()
+
+	dw.end()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return runDot(ctx, dw.String())
+}
+
 // GenerateComponentSVG generates an SVG for the given component.
 func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	component := r.Component(name)

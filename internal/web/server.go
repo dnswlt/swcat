@@ -141,6 +141,15 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		return
 	}
 	params["System"] = system
+
+	svg, err := backstage.GenerateSystemSVG(s.repo, systemID)
+	if err != nil {
+		http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
+		log.Printf("Failed to render SVG: %v", err)
+		return
+	}
+	params["SVG"] = template.HTML(svg)
+
 	params["Components"] = system.Components()
 	s.serveHTMLPage(w, r, "system_detail.html", params)
 }
