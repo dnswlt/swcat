@@ -85,6 +85,18 @@ func (s *Server) reloadTemplates() error {
 }
 
 func (s *Server) serveComponents(w http.ResponseWriter, r *http.Request) {
+	params := map[string]any{}
+	q := r.URL.Query()
+	components := s.repo.FindComponents(q.Get("q"))
+	params["Components"] = components
+
+	if r.Header.Get("HX-Request") == "true" {
+		// htmx request: only render rows
+		s.serveHTMLPage(w, r, "components_rows.html", params)
+		return
+	}
+	// full page
+	s.serveHTMLPage(w, r, "components.html", params)
 }
 
 func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componentID string) {

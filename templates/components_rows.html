@@ -1,0 +1,22 @@
+{{- define "components_rows.html" -}}
+{{- if .Components }}
+{{- range .Components }}
+<tr class="border-t">
+    <td class="px-4 py-2">
+        <a href="/ui/components/{{ .Metadata.Name }}" class="text-blue-600 hover:underline">
+            {{ .Metadata.Name }}
+        </a>
+    </td>
+    <td class="px-4 py-2">{{ .Spec.Owner }}</td>
+    <td class="px-4 py-2">{{ .Spec.Lifecycle }}</td>
+    <td class="px-4 py-2">{{ .Metadata.Description }}</td>
+</tr>
+{{- end }}
+{{- else }}
+<tr>
+    <td colspan="4" class="px-4 py-2 text-center text-gray-500">
+        No components found
+    </td>
+</tr>
+{{- end }}
+{{- end }}

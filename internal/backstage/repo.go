@@ -1,8 +1,10 @@
 package backstage
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -116,6 +118,19 @@ func (r *Repository) Entity(ref string) Entity {
 		return r.Group(name)
 	}
 	return nil
+}
+
+func (r *Repository) FindComponents(query string) []*Component {
+	var result []*Component
+	for _, c := range r.components {
+		if strings.Contains(c.GetQName(), query) {
+			result = append(result, c)
+		}
+	}
+	slices.SortFunc(result, func(c1, c2 *Component) int {
+		return cmp.Compare(c1.GetQName(), c2.GetQName())
+	})
+	return result
 }
 
 var (
