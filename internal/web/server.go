@@ -86,16 +86,19 @@ func (s *Server) reloadTemplates() error {
 				return "#"
 			}
 			switch kind {
-			case "component":
-				return "/ui/components/" + url.PathEscape(name)
-			case "resource":
-				return "/ui/resources/" + url.PathEscape(name)
-			case "system":
-				return "/ui/systems/" + url.PathEscape(name)
-			default:
-				return "#"
-			}
-		},
+			         case "component":
+							return "/ui/components/" + url.PathEscape(name)
+						case "resource":
+							return "/ui/resources/" + url.PathEscape(name)
+						case "system":
+							return "/ui/systems/" + url.PathEscape(name)
+						case "group":
+							return "/ui/groups/" + url.PathEscape(name)
+						case "domain":
+							return "/ui/domains/" + url.PathEscape(name)
+						default:
+							return "#"
+						}		},
 		"urlencode": func(s string) string {
 			return url.PathEscape(s)
 		},

@@ -33,6 +33,12 @@ function addSVGListener() {
             case "system":
                 path = "/ui/systems/";
                 break;
+            case "group":
+                path = "/ui/groups/";
+                break;
+            case "domain":
+                path = "/ui/domains/";
+                break;
             default:
                 console.log(`Unhandled kind ${kind} in SVG.`);
                 return;
