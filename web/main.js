@@ -48,27 +48,13 @@ function addSVGListener() {
     });
 }
 
-function initPage() {
-    document.addEventListener("DOMContentLoaded", () => {
+function initPage(pageId) {
+    if (['domain', 'system', 'component', 'resource', 'api', 'group'].includes(pageId)) {
         addSVGListener();
-    });
+    }
 }
 
-const page = document.body.dataset.page;
-switch (page) {
-    case 'components':
-    case 'component':
-    case 'systems':
-    case 'system':
-    case 'apis':
-    case 'api':
-    case 'resources':
-    case 'resource':
-    case 'groups':
-    case 'group':
-        initPage();
-        break;
-    default:
-        console.error(`Unhandled page in init: ${page}`);
-        break;
-}
+document.addEventListener("DOMContentLoaded", () => {
+    initPage(document.body.dataset.page);
+});
+
