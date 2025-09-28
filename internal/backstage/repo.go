@@ -172,6 +172,32 @@ func (r *Repository) FindResources(query string) []*Resource {
 	return result
 }
 
+func (r *Repository) FindDomains(query string) []*Domain {
+	var result []*Domain
+	for _, d := range r.domains {
+		if strings.Contains(d.GetQName(), query) {
+			result = append(result, d)
+		}
+	}
+	slices.SortFunc(result, func(d1, d2 *Domain) int {
+		return cmp.Compare(d1.GetQName(), d2.GetQName())
+	})
+	return result
+}
+
+func (r *Repository) FindGroups(query string) []*Group {
+	var result []*Group
+	for _, g := range r.groups {
+		if strings.Contains(g.GetQName(), query) {
+			result = append(result, g)
+		}
+	}
+	slices.SortFunc(result, func(g1, g2 *Group) int {
+		return cmp.Compare(g1.GetQName(), g2.GetQName())
+	})
+	return result
+}
+
 var (
 	validNameRE = regexp.MustCompile("^[A-Za-z_][A-Za-z0-9_-]*$")
 )
@@ -391,6 +417,15 @@ func (r *Repository) populateRelationships() {
 		if s := api.Spec.System; s != "" {
 			system := r.System(s)
 			system.Spec.apis = append(system.Spec.apis, qn)
+		}
+	}
+
+	// Systems
+	for _, system := range r.systems {
+		qn := system.GetQName()
+		if d := system.Spec.Domain; d != "" {
+			domain := r.Domain(d)
+			domain.Spec.systems = append(domain.Spec.systems, qn)
 		}
 	}
 

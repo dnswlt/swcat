@@ -100,6 +100,8 @@ type DomainSpec struct {
 	Owner       string `yaml:"owner"`
 	SubdomainOf string `yaml:"subdomainOf"`
 	Type        string `yaml:"type"`
+
+	systems []string
 }
 
 type Domain struct {
@@ -112,6 +114,7 @@ type Domain struct {
 func (d *Domain) GetKind() string        { return d.Kind }
 func (d *Domain) GetMetadata() *Metadata { return d.Metadata }
 func (d *Domain) GetQName() string       { return d.Metadata.GetQName() }
+func (d *Domain) Systems() []string      { return d.Spec.systems }
 
 // API
 

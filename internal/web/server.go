@@ -270,14 +270,84 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 	s.serveHTMLPage(w, r, "resource_detail.html", params)
 }
 
+func (s *Server) serveDomains(w http.ResponseWriter, r *http.Request) {
+	params := map[string]any{}
+	q := r.URL.Query()
+	domains := s.repo.FindDomains(q.Get("q"))
+	params["Domains"] = domains
+
+	if r.Header.Get("HX-Request") == "true" {
+		// htmx request: only render rows
+		s.serveHTMLPage(w, r, "domains_rows.html", params)
+		return
+	}
+	// full page
+	s.serveHTMLPage(w, r, "domains.html", params)
+}
+
+func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID string) {
+	params := map[string]any{}
+	domain := s.repo.Domain(domainID)
+	if domain == nil {
+		http.Error(w, "Invalid domain", http.StatusBadRequest)
+		return
+	}
+	params["Domain"] = domain
+
+	cacheKey := "domain:" + domainID
+	svg, ok := s.svgCache[cacheKey]
+	if !ok {
+		var err error
+		svg, err = backstage.GenerateDomainSVG(s.repo, domainID)
+		if err != nil {
+			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
+			log.Printf("Failed to render SVG: %v", err)
+			return
+		}
+		s.svgCache[cacheKey] = svg
+	}
+	params["SVG"] = template.HTML(svg)
+
+	params["Systems"] = domain.Systems()
+	s.serveHTMLPage(w, r, "domain_detail.html", params)
+}
+
+func (s *Server) serveGroups(w http.ResponseWriter, r *http.Request) {
+	params := map[string]any{}
+	q := r.URL.Query()
+	groups := s.repo.FindGroups(q.Get("q"))
+	params["Groups"] = groups
+
+	if r.Header.Get("HX-Request") == "true" {
+		// htmx request: only render rows
+		s.serveHTMLPage(w, r, "groups_rows.html", params)
+		return
+	}
+	// full page
+	s.serveHTMLPage(w, r, "groups.html", params)
+}
+
+func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID string) {
+	params := map[string]any{}
+	group := s.repo.Group(groupID)
+	if group == nil {
+		http.Error(w, "Invalid group", http.StatusBadRequest)
+		return
+	}
+	params["Group"] = group
+	s.serveHTMLPage(w, r, "group_detail.html", params)
+}
+
 func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateFile string, params map[string]any) {
 	var output bytes.Buffer
 
 	nav := NewNavBar(
+		NavItem("/ui/domains", "Domains"),
 		NavItem("/ui/systems", "Systems"),
 		NavItem("/ui/components", "Components"),
 		NavItem("/ui/resources", "Resources"),
 		NavItem("/ui/apis", "APIs"),
+		NavItem("/ui/groups", "Groups"),
 	).SetActive(r.URL.Path).SetParams(r.URL.Query())
 
 	templateParams := map[string]any{
@@ -330,6 +400,20 @@ func (s *Server) Serve() error {
 	mux.HandleFunc("GET /ui/resources/{resourceID}", func(w http.ResponseWriter, r *http.Request) {
 		resourceID := r.PathValue("resourceID")
 		s.serveResource(w, r, resourceID)
+	})
+	mux.HandleFunc("GET /ui/domains", func(w http.ResponseWriter, r *http.Request) {
+		s.serveDomains(w, r)
+	})
+	mux.HandleFunc("GET /ui/domains/{domainID}", func(w http.ResponseWriter, r *http.Request) {
+		domainID := r.PathValue("domainID")
+		s.serveDomain(w, r, domainID)
+	})
+	mux.HandleFunc("GET /ui/groups", func(w http.ResponseWriter, r *http.Request) {
+		s.serveGroups(w, r)
+	})
+	mux.HandleFunc("GET /ui/groups/{groupID}", func(w http.ResponseWriter, r *http.Request) {
+		groupID := r.PathValue("groupID")
+		s.serveGroup(w, r, groupID)
 	})
 
 	// Health check. Useful for cloud deployments.

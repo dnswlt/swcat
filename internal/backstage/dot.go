@@ -134,6 +134,32 @@ func (dw *DotWriter) endCluster() {
 	dw.w.WriteString("}\n")
 }
 
+// GenerateDomainSVG generates an SVG for the given domain.
+func GenerateDomainSVG(r *Repository, name string) ([]byte, error) {
+	domain := r.Domain(name)
+	if domain == nil {
+		return nil, fmt.Errorf("domain %s does not exist", name)
+	}
+
+	dw := NewDotWriter()
+	dw.start()
+
+	dw.startCluster(name)
+
+	for _, s := range domain.Systems() {
+		system := r.System(s)
+		dw.addNode(DotNode{QName: system.GetQName(), Kind: "system", Label: system.GetQName()})
+	}
+
+	dw.endCluster()
+
+	dw.end()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return runDot(ctx, dw.String())
+}
+
 // GenerateSystemSVG generates an SVG for the given system.
 func GenerateSystemSVG(r *Repository, name string) ([]byte, error) {
 	system := r.System(name)

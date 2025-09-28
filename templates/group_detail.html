@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    {{ template "head.html" }}
+</head>
+
+<body class="min-h-screen bg-gray-50 p-4" data-page="group">
+    <!-- Navbar -->
+    {{template "nav.html" .}}
+
+    <main class="w-full max-w-screen-lg mx-auto space-y-6 bg-white shadow rounded-xl p-6">
+        <h1 class="text-2xl font-semibold text-center">Group Details</h1>
+
+        {{ with .Group }}
+        <div class="space-y-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-semibold">{{ .Metadata.Name }}</h2>
+                <span class="text-gray-500">{{ .Metadata.Title }}</span>
+            </div>
+            <p class="text-gray-700">{{ .Metadata.Description }}</p>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <h3 class="font-semibold">Type</h3>
+                    <p>{{ .Spec.Type }}</p>
+                </div>
+                {{ if .Spec.Parent }}
+                <div>
+                    <h3 class="font-semibold">Parent</h3>
+                    <p><a href="/ui/groups/{{ .Spec.Parent | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.Parent }}</a></p>
+                </div>
+                {{ end }}
+            </div>
+        </div>
+
+        {{ if .Metadata.Links }}
+        <div>
+            <h3 class="text-lg font-semibold">Links</h3>
+            <ul class="list-disc list-inside">
+                {{ range .Metadata.Links }}
+                <li><a href="{{ .URL }}" class="text-blue-600 hover:underline">{{ .Title }}</a></li>
+                {{ end }}
+            </ul>
+        </div>
+        {{ end }}
+
+        {{ if .Spec.Children }}
+        <div>
+            <h3 class="text-lg font-semibold">Children</h3>
+            <ul class="list-disc list-inside">
+                {{ range .Spec.Children }}
+                <li><a href="/ui/groups/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                {{ end }}
+            </ul>
+        </div>
+        {{ end }}
+
+        {{ if .Spec.Members }}
+        <div>
+            <h3 class="text-lg font-semibold">Members</h3>
+            <ul class="list-disc list-inside">
+                {{ range .Spec.Members }}
+                <li>{{ . }}</li>
+                {{ end }}
+            </ul>
+        </div>
+        {{ end }}
+
+        {{ else }}
+        <p class="text-center text-gray-500">Group not found</p>
+        {{ end }}
+
+    </main>
+
+    <script type="module" src="/static/dist/main.js"></script>
+
+</body>
+
+</html>

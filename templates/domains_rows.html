@@ -1,0 +1,21 @@
+{{- define "domains_rows.html" -}}
+{{- if .Domains }}
+{{- range .Domains }}
+<tr class="border-t">
+    <td class="px-4 py-2">
+        <a href="/ui/domains/{{ .Metadata.Name | urlencode }}" class="text-blue-600 hover:underline">
+            {{ .Metadata.Name }}
+        </a>
+    </td>
+    <td class="px-4 py-2">{{ .Metadata.Title }}</td>
+    <td class="px-4 py-2">{{ .Spec.Owner }}</td>
+</tr>
+{{- end }}
+{{- else }}
+<tr>
+    <td colspan="3" class="px-4 py-2 text-center text-gray-500">
+        No domains found
+    </td>
+</tr>
+{{- end }}
+{{- end }}

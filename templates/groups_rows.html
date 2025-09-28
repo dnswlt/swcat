@@ -1,0 +1,21 @@
+{{- define "groups_rows.html" -}}
+{{- if .Groups }}
+{{- range .Groups }}
+<tr class="border-t">
+    <td class="px-4 py-2">
+        <a href="/ui/groups/{{ .Metadata.Name | urlencode }}" class="text-blue-600 hover:underline">
+            {{ .Metadata.Name }}
+        </a>
+    </td>
+    <td class="px-4 py-2">{{ .Metadata.Title }}</td>
+    <td class="px-4 py-2">{{ .Spec.Type }}</td>
+</tr>
+{{- end }}
+{{- else }}
+<tr>
+    <td colspan="3" class="px-4 py-2 text-center text-gray-500">
+        No groups found
+    </td>
+</tr>
+{{- end }}
+{{- end }}
