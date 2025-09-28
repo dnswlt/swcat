@@ -4,4 +4,7 @@
 
 
 @layer utilities {
+    .clickable-node:hover {
+        cursor: pointer;
+    }
 }
