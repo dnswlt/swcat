@@ -133,6 +133,8 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		http.Error(w, "Invalid component", http.StatusBadRequest)
 		return
 	}
+	params["Component"] = component
+
 	svg, err := backstage.GenerateComponentSVG(s.repo, componentID)
 	if err != nil {
 		http.Error(w, "Failed to render SVG", http.StatusInternalServerError)

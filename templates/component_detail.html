@@ -10,7 +10,66 @@
     {{template "nav.html" .}}
 
     <main class="w-full max-w-screen-lg mx-auto space-y-6 bg-white shadow rounded-xl p-6">
-        <h1 class="text-2xl font-semibold text-center">Components</h1>
+        <h1 class="text-2xl font-semibold text-center">Component Details</h1>
+
+        {{ with .Component }}
+        <div class="space-y-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-semibold">{{ .Metadata.Name }}</h2>
+                <span class="text-gray-500">{{ .Spec.Type }}</span>
+            </div>
+            <p class="text-gray-700">{{ .Metadata.Description }}</p>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <h3 class="font-semibold">Owner</h3>
+                    <p>{{ .Spec.Owner }}</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold">Lifecycle</h3>
+                    <p>{{ .Spec.Lifecycle }}</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold">System</h3>
+                    <p><a href="/ui/systems/{{ .Spec.System }}" class="text-blue-600 hover:underline">{{ .Spec.System }}</a></p>
+                </div>
+            </div>
+        </div>
+
+        {{ if .Spec.ProvidesAPIs }}
+        <div>
+            <h3 class="text-lg font-semibold">Provides APIs</h3>
+            <ul class="list-disc list-inside">
+                {{ range .Spec.ProvidesAPIs }}
+                <li><a href="/ui/apis/{{ . }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                {{ end }}
+            </ul>
+        </div>
+        {{ end }}
+
+        {{ if .Spec.ConsumesAPIs }}
+        <div>
+            <h3 class="text-lg font-semibold">Consumes APIs</h3>
+            <ul class="list-disc list-inside">
+                {{ range .Spec.ConsumesAPIs }}
+                <li><a href="/ui/apis/{{ . }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                {{ end }}
+            </ul>
+        </div>
+        {{ end }}
+
+        {{ if .Spec.DependsOn }}
+        <div>
+            <h3 class="text-lg font-semibold">Depends On</h3>
+            <ul class="list-disc list-inside">
+                {{ range .Spec.DependsOn }}
+                <li><a href="/ui/components/{{ . }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                {{ end }}
+            </ul>
+        </div>
+        {{ end }}
+        {{ else }}
+        <p class="text-center text-gray-500">Component not found</p>
+        {{ end }}
 
         {{ if .SVG }}
         <div id="relationships-svg">
