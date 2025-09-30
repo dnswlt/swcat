@@ -1,0 +1,45 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: plants-owners-team
+  description: >
+    Owners group for the whole plants domain.
+spec:
+  type: team
+  # children is a mandatory field.
+  # For simplicity, just use groups without members.
+  children: []
+  profile:
+    displayName: Plants Owners Team
+    email: plants@example.com
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: banana-team
+  description: >
+    Team Banana owns the banana system and its components.
+spec:
+  type: team
+  # children is a mandatory field.
+  # For simplicity, just use groups without members.
+  children: []
+  profile:
+    displayName: Team Banana
+    email: banana@example.com
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: cucumber-team
+  description: >
+    Team Cucumber owns the cucumber system and its components.
+spec:
+  type: team
+  # children is a mandatory field.
+  # For simplicity, just use groups without members.
+  children: []
+  profile:
+    displayName: Team Cucumber
+    email: cucumber@example.com

@@ -199,6 +199,7 @@ func (r *Repository) FindGroups(query string) []*Group {
 }
 
 var (
+	// Regexp to check for valid entity names
 	validNameRE = regexp.MustCompile("^[A-Za-z_][A-Za-z0-9_-]*$")
 )
 
@@ -211,6 +212,34 @@ func (r *Repository) validateMetadata(m *Metadata) error {
 	}
 	if m.Namespace != "" && !validNameRE.MatchString(m.Namespace) {
 		return fmt.Errorf("invalid namespace: %s", m.Namespace)
+	}
+	return nil
+}
+
+// validDependsOnRef checks if ref is a valid fully qualified entity reference.
+// It must include the entity type, e.g. "component:my-namespace/foo", or "component:bar".
+// For now, only component and resource dependencies are supported.
+func validDependsOnRef(ref string) error {
+	kind, qname, found := strings.Cut(ref, ":")
+	if !found {
+		return fmt.Errorf("entity kind is missing in entity ref %q", ref)
+	}
+	if kind != "component" && kind != "resource" {
+		return fmt.Errorf("invalid entity kind %q", kind)
+	}
+	if validNameRE.MatchString(qname) {
+		// Entity without namespace
+		return nil
+	}
+	ns, name, found := strings.Cut(qname, "/")
+	if !found {
+		return fmt.Errorf("not a valid qualified entity name %q", qname)
+	}
+	if !validNameRE.MatchString(ns) {
+		return fmt.Errorf("not a valid namespace name %q", ns)
+	}
+	if !validNameRE.MatchString(name) {
+		return fmt.Errorf("not a valid entity name %q", name)
 	}
 	return nil
 }
@@ -267,6 +296,9 @@ func (r *Repository) Validate() error {
 			}
 		}
 		for _, a := range s.DependsOn {
+			if err := validDependsOnRef(a); err != nil {
+				return fmt.Errorf("invalid entity reference in dependency %q for component %s: %v ", a, qn, err)
+			}
 			if e := r.Entity(a); e == nil {
 				return fmt.Errorf("dependency %q for component %s is undefined", a, qn)
 			}
@@ -321,6 +353,9 @@ func (r *Repository) Validate() error {
 			return fmt.Errorf("owner %q for resource %s is undefined", s.Owner, qn)
 		}
 		for _, a := range s.DependsOn {
+			if err := validDependsOnRef(a); err != nil {
+				return fmt.Errorf("invalid entity reference in dependency %q for component %s: %v ", a, qn, err)
+			}
 			if e := r.Entity(a); e == nil {
 				return fmt.Errorf("dependency %q for resource %s is undefined", a, qn)
 			}

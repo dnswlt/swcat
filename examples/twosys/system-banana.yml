@@ -1,0 +1,103 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: banana-system
+  title: banana System
+  tags:
+    - mission-critical
+  links:
+    - url: https://example.com/docs/banana
+      title: Documentation
+      type: docs
+    - url: https://example.com/repo/banana
+      title: Git repo
+      type: repository
+spec:
+  owner: banana-team
+  domain: plants-domain
+  type: application
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: banana-api-gateway
+  title: banana API Gateway
+  labels:
+    foobar.dev/language: java
+    foobar.dev/deployment: k8s
+spec:
+  type: service
+  lifecycle: production
+  owner: banana-team
+  system: banana-system
+  providesApis:
+    - banana-api
+  consumesApis:
+    - banana-backend-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: banana-backend
+  title: banana Backend
+  labels:
+    foobar.dev/language: java
+    foobar.dev/deployment: k8s
+spec:
+  type: service
+  lifecycle: production
+  owner: banana-team
+  system: banana-system
+  providesApis:
+    - banana-backend-api
+  consumesApis:
+    - cucumber-api
+  dependsOn:
+    - resource:banana-db
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: banana-db
+  title: banana Database
+  labels:
+    foobar.dev/technology: postgres
+spec:
+  type: database
+  owner: banana-team
+  system: banana-system
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: banana-api
+  title: banana API
+  links:
+    - url: https://example.com/apis/banana-api
+      title: banana API Schema
+      type: schema
+spec:
+  type: rest
+  lifecycle: production
+  owner: banana-team
+  system: banana-system
+  # Definition is a mandatory field in backstage.io, fill it with "n/a"
+  # if there is nothing useful to say here.
+  definition: n/a
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: banana-backend-api
+  title: banana Backend API
+  links:
+    - url: https://example.com/apis/banana-backend-api
+      title: banana Backend API Schema
+      type: schema
+spec:
+  type: grpc
+  lifecycle: production
+  owner: banana-team
+  system: banana-system
+  definition: n/a

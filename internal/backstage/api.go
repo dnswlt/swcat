@@ -110,7 +110,9 @@ type SystemSpec struct {
 	Owner string `yaml:"owner"`
 	// An entity reference to the domain that the system belongs to.
 	Domain string `yaml:"domain"`
-	// The type of system. There is currently no enforced set of values for this field, so it is left up to the adopting organization to choose a nomenclature that matches their catalog hierarchy.
+	// The type of system. There is currently no enforced set of values for this field,
+	// so it is left up to the adopting organization to choose a nomenclature that matches
+	// their catalog hierarchy.
 	Type string `yaml:"type"`
 
 	// These fields are not part of the Backstage API.
@@ -142,7 +144,9 @@ type DomainSpec struct {
 	Owner string `yaml:"owner"`
 	// An entity reference to another domain of which the domain is a part.
 	SubdomainOf string `yaml:"subdomainOf"`
-	// The type of domain. There is currently no enforced set of values for this field, so it is left up to the adopting organization to choose a nomenclature that matches their catalog hierarchy.
+	// The type of domain. There is currently no enforced set of values for this field,
+	// so it is left up to the adopting organization to choose a nomenclature that matches
+	// their catalog hierarchy.
 	Type string `yaml:"type"`
 
 	// These fields are not part of the Backstage API.

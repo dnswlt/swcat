@@ -1,0 +1,101 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: cucumber-system
+  title: Cucumber System
+  tags:
+    - mission-critical
+  links:
+    - url: https://example.com/docs/cucumber
+      title: Documentation
+      type: docs
+    - url: https://example.com/repo/cucumber
+      title: Git repo
+      type: repository
+spec:
+  owner: cucumber-team
+  domain: plants-domain
+  type: application
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: cucumber-api-gateway
+  title: Cucumber API Gateway
+  labels:
+    foobar.dev/language: java
+    foobar.dev/deployment: k8s
+spec:
+  type: service
+  lifecycle: production
+  owner: cucumber-team
+  system: cucumber-system
+  providesApis:
+    - cucumber-api
+  consumesApis:
+    - cucumber-backend-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: cucumber-backend
+  title: Cucumber Backend
+  labels:
+    foobar.dev/language: java
+    foobar.dev/deployment: k8s
+spec:
+  type: service
+  lifecycle: production
+  owner: cucumber-team
+  system: cucumber-system
+  providesApis:
+    - cucumber-backend-api
+  dependsOn:
+    - resource:cucumber-db
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: cucumber-db
+  title: Cucumber Database
+  labels:
+    foobar.dev/technology: postgres
+spec:
+  type: database
+  owner: cucumber-team
+  system: cucumber-system
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: cucumber-api
+  title: Cucumber API
+  links:
+    - url: https://example.com/apis/cucumber-api
+      title: Cucumber API Schema
+      type: schema
+spec:
+  type: rest
+  lifecycle: production
+  owner: cucumber-team
+  system: cucumber-system
+  # Definition is a mandatory field in backstage.io, fill it with "n/a"
+  # if there is nothing useful to say here.
+  definition: n/a
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: cucumber-backend-api
+  title: Cucumber Backend API
+  links:
+    - url: https://example.com/apis/cucumber-backend-api
+      title: Cucumber Backend API Schema
+      type: schema
+spec:
+  type: grpc
+  lifecycle: production
+  owner: cucumber-team
+  system: cucumber-system
+  definition: n/a
