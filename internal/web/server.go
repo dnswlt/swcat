@@ -162,8 +162,6 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	}
 	params["SVG"] = template.HTML(svg)
 
-	params["Components"] = system.Components()
-	params["Resources"] = system.Resources()
 	s.serveHTMLPage(w, r, "system_detail.html", params)
 }
 
@@ -312,7 +310,6 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 	}
 	params["SVG"] = template.HTML(svg)
 
-	params["Systems"] = domain.Systems()
 	s.serveHTMLPage(w, r, "domain_detail.html", params)
 }
 

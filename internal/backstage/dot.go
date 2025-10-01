@@ -146,7 +146,7 @@ func GenerateDomainSVG(r *Repository, name string) ([]byte, error) {
 
 	dw.startCluster(name)
 
-	for _, s := range domain.Systems() {
+	for _, s := range domain.GetSystems() {
 		system := r.System(s)
 		dw.addNode(DotNode{QName: system.GetQName(), Kind: "system", Label: system.GetQName()})
 	}
@@ -180,7 +180,7 @@ func GenerateSystemSVG(r *Repository, name string) ([]byte, error) {
 	dw.startCluster(name)
 
 	// Components
-	for _, c := range system.Components() {
+	for _, c := range system.GetComponents() {
 		comp := r.Component(c)
 		dw.addNode(DotNode{QName: comp.GetQName(), Kind: "component", Label: comp.GetQName()})
 
@@ -214,7 +214,7 @@ func GenerateSystemSVG(r *Repository, name string) ([]byte, error) {
 	}
 
 	// APIs
-	for _, a := range system.APIs() {
+	for _, a := range system.GetAPIs() {
 		api := r.API(a)
 		dw.addNode(DotNode{QName: api.GetQName(), Kind: "api", Label: api.GetQName()})
 
@@ -231,7 +231,7 @@ func GenerateSystemSVG(r *Repository, name string) ([]byte, error) {
 	}
 
 	// Resources
-	for _, res := range system.Resources() {
+	for _, res := range system.GetResources() {
 		resource := r.Resource(res)
 		dw.addNode(DotNode{QName: resource.GetQName(), Kind: "resource", Label: resource.GetQName()})
 
@@ -361,7 +361,7 @@ func GenerateAPISVG(r *Repository, name string) ([]byte, error) {
 	dw.addNode(DotNode{QName: qn, Kind: "api", Label: qn})
 
 	// Providers
-	for _, p := range api.Providers() {
+	for _, p := range api.GetProviders() {
 		provider := r.Component(p)
 		if provider != nil {
 			providerQn := provider.GetQName()
@@ -371,7 +371,7 @@ func GenerateAPISVG(r *Repository, name string) ([]byte, error) {
 	}
 
 	// Consumers
-	for _, c := range api.Consumers() {
+	for _, c := range api.GetConsumers() {
 		consumer := r.Component(c)
 		if consumer != nil {
 			consumerQn := consumer.GetQName()

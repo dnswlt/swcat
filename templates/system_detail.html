@@ -15,7 +15,7 @@
         {{ with .System }}
         <div class="space-y-4">
             <div class="flex justify-between items-center">
-                <h2 class="text-xl font-semibold">{{ .Metadata.Name }}</h2>
+                <h2 class="text-xl font-semibold">{{ .GetQName }}</h2>
                 <span class="text-gray-500">{{ .Spec.Type }}</span>
             </div>
             <p class="text-gray-700">{{ .Metadata.Description }}</p>
@@ -44,12 +44,12 @@
         </div>
         {{ end }}
 
-        {{ if .Components }}
+        {{ if .GetComponents }}
         <div class="border rounded-xl">
             <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Components</h3>
             <div class="p-4">
                 <ul class="list-disc list-inside">
-                    {{ range .Components }}
+                    {{ range .GetComponents }}
                     <li><a href="/ui/components/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
                     {{ end }}
                 </ul>
@@ -57,12 +57,12 @@
         </div>
         {{ end }}
 
-        {{ if .Resources }}
+        {{ if .GetResources }}
         <div class="border rounded-xl">
             <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Resources</h3>
             <div class="p-4">
                 <ul class="list-disc list-inside">
-                    {{ range .Resources }}
+                    {{ range .GetResources }}
                     <li><a href="/ui/resources/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
                     {{ end }}
                 </ul>

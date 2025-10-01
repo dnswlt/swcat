@@ -3,13 +3,13 @@
 {{- range .Components }}
 <tr class="border-t">
     <td class="px-4 py-2">
-        <a href="/ui/components/{{ .Metadata.Name | urlencode }}" class="text-blue-600 hover:underline">
-            {{ .Metadata.Name }}
+        <a href="/ui/components/{{ .GetQName | urlencode }}" class="text-blue-600 hover:underline">
+            {{ .GetQName }}
         </a>
     </td>
     <td class="px-4 py-2">
-        <a href="/ui/systems/{{ .Spec.System | urlencode }}" class="text-blue-600 hover:underline">
-            {{ .Spec.System }}
+        <a href="/ui/systems/{{ .GetSystem | urlencode }}" class="text-blue-600 hover:underline">
+            {{ .GetSystem }}
         </a>
     </td>
     <td class="px-4 py-2">{{ .Spec.Owner }}</td>

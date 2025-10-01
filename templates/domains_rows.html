@@ -3,8 +3,8 @@
 {{- range .Domains }}
 <tr class="border-t">
     <td class="px-4 py-2">
-        <a href="/ui/domains/{{ .Metadata.Name | urlencode }}" class="text-blue-600 hover:underline">
-            {{ .Metadata.Name }}
+        <a href="/ui/domains/{{ .GetQName | urlencode }}" class="text-blue-600 hover:underline">
+            {{ .GetQName }}
         </a>
     </td>
     <td class="px-4 py-2">{{ .Metadata.Title }}</td>

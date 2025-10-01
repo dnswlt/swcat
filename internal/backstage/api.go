@@ -101,6 +101,8 @@ type Component struct {
 func (c *Component) GetKind() string         { return c.Kind }
 func (c *Component) GetMetadata() *Metadata  { return c.Metadata }
 func (c *Component) GetQName() string        { return c.Metadata.GetQName() }
+func (c *Component) GetOwner() string        { return c.Spec.Owner }
+func (c *Component) GetLifecycle() string    { return c.Spec.Lifecycle }
 func (c *Component) GetSystem() string       { return c.Spec.System }
 func (c *Component) GetDependents() []string { return c.Spec.dependents }
 
@@ -130,13 +132,13 @@ type System struct {
 	Spec       *SystemSpec `yaml:"spec,omitempty"`
 }
 
-func (s *System) GetKind() string        { return s.Kind }
-func (s *System) GetMetadata() *Metadata { return s.Metadata }
-func (s *System) GetQName() string       { return s.Metadata.GetQName() }
-func (s *System) Components() []string   { return s.Spec.components }
-func (s *System) APIs() []string         { return s.Spec.apis }
-func (s *System) Resources() []string    { return s.Spec.resources }
-func (s *System) GetSystem() string      { return s.GetQName() }
+func (s *System) GetKind() string         { return s.Kind }
+func (s *System) GetMetadata() *Metadata  { return s.Metadata }
+func (s *System) GetQName() string        { return s.Metadata.GetQName() }
+func (s *System) GetComponents() []string { return s.Spec.components }
+func (s *System) GetAPIs() []string       { return s.Spec.apis }
+func (s *System) GetResources() []string  { return s.Spec.resources }
+func (s *System) GetSystem() string       { return s.GetQName() }
 
 // Domain
 
@@ -165,7 +167,7 @@ type Domain struct {
 func (d *Domain) GetKind() string        { return d.Kind }
 func (d *Domain) GetMetadata() *Metadata { return d.Metadata }
 func (d *Domain) GetQName() string       { return d.Metadata.GetQName() }
-func (d *Domain) Systems() []string      { return d.Spec.systems }
+func (d *Domain) GetSystems() []string   { return d.Spec.systems }
 
 // API
 
@@ -197,8 +199,8 @@ type API struct {
 func (a *API) GetKind() string        { return a.Kind }
 func (a *API) GetMetadata() *Metadata { return a.Metadata }
 func (a *API) GetQName() string       { return a.Metadata.GetQName() }
-func (a *API) Providers() []string    { return a.Spec.providers }
-func (a *API) Consumers() []string    { return a.Spec.consumers }
+func (a *API) GetProviders() []string { return a.Spec.providers }
+func (a *API) GetConsumers() []string { return a.Spec.consumers }
 func (a *API) GetSystem() string      { return a.Spec.System }
 
 // Resource
@@ -267,3 +269,4 @@ type Group struct {
 func (g *Group) GetKind() string        { return g.Kind }
 func (g *Group) GetMetadata() *Metadata { return g.Metadata }
 func (g *Group) GetQName() string       { return g.Metadata.GetQName() }
+func (g *Group) GetDisplayName() string { return g.Spec.Profile.DisplayName }

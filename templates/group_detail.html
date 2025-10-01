@@ -15,7 +15,7 @@
         {{ with .Group }}
         <div class="space-y-4">
             <div class="flex justify-between items-center">
-                <h2 class="text-xl font-semibold">{{ .Metadata.Name }}</h2>
+                <h2 class="text-xl font-semibold">{{ .GetQName }}</h2>
                 <span class="text-gray-500">{{ .Metadata.Title }}</span>
             </div>
             <p class="text-gray-700">{{ .Metadata.Description }}</p>

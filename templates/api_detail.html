@@ -15,7 +15,7 @@
         {{ with .API }}
         <div class="space-y-4">
             <div class="flex justify-between items-center">
-                <h2 class="text-xl font-semibold">{{ .Metadata.Name }}</h2>
+                <h2 class="text-xl font-semibold">{{ .GetQName }}</h2>
                 <span class="text-gray-500">{{ .Spec.Type }}</span>
             </div>
             <p class="text-gray-700">{{ .Metadata.Description }}</p>
@@ -33,10 +33,12 @@
                     <p><a href="/ui/systems/{{ .Spec.System | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.System }}</a></p>
                 </div>
             </div>
+            <!--
             <div>
                 <h3 class="font-semibold">Definition</h3>
                 <pre class="bg-gray-100 p-4 rounded-md">{{ .Spec.Definition }}</pre>
             </div>
+            -->
         </div>
 
         {{ if .Metadata.Links }}
@@ -52,22 +54,22 @@
         </div>
         {{ end }}
 
-        {{ if .Providers }}
+        {{ if .GetProviders }}
         <div>
             <h3 class="text-lg font-semibold">Providers</h3>
             <ul class="list-disc list-inside">
-                {{ range .Providers }}
+                {{ range .GetProviders }}
                 <li><a href="/ui/components/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
                 {{ end }}
             </ul>
         </div>
         {{ end }}
 
-        {{ if .Consumers }}
+        {{ if .GetConsumers }}
         <div>
             <h3 class="text-lg font-semibold">Consumers</h3>
             <ul class="list-disc list-inside">
-                {{ range .Consumers }}
+                {{ range .GetConsumers }}
                 <li><a href="/ui/components/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
                 {{ end }}
             </ul>
