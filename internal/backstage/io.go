@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"go.yaml.in/yaml/v2"
 )
@@ -19,6 +20,30 @@ var (
 		"Group":     func() Entity { return &Group{} },
 	}
 )
+
+// WriteEntities safely writes a slice of entities to a given path.
+// It writes to a temporary file first and then atomically moves it to the final destination.
+func WriteEntities(path string, entities []Entity) error {
+	// 1. Create a temporary file in the same directory as the target path.
+	dir := filepath.Dir(path)
+	tmpFile, err := os.CreateTemp(dir, "swcat-*.tmp")
+	if err != nil {
+		return fmt.Errorf("could not create temporary file: %v", err)
+	}
+
+	enc := yaml.NewEncoder(tmpFile)
+	for _, e := range entities {
+		if err := enc.Encode(e); err != nil {
+			tmpFile.Close()
+			os.Remove(tmpFile.Name())
+			return fmt.Errorf("failed to encode entity: %v", err)
+		}
+	}
+	enc.Close()
+	tmpFile.Close()
+
+	return os.Rename(tmpFile.Name(), path)
+}
 
 func ReadEntities(path string) ([]Entity, error) {
 	f, err := os.Open(path)

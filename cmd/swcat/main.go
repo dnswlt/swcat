@@ -80,9 +80,24 @@ func collectYMLFiles(args []string) ([]string, error) {
 
 }
 
+func formatFiles(files []string) error {
+	for _, f := range files {
+		log.Printf("Reading input file %s", f)
+		es, err := backstage.ReadEntities(f)
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %v", f, err)
+		}
+		if err := backstage.WriteEntities(f, es); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func main() {
 
 	serverAddrFlag := flag.String("addr", "localhost:8080", "Address to listen on")
+	formatFlag := flag.Bool("format", false, "Format input files and exit. This currently remvoes all comments!")
 	baseDir := flag.String("base-dir", ".", "Base directory")
 	flag.Parse()
 
@@ -99,6 +114,14 @@ func main() {
 	files, err := collectYMLFiles(flag.Args())
 	if err != nil {
 		log.Fatalf("Failed to collect YAML files: %v", err)
+	}
+
+	if *formatFlag {
+		err := formatFiles(files)
+		if err != nil {
+			log.Fatalf("Failed to format files: %v", err)
+		}
+		return
 	}
 
 	for _, arg := range files {
