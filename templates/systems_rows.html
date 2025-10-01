@@ -7,14 +7,17 @@
             {{ .Metadata.Name }}
         </a>
     </td>
-    <td class="px-4 py-2">{{ .Metadata.Title }}</td>
+    <td class="px-4 py-2">
+        <a href="/ui/domains/{{ .Spec.Domain | urlencode }}" class="text-blue-600 hover:underline">
+            {{ .Spec.Domain }}
+        </a>
+    </td>
     <td class="px-4 py-2">{{ .Spec.Owner }}</td>
-    <td class="px-4 py-2">{{ .Spec.Domain }}</td>
 </tr>
 {{- end }}
 {{- else }}
 <tr>
-    <td colspan="4" class="px-4 py-2 text-center text-gray-500">
+    <td colspan="3" class="px-4 py-2 text-center text-gray-500">
         No systems found
     </td>
 </tr>
