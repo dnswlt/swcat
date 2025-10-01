@@ -86,19 +86,20 @@ func (s *Server) reloadTemplates() error {
 				return "#"
 			}
 			switch kind {
-			         case "component":
-							return "/ui/components/" + url.PathEscape(name)
-						case "resource":
-							return "/ui/resources/" + url.PathEscape(name)
-						case "system":
-							return "/ui/systems/" + url.PathEscape(name)
-						case "group":
-							return "/ui/groups/" + url.PathEscape(name)
-						case "domain":
-							return "/ui/domains/" + url.PathEscape(name)
-						default:
-							return "#"
-						}		},
+			case "component":
+				return "/ui/components/" + url.PathEscape(name)
+			case "resource":
+				return "/ui/resources/" + url.PathEscape(name)
+			case "system":
+				return "/ui/systems/" + url.PathEscape(name)
+			case "group":
+				return "/ui/groups/" + url.PathEscape(name)
+			case "domain":
+				return "/ui/domains/" + url.PathEscape(name)
+			default:
+				return "#"
+			}
+		},
 		"urlencode": func(s string) string {
 			return url.PathEscape(s)
 		},
@@ -162,6 +163,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	params["SVG"] = template.HTML(svg)
 
 	params["Components"] = system.Components()
+	params["Resources"] = system.Resources()
 	s.serveHTMLPage(w, r, "system_detail.html", params)
 }
 
@@ -269,7 +271,6 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 	}
 	params["SVG"] = template.HTML(svg)
 
-	params["Dependents"] = resource.Dependents()
 	s.serveHTMLPage(w, r, "resource_detail.html", params)
 }
 

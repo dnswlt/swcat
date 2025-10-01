@@ -34,24 +34,28 @@
         </div>
 
         {{ if .Metadata.Links }}
-        <div>
-            <h3 class="text-lg font-semibold">Links</h3>
-            <ul class="list-disc list-inside">
-                {{ range .Metadata.Links }}
-                <li><a href="{{ .URL }}" class="text-blue-600 hover:underline">{{ .Title }}</a></li>
-                {{ end }}
-            </ul>
+        <div class="border rounded-xl">
+            <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Links</h3>
+            <div class="p-4">
+                <ul class="list-disc list-inside">
+                    {{ range .Metadata.Links }}
+                    <li><a href="{{ .URL }}" class="text-blue-600 hover:underline">{{ .Title }}</a></li>
+                    {{ end }}
+                </ul>
+            </div>
         </div>
         {{ end }}
 
         {{ if .Systems }}
-        <div>
-            <h3 class="text-lg font-semibold">Systems</h3>
-            <ul class="list-disc list-inside">
-                {{ range .Systems }}
-                <li><a href="/ui/systems/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
-                {{ end }}
-            </ul>
+        <div class="border rounded-xl">
+            <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Systems</h3>
+            <div class="p-4">
+                <ul class="list-disc list-inside">
+                    {{ range .Systems }}
+                    <li><a href="/ui/systems/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                    {{ end }}
+                </ul>
+            </div>
         </div>
         {{ end }}
 

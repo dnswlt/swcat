@@ -402,7 +402,7 @@ func GenerateResourceSVG(r *Repository, name string) ([]byte, error) {
 	dw.addNode(DotNode{QName: qn, Kind: "resource", Label: qn})
 
 	// Dependents
-	for _, d := range resource.Dependents() {
+	for _, d := range resource.GetDependents() {
 		dependent := r.Entity(d)
 		if dependent != nil {
 			dependentQn := dependent.GetQName()

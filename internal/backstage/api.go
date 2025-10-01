@@ -98,10 +98,11 @@ type Component struct {
 	Spec       *ComponentSpec `yaml:"spec,omitempty"`
 }
 
-func (c *Component) GetKind() string        { return c.Kind }
-func (c *Component) GetMetadata() *Metadata { return c.Metadata }
-func (c *Component) GetQName() string       { return c.Metadata.GetQName() }
-func (c *Component) GetSystem() string      { return c.Spec.System }
+func (c *Component) GetKind() string         { return c.Kind }
+func (c *Component) GetMetadata() *Metadata  { return c.Metadata }
+func (c *Component) GetQName() string        { return c.Metadata.GetQName() }
+func (c *Component) GetSystem() string       { return c.Spec.System }
+func (c *Component) GetDependents() []string { return c.Spec.dependents }
 
 // System
 
@@ -224,11 +225,11 @@ type Resource struct {
 	Spec       *ResourceSpec `yaml:"spec,omitempty"`
 }
 
-func (r *Resource) GetKind() string        { return r.Kind }
-func (r *Resource) GetMetadata() *Metadata { return r.Metadata }
-func (r *Resource) GetQName() string       { return r.Metadata.GetQName() }
-func (r *Resource) Dependents() []string   { return r.Spec.dependents }
-func (r *Resource) GetSystem() string      { return r.Spec.System }
+func (r *Resource) GetKind() string         { return r.Kind }
+func (r *Resource) GetMetadata() *Metadata  { return r.Metadata }
+func (r *Resource) GetQName() string        { return r.Metadata.GetQName() }
+func (r *Resource) GetDependents() []string { return r.Spec.dependents }
+func (r *Resource) GetSystem() string       { return r.Spec.System }
 
 // Group
 

@@ -32,24 +32,41 @@
         </div>
 
         {{ if .Metadata.Links }}
-        <div>
-            <h3 class="text-lg font-semibold">Links</h3>
-            <ul class="list-disc list-inside">
-                {{ range .Metadata.Links }}
-                <li><a href="{{ .URL }}" class="text-blue-600 hover:underline">{{ .Title }}</a></li>
-                {{ end }}
-            </ul>
+        <div class="border rounded-xl">
+            <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Links</h3>
+            <div class="p-4">
+                <ul class="list-disc list-inside">
+                    {{ range .Metadata.Links }}
+                    <li><a href="{{ .URL }}" class="text-blue-600 hover:underline">{{ .Title }}</a></li>
+                    {{ end }}
+                </ul>
+            </div>
         </div>
         {{ end }}
 
         {{ if .Components }}
-        <div>
-            <h3 class="text-lg font-semibold">Components</h3>
-            <ul class="list-disc list-inside">
-                {{ range .Components }}
-                <li><a href="/ui/components/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
-                {{ end }}
-            </ul>
+        <div class="border rounded-xl">
+            <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Components</h3>
+            <div class="p-4">
+                <ul class="list-disc list-inside">
+                    {{ range .Components }}
+                    <li><a href="/ui/components/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                    {{ end }}
+                </ul>
+            </div>
+        </div>
+        {{ end }}
+
+        {{ if .Resources }}
+        <div class="border rounded-xl">
+            <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Resources</h3>
+            <div class="p-4">
+                <ul class="list-disc list-inside">
+                    {{ range .Resources }}
+                    <li><a href="/ui/resources/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                    {{ end }}
+                </ul>
+            </div>
         </div>
         {{ end }}
 

@@ -32,35 +32,44 @@
         </div>
 
         {{ if .Metadata.Links }}
-        <div>
-            <h3 class="text-lg font-semibold">Links</h3>
-            <ul class="list-disc list-inside">
-                {{ range .Metadata.Links }}
-                <li><a href="{{ .URL }}" class="text-blue-600 hover:underline">{{ .Title }}</a></li>
-                {{ end }}
-            </ul>
+        <div class="border rounded-xl">
+            <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Links</h3>
+            <div class="p-4">
+                <ul class="list-disc list-inside">
+                    {{ range .Metadata.Links }}
+                    <li><a href="{{ .URL }}" class="text-blue-600 hover:underline">{{ .Title }}</a></li>
+                    {{ end }}
+                </ul>
+            </div>
         </div>
         {{ end }}
 
-        {{ if .Spec.DependsOn }}
-        <div>
-            <h3 class="text-lg font-semibold">Depends On</h3>
-            <ul class="list-disc list-inside">
-                {{ range .Spec.DependsOn }}
-                <li><a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+        {{ if or .Spec.DependsOn .GetDependents }}
+        <div class="border rounded-xl">
+            <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Dependencies</h3>
+            <div class="grid grid-cols-2 gap-4 p-4">
+                {{ if .GetDependents }}
+                <div>
+                    <h3 class="font-semibold">Incoming</h3>
+                    <ul class="list-disc list-inside">
+                        {{ range .GetDependents }}
+                        <li><a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                        {{ end }}
+                    </ul>
+                </div>
                 {{ end }}
-            </ul>
-        </div>
-        {{ end }}
 
-        {{ if .Dependents }}
-        <div>
-            <h3 class="text-lg font-semibold">Dependents</h3>
-            <ul class="list-disc list-inside">
-                {{ range .Dependents }}
-                <li><a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                {{ if .Spec.DependsOn }}
+                <div>
+                    <h3 class="font-semibold">Outgoing</h3>
+                    <ul class="list-disc list-inside">
+                        {{ range .Spec.DependsOn }}
+                        <li><a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                        {{ end }}
+                    </ul>
+                </div>
                 {{ end }}
-            </ul>
+            </div>
         </div>
         {{ end }}
 
