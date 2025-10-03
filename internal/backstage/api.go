@@ -3,6 +3,8 @@
 // https://backstage.io/docs/features/software-catalog/descriptor-format#contents
 package backstage
 
+import "cmp"
+
 const (
 	// The name of the (implicit) default namespace.
 	DefaultNamespace = "default"
@@ -56,6 +58,14 @@ type Entity interface {
 	GetKind() string
 	GetMetadata() *Metadata
 	GetQName() string
+}
+
+// CompareEntityByName compares two entities lexicographically by (namespace, name).
+func CompareEntityByName(a, b Entity) int {
+	if c := cmp.Compare(a.GetMetadata().Namespace, b.GetMetadata().Namespace); c != 0 {
+		return c
+	}
+	return cmp.Compare(a.GetMetadata().Name, b.GetMetadata().Name)
 }
 
 type SystemPart interface {

@@ -1,7 +1,6 @@
 package backstage
 
 import (
-	"cmp"
 	"fmt"
 	"regexp"
 	"slices"
@@ -128,7 +127,7 @@ func (r *Repository) FindComponents(query string) []*Component {
 		}
 	}
 	slices.SortFunc(result, func(c1, c2 *Component) int {
-		return cmp.Compare(c1.GetQName(), c2.GetQName())
+		return CompareEntityByName(c1, c2)
 	})
 	return result
 }
@@ -141,7 +140,7 @@ func (r *Repository) FindSystems(query string) []*System {
 		}
 	}
 	slices.SortFunc(result, func(s1, s2 *System) int {
-		return cmp.Compare(s1.GetQName(), s2.GetQName())
+		return CompareEntityByName(s1, s2)
 	})
 	return result
 }
@@ -154,7 +153,7 @@ func (r *Repository) FindAPIs(query string) []*API {
 		}
 	}
 	slices.SortFunc(result, func(a1, a2 *API) int {
-		return cmp.Compare(a1.GetQName(), a2.GetQName())
+		return CompareEntityByName(a1, a2)
 	})
 	return result
 }
@@ -167,7 +166,7 @@ func (r *Repository) FindResources(query string) []*Resource {
 		}
 	}
 	slices.SortFunc(result, func(r1, r2 *Resource) int {
-		return cmp.Compare(r1.GetQName(), r2.GetQName())
+		return CompareEntityByName(r1, r2)
 	})
 	return result
 }
@@ -180,7 +179,7 @@ func (r *Repository) FindDomains(query string) []*Domain {
 		}
 	}
 	slices.SortFunc(result, func(d1, d2 *Domain) int {
-		return cmp.Compare(d1.GetQName(), d2.GetQName())
+		return CompareEntityByName(d1, d2)
 	})
 	return result
 }
@@ -193,7 +192,7 @@ func (r *Repository) FindGroups(query string) []*Group {
 		}
 	}
 	slices.SortFunc(result, func(g1, g2 *Group) int {
-		return cmp.Compare(g1.GetQName(), g2.GetQName())
+		return CompareEntityByName(g1, g2)
 	})
 	return result
 }
