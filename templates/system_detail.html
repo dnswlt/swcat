@@ -26,7 +26,7 @@
                 </div>
                 <div>
                     <h3 class="font-semibold">Domain</h3>
-                    <p>{{ .Spec.Domain }}</p>
+                    <p><a href="/ui/domains/{{ .Spec.Domain | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.Domain }}</a></p>
                 </div>
             </div>
         </div>
