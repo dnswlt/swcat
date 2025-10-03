@@ -44,44 +44,46 @@
         </div>
         {{ end }}
 
-        {{ if .GetComponents }}
-        <div class="border rounded-xl">
-            <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Components</h3>
-            <div class="p-4">
-                <ul class="list-disc list-inside">
-                    {{ range .GetComponents }}
-                    <li><a href="/ui/components/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
-                    {{ end }}
-                </ul>
+        <div class="grid grid-cols-3 gap-4">
+            {{ if .GetComponents }}
+            <div class="border rounded-xl">
+                <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Components</h3>
+                <div class="p-4">
+                    <ul class="list-disc list-inside">
+                        {{ range .GetComponents }}
+                        <li><a href="/ui/components/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                        {{ end }}
+                    </ul>
+                </div>
             </div>
-        </div>
-        {{ end }}
+            {{ end }}
 
-        {{ if .GetResources }}
-        <div class="border rounded-xl">
-            <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Resources</h3>
-            <div class="p-4">
-                <ul class="list-disc list-inside">
-                    {{ range .GetResources }}
-                    <li><a href="/ui/resources/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
-                    {{ end }}
-                </ul>
+            {{ if .GetResources }}
+            <div class="border rounded-xl">
+                <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Resources</h3>
+                <div class="p-4">
+                    <ul class="list-disc list-inside">
+                        {{ range .GetResources }}
+                        <li><a href="/ui/resources/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                        {{ end }}
+                    </ul>
+                </div>
             </div>
-        </div>
-        {{ end }}
+            {{ end }}
 
-        {{ if .GetAPIs }}
-        <div class="border rounded-xl">
-            <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">APIs</h3>
-            <div class="p-4">
-                <ul class="list-disc list-inside">
-                    {{ range .GetAPIs }}
-                    <li><a href="/ui/apis/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
-                    {{ end }}
-                </ul>
+            {{ if .GetAPIs }}
+            <div class="border rounded-xl">
+                <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">APIs</h3>
+                <div class="p-4">
+                    <ul class="list-disc list-inside">
+                        {{ range .GetAPIs }}
+                        <li><a href="/ui/apis/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                        {{ end }}
+                    </ul>
+                </div>
             </div>
+            {{ end }}
         </div>
-        {{ end }}
 
         {{ else }}
         <p class="text-center text-gray-500">System not found</p>
