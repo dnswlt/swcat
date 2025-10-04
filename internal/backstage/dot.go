@@ -32,7 +32,7 @@ func runDot(ctx context.Context, dotSource string) ([]byte, error) {
 	output, err := cmd.CombinedOutput() // will wait until process exits
 	if err != nil {
 		// CombinedOutput returns output (stdout+stderr) even on error - include it for debugging.
-		return output, fmt.Errorf("dot failed: %w; output: %s", err, output)
+		return output, fmt.Errorf("dot failed: %w; output: %s; input: %s", err, output, dotSource)
 	}
 
 	// Cut off <?xml ?> header and only return the <svg>
@@ -53,23 +53,39 @@ type DotNode struct {
 func (n *DotNode) FillColor() string {
 	switch n.Kind {
 	case "component":
-		return "lightblue"
+		return "#CBDCEB"
 	case "system":
-		return "lightsteelblue"
+		return "#6D94C5"
 	case "api":
-		return "plum"
+		return "#FADA7A"
 	case "resource":
-		return "azure"
+		return "#B4DEBD"
 	case "group":
-		return "sandybrown"
+		return "#F5EEDC"
 	}
-	return "lightgray"
+	return "#F5EEDC" // neutral beige
 }
 
+type DotEdgeStyle int
+
+const (
+	// A normal arrow pointing from source to target
+	ESNormal = iota
+	// An arrow poinging from target to source.
+	ESBackward
+	// An arrow pointing from target (the API provder) to source (the API),
+	// with an empty arrowhead (like a UML implementation arrow).
+	ESProvidedBy
+	// A dashed line pointing from source to target.
+	ESDependsOn
+)
+
 type DotEdge struct {
-	From  string
-	To    string
-	Style string
+	From string
+	To   string
+	// Only one of Label or HTMLLabel may be used. If the latter is set, it takes precedence.
+	Label string
+	Style DotEdgeStyle
 }
 
 type DotWriter struct {
@@ -89,7 +105,10 @@ func (dw *DotWriter) start() {
 	dw.w.WriteString("rankdir=\"LR\"\n")
 	dw.w.WriteString("fontname=\"sans-serif\"\n")
 	dw.w.WriteString("splines=\"spline\"\n")
-	dw.w.WriteString("fontsize=\"11\"\n")
+	// Tell Graphviz about font sizes and (approximate) font families so it can
+	// size boxes and edge labels appropriately. The ultimate font style is defined
+	// via CSS (see style.css).
+	dw.w.WriteString("class=\"graphviz-svg\"\n")
 	dw.w.WriteString("node[shape=\"box\",fontname=\"sans-serif\",fontsize=\"11\",style=\"filled,rounded\"]\n")
 	dw.w.WriteString("edge[fontname=\"sans-serif\",fontsize=\"11\",minlen=\"4\"]\n")
 }
@@ -98,12 +117,9 @@ func (dw *DotWriter) end() {
 	dw.w.WriteString("}\n")
 }
 
-func (dw *DotWriter) String() string {
-	return dw.w.String()
-}
-
 func (dw *DotWriter) addNode(node DotNode) {
 	if dw.nodes[node.QName] {
+		// Ignore duplicate node definitions.
 		return
 	}
 	if node.Shape == "" {
@@ -116,12 +132,34 @@ func (dw *DotWriter) addNode(node DotNode) {
 }
 
 func (dw *DotWriter) addEdge(edge DotEdge) {
-	switch edge.Style {
-	case "provides":
-		fmt.Fprintf(dw.w, `"%s" -> "%s"[dir="back",arrowtail="empty"]`, edge.From, edge.To)
-	default:
-		fmt.Fprintf(dw.w, `"%s" -> "%s"`, edge.From, edge.To)
+	attrs := map[string]string{}
+
+	if edge.Label != "" {
+		attrs["label"] = `"` + edge.Label + `"`
 	}
+	switch edge.Style {
+	case ESBackward:
+		attrs["dir"] = "back"
+	case ESProvidedBy:
+		// Draw "provides" relationships backwards, so the API appears on the left-hand side
+		// of the implementing component (with an empty arrowhead pointing at the API).
+		attrs["dir"] = "back"
+		attrs["arrowtail"] = "empty"
+	case ESDependsOn:
+		attrs["style"] = "dashed"
+	default:
+		// No special attrs required.
+	}
+
+	var edgeAttrs string
+	if len(attrs) > 0 {
+		var items []string
+		for k, v := range attrs {
+			items = append(items, fmt.Sprintf("%s=%s", k, v))
+		}
+		edgeAttrs = "[" + strings.Join(items, ",") + "]"
+	}
+	fmt.Fprintf(dw.w, `"%s" -> "%s"%s`, edge.From, edge.To, edgeAttrs)
 	fmt.Fprintln(dw.w)
 }
 
@@ -132,6 +170,10 @@ func (dw *DotWriter) startCluster(name string) {
 
 func (dw *DotWriter) endCluster() {
 	dw.w.WriteString("}\n")
+}
+
+func (dw *DotWriter) String() string {
+	return dw.w.String()
 }
 
 // GenerateDomainSVG generates an SVG for the given domain.
@@ -271,9 +313,9 @@ func GenerateSystemSVG(r *Repository, name string) ([]byte, error) {
 		seenDeps[extDep.String()] = true
 		dw.addNode(DotNode{QName: extDep.targetSystem, Kind: "system", Label: extDep.targetSystem})
 		if extDep.direction == "outgoing" {
-			dw.addEdge(DotEdge{From: extDep.source.GetQName(), To: extDep.targetSystem, Style: "cluster:out"})
+			dw.addEdge(DotEdge{From: extDep.source.GetQName(), To: extDep.targetSystem})
 		} else {
-			dw.addEdge(DotEdge{From: extDep.targetSystem, To: extDep.source.GetQName(), Style: "cluster:in"})
+			dw.addEdge(DotEdge{From: extDep.targetSystem, To: extDep.source.GetQName()})
 		}
 	}
 
@@ -319,14 +361,14 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 		api := r.API(a)
 		apiQn := api.GetQName()
 		dw.addNode(DotNode{QName: apiQn, Kind: "api", Label: apiQn})
-		dw.addEdge(DotEdge{From: apiQn, To: qn, Style: "provides"})
+		dw.addEdge(DotEdge{From: apiQn, To: qn, Style: ESProvidedBy})
 	}
 	for _, d := range component.Spec.dependents {
 		e := r.Entity(d)
 		if e != nil {
 			xQn := e.GetQName()
 			dw.addNode(DotNode{QName: xQn, Kind: strings.ToLower(e.GetKind()), Label: xQn})
-			dw.addEdge(DotEdge{From: xQn, To: qn})
+			dw.addEdge(DotEdge{From: xQn, To: qn, Style: ESDependsOn})
 		}
 	}
 
@@ -344,7 +386,7 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 		if e != nil {
 			xQn := e.GetQName()
 			dw.addNode(DotNode{QName: xQn, Kind: strings.ToLower(e.GetKind()), Label: xQn})
-			dw.addEdge(DotEdge{From: qn, To: xQn})
+			dw.addEdge(DotEdge{From: qn, To: xQn, Style: ESDependsOn})
 		}
 	}
 
@@ -370,13 +412,28 @@ func GenerateAPISVG(r *Repository, name string) ([]byte, error) {
 	// API
 	dw.addNode(DotNode{QName: qn, Kind: "api", Label: qn})
 
+	// Owner
+	owner := r.Group(api.Spec.Owner)
+	if owner != nil {
+		ownerQn := owner.GetQName()
+		dw.addNode(DotNode{QName: ownerQn, Kind: "group", Label: ownerQn, Shape: "ellipse"})
+		dw.addEdge(DotEdge{From: ownerQn, To: qn})
+	}
+	// System containing the API
+	system := r.System(api.Spec.System)
+	if system != nil {
+		systemQn := system.GetQName()
+		dw.addNode(DotNode{QName: systemQn, Kind: "system", Label: systemQn})
+		dw.addEdge(DotEdge{From: systemQn, To: qn})
+	}
+
 	// Providers
 	for _, p := range api.GetProviders() {
 		provider := r.Component(p)
 		if provider != nil {
 			providerQn := provider.GetQName()
 			dw.addNode(DotNode{QName: providerQn, Kind: "component", Label: providerQn})
-			dw.addEdge(DotEdge{From: qn, To: providerQn, Style: "provides"})
+			dw.addEdge(DotEdge{From: qn, To: providerQn, Style: ESProvidedBy})
 		}
 	}
 

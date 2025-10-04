@@ -4,7 +4,25 @@
 
 
 @layer utilities {
+
+    /* --- Graphviz Styling --- */
     .clickable-node:hover {
         cursor: pointer;
+    }
+
+    /* Override Graphviz font settings, if present. */
+    .graphviz-svg text {
+        /* Value is copied from the font-family seen for the whole HTML. */
+        font-family: ui-sans-serif,system-ui,sans-serif,"Apple Color Emoji","Segoe UI Emoji",Segoe UI Symbol,"Noto Color Emoji";
+    }
+
+    .graphviz-svg .node text {
+        font-size: 11px;
+    }
+
+    .graphviz-svg .edge text {
+        font-size: 10px;
+        font-style: italic;
+        fill: #374151;
     }
 }

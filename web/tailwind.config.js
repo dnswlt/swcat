@@ -5,6 +5,11 @@ export default {
         "../templates/*.html",
         "./*.js",
     ],
+    safelist: [
+        {
+            pattern: /graphviz-svg/,
+        },
+    ],
     theme: {
         extend: {},
     },
