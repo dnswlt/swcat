@@ -76,15 +76,13 @@ func entityNodeKind(e Entity) NodeKind {
 
 type DotNode struct {
 	ID    string // ID of this node in the dot graph.
-	SVGID string // ID to use as the SVG id= attribute.
 	Kind  NodeKind
 	Label string
 }
 
 func EntityNode(e Entity) DotNode {
 	return DotNode{
-		ID:    e.GetQName(),
-		SVGID: e.GetRef(),
+		ID:    e.GetRef(),
 		Kind:  entityNodeKind(e),
 		Label: e.GetQName(),
 	}
@@ -134,11 +132,18 @@ const (
 )
 
 type DotEdge struct {
-	From string
-	To   string
-	// Only one of Label or HTMLLabel may be used. If the latter is set, it takes precedence.
+	From  string
+	To    string
 	Label string
 	Style EdgeStyle
+}
+
+func EntityEdge(from, to Entity, style EdgeStyle) DotEdge {
+	return DotEdge{
+		From:  from.GetRef(),
+		To:    to.GetRef(),
+		Style: style,
+	}
 }
 
 type DotWriter struct {
@@ -176,7 +181,7 @@ func (dw *DotWriter) AddNode(node DotNode) {
 		return
 	}
 	fmt.Fprintf(dw.w, `"%s"[id="%s",label="%s",fillcolor="%s",shape="%s",class="clickable-node"]`,
-		node.ID, node.SVGID, node.Label, node.FillColor(), node.Shape())
+		node.ID, node.ID, node.Label, node.FillColor(), node.Shape())
 	fmt.Fprintln(dw.w)
 	dw.nodes[node.ID] = true
 }
@@ -384,9 +389,9 @@ func GenerateSystemSVG(r *Repository, name string) ([]byte, error) {
 		seenDeps[extDep.String()] = true
 		dw.AddNode(EntityNode(extDep.targetSystem))
 		if extDep.direction == "outgoing" {
-			dw.AddEdge(DotEdge{From: extDep.source.GetQName(), To: extDep.targetSystem.GetQName()})
+			dw.AddEdge(EntityEdge(extDep.source, extDep.targetSystem, ESNormal))
 		} else {
-			dw.AddEdge(DotEdge{From: extDep.targetSystem.GetQName(), To: extDep.source.GetQName()})
+			dw.AddEdge(EntityEdge(extDep.targetSystem, extDep.source, ESNormal))
 		}
 	}
 
@@ -403,7 +408,6 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	if component == nil {
 		return nil, fmt.Errorf("component %s does not exist", name)
 	}
-	qn := component.GetQName()
 
 	dw := NewDotWriter()
 	dw.Start()
@@ -418,28 +422,24 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	// - Other entities with a DependsOn relationship to this entity
 	owner := r.Group(component.Spec.Owner)
 	if owner != nil {
-		ownerQn := owner.GetQName()
 		dw.AddNode(EntityNode(owner))
-		dw.AddEdge(DotEdge{From: ownerQn, To: qn})
+		dw.AddEdge(EntityEdge(owner, component, ESOwner))
 	}
 	system := r.System(component.Spec.System)
 	if system != nil {
-		systemQn := system.GetQName()
 		dw.AddNode(EntityNode(system))
-		dw.AddEdge(DotEdge{From: systemQn, To: qn})
+		dw.AddEdge(EntityEdge(system, component, ESContains))
 	}
 	for _, a := range component.Spec.ProvidesAPIs {
 		api := r.API(a)
-		apiQn := api.GetQName()
 		dw.AddNode(EntityNode(api))
-		dw.AddEdge(DotEdge{From: apiQn, To: qn, Style: ESProvidedBy})
+		dw.AddEdge(EntityEdge(api, component, ESProvidedBy))
 	}
 	for _, d := range component.Spec.dependents {
 		e := r.Entity(d)
 		if e != nil {
-			xQn := e.GetQName()
 			dw.AddNode(EntityNode(e))
-			dw.AddEdge(DotEdge{From: xQn, To: qn, Style: ESDependsOn})
+			dw.AddEdge(EntityEdge(e, component, ESDependsOn))
 		}
 	}
 
@@ -448,16 +448,14 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	// - DependsOn relationships of this entity
 	for _, a := range component.Spec.ConsumesAPIs {
 		api := r.API(a)
-		apiQn := api.GetQName()
 		dw.AddNode(EntityNode(api))
-		dw.AddEdge(DotEdge{From: qn, To: apiQn})
+		dw.AddEdge(EntityEdge(component, api, ESNormal))
 	}
 	for _, d := range component.Spec.DependsOn {
 		e := r.Entity(d)
 		if e != nil {
-			xQn := e.GetQName()
 			dw.AddNode(EntityNode(e))
-			dw.AddEdge(DotEdge{From: qn, To: xQn, Style: ESDependsOn})
+			dw.AddEdge(EntityEdge(component, e, ESDependsOn))
 		}
 	}
 
@@ -475,7 +473,6 @@ func GenerateAPISVG(r *Repository, name string) ([]byte, error) {
 	if api == nil {
 		return nil, fmt.Errorf("API %s does not exist", name)
 	}
-	qn := api.GetQName()
 
 	dw := NewDotWriter()
 	dw.Start()
@@ -486,25 +483,22 @@ func GenerateAPISVG(r *Repository, name string) ([]byte, error) {
 	// Owner
 	owner := r.Group(api.Spec.Owner)
 	if owner != nil {
-		ownerQn := owner.GetQName()
 		dw.AddNode(EntityNode(owner))
-		dw.AddEdge(DotEdge{From: ownerQn, To: qn, Style: ESOwner})
+		dw.AddEdge(EntityEdge(owner, api, ESOwner))
 	}
 	// System containing the API
 	system := r.System(api.Spec.System)
 	if system != nil {
-		systemQn := system.GetQName()
 		dw.AddNode(EntityNode(system))
-		dw.AddEdge(DotEdge{From: systemQn, To: qn, Style: ESContains})
+		dw.AddEdge(EntityEdge(system, api, ESContains))
 	}
 
 	// Providers
 	for _, p := range api.GetProviders() {
 		provider := r.Component(p)
 		if provider != nil {
-			providerQn := provider.GetQName()
 			dw.AddNode(EntityNode(provider))
-			dw.AddEdge(DotEdge{From: qn, To: providerQn, Style: ESProvidedBy})
+			dw.AddEdge(EntityEdge(api, provider, ESProvidedBy))
 		}
 	}
 
@@ -512,9 +506,8 @@ func GenerateAPISVG(r *Repository, name string) ([]byte, error) {
 	for _, c := range api.GetConsumers() {
 		consumer := r.Component(c)
 		if consumer != nil {
-			consumerQn := consumer.GetQName()
 			dw.AddNode(EntityNode(consumer))
-			dw.AddEdge(DotEdge{From: consumerQn, To: qn})
+			dw.AddEdge(EntityEdge(consumer, api, ESNormal))
 		}
 	}
 
@@ -531,7 +524,6 @@ func GenerateResourceSVG(r *Repository, name string) ([]byte, error) {
 	if resource == nil {
 		return nil, fmt.Errorf("resource %s does not exist", name)
 	}
-	qn := resource.GetQName()
 
 	dw := NewDotWriter()
 	dw.Start()
@@ -542,25 +534,22 @@ func GenerateResourceSVG(r *Repository, name string) ([]byte, error) {
 	// Owner
 	owner := r.Group(resource.Spec.Owner)
 	if owner != nil {
-		ownerQn := owner.GetQName()
 		dw.AddNode(EntityNode(owner))
-		dw.AddEdge(DotEdge{From: ownerQn, To: qn, Style: ESOwner})
+		dw.AddEdge(EntityEdge(owner, resource, ESOwner))
 	}
 	// System containing the API
 	system := r.System(resource.Spec.System)
 	if system != nil {
-		systemQn := system.GetQName()
 		dw.AddNode(EntityNode(system))
-		dw.AddEdge(DotEdge{From: systemQn, To: qn, Style: ESContains})
+		dw.AddEdge(EntityEdge(system, resource, ESContains))
 	}
 
 	// Dependents
 	for _, d := range resource.GetDependents() {
 		dependent := r.Entity(d)
 		if dependent != nil {
-			dependentQn := dependent.GetQName()
 			dw.AddNode(EntityNode(dependent))
-			dw.AddEdge(DotEdge{From: dependentQn, To: qn, Style: ESDependsOn})
+			dw.AddEdge(EntityEdge(dependent, resource, ESDependsOn))
 		}
 	}
 

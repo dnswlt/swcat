@@ -7,6 +7,7 @@
             {{ .GetQName }}
         </a>
     </td>
+    <td class="px-4 py-2">{{ .Metadata.Title }}</td>
     <td class="px-4 py-2">
         <a href="/ui/domains/{{ .Spec.Domain | urlencode }}" class="text-blue-600 hover:underline">
             {{ .Spec.Domain }}
