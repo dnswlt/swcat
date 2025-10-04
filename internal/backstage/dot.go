@@ -47,7 +47,6 @@ type DotNode struct {
 	QName string
 	Kind  string
 	Label string
-	Shape string
 }
 
 func (n *DotNode) FillColor() string {
@@ -66,6 +65,15 @@ func (n *DotNode) FillColor() string {
 	return "#F5EEDC" // neutral beige
 }
 
+func (n *DotNode) Shape() string {
+	switch n.Kind {
+	case "group":
+		return "ellipse"
+	default:
+		return "box"
+	}
+}
+
 type DotEdgeStyle int
 
 const (
@@ -78,6 +86,10 @@ const (
 	ESProvidedBy
 	// A dashed line pointing from source to target.
 	ESDependsOn
+	// Used for arrows from owner groups to their owned entities.
+	ESOwner
+	// Used for arrows from a System to its constituent entities (components, apis, resources).
+	ESContains
 )
 
 type DotEdge struct {
@@ -122,11 +134,8 @@ func (dw *DotWriter) addNode(node DotNode) {
 		// Ignore duplicate node definitions.
 		return
 	}
-	if node.Shape == "" {
-		node.Shape = "box"
-	}
 	fmt.Fprintf(dw.w, `"%s"[id="%s:%s",label="%s",fillcolor="%s",shape="%s",class="clickable-node"]`,
-		node.QName, node.Kind, node.QName, node.Label, node.FillColor(), node.Shape)
+		node.QName, node.Kind, node.QName, node.Label, node.FillColor(), node.Shape())
 	fmt.Fprintln(dw.w)
 	dw.nodes[node.QName] = true
 }
@@ -134,8 +143,12 @@ func (dw *DotWriter) addNode(node DotNode) {
 func (dw *DotWriter) addEdge(edge DotEdge) {
 	attrs := map[string]string{}
 
+	setLabel := func(s string) {
+		attrs["label"] = `"` + s + `"`
+	}
+
 	if edge.Label != "" {
-		attrs["label"] = `"` + edge.Label + `"`
+		setLabel(edge.Label)
 	}
 	switch edge.Style {
 	case ESBackward:
@@ -147,6 +160,16 @@ func (dw *DotWriter) addEdge(edge DotEdge) {
 		attrs["arrowtail"] = "empty"
 	case ESDependsOn:
 		attrs["style"] = "dashed"
+	case ESOwner:
+		attrs["dir"] = "back"
+		if attrs["label"] == "" {
+			setLabel("owner")
+		}
+	case ESContains:
+		attrs["dir"] = "back"
+		if attrs["label"] == "" {
+			setLabel("part-of")
+		}
 	default:
 		// No special attrs required.
 	}
@@ -348,7 +371,7 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	owner := r.Group(component.Spec.Owner)
 	if owner != nil {
 		ownerQn := owner.GetQName()
-		dw.addNode(DotNode{QName: ownerQn, Kind: "group", Label: ownerQn, Shape: "ellipse"})
+		dw.addNode(DotNode{QName: ownerQn, Kind: "group", Label: ownerQn})
 		dw.addEdge(DotEdge{From: ownerQn, To: qn})
 	}
 	system := r.System(component.Spec.System)
@@ -416,15 +439,15 @@ func GenerateAPISVG(r *Repository, name string) ([]byte, error) {
 	owner := r.Group(api.Spec.Owner)
 	if owner != nil {
 		ownerQn := owner.GetQName()
-		dw.addNode(DotNode{QName: ownerQn, Kind: "group", Label: ownerQn, Shape: "ellipse"})
-		dw.addEdge(DotEdge{From: ownerQn, To: qn})
+		dw.addNode(DotNode{QName: ownerQn, Kind: "group", Label: ownerQn})
+		dw.addEdge(DotEdge{From: ownerQn, To: qn, Style: ESOwner})
 	}
 	// System containing the API
 	system := r.System(api.Spec.System)
 	if system != nil {
 		systemQn := system.GetQName()
 		dw.addNode(DotNode{QName: systemQn, Kind: "system", Label: systemQn})
-		dw.addEdge(DotEdge{From: systemQn, To: qn})
+		dw.addEdge(DotEdge{From: systemQn, To: qn, Style: ESContains})
 	}
 
 	// Providers
@@ -467,6 +490,21 @@ func GenerateResourceSVG(r *Repository, name string) ([]byte, error) {
 
 	// Resource
 	dw.addNode(DotNode{QName: qn, Kind: "resource", Label: qn})
+
+	// Owner
+	owner := r.Group(resource.Spec.Owner)
+	if owner != nil {
+		ownerQn := owner.GetQName()
+		dw.addNode(DotNode{QName: ownerQn, Kind: "group", Label: ownerQn})
+		dw.addEdge(DotEdge{From: ownerQn, To: qn, Style: ESOwner})
+	}
+	// System containing the API
+	system := r.System(resource.Spec.System)
+	if system != nil {
+		systemQn := system.GetQName()
+		dw.addNode(DotNode{QName: systemQn, Kind: "system", Label: systemQn})
+		dw.addEdge(DotEdge{From: systemQn, To: qn, Style: ESContains})
+	}
 
 	// Dependents
 	for _, d := range resource.GetDependents() {
