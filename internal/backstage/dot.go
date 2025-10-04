@@ -474,7 +474,7 @@ func GenerateResourceSVG(r *Repository, name string) ([]byte, error) {
 		if dependent != nil {
 			dependentQn := dependent.GetQName()
 			dw.addNode(DotNode{QName: dependentQn, Kind: strings.ToLower(dependent.GetKind()), Label: dependentQn})
-			dw.addEdge(DotEdge{From: dependentQn, To: qn})
+			dw.addEdge(DotEdge{From: dependentQn, To: qn, Style: ESDependsOn})
 		}
 	}
 
