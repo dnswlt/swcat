@@ -1,0 +1,48 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: domain
+  namespace: external
+  title: The external domain
+spec:
+  owner: external/owners-team
+  type: external
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: owners-team
+  namespace: external
+  description: >
+    Placeholder group for external entities.
+spec:
+  type: placeholder
+  children: []
+  profile:
+    displayName: External Owners
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: system-one
+  namespace: external
+  title: External System One
+spec:
+  owner: external/owners-team
+  domain: external/domain
+  type: placeholder
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: consumer
+  namespace: external
+  title: External Consumer
+spec:
+  type: external
+  owner: external/owners-team
+  lifecycle: production
+  system: external/system-one
+  consumesApis:
+    - banana-api

@@ -25,4 +25,18 @@
         font-style: italic;
         fill: #374151;
     }
+
+    /* Hover over edges */
+    .graphviz-svg .clickable-edge:hover path {
+        /* Arrow line */
+        cursor: pointer;
+        stroke: #808080;
+        stroke-width: 3;
+    }
+    .graphviz-svg .clickable-edge:hover polygon {
+        /* Arrow head */
+        fill: #808080;
+        stroke: #808080;
+        stroke-width: 3;
+    }
 }

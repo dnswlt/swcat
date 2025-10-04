@@ -23,14 +23,14 @@ type Server struct {
 	opts     ServerOptions
 	template *template.Template
 	repo     *backstage.Repository
-	svgCache map[string][]byte
+	svgCache map[string]*backstage.SVGResult
 }
 
 func NewServer(opts ServerOptions, repo *backstage.Repository) (*Server, error) {
 	s := &Server{
 		opts:     opts,
 		repo:     repo,
-		svgCache: make(map[string][]byte),
+		svgCache: make(map[string]*backstage.SVGResult),
 	}
 	if err := s.reloadTemplates(); err != nil {
 		return nil, err
@@ -152,16 +152,15 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	svg, ok := s.svgCache[cacheKey]
 	if !ok {
 		var err error
-		svg, err = backstage.GenerateSystemSVG(s.repo, systemID)
+		svg, err = backstage.GenerateSystemSVG(s.repo, system)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		s.svgCache[cacheKey] = svg
 	}
-	params["SVG"] = template.HTML(svg)
-
+	params["SVG"] = template.HTML(svg.SVG)
+	params["SVGMetadataJSON"] = template.JS(svg.MetadataJSON())
 	s.serveHTMLPage(w, r, "system_detail.html", params)
 }
 
@@ -178,7 +177,7 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 	svg, ok := s.svgCache[cacheKey]
 	if !ok {
 		var err error
-		svg, err = backstage.GenerateComponentSVG(s.repo, componentID)
+		svg, err = backstage.GenerateComponentSVG(s.repo, component)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
@@ -186,7 +185,9 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		}
 		s.svgCache[cacheKey] = svg
 	}
-	params["SVG"] = template.HTML(svg)
+	params["SVG"] = template.HTML(svg.SVG)
+	params["SVGMetadataJSON"] = template.JS(svg.MetadataJSON())
+
 	s.serveHTMLPage(w, r, "component_detail.html", params)
 }
 
@@ -218,7 +219,7 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 	svg, ok := s.svgCache[cacheKey]
 	if !ok {
 		var err error
-		svg, err = backstage.GenerateAPISVG(s.repo, apiID)
+		svg, err = backstage.GenerateAPISVG(s.repo, api)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
@@ -226,7 +227,8 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 		}
 		s.svgCache[cacheKey] = svg
 	}
-	params["SVG"] = template.HTML(svg)
+	params["SVG"] = template.HTML(svg.SVG)
+	params["SVGMetadataJSON"] = template.JS(svg.MetadataJSON())
 
 	s.serveHTMLPage(w, r, "api_detail.html", params)
 }
@@ -259,7 +261,7 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 	svg, ok := s.svgCache[cacheKey]
 	if !ok {
 		var err error
-		svg, err = backstage.GenerateResourceSVG(s.repo, resourceID)
+		svg, err = backstage.GenerateResourceSVG(s.repo, resource)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
@@ -267,7 +269,8 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 		}
 		s.svgCache[cacheKey] = svg
 	}
-	params["SVG"] = template.HTML(svg)
+	params["SVG"] = template.HTML(svg.SVG)
+	params["SVGMetadataJSON"] = template.JS(svg.MetadataJSON())
 
 	s.serveHTMLPage(w, r, "resource_detail.html", params)
 }
@@ -300,7 +303,7 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 	svg, ok := s.svgCache[cacheKey]
 	if !ok {
 		var err error
-		svg, err = backstage.GenerateDomainSVG(s.repo, domainID)
+		svg, err = backstage.GenerateDomainSVG(s.repo, domain)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
@@ -308,7 +311,8 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 		}
 		s.svgCache[cacheKey] = svg
 	}
-	params["SVG"] = template.HTML(svg)
+	params["SVG"] = template.HTML(svg.SVG)
+	params["SVGMetadataJSON"] = template.JS(svg.MetadataJSON())
 
 	s.serveHTMLPage(w, r, "domain_detail.html", params)
 }
@@ -373,7 +377,14 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 func (s *Server) Serve() error {
 	mux := http.NewServeMux()
 
-	// APIs / Components / Systems pages
+	// Domains / Systems / Components / Resources / APIs pages
+	mux.HandleFunc("GET /ui/domains", func(w http.ResponseWriter, r *http.Request) {
+		s.serveDomains(w, r)
+	})
+	mux.HandleFunc("GET /ui/domains/{domainID}", func(w http.ResponseWriter, r *http.Request) {
+		domainID := r.PathValue("domainID")
+		s.serveDomain(w, r, domainID)
+	})
 	mux.HandleFunc("GET /ui/systems", func(w http.ResponseWriter, r *http.Request) {
 		s.serveSystems(w, r)
 	})
@@ -388,13 +399,6 @@ func (s *Server) Serve() error {
 		componentID := r.PathValue("componentID")
 		s.serveComponent(w, r, componentID)
 	})
-	mux.HandleFunc("GET /ui/apis", func(w http.ResponseWriter, r *http.Request) {
-		s.serveAPIs(w, r)
-	})
-	mux.HandleFunc("GET /ui/apis/{apiID}", func(w http.ResponseWriter, r *http.Request) {
-		apiID := r.PathValue("apiID")
-		s.serveAPI(w, r, apiID)
-	})
 	mux.HandleFunc("GET /ui/resources", func(w http.ResponseWriter, r *http.Request) {
 		s.serveResources(w, r)
 	})
@@ -402,12 +406,12 @@ func (s *Server) Serve() error {
 		resourceID := r.PathValue("resourceID")
 		s.serveResource(w, r, resourceID)
 	})
-	mux.HandleFunc("GET /ui/domains", func(w http.ResponseWriter, r *http.Request) {
-		s.serveDomains(w, r)
+	mux.HandleFunc("GET /ui/apis", func(w http.ResponseWriter, r *http.Request) {
+		s.serveAPIs(w, r)
 	})
-	mux.HandleFunc("GET /ui/domains/{domainID}", func(w http.ResponseWriter, r *http.Request) {
-		domainID := r.PathValue("domainID")
-		s.serveDomain(w, r, domainID)
+	mux.HandleFunc("GET /ui/apis/{apiID}", func(w http.ResponseWriter, r *http.Request) {
+		apiID := r.PathValue("apiID")
+		s.serveAPI(w, r, apiID)
 	})
 	mux.HandleFunc("GET /ui/groups", func(w http.ResponseWriter, r *http.Request) {
 		s.serveGroups(w, r)

@@ -3,6 +3,7 @@ package backstage
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -11,9 +12,40 @@ import (
 	"time"
 )
 
+type NodeInfo struct {
+	Label string `json:"label"`
+}
+type EdgeInfo struct {
+	From  string `json:"from"`  // From entity reference (e.g. api:ns1/super-api).
+	To    string `json:"to"`    // To entity reference.
+	Label string `json:"label"` // Optional edge label.
+}
+type SVGGraphMetadata struct {
+	// Maps the IDs of nodes in the generated SVG (id= attributes) to their node info.
+	Nodes map[string]*NodeInfo `json:"nodes"`
+	// Maps the IDs of edges in the generated SVG (id= attributes) to their edge info.
+	Edges map[string]*EdgeInfo `json:"edges"`
+}
+
+type SVGResult struct {
+	// The dot-generated SVG output. Only contains the <svg> element,
+	// <?xml> headers etc are stripped.
+	SVG      []byte
+	Metadata *SVGGraphMetadata
+}
+
+func (d *SVGResult) MetadataJSON() []byte {
+	json, err := json.Marshal(d.Metadata)
+	if err != nil {
+		// This is truly an application bug.
+		log.Fatalf("Cannot marshal MetadataJSON: %v", err)
+	}
+	return json
+}
+
 func runDot(ctx context.Context, dotSource string) ([]byte, error) {
 	// Command: dot -Tsvg
-	log.Printf("Running 'dot -Tsvg' to generate SVG")
+	log.Println("Running 'dot -Tsvg' to generate SVG")
 	cmd := exec.CommandContext(ctx, "dot", "-Tsvg")
 
 	// Provide the DOT source on stdin and capture stdout/stderr
@@ -81,10 +113,16 @@ type DotNode struct {
 }
 
 func EntityNode(e Entity) DotNode {
+	meta := e.GetMetadata()
+	label := meta.Name
+	if meta.Namespace != "" && meta.Namespace != DefaultNamespace {
+		// Two-line label for namespaced entities.
+		label = meta.Namespace + `/\n` + meta.Name
+	}
 	return DotNode{
 		ID:    e.GetRef(),
 		Kind:  entityNodeKind(e),
-		Label: e.GetQName(),
+		Label: label,
 	}
 }
 
@@ -129,6 +167,8 @@ const (
 	ESOwner
 	// Used for arrows from a System to its constituent entities (components, apis, resources).
 	ESContains
+	// Used for edges on the System overview page to link from the system of interest to its neighbors.
+	ESSystemLink
 )
 
 type DotEdge struct {
@@ -147,14 +187,16 @@ func EntityEdge(from, to Entity, style EdgeStyle) DotEdge {
 }
 
 type DotWriter struct {
-	w     *strings.Builder
-	nodes map[string]bool
+	w        *strings.Builder
+	nodeInfo map[string]*NodeInfo
+	edgeInfo map[string]*EdgeInfo
 }
 
 func NewDotWriter() *DotWriter {
 	return &DotWriter{
-		w:     &strings.Builder{},
-		nodes: make(map[string]bool),
+		w:        &strings.Builder{},
+		nodeInfo: make(map[string]*NodeInfo),
+		edgeInfo: make(map[string]*EdgeInfo),
 	}
 }
 
@@ -176,25 +218,33 @@ func (dw *DotWriter) End() {
 }
 
 func (dw *DotWriter) AddNode(node DotNode) {
-	if dw.nodes[node.ID] {
+	if _, ok := dw.nodeInfo[node.ID]; ok {
 		// Ignore duplicate node definitions.
 		return
 	}
 	fmt.Fprintf(dw.w, `"%s"[id="%s",label="%s",fillcolor="%s",shape="%s",class="clickable-node"]`,
 		node.ID, node.ID, node.Label, node.FillColor(), node.Shape())
 	fmt.Fprintln(dw.w)
-	dw.nodes[node.ID] = true
+	dw.nodeInfo[node.ID] = &NodeInfo{
+		Label: node.Label,
+	}
 }
 
 func (dw *DotWriter) AddEdge(edge DotEdge) {
 	attrs := map[string]string{}
 
-	setLabel := func(s string) {
-		attrs["label"] = `"` + s + `"`
+	// Use a synthetic ID. The frontend will get its information about this
+	// edge from its associated metadata JSON.
+	edgeID := fmt.Sprintf("svg-edge-%d", len(dw.edgeInfo))
+	attrs["id"] = edgeID
+	dw.edgeInfo[edgeID] = &EdgeInfo{
+		From:  edge.From,
+		To:    edge.To,
+		Label: edge.Label,
 	}
 
 	if edge.Label != "" {
-		setLabel(edge.Label)
+		attrs["label"] = edge.Label
 	}
 	switch edge.Style {
 	case ESBackward:
@@ -208,14 +258,12 @@ func (dw *DotWriter) AddEdge(edge DotEdge) {
 		attrs["style"] = "dashed"
 	case ESOwner:
 		attrs["dir"] = "back"
-		if attrs["label"] == "" {
-			setLabel("owner")
-		}
+		attrs["label"] = "owner"
 	case ESContains:
 		attrs["dir"] = "back"
-		if attrs["label"] == "" {
-			setLabel("part-of")
-		}
+		attrs["label"] = "part-of"
+	case ESSystemLink:
+		attrs["class"] = "clickable-edge system-link-edge"
 	default:
 		// No special attrs required.
 	}
@@ -224,10 +272,11 @@ func (dw *DotWriter) AddEdge(edge DotEdge) {
 	if len(attrs) > 0 {
 		var items []string
 		for k, v := range attrs {
-			items = append(items, fmt.Sprintf("%s=%s", k, v))
+			items = append(items, fmt.Sprintf("%s=\"%s\"", k, v))
 		}
 		edgeAttrs = "[" + strings.Join(items, ",") + "]"
 	}
+
 	fmt.Fprintf(dw.w, `"%s" -> "%s"%s`, edge.From, edge.To, edgeAttrs)
 	fmt.Fprintln(dw.w)
 }
@@ -245,17 +294,30 @@ func (dw *DotWriter) String() string {
 	return dw.w.String()
 }
 
-// GenerateDomainSVG generates an SVG for the given domain.
-func GenerateDomainSVG(r *Repository, name string) ([]byte, error) {
-	domain := r.Domain(name)
-	if domain == nil {
-		return nil, fmt.Errorf("domain %s does not exist", name)
+func (dw *DotWriter) Metadata() *SVGGraphMetadata {
+	return &SVGGraphMetadata{
+		Nodes: dw.nodeInfo,
+		Edges: dw.edgeInfo,
 	}
+}
 
+func generateSVGResult(ctx context.Context, dw *DotWriter) (*SVGResult, error) {
+	svg, err := runDot(ctx, dw.String())
+	if err != nil {
+		return nil, err
+	}
+	return &SVGResult{
+		SVG:      svg,
+		Metadata: dw.Metadata(),
+	}, nil
+}
+
+// GenerateDomainSVG generates an SVG for the given domain.
+func GenerateDomainSVG(r *Repository, domain *Domain) (*SVGResult, error) {
 	dw := NewDotWriter()
 	dw.Start()
 
-	dw.StartCluster(name)
+	dw.StartCluster(domain.GetQName())
 
 	for _, s := range domain.GetSystems() {
 		system := r.System(s)
@@ -268,7 +330,7 @@ func GenerateDomainSVG(r *Repository, name string) ([]byte, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return runDot(ctx, dw.String())
+	return generateSVGResult(ctx, dw)
 }
 
 type extSysDep struct {
@@ -282,18 +344,13 @@ func (e extSysDep) String() string {
 }
 
 // GenerateSystemSVG generates an SVG for the given system.
-func GenerateSystemSVG(r *Repository, name string) ([]byte, error) {
-	system := r.System(name)
-	if system == nil {
-		return nil, fmt.Errorf("system %s does not exist", name)
-	}
-
+func GenerateSystemSVG(r *Repository, system *System) (*SVGResult, error) {
 	dw := NewDotWriter()
 	dw.Start()
 
 	var externalDeps []extSysDep
 
-	dw.StartCluster(name)
+	dw.StartCluster(system.GetQName())
 
 	// Components
 	for _, c := range system.GetComponents() {
@@ -389,9 +446,9 @@ func GenerateSystemSVG(r *Repository, name string) ([]byte, error) {
 		seenDeps[extDep.String()] = true
 		dw.AddNode(EntityNode(extDep.targetSystem))
 		if extDep.direction == "outgoing" {
-			dw.AddEdge(EntityEdge(extDep.source, extDep.targetSystem, ESNormal))
+			dw.AddEdge(EntityEdge(extDep.source, extDep.targetSystem, ESSystemLink))
 		} else {
-			dw.AddEdge(EntityEdge(extDep.targetSystem, extDep.source, ESNormal))
+			dw.AddEdge(EntityEdge(extDep.targetSystem, extDep.source, ESSystemLink))
 		}
 	}
 
@@ -399,16 +456,12 @@ func GenerateSystemSVG(r *Repository, name string) ([]byte, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return runDot(ctx, dw.String())
+
+	return generateSVGResult(ctx, dw)
 }
 
 // GenerateComponentSVG generates an SVG for the given component.
-func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
-	component := r.Component(name)
-	if component == nil {
-		return nil, fmt.Errorf("component %s does not exist", name)
-	}
-
+func GenerateComponentSVG(r *Repository, component *Component) (*SVGResult, error) {
 	dw := NewDotWriter()
 	dw.Start()
 
@@ -463,17 +516,11 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return runDot(ctx, dw.String())
-
+	return generateSVGResult(ctx, dw)
 }
 
 // GenerateAPISVG generates an SVG for the given API.
-func GenerateAPISVG(r *Repository, name string) ([]byte, error) {
-	api := r.API(name)
-	if api == nil {
-		return nil, fmt.Errorf("API %s does not exist", name)
-	}
-
+func GenerateAPISVG(r *Repository, api *API) (*SVGResult, error) {
 	dw := NewDotWriter()
 	dw.Start()
 
@@ -515,16 +562,11 @@ func GenerateAPISVG(r *Repository, name string) ([]byte, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return runDot(ctx, dw.String())
+	return generateSVGResult(ctx, dw)
 }
 
 // GenerateResourceSVG generates an SVG for the given resource.
-func GenerateResourceSVG(r *Repository, name string) ([]byte, error) {
-	resource := r.Resource(name)
-	if resource == nil {
-		return nil, fmt.Errorf("resource %s does not exist", name)
-	}
-
+func GenerateResourceSVG(r *Repository, resource *Resource) (*SVGResult, error) {
 	dw := NewDotWriter()
 	dw.Start()
 
@@ -557,5 +599,5 @@ func GenerateResourceSVG(r *Repository, name string) ([]byte, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return runDot(ctx, dw.String())
+	return generateSVGResult(ctx, dw)
 }
