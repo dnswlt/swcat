@@ -37,13 +37,10 @@ function onClickEdge(edge) {
 
     // Build a new URL with two context params (?context=from&context=to).
     const url = new URL(window.location.href);
-    url.searchParams.delete("c");
     url.searchParams.append("c", from);
     url.searchParams.append("c", to);
 
-    // TODO: Navigate to the new page.
-    //   window.location.assign(url);
-    console.log("Would navigate to ", url);
+    window.location.assign(url);
 }
 
 function onClickNode(node) {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
@@ -148,11 +149,22 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	}
 	params["System"] = system
 
-	cacheKey := "system:" + systemID
+	// Extract neighbor systems from context parameter c=.
+	var contextSystems []*backstage.System
+	var cacheKeyIDs []string
+	q := r.URL.Query()
+	for _, v := range q["c"] {
+		if c := s.repo.System(v); c != nil {
+			contextSystems = append(contextSystems, c)
+			cacheKeyIDs = append(cacheKeyIDs, v)
+		}
+	}
+	slices.Sort(cacheKeyIDs)
+	cacheKey := "system:" + systemID + "?" + strings.Join(cacheKeyIDs, ",")
 	svg, ok := s.svgCache[cacheKey]
 	if !ok {
 		var err error
-		svg, err = backstage.GenerateSystemSVG(s.repo, system)
+		svg, err = backstage.GenerateSystemSVG(s.repo, system, contextSystems)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)

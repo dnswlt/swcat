@@ -78,7 +78,7 @@ func runDot(ctx context.Context, dotSource string) ([]byte, error) {
 type NodeKind int
 
 const (
-	KindUnspecified = iota
+	KindUnspecified NodeKind = iota
 	KindDomain
 	KindSystem
 	KindComponent
@@ -155,7 +155,7 @@ type EdgeStyle int
 
 const (
 	// A normal arrow pointing from source to target
-	ESNormal = iota
+	ESNormal EdgeStyle = iota
 	// An arrow poinging from target to source.
 	ESBackward
 	// An arrow pointing from target (the API provder) to source (the API),
@@ -284,6 +284,8 @@ func (dw *DotWriter) AddEdge(edge DotEdge) {
 func (dw *DotWriter) StartCluster(name string) {
 	fmt.Fprintf(dw.w, "subgraph \"cluster_%s\" {\n", name)
 	fmt.Fprintf(dw.w, "label=\"%s\"\n", name)
+	fmt.Fprintf(dw.w, "style=filled\n")
+	fmt.Fprintf(dw.w, "fillcolor=\"#f3f4f6\"\n")
 }
 
 func (dw *DotWriter) EndCluster() {
@@ -333,10 +335,27 @@ func GenerateDomainSVG(r *Repository, domain *Domain) (*SVGResult, error) {
 	return generateSVGResult(ctx, dw)
 }
 
+type DependencyDir int
+
+const (
+	DirIncoming DependencyDir = iota
+	DirOutgoing
+)
+
+// extSysPartDep represents a dependency on an external system in a system diagram.
 type extSysDep struct {
 	source       Entity
 	targetSystem *System
-	direction    string // "incoming" or "outgoing"
+	direction    DependencyDir
+}
+
+// extSysPartDep represents an external dependency in a system diagram.
+// In contrast to extSysDep, it points to a SystemPart of the target system,
+// not the target system itself.
+type extSysPartDep struct {
+	source    Entity
+	target    SystemPart
+	direction DependencyDir
 }
 
 func (e extSysDep) String() string {
@@ -344,11 +363,36 @@ func (e extSysDep) String() string {
 }
 
 // GenerateSystemSVG generates an SVG for the given system.
-func GenerateSystemSVG(r *Repository, system *System) (*SVGResult, error) {
+// contextSystems are systems that should be expanded in the view. Other systems will be shown
+// as opaque single nodes.
+func GenerateSystemSVG(r *Repository, system *System, contextSystems []*System) (*SVGResult, error) {
+	ctxSysMap := map[string]*System{}
+	for _, ctxSys := range contextSystems {
+		ctxSysMap[ctxSys.GetQName()] = ctxSys
+	}
+
 	dw := NewDotWriter()
 	dw.Start()
 
-	var externalDeps []extSysDep
+	var extDeps []extSysDep
+	extSPDeps := map[string][]extSysPartDep{}
+	// Adds the src->dst dependency to either extDeps or extSPDeps, depending on whether
+	// full context was requested for dst.
+	addDep := func(src SystemPart, dst SystemPart, dir DependencyDir) {
+		if dst.GetSystem() != src.GetSystem() {
+			dstSys := r.System(dst.GetSystem())
+			if _, ok := ctxSysMap[dstSys.GetQName()]; ok {
+				// dst is part of a system for which we want to show full context
+				extSPDeps[dstSys.GetQName()] = append(extSPDeps[dstSys.GetQName()],
+					extSysPartDep{source: src, target: dst, direction: dir},
+				)
+			} else {
+				extDeps = append(extDeps, extSysDep{
+					source: src, targetSystem: dstSys, direction: dir,
+				})
+			}
+		}
+	}
 
 	dw.StartCluster(system.GetQName())
 
@@ -360,31 +404,20 @@ func GenerateSystemSVG(r *Repository, system *System) (*SVGResult, error) {
 		// Add links to external systems of which the component consumes APIs.
 		for _, a := range comp.Spec.ConsumesAPIs {
 			api := r.API(a)
-			if api.GetSystem() != comp.GetSystem() {
-				apiSystem := r.System(api.GetSystem())
-				externalDeps = append(externalDeps, extSysDep{
-					source: comp, targetSystem: apiSystem, direction: "outgoing",
-				})
-			}
+			addDep(comp, api, DirOutgoing)
 		}
 		// Add links for direct dependencies of the component.
 		for _, d := range comp.Spec.DependsOn {
 			entity := r.Entity(d)
 			if sp, ok := entity.(SystemPart); ok && sp.GetSystem() != comp.GetSystem() {
-				spSystem := r.System(sp.GetSystem())
-				externalDeps = append(externalDeps, extSysDep{
-					source: comp, targetSystem: spSystem, direction: "outgoing",
-				})
+				addDep(comp, sp, DirOutgoing)
 			}
 		}
 		// Add links for direct dependents of the component.
 		for _, d := range comp.GetDependents() {
 			entity := r.Entity(d)
 			if sp, ok := entity.(SystemPart); ok && sp.GetSystem() != comp.GetSystem() {
-				spSystem := r.System(sp.GetSystem())
-				externalDeps = append(externalDeps, extSysDep{
-					source: comp, targetSystem: spSystem, direction: "incoming",
-				})
+				addDep(comp, sp, DirIncoming)
 			}
 		}
 	}
@@ -398,12 +431,7 @@ func GenerateSystemSVG(r *Repository, system *System) (*SVGResult, error) {
 		for _, c := range api.GetConsumers() {
 			consumer := r.Component(c)
 			if consumer.GetSystem() != api.GetSystem() {
-				consumerSystem := r.System(consumer.GetSystem())
-
-				externalDeps = append(externalDeps, extSysDep{
-					source: api, targetSystem: consumerSystem, direction: "incoming",
-				})
-
+				addDep(api, consumer, DirIncoming)
 			}
 		}
 	}
@@ -417,20 +445,14 @@ func GenerateSystemSVG(r *Repository, system *System) (*SVGResult, error) {
 		for _, d := range resource.Spec.DependsOn {
 			entity := r.Entity(d)
 			if sp, ok := entity.(SystemPart); ok && sp.GetSystem() != resource.GetSystem() {
-				spSystem := r.System(sp.GetSystem())
-				externalDeps = append(externalDeps, extSysDep{
-					source: resource, targetSystem: spSystem, direction: "outgoing",
-				})
+				addDep(resource, sp, DirOutgoing)
 			}
 		}
 		// Add links for direct dependents of the resource.
 		for _, d := range resource.GetDependents() {
 			entity := r.Entity(d)
 			if sp, ok := entity.(SystemPart); ok && sp.GetSystem() != resource.GetSystem() {
-				spSystem := r.System(sp.GetSystem())
-				externalDeps = append(externalDeps, extSysDep{
-					source: resource, targetSystem: spSystem, direction: "incoming",
-				})
+				addDep(resource, sp, DirIncoming)
 			}
 		}
 	}
@@ -439,19 +461,32 @@ func GenerateSystemSVG(r *Repository, system *System) (*SVGResult, error) {
 
 	// Draw edges for all collected external dependencies, removing duplicates
 	seenDeps := map[string]bool{}
-	for _, extDep := range externalDeps {
-		if seenDeps[extDep.String()] {
+	for _, dep := range extDeps {
+		if seenDeps[dep.String()] {
 			continue
 		}
-		seenDeps[extDep.String()] = true
-		dw.AddNode(EntityNode(extDep.targetSystem))
-		if extDep.direction == "outgoing" {
-			dw.AddEdge(EntityEdge(extDep.source, extDep.targetSystem, ESSystemLink))
+		seenDeps[dep.String()] = true
+		dw.AddNode(EntityNode(dep.targetSystem))
+		if dep.direction == DirOutgoing {
+			dw.AddEdge(EntityEdge(dep.source, dep.targetSystem, ESSystemLink))
 		} else {
-			dw.AddEdge(EntityEdge(extDep.targetSystem, extDep.source, ESSystemLink))
+			dw.AddEdge(EntityEdge(dep.targetSystem, dep.source, ESSystemLink))
 		}
 	}
 
+	for systemID, deps := range extSPDeps {
+		dw.StartCluster(systemID)
+		for _, dep := range deps {
+			dw.AddNode(EntityNode(dep.target))
+			// TODO: use proper edge styles, not always normal.
+			if dep.direction == DirOutgoing {
+				dw.AddEdge(EntityEdge(dep.source, dep.target, ESNormal))
+			} else {
+				dw.AddEdge(EntityEdge(dep.target, dep.source, ESNormal))
+			}
+		}
+		dw.EndCluster()
+	}
 	dw.End()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

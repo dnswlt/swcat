@@ -78,6 +78,7 @@ func CompareEntityByName(a, b Entity) int {
 }
 
 type SystemPart interface {
+	Entity
 	GetSystem() string
 }
 
