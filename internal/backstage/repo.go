@@ -8,6 +8,9 @@ import (
 )
 
 type Repository struct {
+	// Maps containing the different kinds of entities in the repository.
+	//
+	// These maps are keyed by qnames without the kind: specifier: <namespace>/<name>
 	domains    map[string]*Domain
 	systems    map[string]*System
 	components map[string]*Component
@@ -16,6 +19,8 @@ type Repository struct {
 	groups     map[string]*Group
 	// Tracks all qualified names added to this repo
 	// (for duplicate detection and type-independent lookups)
+	//
+	// This map uses entity references including the kind: prefix: <kind>:<namespace>/<name>
 	allEntities map[string]Entity
 }
 
@@ -36,10 +41,12 @@ func (r *Repository) Size() int {
 }
 
 func (r *Repository) AddEntity(e Entity) error {
-	qname := e.GetQName()
-	if _, ok := r.allEntities[qname]; ok {
-		return fmt.Errorf("entity with qname %s already exists in the repository", qname)
+	ref := e.GetRef()
+	if _, ok := r.allEntities[ref]; ok {
+		return fmt.Errorf("entity %q already exists in the repository", ref)
 	}
+
+	qname := e.GetQName()
 
 	switch x := e.(type) {
 	case *Domain:
@@ -58,63 +65,64 @@ func (r *Repository) AddEntity(e Entity) error {
 		return fmt.Errorf("invalid type: %T", e)
 	}
 
-	r.allEntities[qname] = e
+	r.allEntities[ref] = e
 
 	return nil
 }
 
-func qname(name string) string {
-	return name
+func getEntity[T any](m map[string]*T, ref, expectedKind string) *T {
+	kind, qn, found := strings.Cut(ref, ":")
+	if !found {
+		return m[ref]
+	}
+	if kind != expectedKind {
+		return nil
+	}
+	return m[qn]
 }
 
-func (r *Repository) Group(name string) *Group {
-	qn := qname(name)
-	return r.groups[qn]
+func (r *Repository) Group(ref string) *Group {
+	return getEntity(r.groups, ref, "group")
 }
 
-func (r *Repository) System(name string) *System {
-	qn := qname(name)
-	return r.systems[qn]
+func (r *Repository) System(ref string) *System {
+	return getEntity(r.systems, ref, "system")
 }
 
-func (r *Repository) Domain(name string) *Domain {
-	qn := qname(name)
-	return r.domains[qn]
+func (r *Repository) Domain(ref string) *Domain {
+	return getEntity(r.domains, ref, "domain")
 }
 
-func (r *Repository) API(name string) *API {
-	qn := qname(name)
-	return r.apis[qn]
+func (r *Repository) API(ref string) *API {
+	return getEntity(r.apis, ref, "api")
 }
 
-func (r *Repository) Component(name string) *Component {
-	qn := qname(name)
-	return r.components[qn]
+func (r *Repository) Component(ref string) *Component {
+	return getEntity(r.components, ref, "component")
 }
 
-func (r *Repository) Resource(name string) *Resource {
-	qn := qname(name)
-	return r.resources[qn]
+func (r *Repository) Resource(ref string) *Resource {
+	return getEntity(r.resources, ref, "resource")
 }
 
 func (r *Repository) Entity(ref string) Entity {
-	kind, name, found := strings.Cut(ref, ":")
+	kind, qn, found := strings.Cut(ref, ":")
 	if !found {
 		return nil // Entity lookup requires kind specifier
 	}
 	switch kind {
 	case "component":
-		return r.Component(name)
+		return r.Component(qn)
 	case "system":
-		return r.System(name)
+		return r.System(qn)
 	case "domain":
-		return r.Domain(name)
+		return r.Domain(qn)
 	case "api":
-		return r.API(name)
+		return r.API(qn)
 	case "resource":
-		return r.Resource(name)
+		return r.Resource(qn)
 	case "group":
-		return r.Group(name)
+		return r.Group(qn)
 	}
 	return nil
 }
@@ -327,10 +335,9 @@ func (r *Repository) Validate() error {
 		if g := r.Group(s.Owner); g == nil {
 			return fmt.Errorf("owner %q for API %s is undefined", s.Owner, qn)
 		}
-		if s.Definition == "" {
-			return fmt.Errorf("API %s has no spec.definition (you can set it to 'missing')", qn)
-		}
-
+		// Allow an empty Definition.
+		// It is mandatory in the backstage.io/v1alpha1 schema, but this just
+		// forces us to set it to "n/a" all over the place.
 	}
 
 	// Resources
@@ -392,7 +399,7 @@ func (r *Repository) Validate() error {
 		}
 	}
 
-	// Validation succeeded: populated computed fields
+	// Validation succeeded: populate computed fields
 	r.populateRelationships()
 	return nil
 }

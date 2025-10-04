@@ -23,6 +23,7 @@ kind: Component
 metadata:
   name: cucumber-api-gateway
   title: Cucumber API Gateway
+  tags: [public]
   labels:
     foobar.dev/language: java
     foobar.dev/deployment: k8s
@@ -34,7 +35,7 @@ spec:
   providesApis:
     - cucumber-api
   consumesApis:
-    - cucumber-backend-api
+    - api:cucumber-backend-api # Using an entity reference including the kind: is optional here.
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Component
@@ -80,9 +81,6 @@ spec:
   lifecycle: production
   owner: cucumber-team
   system: cucumber-system
-  # Definition is a mandatory field in backstage.io, fill it with "n/a"
-  # if there is nothing useful to say here.
-  definition: n/a
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API
@@ -98,4 +96,3 @@ spec:
   lifecycle: production
   owner: cucumber-team
   system: cucumber-system
-  definition: n/a

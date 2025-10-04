@@ -82,9 +82,6 @@ spec:
   lifecycle: production
   owner: banana-team
   system: banana-system
-  # Definition is a mandatory field in backstage.io, fill it with "n/a"
-  # if there is nothing useful to say here.
-  definition: n/a
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API
@@ -100,4 +97,3 @@ spec:
   lifecycle: production
   owner: banana-team
   system: banana-system
-  definition: n/a

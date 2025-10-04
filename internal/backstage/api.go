@@ -5,7 +5,6 @@ package backstage
 
 import (
 	"cmp"
-	"strings"
 )
 
 const (
@@ -60,14 +59,14 @@ func (m *Metadata) GetQName() string {
 type Entity interface {
 	GetKind() string
 	GetMetadata() *Metadata
+	// Returns the qualified entity name in the format
+	// <namespace>/<name>
+	// This form can presented to the user in cases where the entity kind is obvious or irrelevant.
 	GetQName() string
-}
-
-// EntityRef returns the fully qualified entity reference for the given entity.
-// The reference always includes the entity kind prefix.
-// Examples: resource:my-namespace/my-resource, api:some-api-in-default-namespace.
-func EntityRef(e Entity) string {
-	return strings.ToLower(e.GetKind()) + ":" + e.GetQName()
+	// Returns the fully qualified entity reference in the format
+	// <kind>:<namespace>/<name>
+	// This reference should be used in
+	GetRef() string
 }
 
 // CompareEntityByName compares two entities lexicographically by (namespace, name).
@@ -121,6 +120,7 @@ type Component struct {
 func (c *Component) GetKind() string         { return c.Kind }
 func (c *Component) GetMetadata() *Metadata  { return c.Metadata }
 func (c *Component) GetQName() string        { return c.Metadata.GetQName() }
+func (c *Component) GetRef() string          { return "component:" + c.GetQName() }
 func (c *Component) GetOwner() string        { return c.Spec.Owner }
 func (c *Component) GetLifecycle() string    { return c.Spec.Lifecycle }
 func (c *Component) GetSystem() string       { return c.Spec.System }
@@ -155,6 +155,7 @@ type System struct {
 func (s *System) GetKind() string         { return s.Kind }
 func (s *System) GetMetadata() *Metadata  { return s.Metadata }
 func (s *System) GetQName() string        { return s.Metadata.GetQName() }
+func (s *System) GetRef() string          { return "system:" + s.GetQName() }
 func (s *System) GetComponents() []string { return s.Spec.components }
 func (s *System) GetAPIs() []string       { return s.Spec.apis }
 func (s *System) GetResources() []string  { return s.Spec.resources }
@@ -187,6 +188,7 @@ type Domain struct {
 func (d *Domain) GetKind() string        { return d.Kind }
 func (d *Domain) GetMetadata() *Metadata { return d.Metadata }
 func (d *Domain) GetQName() string       { return d.Metadata.GetQName() }
+func (d *Domain) GetRef() string         { return "domain:" + d.GetQName() }
 func (d *Domain) GetSystems() []string   { return d.Spec.systems }
 
 // API
@@ -219,6 +221,7 @@ type API struct {
 func (a *API) GetKind() string        { return a.Kind }
 func (a *API) GetMetadata() *Metadata { return a.Metadata }
 func (a *API) GetQName() string       { return a.Metadata.GetQName() }
+func (a *API) GetRef() string         { return "api:" + a.GetQName() }
 func (a *API) GetProviders() []string { return a.Spec.providers }
 func (a *API) GetConsumers() []string { return a.Spec.consumers }
 func (a *API) GetSystem() string      { return a.Spec.System }
@@ -250,6 +253,7 @@ type Resource struct {
 func (r *Resource) GetKind() string         { return r.Kind }
 func (r *Resource) GetMetadata() *Metadata  { return r.Metadata }
 func (r *Resource) GetQName() string        { return r.Metadata.GetQName() }
+func (r *Resource) GetRef() string          { return "resource:" + r.GetQName() }
 func (r *Resource) GetDependents() []string { return r.Spec.dependents }
 func (r *Resource) GetSystem() string       { return r.Spec.System }
 
@@ -289,4 +293,5 @@ type Group struct {
 func (g *Group) GetKind() string        { return g.Kind }
 func (g *Group) GetMetadata() *Metadata { return g.Metadata }
 func (g *Group) GetQName() string       { return g.Metadata.GetQName() }
+func (g *Group) GetRef() string         { return "group:" + g.GetQName() }
 func (g *Group) GetDisplayName() string { return g.Spec.Profile.DisplayName }

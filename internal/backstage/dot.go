@@ -84,7 +84,7 @@ type DotNode struct {
 func EntityNode(e Entity) DotNode {
 	return DotNode{
 		ID:    e.GetQName(),
-		SVGID: EntityRef(e),
+		SVGID: e.GetRef(),
 		Kind:  entityNodeKind(e),
 		Label: e.GetQName(),
 	}
