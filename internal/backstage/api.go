@@ -3,7 +3,10 @@
 // https://backstage.io/docs/features/software-catalog/descriptor-format#contents
 package backstage
 
-import "cmp"
+import (
+	"cmp"
+	"strings"
+)
 
 const (
 	// The name of the (implicit) default namespace.
@@ -58,6 +61,13 @@ type Entity interface {
 	GetKind() string
 	GetMetadata() *Metadata
 	GetQName() string
+}
+
+// EntityRef returns the fully qualified entity reference for the given entity.
+// The reference always includes the entity kind prefix.
+// Examples: resource:my-namespace/my-resource, api:some-api-in-default-namespace.
+func EntityRef(e Entity) string {
+	return strings.ToLower(e.GetKind()) + ":" + e.GetQName()
 }
 
 // CompareEntityByName compares two entities lexicographically by (namespace, name).

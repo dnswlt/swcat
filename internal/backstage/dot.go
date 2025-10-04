@@ -43,23 +43,64 @@ func runDot(ctx context.Context, dotSource string) ([]byte, error) {
 	return output, nil
 }
 
+type NodeKind int
+
+const (
+	KindUnspecified = iota
+	KindDomain
+	KindSystem
+	KindComponent
+	KindResource
+	KindAPI
+	KindGroup
+)
+
+func entityNodeKind(e Entity) NodeKind {
+	switch e.(type) {
+	case *Domain:
+		return KindDomain
+	case *System:
+		return KindSystem
+	case *Component:
+		return KindComponent
+	case *Resource:
+		return KindResource
+	case *API:
+		return KindAPI
+	case *Group:
+		return KindGroup
+	default:
+		return KindUnspecified
+	}
+}
+
 type DotNode struct {
-	QName string
-	Kind  string
+	ID    string // ID of this node in the dot graph.
+	SVGID string // ID to use as the SVG id= attribute.
+	Kind  NodeKind
 	Label string
+}
+
+func EntityNode(e Entity) DotNode {
+	return DotNode{
+		ID:    e.GetQName(),
+		SVGID: EntityRef(e),
+		Kind:  entityNodeKind(e),
+		Label: e.GetQName(),
+	}
 }
 
 func (n *DotNode) FillColor() string {
 	switch n.Kind {
-	case "component":
+	case KindComponent:
 		return "#CBDCEB"
-	case "system":
+	case KindSystem:
 		return "#6D94C5"
-	case "api":
+	case KindAPI:
 		return "#FADA7A"
-	case "resource":
+	case KindResource:
 		return "#B4DEBD"
-	case "group":
+	case KindGroup:
 		return "#F5EEDC"
 	}
 	return "#F5EEDC" // neutral beige
@@ -67,14 +108,14 @@ func (n *DotNode) FillColor() string {
 
 func (n *DotNode) Shape() string {
 	switch n.Kind {
-	case "group":
+	case KindGroup:
 		return "ellipse"
 	default:
 		return "box"
 	}
 }
 
-type DotEdgeStyle int
+type EdgeStyle int
 
 const (
 	// A normal arrow pointing from source to target
@@ -97,7 +138,7 @@ type DotEdge struct {
 	To   string
 	// Only one of Label or HTMLLabel may be used. If the latter is set, it takes precedence.
 	Label string
-	Style DotEdgeStyle
+	Style EdgeStyle
 }
 
 type DotWriter struct {
@@ -112,7 +153,7 @@ func NewDotWriter() *DotWriter {
 	}
 }
 
-func (dw *DotWriter) start() {
+func (dw *DotWriter) Start() {
 	dw.w.WriteString("digraph {\n")
 	dw.w.WriteString("rankdir=\"LR\"\n")
 	dw.w.WriteString("fontname=\"sans-serif\"\n")
@@ -125,22 +166,22 @@ func (dw *DotWriter) start() {
 	dw.w.WriteString("edge[fontname=\"sans-serif\",fontsize=\"11\",minlen=\"4\"]\n")
 }
 
-func (dw *DotWriter) end() {
+func (dw *DotWriter) End() {
 	dw.w.WriteString("}\n")
 }
 
-func (dw *DotWriter) addNode(node DotNode) {
-	if dw.nodes[node.QName] {
+func (dw *DotWriter) AddNode(node DotNode) {
+	if dw.nodes[node.ID] {
 		// Ignore duplicate node definitions.
 		return
 	}
-	fmt.Fprintf(dw.w, `"%s"[id="%s:%s",label="%s",fillcolor="%s",shape="%s",class="clickable-node"]`,
-		node.QName, node.Kind, node.QName, node.Label, node.FillColor(), node.Shape())
+	fmt.Fprintf(dw.w, `"%s"[id="%s",label="%s",fillcolor="%s",shape="%s",class="clickable-node"]`,
+		node.ID, node.SVGID, node.Label, node.FillColor(), node.Shape())
 	fmt.Fprintln(dw.w)
-	dw.nodes[node.QName] = true
+	dw.nodes[node.ID] = true
 }
 
-func (dw *DotWriter) addEdge(edge DotEdge) {
+func (dw *DotWriter) AddEdge(edge DotEdge) {
 	attrs := map[string]string{}
 
 	setLabel := func(s string) {
@@ -186,12 +227,12 @@ func (dw *DotWriter) addEdge(edge DotEdge) {
 	fmt.Fprintln(dw.w)
 }
 
-func (dw *DotWriter) startCluster(name string) {
+func (dw *DotWriter) StartCluster(name string) {
 	fmt.Fprintf(dw.w, "subgraph \"cluster_%s\" {\n", name)
 	fmt.Fprintf(dw.w, "label=\"%s\"\n", name)
 }
 
-func (dw *DotWriter) endCluster() {
+func (dw *DotWriter) EndCluster() {
 	dw.w.WriteString("}\n")
 }
 
@@ -207,18 +248,18 @@ func GenerateDomainSVG(r *Repository, name string) ([]byte, error) {
 	}
 
 	dw := NewDotWriter()
-	dw.start()
+	dw.Start()
 
-	dw.startCluster(name)
+	dw.StartCluster(name)
 
 	for _, s := range domain.GetSystems() {
 		system := r.System(s)
-		dw.addNode(DotNode{QName: system.GetQName(), Kind: "system", Label: system.GetQName()})
+		dw.AddNode(EntityNode(system))
 	}
 
-	dw.endCluster()
+	dw.EndCluster()
 
-	dw.end()
+	dw.End()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -227,12 +268,12 @@ func GenerateDomainSVG(r *Repository, name string) ([]byte, error) {
 
 type extSysDep struct {
 	source       Entity
-	targetSystem string
+	targetSystem *System
 	direction    string // "incoming" or "outgoing"
 }
 
 func (e extSysDep) String() string {
-	return fmt.Sprintf("%s -> %s / %s", e.source.GetQName(), e.targetSystem, e.direction)
+	return fmt.Sprintf("%s -> %s / %s", e.source.GetQName(), e.targetSystem.GetQName(), e.direction)
 }
 
 // GenerateSystemSVG generates an SVG for the given system.
@@ -243,41 +284,44 @@ func GenerateSystemSVG(r *Repository, name string) ([]byte, error) {
 	}
 
 	dw := NewDotWriter()
-	dw.start()
+	dw.Start()
 
 	var externalDeps []extSysDep
 
-	dw.startCluster(name)
+	dw.StartCluster(name)
 
 	// Components
 	for _, c := range system.GetComponents() {
 		comp := r.Component(c)
-		dw.addNode(DotNode{QName: comp.GetQName(), Kind: "component", Label: comp.GetQName()})
+		dw.AddNode(EntityNode(comp))
 
 		// Add links to external systems of which the component consumes APIs.
 		for _, a := range comp.Spec.ConsumesAPIs {
 			api := r.API(a)
 			if api.GetSystem() != comp.GetSystem() {
+				apiSystem := r.System(api.GetSystem())
 				externalDeps = append(externalDeps, extSysDep{
-					source: comp, targetSystem: api.GetSystem(), direction: "outgoing",
+					source: comp, targetSystem: apiSystem, direction: "outgoing",
 				})
 			}
 		}
 		// Add links for direct dependencies of the component.
 		for _, d := range comp.Spec.DependsOn {
 			entity := r.Entity(d)
-			if se, ok := entity.(SystemPart); ok && se.GetSystem() != comp.GetSystem() {
+			if sp, ok := entity.(SystemPart); ok && sp.GetSystem() != comp.GetSystem() {
+				spSystem := r.System(sp.GetSystem())
 				externalDeps = append(externalDeps, extSysDep{
-					source: comp, targetSystem: se.GetSystem(), direction: "outgoing",
+					source: comp, targetSystem: spSystem, direction: "outgoing",
 				})
 			}
 		}
 		// Add links for direct dependents of the component.
 		for _, d := range comp.GetDependents() {
 			entity := r.Entity(d)
-			if se, ok := entity.(SystemPart); ok && se.GetSystem() != comp.GetSystem() {
+			if sp, ok := entity.(SystemPart); ok && sp.GetSystem() != comp.GetSystem() {
+				spSystem := r.System(sp.GetSystem())
 				externalDeps = append(externalDeps, extSysDep{
-					source: comp, targetSystem: se.GetSystem(), direction: "incoming",
+					source: comp, targetSystem: spSystem, direction: "incoming",
 				})
 			}
 		}
@@ -286,14 +330,16 @@ func GenerateSystemSVG(r *Repository, name string) ([]byte, error) {
 	// APIs
 	for _, a := range system.GetAPIs() {
 		api := r.API(a)
-		dw.addNode(DotNode{QName: api.GetQName(), Kind: "api", Label: api.GetQName()})
+		dw.AddNode(EntityNode(api))
 
 		// Add links for consumers of any API of this system.
 		for _, c := range api.GetConsumers() {
 			consumer := r.Component(c)
 			if consumer.GetSystem() != api.GetSystem() {
+				consumerSystem := r.System(consumer.GetSystem())
+
 				externalDeps = append(externalDeps, extSysDep{
-					source: api, targetSystem: consumer.GetSystem(), direction: "incoming",
+					source: api, targetSystem: consumerSystem, direction: "incoming",
 				})
 
 			}
@@ -303,29 +349,31 @@ func GenerateSystemSVG(r *Repository, name string) ([]byte, error) {
 	// Resources
 	for _, res := range system.GetResources() {
 		resource := r.Resource(res)
-		dw.addNode(DotNode{QName: resource.GetQName(), Kind: "resource", Label: resource.GetQName()})
+		dw.AddNode(EntityNode(resource))
 
 		// Add links to external systems that the resource depends on.
 		for _, d := range resource.Spec.DependsOn {
 			entity := r.Entity(d)
-			if se, ok := entity.(SystemPart); ok && se.GetSystem() != resource.GetSystem() {
+			if sp, ok := entity.(SystemPart); ok && sp.GetSystem() != resource.GetSystem() {
+				spSystem := r.System(sp.GetSystem())
 				externalDeps = append(externalDeps, extSysDep{
-					source: resource, targetSystem: se.GetSystem(), direction: "outgoing",
+					source: resource, targetSystem: spSystem, direction: "outgoing",
 				})
 			}
 		}
 		// Add links for direct dependents of the resource.
 		for _, d := range resource.GetDependents() {
 			entity := r.Entity(d)
-			if se, ok := entity.(SystemPart); ok && se.GetSystem() != resource.GetSystem() {
+			if sp, ok := entity.(SystemPart); ok && sp.GetSystem() != resource.GetSystem() {
+				spSystem := r.System(sp.GetSystem())
 				externalDeps = append(externalDeps, extSysDep{
-					source: resource, targetSystem: se.GetSystem(), direction: "incoming",
+					source: resource, targetSystem: spSystem, direction: "incoming",
 				})
 			}
 		}
 	}
 
-	dw.endCluster()
+	dw.EndCluster()
 
 	// Draw edges for all collected external dependencies, removing duplicates
 	seenDeps := map[string]bool{}
@@ -334,15 +382,15 @@ func GenerateSystemSVG(r *Repository, name string) ([]byte, error) {
 			continue
 		}
 		seenDeps[extDep.String()] = true
-		dw.addNode(DotNode{QName: extDep.targetSystem, Kind: "system", Label: extDep.targetSystem})
+		dw.AddNode(EntityNode(extDep.targetSystem))
 		if extDep.direction == "outgoing" {
-			dw.addEdge(DotEdge{From: extDep.source.GetQName(), To: extDep.targetSystem})
+			dw.AddEdge(DotEdge{From: extDep.source.GetQName(), To: extDep.targetSystem.GetQName()})
 		} else {
-			dw.addEdge(DotEdge{From: extDep.targetSystem, To: extDep.source.GetQName()})
+			dw.AddEdge(DotEdge{From: extDep.targetSystem.GetQName(), To: extDep.source.GetQName()})
 		}
 	}
 
-	dw.end()
+	dw.End()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -358,10 +406,10 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	qn := component.GetQName()
 
 	dw := NewDotWriter()
-	dw.start()
+	dw.Start()
 
 	// Component
-	dw.addNode(DotNode{QName: qn, Kind: "component", Label: qn})
+	dw.AddNode(EntityNode(component))
 
 	// "Incoming" dependencies
 	// - Owner
@@ -371,27 +419,27 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	owner := r.Group(component.Spec.Owner)
 	if owner != nil {
 		ownerQn := owner.GetQName()
-		dw.addNode(DotNode{QName: ownerQn, Kind: "group", Label: ownerQn})
-		dw.addEdge(DotEdge{From: ownerQn, To: qn})
+		dw.AddNode(EntityNode(owner))
+		dw.AddEdge(DotEdge{From: ownerQn, To: qn})
 	}
 	system := r.System(component.Spec.System)
 	if system != nil {
 		systemQn := system.GetQName()
-		dw.addNode(DotNode{QName: systemQn, Kind: "system", Label: systemQn})
-		dw.addEdge(DotEdge{From: systemQn, To: qn})
+		dw.AddNode(EntityNode(system))
+		dw.AddEdge(DotEdge{From: systemQn, To: qn})
 	}
 	for _, a := range component.Spec.ProvidesAPIs {
 		api := r.API(a)
 		apiQn := api.GetQName()
-		dw.addNode(DotNode{QName: apiQn, Kind: "api", Label: apiQn})
-		dw.addEdge(DotEdge{From: apiQn, To: qn, Style: ESProvidedBy})
+		dw.AddNode(EntityNode(api))
+		dw.AddEdge(DotEdge{From: apiQn, To: qn, Style: ESProvidedBy})
 	}
 	for _, d := range component.Spec.dependents {
 		e := r.Entity(d)
 		if e != nil {
 			xQn := e.GetQName()
-			dw.addNode(DotNode{QName: xQn, Kind: strings.ToLower(e.GetKind()), Label: xQn})
-			dw.addEdge(DotEdge{From: xQn, To: qn, Style: ESDependsOn})
+			dw.AddNode(EntityNode(e))
+			dw.AddEdge(DotEdge{From: xQn, To: qn, Style: ESDependsOn})
 		}
 	}
 
@@ -401,19 +449,19 @@ func GenerateComponentSVG(r *Repository, name string) ([]byte, error) {
 	for _, a := range component.Spec.ConsumesAPIs {
 		api := r.API(a)
 		apiQn := api.GetQName()
-		dw.addNode(DotNode{QName: apiQn, Kind: "api", Label: apiQn})
-		dw.addEdge(DotEdge{From: qn, To: apiQn})
+		dw.AddNode(EntityNode(api))
+		dw.AddEdge(DotEdge{From: qn, To: apiQn})
 	}
 	for _, d := range component.Spec.DependsOn {
 		e := r.Entity(d)
 		if e != nil {
 			xQn := e.GetQName()
-			dw.addNode(DotNode{QName: xQn, Kind: strings.ToLower(e.GetKind()), Label: xQn})
-			dw.addEdge(DotEdge{From: qn, To: xQn, Style: ESDependsOn})
+			dw.AddNode(EntityNode(e))
+			dw.AddEdge(DotEdge{From: qn, To: xQn, Style: ESDependsOn})
 		}
 	}
 
-	dw.end()
+	dw.End()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -430,24 +478,24 @@ func GenerateAPISVG(r *Repository, name string) ([]byte, error) {
 	qn := api.GetQName()
 
 	dw := NewDotWriter()
-	dw.start()
+	dw.Start()
 
 	// API
-	dw.addNode(DotNode{QName: qn, Kind: "api", Label: qn})
+	dw.AddNode(EntityNode(api))
 
 	// Owner
 	owner := r.Group(api.Spec.Owner)
 	if owner != nil {
 		ownerQn := owner.GetQName()
-		dw.addNode(DotNode{QName: ownerQn, Kind: "group", Label: ownerQn})
-		dw.addEdge(DotEdge{From: ownerQn, To: qn, Style: ESOwner})
+		dw.AddNode(EntityNode(owner))
+		dw.AddEdge(DotEdge{From: ownerQn, To: qn, Style: ESOwner})
 	}
 	// System containing the API
 	system := r.System(api.Spec.System)
 	if system != nil {
 		systemQn := system.GetQName()
-		dw.addNode(DotNode{QName: systemQn, Kind: "system", Label: systemQn})
-		dw.addEdge(DotEdge{From: systemQn, To: qn, Style: ESContains})
+		dw.AddNode(EntityNode(system))
+		dw.AddEdge(DotEdge{From: systemQn, To: qn, Style: ESContains})
 	}
 
 	// Providers
@@ -455,8 +503,8 @@ func GenerateAPISVG(r *Repository, name string) ([]byte, error) {
 		provider := r.Component(p)
 		if provider != nil {
 			providerQn := provider.GetQName()
-			dw.addNode(DotNode{QName: providerQn, Kind: "component", Label: providerQn})
-			dw.addEdge(DotEdge{From: qn, To: providerQn, Style: ESProvidedBy})
+			dw.AddNode(EntityNode(provider))
+			dw.AddEdge(DotEdge{From: qn, To: providerQn, Style: ESProvidedBy})
 		}
 	}
 
@@ -465,12 +513,12 @@ func GenerateAPISVG(r *Repository, name string) ([]byte, error) {
 		consumer := r.Component(c)
 		if consumer != nil {
 			consumerQn := consumer.GetQName()
-			dw.addNode(DotNode{QName: consumerQn, Kind: "component", Label: consumerQn})
-			dw.addEdge(DotEdge{From: consumerQn, To: qn})
+			dw.AddNode(EntityNode(consumer))
+			dw.AddEdge(DotEdge{From: consumerQn, To: qn})
 		}
 	}
 
-	dw.end()
+	dw.End()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -486,24 +534,24 @@ func GenerateResourceSVG(r *Repository, name string) ([]byte, error) {
 	qn := resource.GetQName()
 
 	dw := NewDotWriter()
-	dw.start()
+	dw.Start()
 
 	// Resource
-	dw.addNode(DotNode{QName: qn, Kind: "resource", Label: qn})
+	dw.AddNode(EntityNode(resource))
 
 	// Owner
 	owner := r.Group(resource.Spec.Owner)
 	if owner != nil {
 		ownerQn := owner.GetQName()
-		dw.addNode(DotNode{QName: ownerQn, Kind: "group", Label: ownerQn})
-		dw.addEdge(DotEdge{From: ownerQn, To: qn, Style: ESOwner})
+		dw.AddNode(EntityNode(owner))
+		dw.AddEdge(DotEdge{From: ownerQn, To: qn, Style: ESOwner})
 	}
 	// System containing the API
 	system := r.System(resource.Spec.System)
 	if system != nil {
 		systemQn := system.GetQName()
-		dw.addNode(DotNode{QName: systemQn, Kind: "system", Label: systemQn})
-		dw.addEdge(DotEdge{From: systemQn, To: qn, Style: ESContains})
+		dw.AddNode(EntityNode(system))
+		dw.AddEdge(DotEdge{From: systemQn, To: qn, Style: ESContains})
 	}
 
 	// Dependents
@@ -511,12 +559,12 @@ func GenerateResourceSVG(r *Repository, name string) ([]byte, error) {
 		dependent := r.Entity(d)
 		if dependent != nil {
 			dependentQn := dependent.GetQName()
-			dw.addNode(DotNode{QName: dependentQn, Kind: strings.ToLower(dependent.GetKind()), Label: dependentQn})
-			dw.addEdge(DotEdge{From: dependentQn, To: qn, Style: ESDependsOn})
+			dw.AddNode(EntityNode(dependent))
+			dw.AddEdge(DotEdge{From: dependentQn, To: qn, Style: ESDependsOn})
 		}
 	}
 
-	dw.end()
+	dw.End()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
