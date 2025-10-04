@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/dnswlt/swcat/internal/backstage"
 	"github.com/dnswlt/swcat/internal/web"
@@ -103,11 +105,21 @@ func main() {
 
 	// Check if dot (graphviz) is in the PATH, else abort.
 	// We need dot to render SVG graphs.
-	path, err := exec.LookPath("dot")
-	if err != nil {
-		log.Fatalf("dot was not found in your PATH. Please install Graphviz and add it to the PATH.")
-	}
-	log.Printf("Found dot program at %s", path)
+	func() {
+		path, err := exec.LookPath("dot")
+		if err != nil {
+			log.Fatalf("dot was not found in your PATH. Please install Graphviz and add it to the PATH.")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "dot", "-V")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			// This error is returned if the command cannot be found or exits with a non-zero status.
+			log.Fatalf("Failed to run 'dot -V': %v", err)
+		}
+		log.Printf("Found dot program at %s (%s)", path, strings.TrimSpace(string(output)))
+	}()
 
 	repo := backstage.NewRepository()
 

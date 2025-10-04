@@ -478,7 +478,6 @@ func GenerateSystemSVG(r *Repository, system *System, contextSystems []*System) 
 		dw.StartCluster(systemID)
 		for _, dep := range deps {
 			dw.AddNode(EntityNode(dep.target))
-			// TODO: use proper edge styles, not always normal.
 			if dep.direction == DirOutgoing {
 				dw.AddEdge(EntityEdge(dep.source, dep.target, ESNormal))
 			} else {

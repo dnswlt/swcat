@@ -23,7 +23,7 @@ cd ..
 Now run the server, using the example catalog files:
 
 ```bash
-go run ./cmd/swcat -addr localhost:9191 examples/twosys/
+go run ./cmd/swcat -addr localhost:9191 
 ```
 
 Point your browser at <http://localhost:9191> and explore the example catalog.

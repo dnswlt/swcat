@@ -1,0 +1,17 @@
+# Go
+bin/
+dist/
+build/
+*.test
+*.out
+
+# Node
+web/node_modules
+web/.vite
+web/dist
+
+# VCS & misc
+.git
+.gitignore
+Dockerfile
+docker-compose.yml
