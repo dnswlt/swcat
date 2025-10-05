@@ -1,81 +1,20 @@
+//go:build integration
+
 // Integration tests require "dot" to be installed and are skipped by default.
 // Enable by running with
-// go test ./internal/dot -integration
+// go test -tags=integration ./internal/dot
 
 package dot
 
 import (
-	"bytes"
 	"context"
-	"encoding/xml"
-	"flag"
-	"io"
-	"sort"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/dnswlt/swcat/internal/testutil"
 )
 
-var integration = flag.Bool("integration", false, "run integration tests")
-
-func extractIDs(svg []byte) ([]string, error) {
-	dec := xml.NewDecoder(bytes.NewReader(svg))
-	var ids []string
-	for {
-		tok, err := dec.Token()
-		if err == io.EOF {
-			return ids, nil
-		}
-		if err != nil {
-			return nil, err
-		}
-		if se, ok := tok.(xml.StartElement); ok {
-			for _, a := range se.Attr {
-				if a.Name.Local == "id" {
-					// xml.Decoder already entity-decodes (e.g., &#45; -> -)
-					ids = append(ids, a.Value)
-				}
-			}
-		}
-	}
-}
-
-func extractClasses(svg []byte) ([]string, error) {
-	dec := xml.NewDecoder(bytes.NewReader(svg))
-	set := make(map[string]struct{})
-	for {
-		tok, err := dec.Token()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if se, ok := tok.(xml.StartElement); ok {
-			for _, a := range se.Attr {
-				if a.Name.Local == "class" {
-					for _, c := range strings.Fields(a.Value) { // splits by any whitespace
-						if c != "" {
-							set[c] = struct{}{}
-						}
-					}
-				}
-			}
-		}
-	}
-	out := make([]string, 0, len(set))
-	for c := range set {
-		out = append(out, c)
-	}
-	sort.Strings(out)
-	return out, nil
-}
-
 func TestDotRunner_Simple(t *testing.T) {
-	if !*integration {
-		t.Skip("pass -integration to run integration tests")
-	}
-
 	r := NewRunner("dot")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -92,7 +31,7 @@ func TestDotRunner_Simple(t *testing.T) {
 		t.Fatalf("dot failed: %v\n%s", err, svg)
 	}
 
-	ids, err := extractIDs(svg)
+	ids, err := testutil.ExtractSVGIDs(svg)
 	if err != nil {
 		t.Fatalf("failed to parse SVG: %v", err)
 	}
@@ -114,7 +53,7 @@ func TestDotRunner_Simple(t *testing.T) {
 	}
 
 	// Check that class= attributes are set.
-	classes, err := extractClasses(svg)
+	classes, err := testutil.ExtractSVGClasses(svg)
 	if err != nil {
 		t.Fatalf("failed to parse SVG for classes: %v", err)
 	}

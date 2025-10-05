@@ -3,3 +3,4 @@ catalogs/
 /static/dist/
 /static/.vite/
 swcat
+.vscode

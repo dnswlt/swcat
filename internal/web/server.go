@@ -11,6 +11,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dnswlt/swcat/internal/backstage"
@@ -24,11 +25,12 @@ type ServerOptions struct {
 }
 
 type Server struct {
-	opts      ServerOptions
-	template  *template.Template
-	repo      *backstage.Repository
-	svgCache  map[string]*backstage.SVGResult
-	dotRunner dot.Runner
+	opts        ServerOptions
+	template    *template.Template
+	repo        *backstage.Repository
+	svgCache    map[string]*backstage.SVGResult
+	svgCacheMut sync.Mutex
+	dotRunner   dot.Runner
 }
 
 func NewServer(opts ServerOptions, repo *backstage.Repository) (*Server, error) {
@@ -59,6 +61,18 @@ func (lrw *loggingResponseWriter) Write(b []byte) (int, error) {
 		lrw.WriteHeader(http.StatusOK)
 	}
 	return lrw.ResponseWriter.Write(b)
+}
+
+func (s *Server) lookupSVG(cacheKey string) (*backstage.SVGResult, bool) {
+	s.svgCacheMut.Lock()
+	defer s.svgCacheMut.Unlock()
+	svg, ok := s.svgCache[cacheKey]
+	return svg, ok
+}
+func (s *Server) storeSVG(cacheKey string, svg *backstage.SVGResult) {
+	s.svgCacheMut.Lock()
+	defer s.svgCacheMut.Unlock()
+	s.svgCache[cacheKey] = svg
 }
 
 // withRequestLogging wraps a handler and logs each request if in debug mode.
@@ -149,7 +163,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	params := map[string]any{}
 	system := s.repo.System(systemID)
 	if system == nil {
-		http.Error(w, "Invalid system", http.StatusBadRequest)
+		http.Error(w, "Invalid system", http.StatusNotFound)
 		return
 	}
 	params["System"] = system
@@ -166,7 +180,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	}
 	slices.Sort(cacheKeyIDs)
 	cacheKey := "system:" + systemID + "?" + strings.Join(cacheKeyIDs, ",")
-	svg, ok := s.svgCache[cacheKey]
+	svg, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -177,6 +191,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
+		s.storeSVG(cacheKey, svg)
 	}
 	params["SVG"] = template.HTML(svg.SVG)
 	params["SVGMetadataJSON"] = template.JS(svg.MetadataJSON())
@@ -187,13 +202,13 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 	params := map[string]any{}
 	component := s.repo.Component(componentID)
 	if component == nil {
-		http.Error(w, "Invalid component", http.StatusBadRequest)
+		http.Error(w, "Invalid component", http.StatusNotFound)
 		return
 	}
 	params["Component"] = component
 
 	cacheKey := "component:" + componentID
-	svg, ok := s.svgCache[cacheKey]
+	svg, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -204,7 +219,7 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		s.svgCache[cacheKey] = svg
+		s.storeSVG(cacheKey, svg)
 	}
 	params["SVG"] = template.HTML(svg.SVG)
 	params["SVGMetadataJSON"] = template.JS(svg.MetadataJSON())
@@ -231,13 +246,13 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 	params := map[string]any{}
 	api := s.repo.API(apiID)
 	if api == nil {
-		http.Error(w, "Invalid API", http.StatusBadRequest)
+		http.Error(w, "Invalid API", http.StatusNotFound)
 		return
 	}
 	params["API"] = api
 
 	cacheKey := "api:" + apiID
-	svg, ok := s.svgCache[cacheKey]
+	svg, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -248,7 +263,7 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		s.svgCache[cacheKey] = svg
+		s.storeSVG(cacheKey, svg)
 	}
 	params["SVG"] = template.HTML(svg.SVG)
 	params["SVGMetadataJSON"] = template.JS(svg.MetadataJSON())
@@ -275,13 +290,13 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 	params := map[string]any{}
 	resource := s.repo.Resource(resourceID)
 	if resource == nil {
-		http.Error(w, "Invalid resource", http.StatusBadRequest)
+		http.Error(w, "Invalid resource", http.StatusNotFound)
 		return
 	}
 	params["Resource"] = resource
 
 	cacheKey := "resource:" + resourceID
-	svg, ok := s.svgCache[cacheKey]
+	svg, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -292,7 +307,7 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		s.svgCache[cacheKey] = svg
+		s.storeSVG(cacheKey, svg)
 	}
 	params["SVG"] = template.HTML(svg.SVG)
 	params["SVGMetadataJSON"] = template.JS(svg.MetadataJSON())
@@ -319,13 +334,13 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 	params := map[string]any{}
 	domain := s.repo.Domain(domainID)
 	if domain == nil {
-		http.Error(w, "Invalid domain", http.StatusBadRequest)
+		http.Error(w, "Invalid domain", http.StatusNotFound)
 		return
 	}
 	params["Domain"] = domain
 
 	cacheKey := "domain:" + domainID
-	svg, ok := s.svgCache[cacheKey]
+	svg, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -336,7 +351,7 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		s.svgCache[cacheKey] = svg
+		s.storeSVG(cacheKey, svg)
 	}
 	params["SVG"] = template.HTML(svg.SVG)
 	params["SVGMetadataJSON"] = template.JS(svg.MetadataJSON())
@@ -363,7 +378,7 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 	params := map[string]any{}
 	group := s.repo.Group(groupID)
 	if group == nil {
-		http.Error(w, "Invalid group", http.StatusBadRequest)
+		http.Error(w, "Invalid group", http.StatusNotFound)
 		return
 	}
 	params["Group"] = group
@@ -401,7 +416,7 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 	w.Write(output.Bytes())
 }
 
-func (s *Server) Serve() error {
+func (s *Server) routes() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// Domains / Systems / Components / Resources / APIs pages
@@ -483,9 +498,16 @@ func (s *Server) Serve() error {
 		http.Redirect(w, r, "/ui/components", http.StatusTemporaryRedirect)
 	})
 
-	var handler http.Handler = mux
-	handler = s.withRequestLogging(handler)
+	return mux
+}
 
+// Serve starts the HTTP server on s.opts.Addr using the wrapped handler.
+func (s *Server) Serve() error {
+	handler := s.Handler()
 	log.Printf("Go server listening on http://%s", s.opts.Addr)
 	return http.ListenAndServe(s.opts.Addr, handler)
+}
+
+func (s *Server) Handler() http.Handler {
+	return s.withRequestLogging(s.routes())
 }

@@ -1,0 +1,79 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: test-domain
+  title: Test Domain
+spec:
+  owner: test-group
+  type: division
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: test-group
+spec:
+  type: team
+  profile:
+    displayName: Test Team
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: test-system
+  title: Test System
+  tags:
+    - test-tag
+  links:
+    - url: https://example.com/docs/testing
+      title: Documentation
+      type: docs
+spec:
+  owner: test-group
+  domain: test-domain
+  type: application
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: test-component
+  title: Test Component
+  labels:
+    foobar.dev/language: java
+    foobar.dev/deployment: k8s
+spec:
+  type: service
+  lifecycle: production
+  owner: test-group
+  system: test-system
+  providesApis:
+    - test-api
+  dependsOn:
+    - resource:test-resource
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: test-api
+  title: Test API
+  links:
+    - url: https://example.com/apis/test-api
+      title: Test API Schema
+      type: schema
+spec:
+  type: grpc
+  lifecycle: production
+  owner: test-group
+  system: test-system
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: test-resource
+  title: Test Resource
+  labels:
+    foobar.dev/technology: postgres
+spec:
+  type: database
+  owner: test-group
+  system: test-system
