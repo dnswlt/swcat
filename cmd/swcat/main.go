@@ -162,6 +162,7 @@ func main() {
 			web.ServerOptions{
 				Addr:    *serverAddrFlag,
 				BaseDir: *baseDir,
+				DotPath: "dot",
 			},
 			repo,
 		)

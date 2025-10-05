@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"html/template"
 	"log"
@@ -13,25 +14,29 @@ import (
 	"time"
 
 	"github.com/dnswlt/swcat/internal/backstage"
+	"github.com/dnswlt/swcat/internal/dot"
 )
 
 type ServerOptions struct {
 	Addr    string // E.g., "localhost:8080"
-	BaseDir string
+	BaseDir string // Directory from which resources (templates etc.) are read.
+	DotPath string // E.g., "dot" (with dot on the PATH)
 }
 
 type Server struct {
-	opts     ServerOptions
-	template *template.Template
-	repo     *backstage.Repository
-	svgCache map[string]*backstage.SVGResult
+	opts      ServerOptions
+	template  *template.Template
+	repo      *backstage.Repository
+	svgCache  map[string]*backstage.SVGResult
+	dotRunner dot.Runner
 }
 
 func NewServer(opts ServerOptions, repo *backstage.Repository) (*Server, error) {
 	s := &Server{
-		opts:     opts,
-		repo:     repo,
-		svgCache: make(map[string]*backstage.SVGResult),
+		opts:      opts,
+		repo:      repo,
+		svgCache:  make(map[string]*backstage.SVGResult),
+		dotRunner: dot.NewRunner(opts.DotPath),
 	}
 	if err := s.reloadTemplates(); err != nil {
 		return nil, err
@@ -164,7 +169,9 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	svg, ok := s.svgCache[cacheKey]
 	if !ok {
 		var err error
-		svg, err = backstage.GenerateSystemSVG(s.repo, system, contextSystems)
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		svg, err = backstage.GenerateSystemSVG(ctx, s.dotRunner, s.repo, system, contextSystems)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
@@ -189,7 +196,9 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 	svg, ok := s.svgCache[cacheKey]
 	if !ok {
 		var err error
-		svg, err = backstage.GenerateComponentSVG(s.repo, component)
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		svg, err = backstage.GenerateComponentSVG(ctx, s.dotRunner, s.repo, component)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
@@ -231,7 +240,9 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 	svg, ok := s.svgCache[cacheKey]
 	if !ok {
 		var err error
-		svg, err = backstage.GenerateAPISVG(s.repo, api)
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		svg, err = backstage.GenerateAPISVG(ctx, s.dotRunner, s.repo, api)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
@@ -273,7 +284,9 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 	svg, ok := s.svgCache[cacheKey]
 	if !ok {
 		var err error
-		svg, err = backstage.GenerateResourceSVG(s.repo, resource)
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		svg, err = backstage.GenerateResourceSVG(ctx, s.dotRunner, s.repo, resource)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
@@ -315,7 +328,9 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 	svg, ok := s.svgCache[cacheKey]
 	if !ok {
 		var err error
-		svg, err = backstage.GenerateDomainSVG(s.repo, domain)
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		svg, err = backstage.GenerateDomainSVG(ctx, s.dotRunner, s.repo, domain)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
