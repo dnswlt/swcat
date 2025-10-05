@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os/exec"
+	"sort"
 	"strings"
 )
 
@@ -238,9 +239,15 @@ func (dw *Writer) AddEdge(edge Edge) {
 
 	var edgeAttrs string
 	if len(attrs) > 0 {
-		var items []string
-		for k, v := range attrs {
-			items = append(items, fmt.Sprintf("%s=\"%s\"", k, v))
+		// Sort keys for deterministic output
+		keys := make([]string, 0, len(attrs))
+		for k := range attrs {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		items := make([]string, 0, len(keys))
+		for _, k := range keys {
+			items = append(items, fmt.Sprintf("%s=\"%s\"", k, attrs[k]))
 		}
 		edgeAttrs = "[" + strings.Join(items, ",") + "]"
 	}
