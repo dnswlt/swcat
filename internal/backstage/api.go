@@ -1,5 +1,5 @@
 // This file contains the API classes that define a software catalog.
-// The types are compatible with backstage.io's types:
+// The types are broadly compatible with backstage.io's types:
 // https://backstage.io/docs/features/software-catalog/descriptor-format#contents
 package backstage
 
@@ -9,53 +9,12 @@ import (
 
 const (
 	// The name of the (implicit) default namespace.
+	// In swcat, entity references typically omit the default namespace
+	// even in fully qualified form (e.g., resource:my-resource).
 	DefaultNamespace = "default"
 )
 
-// Metadata
-
-type Link struct {
-	// A url in a standard uri format.
-	URL string `yaml:"url,omitempty"`
-	// A user friendly display name for the link.
-	Title string `yaml:"title,omitempty"`
-	// A key representing a visual icon to be displayed in the UI.
-	Icon string `yaml:"icon,omitempty"`
-	// An optional value to categorize links into specific groups.
-	Type string `yaml:"type,omitempty"`
-}
-
-type Metadata struct {
-	// The name of the entity. Must be unique within the catalog at any given point in time, for any given namespace + kind pair.
-	Name string `yaml:"name,omitempty"`
-	// The namespace that the entity belongs to. If empty, the entity is assume to live in the default namespace.
-	Namespace string `yaml:"namespace,omitempty"`
-	// A display name of the entity, to be presented in user interfaces instead of the name property, when available.
-	Title string `yaml:"title,omitempty"`
-	// A short (typically relatively few words, on one line) description of the entity.
-	Description string `yaml:"description,omitempty"`
-	// Key/value pairs of identifying information attached to the entity.
-	Labels map[string]string `yaml:"labels,omitempty"`
-	// Key/value pairs of non-identifying auxiliary information attached to the entity.
-	// Mostly used by plugins to store additional information about the entity.
-	Annotations map[string]string `yaml:"annotations,omitempty"`
-	// A list of single-valued strings, to for example classify catalog entities in various ways.
-	Tags []string `yaml:"tags,omitempty"`
-	// A list of external hyperlinks related to the entity.
-	Links []*Link `yaml:"links,omitempty"`
-}
-
-// GetQName returns the qualified name of the entity.
-func (m *Metadata) GetQName() string {
-	if m == nil {
-		return ""
-	}
-	if m.Namespace == "" || m.Namespace == DefaultNamespace {
-		return m.Name
-	}
-	return m.Namespace + "/" + m.Name
-}
-
+// Entity is the interface implemented by all entity kinds (Component, System, etc.).
 type Entity interface {
 	GetKind() string
 	GetMetadata() *Metadata
@@ -65,78 +24,102 @@ type Entity interface {
 	GetQName() string
 	// Returns the fully qualified entity reference in the format
 	// <kind>:<namespace>/<name>
-	// This reference should be used in
 	GetRef() string
 }
 
-// CompareEntityByName compares two entities lexicographically by (namespace, name).
-func CompareEntityByName(a, b Entity) int {
-	if c := cmp.Compare(a.GetMetadata().Namespace, b.GetMetadata().Namespace); c != 0 {
-		return c
-	}
-	return cmp.Compare(a.GetMetadata().Name, b.GetMetadata().Name)
-}
-
+// SystemPart is the interface implemented by all entity kinds that appear as parts
+// of a System entity (Components, Resources, APIs, Systems).
 type SystemPart interface {
 	Entity
+	// Returns the entity reference of the System that this entity is a part of.
 	GetSystem() string
 }
 
-// Component
+// Metadata
 
-type ComponentSpec struct {
-	// The type of component.
-	// Should ideally be one of a few well-known values that are used consistently.
-	// For example, ["service", "batch"].
+type Link struct {
+	// A url in a standard uri format.
+	// [required]
+	URL string `yaml:"url,omitempty"`
+	// A user friendly display name for the link.
+	// [optional]
+	Title string `yaml:"title,omitempty"`
+	// A key representing a visual icon to be displayed in the UI.
+	// [optional]
+	Icon string `yaml:"icon,omitempty"`
+	// An optional value to categorize links into specific groups.
+	// [optional]
 	Type string `yaml:"type,omitempty"`
-	// The lifecycle state of the component.
-	// Should ideally be one of a few well-known values that are used consistently.
-	// For example, ["production", "test", "dev", "experimental"].
-	Lifecycle string `yaml:"lifecycle,omitempty"`
-	// An entity reference to the owner of the component.
+}
+
+type Metadata struct {
+	// The name of the entity. Must be unique within the catalog at any given point in time, for any given namespace + kind pair.
+	// [required]
+	Name string `yaml:"name,omitempty"`
+	// The namespace that the entity belongs to. If empty, the entity is assume to live in the default namespace.
+	// [optional]
+	Namespace string `yaml:"namespace,omitempty"`
+	// A display name of the entity, to be presented in user interfaces instead of the name property, when available.
+	// [optional]
+	Title string `yaml:"title,omitempty"`
+	// A short (typically relatively few words, on one line) description of the entity.
+	// [optional]
+	Description string `yaml:"description,omitempty"`
+	// Key/value pairs of identifying information attached to the entity.
+	// [optional]
+	Labels map[string]string `yaml:"labels,omitempty"`
+	// Key/value pairs of non-identifying auxiliary information attached to the entity.
+	// Mostly used by plugins to store additional information about the entity.
+	// [optional]
+	Annotations map[string]string `yaml:"annotations,omitempty"`
+	// A list of single-valued strings, to for example classify catalog entities in various ways.
+	// [optional]
+	Tags []string `yaml:"tags,omitempty"`
+	// A list of external hyperlinks related to the entity.
+	// [optional]
+	Links []*Link `yaml:"links,omitempty"`
+}
+
+// Domain
+
+type DomainSpec struct {
+	// An entity reference to the owner of the domain.
+	// [required]
 	Owner string `yaml:"owner,omitempty"`
-	// An entity reference to the system that the component belongs to.
-	System string `yaml:"system,omitempty"`
-	// An entity reference to another component of which the component is a part.
-	SubcomponentOf string `yaml:"subcomponentOf,omitempty"`
-	// An array of entity references to the APIs that are provided by the component.
-	ProvidesAPIs []string `yaml:"providesApis,omitempty"`
-	// An array of entity references to the APIs that are consumed by the component.
-	ConsumesAPIs []string `yaml:"consumesApis,omitempty"`
-	// An array of references to other entities that the component depends on to function.
-	DependsOn []string `yaml:"dependsOn,omitempty"`
+	// An entity reference to another domain of which the domain is a part.
+	// [optional]
+	SubdomainOf string `yaml:"subdomainOf,omitempty"`
+	// The type of domain. There is currently no enforced set of values for this field,
+	// so it is left up to the adopting organization to choose a nomenclature that matches
+	// their catalog hierarchy.
+	// [optional]
+	Type string `yaml:"type,omitempty"`
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
-	dependents []string
+	systems []string
 }
 
-type Component struct {
-	APIVersion string         `yaml:"apiVersion,omitempty"`
-	Kind       string         `yaml:"kind,omitempty"`
-	Metadata   *Metadata      `yaml:"metadata,omitempty"`
-	Spec       *ComponentSpec `yaml:"spec,omitempty"`
+type Domain struct {
+	APIVersion string      `yaml:"apiVersion,omitempty"`
+	Kind       string      `yaml:"kind,omitempty"`
+	Metadata   *Metadata   `yaml:"metadata,omitempty"`
+	Spec       *DomainSpec `yaml:"spec,omitempty"`
 }
-
-func (c *Component) GetKind() string         { return c.Kind }
-func (c *Component) GetMetadata() *Metadata  { return c.Metadata }
-func (c *Component) GetQName() string        { return c.Metadata.GetQName() }
-func (c *Component) GetRef() string          { return "component:" + c.GetQName() }
-func (c *Component) GetOwner() string        { return c.Spec.Owner }
-func (c *Component) GetLifecycle() string    { return c.Spec.Lifecycle }
-func (c *Component) GetSystem() string       { return c.Spec.System }
-func (c *Component) GetDependents() []string { return c.Spec.dependents }
 
 // System
 
 type SystemSpec struct {
 	// An entity reference to the owner of the system.
+	// [required]
 	Owner string `yaml:"owner,omitempty"`
 	// An entity reference to the domain that the system belongs to.
+	// [optional]
 	Domain string `yaml:"domain,omitempty"`
 	// The type of system. There is currently no enforced set of values for this field,
 	// so it is left up to the adopting organization to choose a nomenclature that matches
 	// their catalog hierarchy.
+	// [optional]
 	Type string `yaml:"type,omitempty"`
 
 	// These fields are not part of the Backstage API.
@@ -153,57 +136,96 @@ type System struct {
 	Spec       *SystemSpec `yaml:"spec,omitempty"`
 }
 
-func (s *System) GetKind() string         { return s.Kind }
-func (s *System) GetMetadata() *Metadata  { return s.Metadata }
-func (s *System) GetQName() string        { return s.Metadata.GetQName() }
-func (s *System) GetRef() string          { return "system:" + s.GetQName() }
-func (s *System) GetComponents() []string { return s.Spec.components }
-func (s *System) GetAPIs() []string       { return s.Spec.apis }
-func (s *System) GetResources() []string  { return s.Spec.resources }
-func (s *System) GetSystem() string       { return s.GetQName() }
+// Component
 
-// Domain
-
-type DomainSpec struct {
-	// An entity reference to the owner of the domain.
-	Owner string `yaml:"owner,omitempty"`
-	// An entity reference to another domain of which the domain is a part.
-	SubdomainOf string `yaml:"subdomainOf,omitempty"`
-	// The type of domain. There is currently no enforced set of values for this field,
-	// so it is left up to the adopting organization to choose a nomenclature that matches
-	// their catalog hierarchy.
+type ComponentSpec struct {
+	// The type of component.
+	// Should ideally be one of a few well-known values that are used consistently.
+	// For example, ["service", "batch"].
+	// [required]
 	Type string `yaml:"type,omitempty"`
+	// The lifecycle state of the component.
+	// Should ideally be one of a few well-known values that are used consistently.
+	// For example, ["production", "test", "dev", "experimental"].
+	// [required]
+	Lifecycle string `yaml:"lifecycle,omitempty"`
+	// An entity reference to the owner of the component.
+	// [required]
+	Owner string `yaml:"owner,omitempty"`
+	// An entity reference to the system that the component belongs to.
+	// [optional]
+	System string `yaml:"system,omitempty"`
+	// An entity reference to another component of which the component is a part.
+	// [optional]
+	SubcomponentOf string `yaml:"subcomponentOf,omitempty"`
+	// An array of entity references to the APIs that are provided by the component.
+	// [optional]
+	ProvidesAPIs []string `yaml:"providesApis,omitempty"`
+	// An array of entity references to the APIs that are consumed by the component.
+	// [optional]
+	ConsumesAPIs []string `yaml:"consumesApis,omitempty"`
+	// An array of references to other entities that the component depends on to function.
+	// [optional]
+	DependsOn []string `yaml:"dependsOn,omitempty"`
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
-	systems []string
+	dependents []string
 }
 
-type Domain struct {
-	APIVersion string      `yaml:"apiVersion,omitempty"`
-	Kind       string      `yaml:"kind,omitempty"`
-	Metadata   *Metadata   `yaml:"metadata,omitempty"`
-	Spec       *DomainSpec `yaml:"spec,omitempty"`
+type Component struct {
+	APIVersion string         `yaml:"apiVersion,omitempty"`
+	Kind       string         `yaml:"kind,omitempty"`
+	Metadata   *Metadata      `yaml:"metadata,omitempty"`
+	Spec       *ComponentSpec `yaml:"spec,omitempty"`
 }
 
-func (d *Domain) GetKind() string        { return d.Kind }
-func (d *Domain) GetMetadata() *Metadata { return d.Metadata }
-func (d *Domain) GetQName() string       { return d.Metadata.GetQName() }
-func (d *Domain) GetRef() string         { return "domain:" + d.GetQName() }
-func (d *Domain) GetSystems() []string   { return d.Spec.systems }
+// Resource
+
+type ResourceSpec struct {
+	// The type of resource.
+	// [required]
+	Type string `yaml:"type,omitempty"`
+	// An entity reference to the owner of the resource.
+	// [required]
+	Owner string `yaml:"owner,omitempty"`
+	// An array of references to other entities that the resource depends on to function.
+	// [optional]
+	DependsOn []string `yaml:"dependsOn,omitempty"`
+	// An entity reference to the system that the resource belongs to.
+	// [optional]
+	System string `yaml:"system,omitempty"`
+
+	// These fields are not part of the Backstage API.
+	// They are populated on demand to make "reverse navigation" easier.
+	dependents []string
+}
+
+type Resource struct {
+	APIVersion string        `yaml:"apiVersion,omitempty"`
+	Kind       string        `yaml:"kind,omitempty"`
+	Metadata   *Metadata     `yaml:"metadata,omitempty"`
+	Spec       *ResourceSpec `yaml:"spec,omitempty"`
+}
 
 // API
 
 type APISpec struct {
 	// The type of the API definition.
+	// [required]
 	Type string `yaml:"type,omitempty"`
 	// The lifecycle state of the API.
+	// [required]
 	Lifecycle string `yaml:"lifecycle,omitempty"`
 	// An entity reference to the owner of the API.
+	// [required]
 	Owner string `yaml:"owner,omitempty"`
 	// An entity reference to the system that the API belongs to.
+	// [optional]
 	System string `yaml:"system,omitempty"`
 	// The definition of the API, based on the format defined by the type.
+	// A required field in the backstage.io schema, but we leave it as optional.
+	// [optional]
 	Definition string `yaml:"definition,omitempty"`
 
 	// These fields are not part of the Backstage API.
@@ -219,45 +241,6 @@ type API struct {
 	Spec       *APISpec  `yaml:"spec,omitempty"`
 }
 
-func (a *API) GetKind() string        { return a.Kind }
-func (a *API) GetMetadata() *Metadata { return a.Metadata }
-func (a *API) GetQName() string       { return a.Metadata.GetQName() }
-func (a *API) GetRef() string         { return "api:" + a.GetQName() }
-func (a *API) GetProviders() []string { return a.Spec.providers }
-func (a *API) GetConsumers() []string { return a.Spec.consumers }
-func (a *API) GetSystem() string      { return a.Spec.System }
-
-// Resource
-
-type ResourceSpec struct {
-	// The type of resource.
-	Type string `yaml:"type,omitempty"`
-	// An entity reference to the owner of the resource.
-	Owner string `yaml:"owner,omitempty"`
-	// An array of references to other entities that the resource depends on to function.
-	DependsOn []string `yaml:"dependsOn,omitempty"`
-	// An entity reference to the system that the resource belongs to.
-	System string `yaml:"system,omitempty"`
-
-	// These fields are not part of the Backstage API.
-	// They are populated on demand to make "reverse navigation" easier.
-	dependents []string
-}
-
-type Resource struct {
-	APIVersion string        `yaml:"apiVersion,omitempty"`
-	Kind       string        `yaml:"kind,omitempty"`
-	Metadata   *Metadata     `yaml:"metadata,omitempty"`
-	Spec       *ResourceSpec `yaml:"spec,omitempty"`
-}
-
-func (r *Resource) GetKind() string         { return r.Kind }
-func (r *Resource) GetMetadata() *Metadata  { return r.Metadata }
-func (r *Resource) GetQName() string        { return r.Metadata.GetQName() }
-func (r *Resource) GetRef() string          { return "resource:" + r.GetQName() }
-func (r *Resource) GetDependents() []string { return r.Spec.dependents }
-func (r *Resource) GetSystem() string       { return r.Spec.System }
-
 // Group
 
 type GroupSpecProfile struct {
@@ -272,15 +255,20 @@ type GroupSpecProfile struct {
 type GroupSpec struct {
 	// The type of group. There is currently no enforced set of values for this field,
 	// so it is left up to the adopting organization to choose a nomenclature that matches their org hierarchy.
+	// [required]
 	Type string `yaml:"type,omitempty"`
 	// Optional profile information about the group, mainly for display purposes.
+	// [optional]
 	Profile *GroupSpecProfile `yaml:"profile,omitempty"`
 	// The immediate parent group in the hierarchy, if any.
+	// [optional]
 	Parent string `yaml:"parent,omitempty"`
 	// The immediate child groups of this group in the hierarchy (whose parent field points to this group).
-	// The list must be present, but may be empty if there are no child groups.
-	Children []string `yaml:"children,omitempty"`
+	// In the backstage.io schema the list must be present, but may be empty if there are no child groups.
+	// [optional]
+	Children []string `yaml:"children"`
 	// The users that are members of this group. The entries of this array are entity references.
+	// [optional]
 	Members []string `yaml:"members,omitempty"`
 }
 
@@ -290,6 +278,68 @@ type Group struct {
 	Metadata   *Metadata  `yaml:"metadata,omitempty"`
 	Spec       *GroupSpec `yaml:"spec,omitempty"`
 }
+
+//
+// Interface implementations and helpers.
+//
+
+// GetQName returns the qualified name of the entity.
+func (m *Metadata) GetQName() string {
+	if m == nil {
+		return ""
+	}
+	if m.Namespace == "" || m.Namespace == DefaultNamespace {
+		return m.Name
+	}
+	return m.Namespace + "/" + m.Name
+}
+
+// CompareEntityByName compares two entities lexicographically by (namespace, name).
+func CompareEntityByName(a, b Entity) int {
+	if c := cmp.Compare(a.GetMetadata().Namespace, b.GetMetadata().Namespace); c != 0 {
+		return c
+	}
+	return cmp.Compare(a.GetMetadata().Name, b.GetMetadata().Name)
+}
+
+func (c *Component) GetKind() string         { return c.Kind }
+func (c *Component) GetMetadata() *Metadata  { return c.Metadata }
+func (c *Component) GetQName() string        { return c.Metadata.GetQName() }
+func (c *Component) GetRef() string          { return "component:" + c.GetQName() }
+func (c *Component) GetOwner() string        { return c.Spec.Owner }
+func (c *Component) GetLifecycle() string    { return c.Spec.Lifecycle }
+func (c *Component) GetSystem() string       { return c.Spec.System }
+func (c *Component) GetDependents() []string { return c.Spec.dependents }
+
+func (s *System) GetKind() string         { return s.Kind }
+func (s *System) GetMetadata() *Metadata  { return s.Metadata }
+func (s *System) GetQName() string        { return s.Metadata.GetQName() }
+func (s *System) GetRef() string          { return "system:" + s.GetQName() }
+func (s *System) GetComponents() []string { return s.Spec.components }
+func (s *System) GetAPIs() []string       { return s.Spec.apis }
+func (s *System) GetResources() []string  { return s.Spec.resources }
+func (s *System) GetSystem() string       { return s.GetQName() }
+
+func (d *Domain) GetKind() string        { return d.Kind }
+func (d *Domain) GetMetadata() *Metadata { return d.Metadata }
+func (d *Domain) GetQName() string       { return d.Metadata.GetQName() }
+func (d *Domain) GetRef() string         { return "domain:" + d.GetQName() }
+func (d *Domain) GetSystems() []string   { return d.Spec.systems }
+
+func (a *API) GetKind() string        { return a.Kind }
+func (a *API) GetMetadata() *Metadata { return a.Metadata }
+func (a *API) GetQName() string       { return a.Metadata.GetQName() }
+func (a *API) GetRef() string         { return "api:" + a.GetQName() }
+func (a *API) GetProviders() []string { return a.Spec.providers }
+func (a *API) GetConsumers() []string { return a.Spec.consumers }
+func (a *API) GetSystem() string      { return a.Spec.System }
+
+func (r *Resource) GetKind() string         { return r.Kind }
+func (r *Resource) GetMetadata() *Metadata  { return r.Metadata }
+func (r *Resource) GetQName() string        { return r.Metadata.GetQName() }
+func (r *Resource) GetRef() string          { return "resource:" + r.GetQName() }
+func (r *Resource) GetDependents() []string { return r.Spec.dependents }
+func (r *Resource) GetSystem() string       { return r.Spec.System }
 
 func (g *Group) GetKind() string        { return g.Kind }
 func (g *Group) GetMetadata() *Metadata { return g.Metadata }
