@@ -158,6 +158,9 @@ func TestRepository_Finders(t *testing.T) {
 		&api.Component{Metadata: &api.Metadata{Name: "c2", Namespace: "ns1"}}, // Add in different order
 		&api.Component{Metadata: &api.Metadata{Name: "c1", Namespace: "ns1"}},
 		&api.Component{Metadata: &api.Metadata{Name: "c3", Namespace: "ns2"}},
+		&api.Component{Metadata: &api.Metadata{Name: "c4", Namespace: "ns3"}, Spec: &api.ComponentSpec{
+			Owner: "o4", Lifecycle: "production",
+		}},
 		&api.System{Metadata: &api.Metadata{Name: "s2"}},
 		&api.System{Metadata: &api.Metadata{Name: "s1"}},
 		&api.Domain{Metadata: &api.Metadata{Name: "d1"}},
@@ -206,10 +209,12 @@ func TestRepository_Finders(t *testing.T) {
 		}
 		tests := []finderTest{
 			{"ns1", []string{"ns1/c1", "ns1/c2"}},
+			{"namespace:ns1 AND name:c1", []string{"ns1/c1"}},
 			{"c1", []string{"ns1/c1"}},
 			{"c3", []string{"ns2/c3"}},
+			{"owner:o4 OR lifecycle:production", []string{"ns3/c4"}},
 			{"notfound", nil},
-			{"", []string{"ns1/c1", "ns1/c2", "ns2/c3"}},
+			{"", []string{"ns1/c1", "ns1/c2", "ns2/c3", "ns3/c4"}},
 		}
 		testFinder(t, finder, tests)
 	})

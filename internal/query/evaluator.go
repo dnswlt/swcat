@@ -48,14 +48,29 @@ var attributeAccessors = map[string]attributeAccessor{
 	"owner": func(e api.Entity) ([]string, bool) {
 		switch v := e.(type) {
 		case *api.Component:
+			if v.Spec == nil {
+				return nil, false
+			}
 			return []string{v.Spec.Owner}, true
 		case *api.System:
+			if v.Spec == nil {
+				return nil, false
+			}
 			return []string{v.Spec.Owner}, true
 		case *api.Domain:
+			if v.Spec == nil {
+				return nil, false
+			}
 			return []string{v.Spec.Owner}, true
 		case *api.Resource:
+			if v.Spec == nil {
+				return nil, false
+			}
 			return []string{v.Spec.Owner}, true
 		case *api.API:
+			if v.Spec == nil {
+				return nil, false
+			}
 			return []string{v.Spec.Owner}, true
 		default:
 			return nil, false // Group and other types don't have an owner
@@ -64,16 +79,34 @@ var attributeAccessors = map[string]attributeAccessor{
 	"type": func(e api.Entity) ([]string, bool) {
 		switch v := e.(type) {
 		case *api.Component:
+			if v.Spec == nil {
+				return nil, false
+			}
 			return []string{v.Spec.Type}, true
 		case *api.System:
+			if v.Spec == nil {
+				return nil, false
+			}
 			return []string{v.Spec.Type}, true
 		case *api.Domain:
+			if v.Spec == nil {
+				return nil, false
+			}
 			return []string{v.Spec.Type}, true
 		case *api.Resource:
+			if v.Spec == nil {
+				return nil, false
+			}
 			return []string{v.Spec.Type}, true
 		case *api.API:
+			if v.Spec == nil {
+				return nil, false
+			}
 			return []string{v.Spec.Type}, true
 		case *api.Group:
+			if v.Spec == nil {
+				return nil, false
+			}
 			return []string{v.Spec.Type}, true
 		default:
 			return nil, false
@@ -82,8 +115,14 @@ var attributeAccessors = map[string]attributeAccessor{
 	"lifecycle": func(e api.Entity) ([]string, bool) {
 		switch v := e.(type) {
 		case *api.Component:
+			if v.Spec == nil {
+				return nil, false
+			}
 			return []string{v.Spec.Lifecycle}, true
 		case *api.API:
+			if v.Spec == nil {
+				return nil, false
+			}
 			return []string{v.Spec.Lifecycle}, true
 		default:
 			return nil, false
@@ -100,9 +139,9 @@ func (ev *Evaluator) Matches(e api.Entity) (bool, error) {
 func (ev *Evaluator) evaluateNode(e api.Entity, expr Expression) (bool, error) {
 	switch v := expr.(type) {
 	case *Term:
-		// A simple term matches against the entity's name.
-		m := e.GetMetadata()
-		return strings.Contains(strings.ToLower(m.Name), strings.ToLower(v.Value)), nil
+		// A simple term matches against the entity's qualified name.
+		qn := e.GetQName()
+		return strings.Contains(strings.ToLower(qn), strings.ToLower(v.Value)), nil
 
 	case *AttributeTerm:
 		attr := strings.ToLower(v.Attribute)

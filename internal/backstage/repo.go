@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/api"
+	"github.com/dnswlt/swcat/internal/query"
 )
 
 type Repository struct {
@@ -129,82 +130,59 @@ func (r *Repository) Entity(ref string) api.Entity {
 	return nil
 }
 
-func (r *Repository) FindComponents(query string) []*api.Component {
-	var result []*api.Component
-	for _, c := range r.components {
-		if strings.Contains(c.GetQName(), query) {
-			result = append(result, c)
+func findEntities[T api.Entity](q string, items map[string]T) []T {
+	var result []T
+
+	if strings.TrimSpace(q) == "" {
+		// No filter, return all items
+		result = make([]T, 0, len(items))
+		for _, item := range items {
+			result = append(result, item)
+		}
+	} else {
+		expr, err := query.Parse(q)
+		if err != nil {
+			return nil // Invalid query => no results
+		}
+		ev := query.NewEvaluator(expr)
+		for _, c := range items {
+			ok, err := ev.Matches(c)
+			if err != nil {
+				return nil // Broken query (e.g. broken regex) => no results
+			}
+			if ok {
+				result = append(result, c)
+			}
 		}
 	}
-	slices.SortFunc(result, func(c1, c2 *api.Component) int {
+	slices.SortFunc(result, func(c1, c2 T) int {
 		return api.CompareEntityByName(c1, c2)
 	})
 	return result
 }
 
-func (r *Repository) FindSystems(query string) []*api.System {
-	var result []*api.System
-	for _, s := range r.systems {
-		if strings.Contains(s.GetQName(), query) {
-			result = append(result, s)
-		}
-	}
-	slices.SortFunc(result, func(s1, s2 *api.System) int {
-		return api.CompareEntityByName(s1, s2)
-	})
-	return result
+func (r *Repository) FindComponents(q string) []*api.Component {
+	return findEntities(q, r.components)
 }
 
-func (r *Repository) FindAPIs(query string) []*api.API {
-	var result []*api.API
-	for _, a := range r.apis {
-		if strings.Contains(a.GetQName(), query) {
-			result = append(result, a)
-		}
-	}
-	slices.SortFunc(result, func(a1, a2 *api.API) int {
-		return api.CompareEntityByName(a1, a2)
-	})
-	return result
+func (r *Repository) FindSystems(q string) []*api.System {
+	return findEntities(q, r.systems)
 }
 
-func (r *Repository) FindResources(query string) []*api.Resource {
-	var result []*api.Resource
-	for _, res := range r.resources {
-		if strings.Contains(res.GetQName(), query) {
-			result = append(result, res)
-		}
-	}
-	slices.SortFunc(result, func(r1, r2 *api.Resource) int {
-		return api.CompareEntityByName(r1, r2)
-	})
-	return result
+func (r *Repository) FindAPIs(q string) []*api.API {
+	return findEntities(q, r.apis)
 }
 
-func (r *Repository) FindDomains(query string) []*api.Domain {
-	var result []*api.Domain
-	for _, d := range r.domains {
-		if strings.Contains(d.GetQName(), query) {
-			result = append(result, d)
-		}
-	}
-	slices.SortFunc(result, func(d1, d2 *api.Domain) int {
-		return api.CompareEntityByName(d1, d2)
-	})
-	return result
+func (r *Repository) FindResources(q string) []*api.Resource {
+	return findEntities(q, r.resources)
 }
 
-func (r *Repository) FindGroups(query string) []*api.Group {
-	var result []*api.Group
-	for _, g := range r.groups {
-		if strings.Contains(g.GetQName(), query) {
-			result = append(result, g)
-		}
-	}
-	slices.SortFunc(result, func(g1, g2 *api.Group) int {
-		return api.CompareEntityByName(g1, g2)
-	})
-	return result
+func (r *Repository) FindDomains(q string) []*api.Domain {
+	return findEntities(q, r.domains)
+}
+
+func (r *Repository) FindGroups(q string) []*api.Group {
+	return findEntities(q, r.groups)
 }
 
 var (
