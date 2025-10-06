@@ -3,36 +3,36 @@ package query
 import (
 	"testing"
 
-	"github.com/dnswlt/swcat/internal/backstage"
+	"github.com/dnswlt/swcat/internal/api"
 )
 
 func TestEvaluator_Matches(t *testing.T) {
-	comp1 := &backstage.Component{
+	comp1 := &api.Component{
 		Kind: "Component",
-		Metadata: &backstage.Metadata{
+		Metadata: &api.Metadata{
 			Name:      "test-component",
 			Namespace: "default",
 			Title:     "Test Component",
 			Tags:      []string{"go", "test"},
 			Labels:    map[string]string{"env": "dev", "team": "a"},
 		},
-		Spec: &backstage.ComponentSpec{
+		Spec: &api.ComponentSpec{
 			Type:      "service",
 			Lifecycle: "experimental",
 			Owner:     "team-a",
 		},
 	}
 
-	sys1 := &backstage.System{
+	sys1 := &api.System{
 		Kind: "System",
-		Metadata: &backstage.Metadata{
+		Metadata: &api.Metadata{
 			Name:      "my-system",
 			Namespace: "production",
 			Title:     "My Production System",
 			Tags:      []string{"java", "prod"},
 			Labels:    map[string]string{"env": "prod", "critical": "true"},
 		},
-		Spec: &backstage.SystemSpec{
+		Spec: &api.SystemSpec{
 			Type:  "workflow",
 			Owner: "team-b",
 		},
@@ -41,7 +41,7 @@ func TestEvaluator_Matches(t *testing.T) {
 	tests := []struct {
 		name      string
 		query     string
-		entity    backstage.Entity
+		entity    api.Entity
 		wantMatch bool
 		wantErr   bool
 	}{

@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/dnswlt/swcat/internal/backstage"
+	"github.com/dnswlt/swcat/internal/api"
 )
 
 // Evaluator holds a compiled query expression and provides methods to match it against entities.
@@ -25,16 +25,16 @@ func NewEvaluator(expr Expression) *Evaluator {
 
 // attributeAccessor defines a function that extracts specific string attribute values from an entity.
 // It returns a slice of strings and a boolean indicating if the attribute is applicable.
-type attributeAccessor func(e backstage.Entity) (values []string, ok bool)
+type attributeAccessor func(e api.Entity) (values []string, ok bool)
 
 // attributeAccessors maps query attribute names to functions that can retrieve them from an entity.
 var attributeAccessors = map[string]attributeAccessor{
-	"kind":      func(e backstage.Entity) ([]string, bool) { return []string{e.GetKind()}, true },
-	"name":      func(e backstage.Entity) ([]string, bool) { return []string{e.GetMetadata().Name}, true },
-	"namespace": func(e backstage.Entity) ([]string, bool) { return []string{e.GetMetadata().Namespace}, true },
-	"title":     func(e backstage.Entity) ([]string, bool) { return []string{e.GetMetadata().Title}, true },
-	"tag":       func(e backstage.Entity) ([]string, bool) { return e.GetMetadata().Tags, true },
-	"label": func(e backstage.Entity) ([]string, bool) {
+	"kind":      func(e api.Entity) ([]string, bool) { return []string{e.GetKind()}, true },
+	"name":      func(e api.Entity) ([]string, bool) { return []string{e.GetMetadata().Name}, true },
+	"namespace": func(e api.Entity) ([]string, bool) { return []string{e.GetMetadata().Namespace}, true },
+	"title":     func(e api.Entity) ([]string, bool) { return []string{e.GetMetadata().Title}, true },
+	"tag":       func(e api.Entity) ([]string, bool) { return e.GetMetadata().Tags, true },
+	"label": func(e api.Entity) ([]string, bool) {
 		if e.GetMetadata().Labels == nil {
 			return nil, true
 		}
@@ -45,45 +45,45 @@ var attributeAccessors = map[string]attributeAccessor{
 		}
 		return results, true
 	},
-	"owner": func(e backstage.Entity) ([]string, bool) {
+	"owner": func(e api.Entity) ([]string, bool) {
 		switch v := e.(type) {
-		case *backstage.Component:
+		case *api.Component:
 			return []string{v.Spec.Owner}, true
-		case *backstage.System:
+		case *api.System:
 			return []string{v.Spec.Owner}, true
-		case *backstage.Domain:
+		case *api.Domain:
 			return []string{v.Spec.Owner}, true
-		case *backstage.Resource:
+		case *api.Resource:
 			return []string{v.Spec.Owner}, true
-		case *backstage.API:
+		case *api.API:
 			return []string{v.Spec.Owner}, true
 		default:
 			return nil, false // Group and other types don't have an owner
 		}
 	},
-	"type": func(e backstage.Entity) ([]string, bool) {
+	"type": func(e api.Entity) ([]string, bool) {
 		switch v := e.(type) {
-		case *backstage.Component:
+		case *api.Component:
 			return []string{v.Spec.Type}, true
-		case *backstage.System:
+		case *api.System:
 			return []string{v.Spec.Type}, true
-		case *backstage.Domain:
+		case *api.Domain:
 			return []string{v.Spec.Type}, true
-		case *backstage.Resource:
+		case *api.Resource:
 			return []string{v.Spec.Type}, true
-		case *backstage.API:
+		case *api.API:
 			return []string{v.Spec.Type}, true
-		case *backstage.Group:
+		case *api.Group:
 			return []string{v.Spec.Type}, true
 		default:
 			return nil, false
 		}
 	},
-	"lifecycle": func(e backstage.Entity) ([]string, bool) {
+	"lifecycle": func(e api.Entity) ([]string, bool) {
 		switch v := e.(type) {
-		case *backstage.Component:
+		case *api.Component:
 			return []string{v.Spec.Lifecycle}, true
-		case *backstage.API:
+		case *api.API:
 			return []string{v.Spec.Lifecycle}, true
 		default:
 			return nil, false
@@ -92,12 +92,12 @@ var attributeAccessors = map[string]attributeAccessor{
 }
 
 // Matches returns true if the entity matches the expression held by the Evaluator.
-func (ev *Evaluator) Matches(e backstage.Entity) (bool, error) {
+func (ev *Evaluator) Matches(e api.Entity) (bool, error) {
 	return ev.evaluateNode(e, ev.expr)
 }
 
 // evaluateNode recursively walks the expression tree.
-func (ev *Evaluator) evaluateNode(e backstage.Entity, expr Expression) (bool, error) {
+func (ev *Evaluator) evaluateNode(e api.Entity, expr Expression) (bool, error) {
 	switch v := expr.(type) {
 	case *Term:
 		// A simple term matches against the entity's name.

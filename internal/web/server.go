@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/backstage"
 	"github.com/dnswlt/swcat/internal/dot"
 )
@@ -169,7 +170,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	params["System"] = system
 
 	// Extract neighbor systems from context parameter c=.
-	var contextSystems []*backstage.System
+	var contextSystems []*api.System
 	var cacheKeyIDs []string
 	q := r.URL.Query()
 	for _, v := range q["c"] {
@@ -244,12 +245,12 @@ func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) {
 	params := map[string]any{}
-	api := s.repo.API(apiID)
-	if api == nil {
+	ap := s.repo.API(apiID)
+	if ap == nil {
 		http.Error(w, "Invalid API", http.StatusNotFound)
 		return
 	}
-	params["API"] = api
+	params["API"] = ap
 
 	cacheKey := "api:" + apiID
 	svg, ok := s.lookupSVG(cacheKey)
@@ -257,7 +258,7 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svg, err = backstage.GenerateAPISVG(ctx, s.dotRunner, s.repo, api)
+		svg, err = backstage.GenerateAPISVG(ctx, s.dotRunner, s.repo, ap)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)

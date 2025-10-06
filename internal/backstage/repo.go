@@ -5,34 +5,36 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/dnswlt/swcat/internal/api"
 )
 
 type Repository struct {
 	// Maps containing the different kinds of entities in the repository.
 	//
 	// These maps are keyed by qnames without the kind: specifier: <namespace>/<name>
-	domains    map[string]*Domain
-	systems    map[string]*System
-	components map[string]*Component
-	resources  map[string]*Resource
-	apis       map[string]*API
-	groups     map[string]*Group
+	domains    map[string]*api.Domain
+	systems    map[string]*api.System
+	components map[string]*api.Component
+	resources  map[string]*api.Resource
+	apis       map[string]*api.API
+	groups     map[string]*api.Group
 	// Tracks all qualified names added to this repo
 	// (for duplicate detection and type-independent lookups)
 	//
 	// This map uses entity references including the kind: prefix: <kind>:<namespace>/<name>
-	allEntities map[string]Entity
+	allEntities map[string]api.Entity
 }
 
 func NewRepository() *Repository {
 	return &Repository{
-		domains:     make(map[string]*Domain),
-		systems:     make(map[string]*System),
-		components:  make(map[string]*Component),
-		resources:   make(map[string]*Resource),
-		apis:        make(map[string]*API),
-		groups:      make(map[string]*Group),
-		allEntities: make(map[string]Entity),
+		domains:     make(map[string]*api.Domain),
+		systems:     make(map[string]*api.System),
+		components:  make(map[string]*api.Component),
+		resources:   make(map[string]*api.Resource),
+		apis:        make(map[string]*api.API),
+		groups:      make(map[string]*api.Group),
+		allEntities: make(map[string]api.Entity),
 	}
 }
 
@@ -40,7 +42,7 @@ func (r *Repository) Size() int {
 	return len(r.allEntities)
 }
 
-func (r *Repository) AddEntity(e Entity) error {
+func (r *Repository) AddEntity(e api.Entity) error {
 	ref := e.GetRef()
 	if _, ok := r.allEntities[ref]; ok {
 		return fmt.Errorf("entity %q already exists in the repository", ref)
@@ -49,17 +51,17 @@ func (r *Repository) AddEntity(e Entity) error {
 	qname := e.GetQName()
 
 	switch x := e.(type) {
-	case *Domain:
+	case *api.Domain:
 		r.domains[qname] = x
-	case *System:
+	case *api.System:
 		r.systems[qname] = x
-	case *Component:
+	case *api.Component:
 		r.components[qname] = x
-	case *Resource:
+	case *api.Resource:
 		r.resources[qname] = x
-	case *API:
+	case *api.API:
 		r.apis[qname] = x
-	case *Group:
+	case *api.Group:
 		r.groups[qname] = x
 	default:
 		return fmt.Errorf("invalid type: %T", e)
@@ -81,31 +83,31 @@ func getEntity[T any](m map[string]*T, ref, expectedKind string) *T {
 	return m[qn]
 }
 
-func (r *Repository) Group(ref string) *Group {
+func (r *Repository) Group(ref string) *api.Group {
 	return getEntity(r.groups, ref, "group")
 }
 
-func (r *Repository) System(ref string) *System {
+func (r *Repository) System(ref string) *api.System {
 	return getEntity(r.systems, ref, "system")
 }
 
-func (r *Repository) Domain(ref string) *Domain {
+func (r *Repository) Domain(ref string) *api.Domain {
 	return getEntity(r.domains, ref, "domain")
 }
 
-func (r *Repository) API(ref string) *API {
+func (r *Repository) API(ref string) *api.API {
 	return getEntity(r.apis, ref, "api")
 }
 
-func (r *Repository) Component(ref string) *Component {
+func (r *Repository) Component(ref string) *api.Component {
 	return getEntity(r.components, ref, "component")
 }
 
-func (r *Repository) Resource(ref string) *Resource {
+func (r *Repository) Resource(ref string) *api.Resource {
 	return getEntity(r.resources, ref, "resource")
 }
 
-func (r *Repository) Entity(ref string) Entity {
+func (r *Repository) Entity(ref string) api.Entity {
 	kind, qn, found := strings.Cut(ref, ":")
 	if !found {
 		return nil // Entity lookup requires kind specifier
@@ -127,80 +129,80 @@ func (r *Repository) Entity(ref string) Entity {
 	return nil
 }
 
-func (r *Repository) FindComponents(query string) []*Component {
-	var result []*Component
+func (r *Repository) FindComponents(query string) []*api.Component {
+	var result []*api.Component
 	for _, c := range r.components {
 		if strings.Contains(c.GetQName(), query) {
 			result = append(result, c)
 		}
 	}
-	slices.SortFunc(result, func(c1, c2 *Component) int {
-		return CompareEntityByName(c1, c2)
+	slices.SortFunc(result, func(c1, c2 *api.Component) int {
+		return api.CompareEntityByName(c1, c2)
 	})
 	return result
 }
 
-func (r *Repository) FindSystems(query string) []*System {
-	var result []*System
+func (r *Repository) FindSystems(query string) []*api.System {
+	var result []*api.System
 	for _, s := range r.systems {
 		if strings.Contains(s.GetQName(), query) {
 			result = append(result, s)
 		}
 	}
-	slices.SortFunc(result, func(s1, s2 *System) int {
-		return CompareEntityByName(s1, s2)
+	slices.SortFunc(result, func(s1, s2 *api.System) int {
+		return api.CompareEntityByName(s1, s2)
 	})
 	return result
 }
 
-func (r *Repository) FindAPIs(query string) []*API {
-	var result []*API
+func (r *Repository) FindAPIs(query string) []*api.API {
+	var result []*api.API
 	for _, a := range r.apis {
 		if strings.Contains(a.GetQName(), query) {
 			result = append(result, a)
 		}
 	}
-	slices.SortFunc(result, func(a1, a2 *API) int {
-		return CompareEntityByName(a1, a2)
+	slices.SortFunc(result, func(a1, a2 *api.API) int {
+		return api.CompareEntityByName(a1, a2)
 	})
 	return result
 }
 
-func (r *Repository) FindResources(query string) []*Resource {
-	var result []*Resource
+func (r *Repository) FindResources(query string) []*api.Resource {
+	var result []*api.Resource
 	for _, res := range r.resources {
 		if strings.Contains(res.GetQName(), query) {
 			result = append(result, res)
 		}
 	}
-	slices.SortFunc(result, func(r1, r2 *Resource) int {
-		return CompareEntityByName(r1, r2)
+	slices.SortFunc(result, func(r1, r2 *api.Resource) int {
+		return api.CompareEntityByName(r1, r2)
 	})
 	return result
 }
 
-func (r *Repository) FindDomains(query string) []*Domain {
-	var result []*Domain
+func (r *Repository) FindDomains(query string) []*api.Domain {
+	var result []*api.Domain
 	for _, d := range r.domains {
 		if strings.Contains(d.GetQName(), query) {
 			result = append(result, d)
 		}
 	}
-	slices.SortFunc(result, func(d1, d2 *Domain) int {
-		return CompareEntityByName(d1, d2)
+	slices.SortFunc(result, func(d1, d2 *api.Domain) int {
+		return api.CompareEntityByName(d1, d2)
 	})
 	return result
 }
 
-func (r *Repository) FindGroups(query string) []*Group {
-	var result []*Group
+func (r *Repository) FindGroups(query string) []*api.Group {
+	var result []*api.Group
 	for _, g := range r.groups {
 		if strings.Contains(g.GetQName(), query) {
 			result = append(result, g)
 		}
 	}
-	slices.SortFunc(result, func(g1, g2 *Group) int {
-		return CompareEntityByName(g1, g2)
+	slices.SortFunc(result, func(g1, g2 *api.Group) int {
+		return api.CompareEntityByName(g1, g2)
 	})
 	return result
 }
@@ -210,7 +212,7 @@ var (
 	validNameRE = regexp.MustCompile("^[A-Za-z_][A-Za-z0-9_-]*$")
 )
 
-func (r *Repository) validateMetadata(m *Metadata) error {
+func (r *Repository) validateMetadata(m *api.Metadata) error {
 	if m == nil {
 		return fmt.Errorf("metadata is null")
 	}
@@ -266,7 +268,7 @@ func (r *Repository) Validate() error {
 		}
 		if g.Spec.Profile == nil {
 			// Avoid nil checks elsewhere. Profile is optional according to the spec.
-			g.Spec.Profile = &GroupSpecProfile{}
+			g.Spec.Profile = &api.GroupSpecProfile{}
 		}
 	}
 
@@ -296,12 +298,12 @@ func (r *Repository) Validate() error {
 		}
 
 		for _, a := range s.ProvidesAPIs {
-			if api := r.API(a); api == nil {
+			if ap := r.API(a); ap == nil {
 				return fmt.Errorf("provided API %q for component %s is undefined", a, qn)
 			}
 		}
 		for _, a := range s.ConsumesAPIs {
-			if api := r.API(a); api == nil {
+			if ap := r.API(a); ap == nil {
 				return fmt.Errorf("consumed API %q for component %s is undefined", a, qn)
 			}
 		}
@@ -316,11 +318,11 @@ func (r *Repository) Validate() error {
 	}
 
 	// APIs
-	for qn, api := range r.apis {
-		if err := r.validateMetadata(api.Metadata); err != nil {
+	for qn, ap := range r.apis {
+		if err := r.validateMetadata(ap.Metadata); err != nil {
 			return fmt.Errorf("API %s has invalid metadata: %v", qn, err)
 		}
-		s := api.Spec
+		s := ap.Spec
 		if s == nil {
 			return fmt.Errorf("API %s has no spec", qn)
 		}
@@ -414,10 +416,10 @@ func (r *Repository) populateRelationships() {
 	registerDependent := func(entityRef, depName string) {
 		dep := r.Entity(depName)
 		switch x := dep.(type) {
-		case *Component:
-			x.Spec.dependents = append(x.Spec.dependents, entityRef)
-		case *Resource:
-			x.Spec.dependents = append(x.Spec.dependents, entityRef)
+		case *api.Component:
+			x.AddDependent(entityRef)
+		case *api.Resource:
+			x.AddDependent(entityRef)
 		default:
 			// Ignore: we only track dependents for components and resources for now.
 		}
@@ -428,16 +430,16 @@ func (r *Repository) populateRelationships() {
 		qn := c.GetQName()
 		// Register in APIs
 		for _, a := range c.Spec.ConsumesAPIs {
-			api := r.API(a)
-			api.Spec.consumers = append(api.Spec.consumers, qn)
+			ap := r.API(a)
+			ap.AddConsumer(qn)
 		}
 		for _, a := range c.Spec.ProvidesAPIs {
-			api := r.API(a)
-			api.Spec.providers = append(api.Spec.providers, qn)
+			ap := r.API(a)
+			ap.AddProvider(qn)
 		}
 		if s := c.Spec.System; s != "" {
 			system := r.System(s)
-			system.Spec.components = append(system.Spec.components, qn)
+			system.AddComponent(qn)
 		}
 
 		// Register in "DependsOn" dependencies.
@@ -451,7 +453,7 @@ func (r *Repository) populateRelationships() {
 		qn := res.GetQName()
 		if s := res.Spec.System; s != "" {
 			system := r.System(s)
-			system.Spec.resources = append(system.Spec.resources, qn)
+			system.AddResource(qn)
 		}
 		// Register in "DependsOn" dependencies.
 		for _, d := range res.Spec.DependsOn {
@@ -460,11 +462,11 @@ func (r *Repository) populateRelationships() {
 	}
 
 	// APIs
-	for _, api := range r.apis {
-		qn := api.GetQName()
-		if s := api.Spec.System; s != "" {
+	for _, ap := range r.apis {
+		qn := ap.GetQName()
+		if s := ap.Spec.System; s != "" {
 			system := r.System(s)
-			system.Spec.apis = append(system.Spec.apis, qn)
+			system.AddAPI(qn)
 		}
 	}
 
@@ -473,7 +475,7 @@ func (r *Repository) populateRelationships() {
 		qn := system.GetQName()
 		if d := system.Spec.Domain; d != "" {
 			domain := r.Domain(d)
-			domain.Spec.systems = append(domain.Spec.systems, qn)
+			domain.AddSystem(qn)
 		}
 	}
 

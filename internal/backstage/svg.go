@@ -6,32 +6,33 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/dot"
 )
 
-func entityNodeKind(e Entity) dot.NodeKind {
+func entityNodeKind(e api.Entity) dot.NodeKind {
 	switch e.(type) {
-	case *Domain:
+	case *api.Domain:
 		return dot.KindDomain
-	case *System:
+	case *api.System:
 		return dot.KindSystem
-	case *Component:
+	case *api.Component:
 		return dot.KindComponent
-	case *Resource:
+	case *api.Resource:
 		return dot.KindResource
-	case *API:
+	case *api.API:
 		return dot.KindAPI
-	case *Group:
+	case *api.Group:
 		return dot.KindGroup
 	default:
 		return dot.KindUnspecified
 	}
 }
 
-func EntityNode(e Entity) dot.Node {
+func EntityNode(e api.Entity) dot.Node {
 	meta := e.GetMetadata()
 	label := meta.Name
-	if meta.Namespace != "" && meta.Namespace != DefaultNamespace {
+	if meta.Namespace != "" && meta.Namespace != api.DefaultNamespace {
 		// Two-line label for namespaced entities.
 		label = meta.Namespace + `/\n` + meta.Name
 	}
@@ -42,7 +43,7 @@ func EntityNode(e Entity) dot.Node {
 	}
 }
 
-func EntityEdge(from, to Entity, style dot.EdgeStyle) dot.Edge {
+func EntityEdge(from, to api.Entity, style dot.EdgeStyle) dot.Edge {
 	return dot.Edge{
 		From:  from.GetRef(),
 		To:    to.GetRef(),
@@ -75,8 +76,8 @@ const (
 
 // extSysPartDep represents a dependency on an external system in a system diagram.
 type extSysDep struct {
-	source       Entity
-	targetSystem *System
+	source       api.Entity
+	targetSystem *api.System
 	direction    DependencyDir
 }
 
@@ -84,8 +85,8 @@ type extSysDep struct {
 // In contrast to extSysDep, it points to a SystemPart of the target system,
 // not the target system itself.
 type extSysPartDep struct {
-	source    Entity
-	target    SystemPart
+	source    api.Entity
+	target    api.SystemPart
 	direction DependencyDir
 }
 
@@ -93,7 +94,7 @@ func (e extSysDep) String() string {
 	return fmt.Sprintf("%s -> %s / %v", e.source.GetQName(), e.targetSystem.GetQName(), e.direction)
 }
 
-func generateDomainDotSource(r *Repository, domain *Domain) *dot.DotSource {
+func generateDomainDotSource(r *Repository, domain *api.Domain) *dot.DotSource {
 	dw := dot.New()
 	dw.Start()
 
@@ -112,13 +113,13 @@ func generateDomainDotSource(r *Repository, domain *Domain) *dot.DotSource {
 }
 
 // GenerateDomainSVG generates an SVG for the given domain.
-func GenerateDomainSVG(ctx context.Context, runner dot.Runner, r *Repository, domain *Domain) (*SVGResult, error) {
+func GenerateDomainSVG(ctx context.Context, runner dot.Runner, r *Repository, domain *api.Domain) (*SVGResult, error) {
 	dotSource := generateDomainDotSource(r, domain)
 	return runDot(ctx, runner, dotSource)
 }
 
-func generateSystemDotSource(r *Repository, system *System, contextSystems []*System) *dot.DotSource {
-	ctxSysMap := map[string]*System{}
+func generateSystemDotSource(r *Repository, system *api.System, contextSystems []*api.System) *dot.DotSource {
+	ctxSysMap := map[string]*api.System{}
 	for _, ctxSys := range contextSystems {
 		ctxSysMap[ctxSys.GetQName()] = ctxSys
 	}
@@ -130,7 +131,7 @@ func generateSystemDotSource(r *Repository, system *System, contextSystems []*Sy
 	extSPDeps := map[string][]extSysPartDep{}
 	// Adds the src->dst dependency to either extDeps or extSPDeps, depending on whether
 	// full context was requested for dst.
-	addDep := func(src SystemPart, dst SystemPart, dir DependencyDir) {
+	addDep := func(src api.SystemPart, dst api.SystemPart, dir DependencyDir) {
 		if dst.GetSystem() != src.GetSystem() {
 			dstSys := r.System(dst.GetSystem())
 			if _, ok := ctxSysMap[dstSys.GetQName()]; ok {
@@ -155,20 +156,20 @@ func generateSystemDotSource(r *Repository, system *System, contextSystems []*Sy
 
 		// Add links to external systems of which the component consumes APIs.
 		for _, a := range comp.Spec.ConsumesAPIs {
-			api := r.API(a)
-			addDep(comp, api, DirOutgoing)
+			ap := r.API(a)
+			addDep(comp, ap, DirOutgoing)
 		}
 		// Add links for direct dependencies of the component.
 		for _, d := range comp.Spec.DependsOn {
 			entity := r.Entity(d)
-			if sp, ok := entity.(SystemPart); ok && sp.GetSystem() != comp.GetSystem() {
+			if sp, ok := entity.(api.SystemPart); ok && sp.GetSystem() != comp.GetSystem() {
 				addDep(comp, sp, DirOutgoing)
 			}
 		}
 		// Add links for direct dependents of the component.
 		for _, d := range comp.GetDependents() {
 			entity := r.Entity(d)
-			if sp, ok := entity.(SystemPart); ok && sp.GetSystem() != comp.GetSystem() {
+			if sp, ok := entity.(api.SystemPart); ok && sp.GetSystem() != comp.GetSystem() {
 				addDep(comp, sp, DirIncoming)
 			}
 		}
@@ -176,14 +177,14 @@ func generateSystemDotSource(r *Repository, system *System, contextSystems []*Sy
 
 	// APIs
 	for _, a := range system.GetAPIs() {
-		api := r.API(a)
-		dw.AddNode(EntityNode(api))
+		ap := r.API(a)
+		dw.AddNode(EntityNode(ap))
 
 		// Add links for consumers of any API of this system.
-		for _, c := range api.GetConsumers() {
+		for _, c := range ap.GetConsumers() {
 			consumer := r.Component(c)
-			if consumer.GetSystem() != api.GetSystem() {
-				addDep(api, consumer, DirIncoming)
+			if consumer.GetSystem() != ap.GetSystem() {
+				addDep(ap, consumer, DirIncoming)
 			}
 		}
 	}
@@ -196,14 +197,14 @@ func generateSystemDotSource(r *Repository, system *System, contextSystems []*Sy
 		// Add links to external systems that the resource depends on.
 		for _, d := range resource.Spec.DependsOn {
 			entity := r.Entity(d)
-			if sp, ok := entity.(SystemPart); ok && sp.GetSystem() != resource.GetSystem() {
+			if sp, ok := entity.(api.SystemPart); ok && sp.GetSystem() != resource.GetSystem() {
 				addDep(resource, sp, DirOutgoing)
 			}
 		}
 		// Add links for direct dependents of the resource.
 		for _, d := range resource.GetDependents() {
 			entity := r.Entity(d)
-			if sp, ok := entity.(SystemPart); ok && sp.GetSystem() != resource.GetSystem() {
+			if sp, ok := entity.(api.SystemPart); ok && sp.GetSystem() != resource.GetSystem() {
 				addDep(resource, sp, DirIncoming)
 			}
 		}
@@ -245,12 +246,12 @@ func generateSystemDotSource(r *Repository, system *System, contextSystems []*Sy
 // GenerateSystemSVG generates an SVG for the given system.
 // contextSystems are systems that should be expanded in the view. Other systems will be shown
 // as opaque single nodes.
-func GenerateSystemSVG(ctx context.Context, runner dot.Runner, r *Repository, system *System, contextSystems []*System) (*SVGResult, error) {
+func GenerateSystemSVG(ctx context.Context, runner dot.Runner, r *Repository, system *api.System, contextSystems []*api.System) (*SVGResult, error) {
 	dotSource := generateSystemDotSource(r, system, contextSystems)
 	return runDot(ctx, runner, dotSource)
 }
 
-func generateComponentDotSource(r *Repository, component *Component) *dot.DotSource {
+func generateComponentDotSource(r *Repository, component *api.Component) *dot.DotSource {
 	dw := dot.New()
 	dw.Start()
 
@@ -273,11 +274,11 @@ func generateComponentDotSource(r *Repository, component *Component) *dot.DotSou
 		dw.AddEdge(EntityEdge(system, component, dot.ESContains))
 	}
 	for _, a := range component.Spec.ProvidesAPIs {
-		api := r.API(a)
-		dw.AddNode(EntityNode(api))
-		dw.AddEdge(EntityEdge(api, component, dot.ESProvidedBy))
+		ap := r.API(a)
+		dw.AddNode(EntityNode(ap))
+		dw.AddEdge(EntityEdge(ap, component, dot.ESProvidedBy))
 	}
-	for _, d := range component.Spec.dependents {
+	for _, d := range component.GetDependents() {
 		e := r.Entity(d)
 		if e != nil {
 			dw.AddNode(EntityNode(e))
@@ -289,9 +290,9 @@ func generateComponentDotSource(r *Repository, component *Component) *dot.DotSou
 	// - Consumed APIs
 	// - DependsOn relationships of this entity
 	for _, a := range component.Spec.ConsumesAPIs {
-		api := r.API(a)
-		dw.AddNode(EntityNode(api))
-		dw.AddEdge(EntityEdge(component, api, dot.ESNormal))
+		ap := r.API(a)
+		dw.AddNode(EntityNode(ap))
+		dw.AddEdge(EntityEdge(component, ap, dot.ESNormal))
 	}
 	for _, d := range component.Spec.DependsOn {
 		e := r.Entity(d)
@@ -306,12 +307,12 @@ func generateComponentDotSource(r *Repository, component *Component) *dot.DotSou
 }
 
 // GenerateComponentSVG generates an SVG for the given component.
-func GenerateComponentSVG(ctx context.Context, runner dot.Runner, r *Repository, component *Component) (*SVGResult, error) {
+func GenerateComponentSVG(ctx context.Context, runner dot.Runner, r *Repository, component *api.Component) (*SVGResult, error) {
 	dotSource := generateComponentDotSource(r, component)
 	return runDot(ctx, runner, dotSource)
 }
 
-func generateAPIDotSource(r *Repository, api *API) *dot.DotSource {
+func generateAPIDotSource(r *Repository, api *api.API) *dot.DotSource {
 	dw := dot.New()
 	dw.Start()
 
@@ -354,12 +355,12 @@ func generateAPIDotSource(r *Repository, api *API) *dot.DotSource {
 }
 
 // GenerateAPISVG generates an SVG for the given API.
-func GenerateAPISVG(ctx context.Context, runner dot.Runner, r *Repository, api *API) (*SVGResult, error) {
+func GenerateAPISVG(ctx context.Context, runner dot.Runner, r *Repository, api *api.API) (*SVGResult, error) {
 	dotSource := generateAPIDotSource(r, api)
 	return runDot(ctx, runner, dotSource)
 }
 
-func generateResourceDotSource(r *Repository, resource *Resource) *dot.DotSource {
+func generateResourceDotSource(r *Repository, resource *api.Resource) *dot.DotSource {
 	dw := dot.New()
 	dw.Start()
 
@@ -393,7 +394,7 @@ func generateResourceDotSource(r *Repository, resource *Resource) *dot.DotSource
 }
 
 // GenerateResourceSVG generates an SVG for the given resource.
-func GenerateResourceSVG(ctx context.Context, runner dot.Runner, r *Repository, resource *Resource) (*SVGResult, error) {
+func GenerateResourceSVG(ctx context.Context, runner dot.Runner, r *Repository, resource *api.Resource) (*SVGResult, error) {
 	dotSource := generateResourceDotSource(r, resource)
 	return runDot(ctx, runner, dotSource)
 }

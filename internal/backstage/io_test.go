@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/dnswlt/swcat/internal/api"
 )
 
 func TestReadEntities(t *testing.T) {
@@ -36,7 +38,7 @@ spec:
 			t.Fatalf("len(entities) = %d, want %d", len(entities), 2)
 		}
 
-		component, ok := entities[0].(*Component)
+		component, ok := entities[0].(*api.Component)
 		if !ok {
 			t.Fatalf("entities[0] is not a *Component")
 		}
@@ -44,7 +46,7 @@ spec:
 			t.Errorf("component.Metadata.Name = %s, want %s", component.Metadata.Name, "my-component")
 		}
 
-		group, ok := entities[1].(*Group)
+		group, ok := entities[1].(*api.Group)
 		if !ok {
 			t.Fatalf("entities[1] is not a *Group")
 		}

@@ -11,23 +11,24 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/dnswlt/swcat/internal/api"
 	"go.yaml.in/yaml/v2"
 )
 
 var (
-	kindFactories = map[string]func() Entity{
-		"Domain":    func() Entity { return &Domain{} },
-		"System":    func() Entity { return &System{} },
-		"Component": func() Entity { return &Component{} },
-		"Resource":  func() Entity { return &Resource{} },
-		"API":       func() Entity { return &API{} },
-		"Group":     func() Entity { return &Group{} },
+	kindFactories = map[string]func() api.Entity{
+		"Domain":    func() api.Entity { return &api.Domain{} },
+		"System":    func() api.Entity { return &api.System{} },
+		"Component": func() api.Entity { return &api.Component{} },
+		"Resource":  func() api.Entity { return &api.Resource{} },
+		"API":       func() api.Entity { return &api.API{} },
+		"Group":     func() api.Entity { return &api.Group{} },
 	}
 )
 
 // WriteEntities safely writes a slice of entities to a given path.
 // It writes to a temporary file first and then atomically moves it to the final destination.
-func WriteEntities(path string, entities []Entity) error {
+func WriteEntities(path string, entities []api.Entity) error {
 	// 1. Create a temporary file in the same directory as the target path.
 	dir := filepath.Dir(path)
 	tmpFile, err := os.CreateTemp(dir, "swcat-*.tmp")
@@ -49,14 +50,14 @@ func WriteEntities(path string, entities []Entity) error {
 	return os.Rename(tmpFile.Name(), path)
 }
 
-func ReadEntities(path string) ([]Entity, error) {
+func ReadEntities(path string) ([]api.Entity, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	dec := yaml.NewDecoder(f)
 
-	var entities []Entity
+	var entities []api.Entity
 
 	for i := 0; ; i++ {
 		doc := map[string]any{}

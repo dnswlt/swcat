@@ -4,43 +4,45 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+
+	"github.com/dnswlt/swcat/internal/api"
 )
 
 func TestRepository_AddAndGet(t *testing.T) {
 	repo := NewRepository()
 
 	tests := []struct {
-		entity   Entity
+		entity   api.Entity
 		getRef   string
 		typeName string
 	}{
 		{
-			entity:   &Component{Metadata: &Metadata{Name: "c1"}},
+			entity:   &api.Component{Metadata: &api.Metadata{Name: "c1"}},
 			getRef:   "c1",
 			typeName: "Component",
 		},
 		{
-			entity:   &System{Metadata: &Metadata{Name: "s1"}},
+			entity:   &api.System{Metadata: &api.Metadata{Name: "s1"}},
 			getRef:   "s1",
 			typeName: "System",
 		},
 		{
-			entity:   &Domain{Metadata: &Metadata{Name: "d1"}},
+			entity:   &api.Domain{Metadata: &api.Metadata{Name: "d1"}},
 			getRef:   "d1",
 			typeName: "Domain",
 		},
 		{
-			entity:   &API{Metadata: &Metadata{Name: "a1"}},
+			entity:   &api.API{Metadata: &api.Metadata{Name: "a1"}},
 			getRef:   "a1",
 			typeName: "API",
 		},
 		{
-			entity:   &Resource{Metadata: &Metadata{Name: "r1"}},
+			entity:   &api.Resource{Metadata: &api.Metadata{Name: "r1"}},
 			getRef:   "r1",
 			typeName: "Resource",
 		},
 		{
-			entity:   &Group{Metadata: &Metadata{Name: "g1"}},
+			entity:   &api.Group{Metadata: &api.Metadata{Name: "g1"}},
 			getRef:   "g1",
 			typeName: "Group",
 		},
@@ -59,7 +61,7 @@ func TestRepository_AddAndGet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("get %s", tt.typeName), func(t *testing.T) {
-			var e Entity
+			var e api.Entity
 			switch tt.typeName {
 			case "Component":
 				e = repo.Component(tt.getRef)
@@ -87,7 +89,7 @@ func TestRepository_AddAndGet(t *testing.T) {
 	}
 
 	t.Run("add duplicate", func(t *testing.T) {
-		err := repo.AddEntity(&Component{Metadata: &Metadata{Name: "c1"}})
+		err := repo.AddEntity(&api.Component{Metadata: &api.Metadata{Name: "c1"}})
 		if err == nil {
 			t.Error("AddEntity() error = nil, want error")
 		}
@@ -97,13 +99,13 @@ func TestRepository_AddAndGet(t *testing.T) {
 func TestRepository_Entity(t *testing.T) {
 	repo := NewRepository()
 
-	entities := []Entity{
-		&Component{Metadata: &Metadata{Name: "c1"}},
-		&System{Metadata: &Metadata{Name: "s1"}},
-		&Domain{Metadata: &Metadata{Name: "d1"}},
-		&API{Metadata: &Metadata{Name: "a1"}},
-		&Resource{Metadata: &Metadata{Name: "r1"}},
-		&Group{Metadata: &Metadata{Name: "g1"}},
+	entities := []api.Entity{
+		&api.Component{Metadata: &api.Metadata{Name: "c1"}},
+		&api.System{Metadata: &api.Metadata{Name: "s1"}},
+		&api.Domain{Metadata: &api.Metadata{Name: "d1"}},
+		&api.API{Metadata: &api.Metadata{Name: "a1"}},
+		&api.Resource{Metadata: &api.Metadata{Name: "r1"}},
+		&api.Group{Metadata: &api.Metadata{Name: "g1"}},
 	}
 
 	for _, e := range entities {
@@ -152,17 +154,17 @@ func TestRepository_Entity(t *testing.T) {
 func TestRepository_Finders(t *testing.T) {
 	repo := NewRepository()
 
-	entities := []Entity{
-		&Component{Metadata: &Metadata{Name: "c2", Namespace: "ns1"}}, // Add in different order
-		&Component{Metadata: &Metadata{Name: "c1", Namespace: "ns1"}},
-		&Component{Metadata: &Metadata{Name: "c3", Namespace: "ns2"}},
-		&System{Metadata: &Metadata{Name: "s2"}},
-		&System{Metadata: &Metadata{Name: "s1"}},
-		&Domain{Metadata: &Metadata{Name: "d1"}},
-		&API{Metadata: &Metadata{Name: "a1"}},
-		&Resource{Metadata: &Metadata{Name: "r1"}},
-		&Group{Metadata: &Metadata{Name: "g2"}},
-		&Group{Metadata: &Metadata{Name: "g1"}},
+	entities := []api.Entity{
+		&api.Component{Metadata: &api.Metadata{Name: "c2", Namespace: "ns1"}}, // Add in different order
+		&api.Component{Metadata: &api.Metadata{Name: "c1", Namespace: "ns1"}},
+		&api.Component{Metadata: &api.Metadata{Name: "c3", Namespace: "ns2"}},
+		&api.System{Metadata: &api.Metadata{Name: "s2"}},
+		&api.System{Metadata: &api.Metadata{Name: "s1"}},
+		&api.Domain{Metadata: &api.Metadata{Name: "d1"}},
+		&api.API{Metadata: &api.Metadata{Name: "a1"}},
+		&api.Resource{Metadata: &api.Metadata{Name: "r1"}},
+		&api.Group{Metadata: &api.Metadata{Name: "g2"}},
+		&api.Group{Metadata: &api.Metadata{Name: "g1"}},
 	}
 
 	for _, e := range entities {
@@ -174,7 +176,7 @@ func TestRepository_Finders(t *testing.T) {
 		wantNames []string
 	}
 
-	testFinder := func(t *testing.T, finder func(string) []Entity, tests []finderTest) {
+	testFinder := func(t *testing.T, finder func(string) []api.Entity, tests []finderTest) {
 		for _, tt := range tests {
 			t.Run(tt.query, func(t *testing.T) {
 				results := finder(tt.query)
@@ -195,8 +197,8 @@ func TestRepository_Finders(t *testing.T) {
 	}
 
 	t.Run("FindComponents", func(t *testing.T) {
-		finder := func(q string) []Entity {
-			var entities []Entity
+		finder := func(q string) []api.Entity {
+			var entities []api.Entity
 			for _, e := range repo.FindComponents(q) {
 				entities = append(entities, e)
 			}
@@ -213,8 +215,8 @@ func TestRepository_Finders(t *testing.T) {
 	})
 
 	t.Run("FindSystems", func(t *testing.T) {
-		finder := func(q string) []Entity {
-			var entities []Entity
+		finder := func(q string) []api.Entity {
+			var entities []api.Entity
 			for _, e := range repo.FindSystems(q) {
 				entities = append(entities, e)
 			}
@@ -229,8 +231,8 @@ func TestRepository_Finders(t *testing.T) {
 	})
 
 	t.Run("FindDomains", func(t *testing.T) {
-		finder := func(q string) []Entity {
-			var entities []Entity
+		finder := func(q string) []api.Entity {
+			var entities []api.Entity
 			for _, e := range repo.FindDomains(q) {
 				entities = append(entities, e)
 			}
@@ -244,8 +246,8 @@ func TestRepository_Finders(t *testing.T) {
 	})
 
 	t.Run("FindAPIs", func(t *testing.T) {
-		finder := func(q string) []Entity {
-			var entities []Entity
+		finder := func(q string) []api.Entity {
+			var entities []api.Entity
 			for _, e := range repo.FindAPIs(q) {
 				entities = append(entities, e)
 			}
@@ -259,8 +261,8 @@ func TestRepository_Finders(t *testing.T) {
 	})
 
 	t.Run("FindResources", func(t *testing.T) {
-		finder := func(q string) []Entity {
-			var entities []Entity
+		finder := func(q string) []api.Entity {
+			var entities []api.Entity
 			for _, e := range repo.FindResources(q) {
 				entities = append(entities, e)
 			}
@@ -274,8 +276,8 @@ func TestRepository_Finders(t *testing.T) {
 	})
 
 	t.Run("FindGroups", func(t *testing.T) {
-		finder := func(q string) []Entity {
-			var entities []Entity
+		finder := func(q string) []api.Entity {
+			var entities []api.Entity
 			for _, e := range repo.FindGroups(q) {
 				entities = append(entities, e)
 			}

@@ -1,7 +1,7 @@
 // This file contains the API classes that define a software catalog.
 // The types are broadly compatible with backstage.io's types:
 // https://backstage.io/docs/features/software-catalog/descriptor-format#contents
-package backstage
+package api
 
 import (
 	"cmp"
@@ -310,6 +310,7 @@ func (c *Component) GetOwner() string        { return c.Spec.Owner }
 func (c *Component) GetLifecycle() string    { return c.Spec.Lifecycle }
 func (c *Component) GetSystem() string       { return c.Spec.System }
 func (c *Component) GetDependents() []string { return c.Spec.dependents }
+func (c *Component) AddDependent(d string)   { c.Spec.dependents = append(c.Spec.dependents, d) }
 
 func (s *System) GetKind() string         { return s.Kind }
 func (s *System) GetMetadata() *Metadata  { return s.Metadata }
@@ -319,12 +320,16 @@ func (s *System) GetComponents() []string { return s.Spec.components }
 func (s *System) GetAPIs() []string       { return s.Spec.apis }
 func (s *System) GetResources() []string  { return s.Spec.resources }
 func (s *System) GetSystem() string       { return s.GetQName() }
+func (s *System) AddAPI(a string)         { s.Spec.apis = append(s.Spec.apis, a) }
+func (s *System) AddComponent(c string)   { s.Spec.components = append(s.Spec.components, c) }
+func (s *System) AddResource(r string)    { s.Spec.resources = append(s.Spec.resources, r) }
 
 func (d *Domain) GetKind() string        { return d.Kind }
 func (d *Domain) GetMetadata() *Metadata { return d.Metadata }
 func (d *Domain) GetQName() string       { return d.Metadata.GetQName() }
 func (d *Domain) GetRef() string         { return "domain:" + d.GetQName() }
 func (d *Domain) GetSystems() []string   { return d.Spec.systems }
+func (d *Domain) AddSystem(s string)     { d.Spec.systems = append(d.Spec.systems, s) }
 
 func (a *API) GetKind() string        { return a.Kind }
 func (a *API) GetMetadata() *Metadata { return a.Metadata }
@@ -333,6 +338,8 @@ func (a *API) GetRef() string         { return "api:" + a.GetQName() }
 func (a *API) GetProviders() []string { return a.Spec.providers }
 func (a *API) GetConsumers() []string { return a.Spec.consumers }
 func (a *API) GetSystem() string      { return a.Spec.System }
+func (a *API) AddProvider(p string)   { a.Spec.providers = append(a.Spec.providers, p) }
+func (a *API) AddConsumer(c string)   { a.Spec.consumers = append(a.Spec.consumers, c) }
 
 func (r *Resource) GetKind() string         { return r.Kind }
 func (r *Resource) GetMetadata() *Metadata  { return r.Metadata }
@@ -340,6 +347,7 @@ func (r *Resource) GetQName() string        { return r.Metadata.GetQName() }
 func (r *Resource) GetRef() string          { return "resource:" + r.GetQName() }
 func (r *Resource) GetDependents() []string { return r.Spec.dependents }
 func (r *Resource) GetSystem() string       { return r.Spec.System }
+func (r *Resource) AddDependent(d string)   { r.Spec.dependents = append(r.Spec.dependents, d) }
 
 func (g *Group) GetKind() string        { return g.Kind }
 func (g *Group) GetMetadata() *Metadata { return g.Metadata }

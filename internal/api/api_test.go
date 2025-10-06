@@ -1,4 +1,4 @@
-package backstage
+package api
 
 import (
 	"testing"
