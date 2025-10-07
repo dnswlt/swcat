@@ -17,6 +17,7 @@ import (
 	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/backstage"
 	"github.com/dnswlt/swcat/internal/dot"
+	"gopkg.in/yaml.v3"
 )
 
 type ServerOptions struct {
@@ -75,6 +76,11 @@ func (s *Server) storeSVG(cacheKey string, svg *backstage.SVGResult) {
 	defer s.svgCacheMut.Unlock()
 	s.svgCache[cacheKey] = svg
 }
+func (s *Server) clearSVGCache() {
+	s.svgCacheMut.Lock()
+	defer s.svgCacheMut.Unlock()
+	s.svgCache = make(map[string]*backstage.SVGResult)
+}
 
 // withRequestLogging wraps a handler and logs each request if in debug mode.
 // Logs include method, path, remote address, and duration.
@@ -98,32 +104,36 @@ func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 	})
 }
 
+func entityURL(ref string) string {
+	kind, name, found := strings.Cut(ref, ":")
+	if !found {
+		return "#"
+	}
+	var path string
+	switch kind {
+	case "component":
+		path = "/ui/components/"
+	case "resource":
+		path = "/ui/resources/"
+	case "system":
+		path = "/ui/systems/"
+	case "group":
+		path = "/ui/groups/"
+	case "domain":
+		path = "/ui/domains/"
+	case "api":
+		path = "/ui/apis/"
+	default:
+		return "#"
+	}
+	return path + url.PathEscape(name)
+}
+
 func (s *Server) reloadTemplates() error {
 	tmpl := template.New("root")
 	tmpl = tmpl.Funcs(map[string]any{
-		"toURL": func(ref string) string {
-			kind, name, found := strings.Cut(ref, ":")
-			if !found {
-				return "#"
-			}
-			switch kind {
-			case "component":
-				return "/ui/components/" + url.PathEscape(name)
-			case "resource":
-				return "/ui/resources/" + url.PathEscape(name)
-			case "system":
-				return "/ui/systems/" + url.PathEscape(name)
-			case "group":
-				return "/ui/groups/" + url.PathEscape(name)
-			case "domain":
-				return "/ui/domains/" + url.PathEscape(name)
-			default:
-				return "#"
-			}
-		},
-		"urlencode": func(s string) string {
-			return url.PathEscape(s)
-		},
+		"toURL":     entityURL,
+		"urlencode": url.PathEscape,
 	})
 	var err error
 	s.template, err = tmpl.ParseGlob(path.Join(s.opts.BaseDir, "templates/*.html"))
@@ -386,6 +396,118 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 	s.serveHTMLPage(w, r, "group_detail.html", params)
 }
 
+func (s *Server) serveEntityEdit(w http.ResponseWriter, r *http.Request, entityRef string) {
+	params := map[string]any{}
+	entity := s.repo.Entity(entityRef)
+	if entity == nil {
+		http.Error(w, "Invalid entity", http.StatusNotFound)
+		return
+	}
+	params["Entity"] = entity
+
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(backstage.YAMLIndent)
+	if err := enc.Encode(entity.GetSourceInfo().Node); err != nil {
+		http.Error(w, "Failed to get YAML", http.StatusInternalServerError)
+		log.Printf("Failed to encode YAML for %q: %v", entityRef, err)
+		return
+	}
+	params["YAML"] = buf.String()
+
+	s.serveHTMLPage(w, r, "entity_edit.html", params)
+}
+
+func (s *Server) isHX(r *http.Request) bool {
+	return r.Header.Get("HX-Request") == "true"
+}
+
+func (s *Server) renderErrorSnippet(w http.ResponseWriter, errorMsg string) {
+	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
+	s.template.ExecuteTemplate(w, "_error.html", map[string]any{
+		"Error": errorMsg,
+	})
+}
+
+func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef string) {
+	if !s.isHX(r) {
+		http.Error(w, "Entity updates must be done via HTMX", http.StatusBadRequest)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		return
+	}
+
+	originalEntity := s.repo.Entity(entityRef)
+	if originalEntity == nil {
+		http.Error(w, "Invalid entity", http.StatusNotFound)
+		return
+	}
+
+	newYAML := r.FormValue("yaml")
+	newEntity, err := backstage.ReadEntityFromString(newYAML)
+	if err != nil {
+		s.renderErrorSnippet(w, fmt.Sprintf("Failed to parse new YAML: %v", err))
+		return
+	}
+
+	// Only update if the entity reference remains the same, i.e.:
+	// - no changes of the kind, namespace, or name
+	if newEntity.GetRef() != originalEntity.GetRef() {
+		s.renderErrorSnippet(w, "Updated entity reference does not match original")
+		return
+	}
+
+	// Update the repo
+	if err := s.repo.UpdateEntity(newEntity); err != nil {
+		s.renderErrorSnippet(w, fmt.Sprintf("Failed to update entity in repo: %v", err))
+		return
+	}
+	// Invalidate the SVg cache
+	s.clearSVGCache()
+
+	// Update the YAML file.
+	path := originalEntity.GetSourceInfo().Path
+	newEntity.GetSourceInfo().Path = path
+
+	entitiesInFile, err := backstage.ReadEntities(path)
+	if err != nil {
+		http.Error(w, "Failed to read entity file", http.StatusInternalServerError)
+		log.Printf("Failed to read entities from %q: %v", path, err)
+		return
+	}
+
+	var found bool
+	for i, e := range entitiesInFile {
+		if e.GetRef() == originalEntity.GetRef() {
+			entitiesInFile[i] = newEntity
+			found = true
+			break
+		}
+	}
+	if !found {
+		http.Error(w, "Could not find entity to update in file", http.StatusInternalServerError)
+		log.Printf("Could not find entity to update in its alleged path %q", path)
+		return
+	}
+
+	if err := backstage.WriteEntities(path, entitiesInFile); err != nil {
+		http.Error(w, "Failed to write updated entity file", http.StatusInternalServerError)
+		log.Printf("Failed to write entities to %q: %v", path, err)
+		return
+	}
+
+	redirectURL := entityURL(entityRef)
+	if redirectURL == "#" {
+		redirectURL = "/ui/components" // fallback
+	}
+
+	w.Header().Set("HX-Redirect", redirectURL)
+	w.WriteHeader(http.StatusOK)
+}
+
 func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateFile string, params map[string]any) {
 	var output bytes.Buffer
 
@@ -462,6 +584,15 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("GET /ui/groups/{groupID}", func(w http.ResponseWriter, r *http.Request) {
 		groupID := r.PathValue("groupID")
 		s.serveGroup(w, r, groupID)
+	})
+
+	mux.HandleFunc("GET /ui/entities/{entityRef}/edit", func(w http.ResponseWriter, r *http.Request) {
+		entityRef := r.PathValue("entityRef")
+		s.serveEntityEdit(w, r, entityRef)
+	})
+	mux.HandleFunc("POST /ui/entities/{entityRef}/edit", func(w http.ResponseWriter, r *http.Request) {
+		entityRef := r.PathValue("entityRef")
+		s.updateEntity(w, r, entityRef)
 	})
 
 	// Health check. Useful for cloud deployments.

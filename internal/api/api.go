@@ -5,6 +5,8 @@ package api
 
 import (
 	"cmp"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -25,6 +27,22 @@ type Entity interface {
 	// Returns the fully qualified entity reference in the format
 	// <kind>:<namespace>/<name>
 	GetRef() string
+
+	// GetSourceInfo returns internal bookkeeping data, e.g. for error logging
+	// and reconstructing YAML files (retaining the exact structure including comments).
+	GetSourceInfo() *SourceInfo
+	SetSourceInfo(si *SourceInfo)
+
+	// Reset creates a shallow copy of the entity with computed values (inv. relations) removed.
+	Reset() Entity
+}
+
+// File and line information shared by all entities.
+// Can be used in error messages and to reconstruct YAML
+type SourceInfo struct {
+	Node *yaml.Node // The raw YAML source code from which the entity was parsed.
+	Path string     // The path from which the entity was read.
+	Line int        // The first line number in Path where the entity was found.
 }
 
 // SystemPart is the interface implemented by all entity kinds that appear as parts
@@ -82,6 +100,10 @@ type Metadata struct {
 
 // Domain
 
+type domainInvRel struct {
+	systems []string
+}
+
 type DomainSpec struct {
 	// An entity reference to the owner of the domain.
 	// [required]
@@ -97,7 +119,7 @@ type DomainSpec struct {
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
-	systems []string
+	inv domainInvRel
 }
 
 type Domain struct {
@@ -105,9 +127,18 @@ type Domain struct {
 	Kind       string      `yaml:"kind,omitempty"`
 	Metadata   *Metadata   `yaml:"metadata,omitempty"`
 	Spec       *DomainSpec `yaml:"spec,omitempty"`
+
+	// Internal data, not part of the API.
+	*SourceInfo `yaml:"-"`
 }
 
 // System
+
+type systemInvRel struct {
+	components []string
+	apis       []string
+	resources  []string
+}
 
 type SystemSpec struct {
 	// An entity reference to the owner of the system.
@@ -124,9 +155,7 @@ type SystemSpec struct {
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
-	components []string
-	apis       []string
-	resources  []string
+	inv systemInvRel
 }
 
 type System struct {
@@ -134,9 +163,15 @@ type System struct {
 	Kind       string      `yaml:"kind,omitempty"`
 	Metadata   *Metadata   `yaml:"metadata,omitempty"`
 	Spec       *SystemSpec `yaml:"spec,omitempty"`
+
+	// Internal bookkeeping data, not part of the API.
+	*SourceInfo `yaml:"-"`
 }
 
 // Component
+type componentInvRel struct {
+	dependents []string
+}
 
 type ComponentSpec struct {
 	// The type of component.
@@ -170,7 +205,7 @@ type ComponentSpec struct {
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
-	dependents []string
+	inv componentInvRel
 }
 
 type Component struct {
@@ -178,9 +213,16 @@ type Component struct {
 	Kind       string         `yaml:"kind,omitempty"`
 	Metadata   *Metadata      `yaml:"metadata,omitempty"`
 	Spec       *ComponentSpec `yaml:"spec,omitempty"`
+
+	// Internal bookkeeping data, not part of the API.
+	*SourceInfo `yaml:"-"`
 }
 
 // Resource
+
+type resourceInvRel struct {
+	dependents []string
+}
 
 type ResourceSpec struct {
 	// The type of resource.
@@ -198,7 +240,7 @@ type ResourceSpec struct {
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
-	dependents []string
+	inv resourceInvRel
 }
 
 type Resource struct {
@@ -206,9 +248,16 @@ type Resource struct {
 	Kind       string        `yaml:"kind,omitempty"`
 	Metadata   *Metadata     `yaml:"metadata,omitempty"`
 	Spec       *ResourceSpec `yaml:"spec,omitempty"`
+
+	// Internal bookkeeping data, not part of the API.
+	*SourceInfo `yaml:"-"`
 }
 
 // API
+type apiInvRel struct {
+	providers []string
+	consumers []string
+}
 
 type APISpec struct {
 	// The type of the API definition.
@@ -230,8 +279,7 @@ type APISpec struct {
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
-	providers []string
-	consumers []string
+	inv apiInvRel
 }
 
 type API struct {
@@ -239,6 +287,9 @@ type API struct {
 	Kind       string    `yaml:"kind,omitempty"`
 	Metadata   *Metadata `yaml:"metadata,omitempty"`
 	Spec       *APISpec  `yaml:"spec,omitempty"`
+
+	// Internal bookkeeping data, not part of the API.
+	*SourceInfo `yaml:"-"`
 }
 
 // Group
@@ -277,6 +328,9 @@ type Group struct {
 	Kind       string     `yaml:"kind,omitempty"`
 	Metadata   *Metadata  `yaml:"metadata,omitempty"`
 	Spec       *GroupSpec `yaml:"spec,omitempty"`
+
+	// Internal bookkeeping data, not part of the API.
+	*SourceInfo `yaml:"-"`
 }
 
 //
@@ -302,55 +356,108 @@ func CompareEntityByName(a, b Entity) int {
 	return cmp.Compare(a.GetMetadata().Name, b.GetMetadata().Name)
 }
 
-func (c *Component) GetKind() string         { return c.Kind }
-func (c *Component) GetMetadata() *Metadata  { return c.Metadata }
-func (c *Component) GetQName() string        { return c.Metadata.GetQName() }
-func (c *Component) GetRef() string          { return "component:" + c.GetQName() }
-func (c *Component) GetOwner() string        { return c.Spec.Owner }
-func (c *Component) GetLifecycle() string    { return c.Spec.Lifecycle }
-func (c *Component) GetSystem() string       { return c.Spec.System }
-func (c *Component) GetDependents() []string { return c.Spec.dependents }
-func (c *Component) AddDependent(d string)   { c.Spec.dependents = append(c.Spec.dependents, d) }
+func (c *Component) GetKind() string              { return c.Kind }
+func (c *Component) GetMetadata() *Metadata       { return c.Metadata }
+func (c *Component) GetQName() string             { return c.Metadata.GetQName() }
+func (c *Component) GetRef() string               { return "component:" + c.GetQName() }
+func (c *Component) GetOwner() string             { return c.Spec.Owner }
+func (c *Component) GetLifecycle() string         { return c.Spec.Lifecycle }
+func (c *Component) GetSystem() string            { return c.Spec.System }
+func (c *Component) GetDependents() []string      { return c.Spec.inv.dependents }
+func (c *Component) AddDependent(d string)        { c.Spec.inv.dependents = append(c.Spec.inv.dependents, d) }
+func (c *Component) GetSourceInfo() *SourceInfo   { return c.SourceInfo }
+func (c *Component) SetSourceInfo(si *SourceInfo) { c.SourceInfo = si }
+func (c *Component) Reset() Entity {
+	clone := *c
+	spec := *c.Spec
+	clone.Spec = &spec
+	clone.Spec.inv = componentInvRel{}
+	return &clone
+}
 
-func (s *System) GetKind() string         { return s.Kind }
-func (s *System) GetMetadata() *Metadata  { return s.Metadata }
-func (s *System) GetQName() string        { return s.Metadata.GetQName() }
-func (s *System) GetRef() string          { return "system:" + s.GetQName() }
-func (s *System) GetComponents() []string { return s.Spec.components }
-func (s *System) GetAPIs() []string       { return s.Spec.apis }
-func (s *System) GetResources() []string  { return s.Spec.resources }
-func (s *System) GetSystem() string       { return s.GetQName() }
-func (s *System) AddAPI(a string)         { s.Spec.apis = append(s.Spec.apis, a) }
-func (s *System) AddComponent(c string)   { s.Spec.components = append(s.Spec.components, c) }
-func (s *System) AddResource(r string)    { s.Spec.resources = append(s.Spec.resources, r) }
+func (s *System) GetKind() string              { return s.Kind }
+func (s *System) GetMetadata() *Metadata       { return s.Metadata }
+func (s *System) GetQName() string             { return s.Metadata.GetQName() }
+func (s *System) GetRef() string               { return "system:" + s.GetQName() }
+func (s *System) GetComponents() []string      { return s.Spec.inv.components }
+func (s *System) GetAPIs() []string            { return s.Spec.inv.apis }
+func (s *System) GetResources() []string       { return s.Spec.inv.resources }
+func (s *System) GetSystem() string            { return s.GetQName() }
+func (s *System) AddAPI(a string)              { s.Spec.inv.apis = append(s.Spec.inv.apis, a) }
+func (s *System) AddComponent(c string)        { s.Spec.inv.components = append(s.Spec.inv.components, c) }
+func (s *System) AddResource(r string)         { s.Spec.inv.resources = append(s.Spec.inv.resources, r) }
+func (s *System) GetSourceInfo() *SourceInfo   { return s.SourceInfo }
+func (s *System) SetSourceInfo(si *SourceInfo) { s.SourceInfo = si }
+func (s *System) Reset() Entity {
+	clone := *s
+	spec := *s.Spec
+	clone.Spec = &spec
+	clone.Spec.inv = systemInvRel{}
+	return &clone
+}
 
-func (d *Domain) GetKind() string        { return d.Kind }
-func (d *Domain) GetMetadata() *Metadata { return d.Metadata }
-func (d *Domain) GetQName() string       { return d.Metadata.GetQName() }
-func (d *Domain) GetRef() string         { return "domain:" + d.GetQName() }
-func (d *Domain) GetSystems() []string   { return d.Spec.systems }
-func (d *Domain) AddSystem(s string)     { d.Spec.systems = append(d.Spec.systems, s) }
+func (d *Domain) GetKind() string              { return d.Kind }
+func (d *Domain) GetMetadata() *Metadata       { return d.Metadata }
+func (d *Domain) GetQName() string             { return d.Metadata.GetQName() }
+func (d *Domain) GetRef() string               { return "domain:" + d.GetQName() }
+func (d *Domain) GetSystems() []string         { return d.Spec.inv.systems }
+func (d *Domain) AddSystem(s string)           { d.Spec.inv.systems = append(d.Spec.inv.systems, s) }
+func (d *Domain) GetSourceInfo() *SourceInfo   { return d.SourceInfo }
+func (d *Domain) SetSourceInfo(si *SourceInfo) { d.SourceInfo = si }
+func (d *Domain) Reset() Entity {
+	clone := *d
+	spec := *d.Spec
+	clone.Spec = &spec
+	clone.Spec.inv = domainInvRel{}
+	return &clone
+}
 
-func (a *API) GetKind() string        { return a.Kind }
-func (a *API) GetMetadata() *Metadata { return a.Metadata }
-func (a *API) GetQName() string       { return a.Metadata.GetQName() }
-func (a *API) GetRef() string         { return "api:" + a.GetQName() }
-func (a *API) GetProviders() []string { return a.Spec.providers }
-func (a *API) GetConsumers() []string { return a.Spec.consumers }
-func (a *API) GetSystem() string      { return a.Spec.System }
-func (a *API) AddProvider(p string)   { a.Spec.providers = append(a.Spec.providers, p) }
-func (a *API) AddConsumer(c string)   { a.Spec.consumers = append(a.Spec.consumers, c) }
+func (a *API) GetKind() string              { return a.Kind }
+func (a *API) GetMetadata() *Metadata       { return a.Metadata }
+func (a *API) GetQName() string             { return a.Metadata.GetQName() }
+func (a *API) GetRef() string               { return "api:" + a.GetQName() }
+func (a *API) GetProviders() []string       { return a.Spec.inv.providers }
+func (a *API) GetConsumers() []string       { return a.Spec.inv.consumers }
+func (a *API) GetSystem() string            { return a.Spec.System }
+func (a *API) AddProvider(p string)         { a.Spec.inv.providers = append(a.Spec.inv.providers, p) }
+func (a *API) AddConsumer(c string)         { a.Spec.inv.consumers = append(a.Spec.inv.consumers, c) }
+func (a *API) GetSourceInfo() *SourceInfo   { return a.SourceInfo }
+func (a *API) SetSourceInfo(si *SourceInfo) { a.SourceInfo = si }
+func (a *API) Reset() Entity {
+	clone := *a
+	spec := *a.Spec
+	clone.Spec = &spec
+	clone.Spec.inv = apiInvRel{}
+	return &clone
+}
 
-func (r *Resource) GetKind() string         { return r.Kind }
-func (r *Resource) GetMetadata() *Metadata  { return r.Metadata }
-func (r *Resource) GetQName() string        { return r.Metadata.GetQName() }
-func (r *Resource) GetRef() string          { return "resource:" + r.GetQName() }
-func (r *Resource) GetDependents() []string { return r.Spec.dependents }
-func (r *Resource) GetSystem() string       { return r.Spec.System }
-func (r *Resource) AddDependent(d string)   { r.Spec.dependents = append(r.Spec.dependents, d) }
+func (r *Resource) GetKind() string              { return r.Kind }
+func (r *Resource) GetMetadata() *Metadata       { return r.Metadata }
+func (r *Resource) GetQName() string             { return r.Metadata.GetQName() }
+func (r *Resource) GetRef() string               { return "resource:" + r.GetQName() }
+func (r *Resource) GetDependents() []string      { return r.Spec.inv.dependents }
+func (r *Resource) GetSystem() string            { return r.Spec.System }
+func (r *Resource) AddDependent(d string)        { r.Spec.inv.dependents = append(r.Spec.inv.dependents, d) }
+func (r *Resource) GetSourceInfo() *SourceInfo   { return r.SourceInfo }
+func (r *Resource) SetSourceInfo(si *SourceInfo) { r.SourceInfo = si }
+func (r *Resource) Reset() Entity {
+	clone := *r
+	spec := *r.Spec
+	clone.Spec = &spec
+	clone.Spec.inv = resourceInvRel{}
+	return &clone
+}
 
-func (g *Group) GetKind() string        { return g.Kind }
-func (g *Group) GetMetadata() *Metadata { return g.Metadata }
-func (g *Group) GetQName() string       { return g.Metadata.GetQName() }
-func (g *Group) GetRef() string         { return "group:" + g.GetQName() }
-func (g *Group) GetDisplayName() string { return g.Spec.Profile.DisplayName }
+func (g *Group) GetKind() string              { return g.Kind }
+func (g *Group) GetMetadata() *Metadata       { return g.Metadata }
+func (g *Group) GetQName() string             { return g.Metadata.GetQName() }
+func (g *Group) GetRef() string               { return "group:" + g.GetQName() }
+func (g *Group) GetDisplayName() string       { return g.Spec.Profile.DisplayName }
+func (g *Group) GetSourceInfo() *SourceInfo   { return g.SourceInfo }
+func (g *Group) SetSourceInfo(si *SourceInfo) { g.SourceInfo = si }
+func (g *Group) Reset() Entity {
+	clone := *g
+	spec := *g.Spec
+	clone.Spec = &spec
+	return &clone
+}

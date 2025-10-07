@@ -104,14 +104,17 @@ function addSVGListener() {
     });
 }
 
-function initPage(pageId) {
+async function initPage(pageId) {
     if (['domain', 'system', 'component', 'resource', 'api', 'group'].includes(pageId)) {
         loadSVGMetadata();
         addSVGListener();
+    }
+    if (pageId === 'entity-edit') {
+        const { initEditor } = await import('./editor.js');
+        initEditor();
     }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
     initPage(document.body.dataset.page);
 });
-

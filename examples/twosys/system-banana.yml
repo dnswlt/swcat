@@ -1,4 +1,3 @@
----
 apiVersion: backstage.io/v1alpha1
 kind: System
 metadata:
@@ -22,7 +21,7 @@ apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
   name: banana-api-gateway
-  title: banana API Gateway
+  title: Banana API Gateway
   labels:
     foobar.dev/language: java
     foobar.dev/deployment: k8s
@@ -40,7 +39,7 @@ apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
   name: banana-backend
-  title: banana Backend
+  title: Banana Backend
   labels:
     foobar.dev/language: java
     foobar.dev/deployment: k8s

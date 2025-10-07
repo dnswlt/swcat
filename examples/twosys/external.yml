@@ -1,4 +1,3 @@
----
 apiVersion: backstage.io/v1alpha1
 kind: Domain
 metadata:
@@ -16,6 +15,7 @@ metadata:
   namespace: external
   description: >
     Placeholder group for external entities.
+
 spec:
   type: placeholder
   children: []

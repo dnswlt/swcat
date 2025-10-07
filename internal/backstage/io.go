@@ -1,6 +1,7 @@
 package backstage
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -12,7 +13,11 @@ import (
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/api"
-	"go.yaml.in/yaml/v2"
+	"gopkg.in/yaml.v3"
+)
+
+const (
+	YAMLIndent = 2
 )
 
 var (
@@ -37,11 +42,12 @@ func WriteEntities(path string, entities []api.Entity) error {
 	}
 
 	enc := yaml.NewEncoder(tmpFile)
+	enc.SetIndent(YAMLIndent)
 	for _, e := range entities {
-		if err := enc.Encode(e); err != nil {
+		if err := enc.Encode(e.GetSourceInfo().Node); err != nil {
 			tmpFile.Close()
 			os.Remove(tmpFile.Name())
-			return fmt.Errorf("failed to encode entity: %v", err)
+			return fmt.Errorf("failed to encode node from line %d: %w", e.GetSourceInfo().Line, err)
 		}
 	}
 	enc.Close()
@@ -50,49 +56,162 @@ func WriteEntities(path string, entities []api.Entity) error {
 	return os.Rename(tmpFile.Name(), path)
 }
 
+// WriteEntitiesByPath groups entities by their source path, sorts them by line number,
+// and writes them back to their original files.
+func WriteEntitiesByPath(allEntities []api.Entity) error {
+	// Group entities by their source file path.
+	entitiesByPath := make(map[string][]api.Entity)
+	for _, e := range allEntities {
+		path := e.GetSourceInfo().Path
+		entitiesByPath[path] = append(entitiesByPath[path], e)
+	}
+
+	// Process each file.
+	for path, entities := range entitiesByPath {
+		// Sort the entities for this path by their original line number.
+		sort.Slice(entities, func(i, j int) bool {
+			return entities[i].GetSourceInfo().Line < entities[j].GetSourceInfo().Line
+		})
+
+		// Use the safe, atomic write pattern.
+		err := WriteEntities(path, entities)
+		if err != nil {
+			return fmt.Errorf("failed to write entities to %s: %w", path, err)
+		}
+		log.Printf("Successfully wrote %d entities to %s\n", len(entities), path)
+	}
+
+	return nil
+}
+
 func ReadEntities(path string) ([]api.Entity, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
+
 	dec := yaml.NewDecoder(f)
+	dec.KnownFields(true) // We want to be strict and error out on any unknown field
 
 	var entities []api.Entity
 
-	for i := 0; ; i++ {
-		doc := map[string]any{}
-		err = dec.Decode(&doc)
+	for {
+		var node yaml.Node
+		err := dec.Decode(&node)
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse YAML: %w", err)
+			return nil, fmt.Errorf("failed to decode YAML node: %w", err)
 		}
-		if _, ok := doc["kind"]; !ok {
-			return nil, fmt.Errorf("entity #%d has no kind: field", i)
-		}
-		switch kind := doc["kind"].(type) {
-		case string:
-			factory, ok := kindFactories[kind]
-			if !ok {
-				return nil, fmt.Errorf("invalid kind in YAML entity: %s", kind)
-			}
 
-			entity := factory()
-			bs, err := yaml.Marshal(doc)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal as intermediate JSON: %w", err)
-			}
-			if err := yaml.UnmarshalStrict(bs, entity); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal intermediate JSON: %w", err)
-			}
-			entities = append(entities, entity)
-		default:
-			return nil, fmt.Errorf("kind: field has wrong type: %T", doc["kind"])
+		// node.Content will be empty for blank documents (e.g., just "---")
+		if len(node.Content) == 0 {
+			continue
 		}
+
+		// Find the 'kind' field to use the factory
+		kind, err := findKindInNode(&node)
+		if err != nil {
+			return nil, fmt.Errorf("error in document starting at line %d: %v", node.Line, err)
+		}
+
+		factory, ok := kindFactories[kind]
+		if !ok {
+			return nil, fmt.Errorf("invalid kind '%s' in document at line %d", kind, node.Line)
+		}
+		entity := factory()
+
+		// Re-encode the YAML document to then decode it strictly into the target type.
+		// This is a necessary dance to make parsing strict - there is no equivalent "strict mode"
+		// when decoding from the yaml.Node to the target struct directly :(
+		var buf bytes.Buffer
+		enc := yaml.NewEncoder(&buf)
+		if err := enc.Encode(&node); err != nil {
+			return nil, fmt.Errorf("failed to re-encode node: %v", err)
+		}
+		// Decode into the final typed struct
+		strictDec := yaml.NewDecoder(&buf)
+		strictDec.KnownFields(true)
+		if err := strictDec.Decode(entity); err != nil {
+			return nil, fmt.Errorf("failed to decode node into struct at line %d: %v", node.Line, err)
+		}
+
+		entity.SetSourceInfo(&api.SourceInfo{
+			Path: path,
+			Line: node.Line,
+			Node: &node,
+		})
+
+		entities = append(entities, entity)
 	}
 
 	return entities, nil
+}
+
+func ReadEntityFromString(content string) (api.Entity, error) {
+	var node yaml.Node
+	dec := yaml.NewDecoder(strings.NewReader(content))
+	err := dec.Decode(&node)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode YAML node: %w", err)
+	}
+
+	if len(node.Content) == 0 {
+		return nil, errors.New("empty yaml document")
+	}
+
+	kind, err := findKindInNode(&node)
+	if err != nil {
+		return nil, fmt.Errorf("error in document: %w", err)
+	}
+
+	factory, ok := kindFactories[kind]
+	if !ok {
+		return nil, fmt.Errorf("invalid kind '%s'", kind)
+	}
+	entity := factory()
+
+	// See comments in ReadEntities about why this dance is necessary.
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	if err := enc.Encode(&node); err != nil {
+		return nil, fmt.Errorf("failed to re-encode node: %v", err)
+	}
+	// Decode into the final typed struct
+	strictDec := yaml.NewDecoder(&buf)
+	strictDec.KnownFields(true)
+	if err := strictDec.Decode(entity); err != nil {
+		return nil, fmt.Errorf("failed to decode node into struct: %v", err)
+	}
+
+	entity.SetSourceInfo(&api.SourceInfo{
+		Node: &node,
+	})
+
+	return entity, nil
+}
+
+// findKindInNode is a helper to extract the 'kind' value from a yaml.Node
+func findKindInNode(doc *yaml.Node) (string, error) {
+	// The top-level node is a DocumentNode, its content is a MappingNode
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 || doc.Content[0].Kind != yaml.MappingNode {
+		return "", errors.New("expected a YAML document with a top-level map")
+	}
+
+	nodes := doc.Content[0].Content
+	for i := 0; i < len(nodes); i += 2 {
+		keyNode := nodes[i]
+		if keyNode.Value == "kind" {
+			valueNode := nodes[i+1]
+			if valueNode.Kind != yaml.ScalarNode {
+				return "", fmt.Errorf("'kind' field is not a string (type: %v)", valueNode.Tag)
+			}
+			return valueNode.Value, nil
+		}
+	}
+	return "", errors.New("no 'kind' field found")
 }
 
 // collectYMLFilesInDir walks root recursively up to maxDepth levels below root

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    {{ template "head.html" }}
+</head>
+
+<body class="min-h-screen bg-gray-50 p-4" data-page="entity-edit">
+    <!-- Navbar -->
+    {{template "nav.html" .}}
+
+    <main class="w-full max-w-screen-lg mx-auto space-y-6 bg-white shadow rounded-xl p-6">
+        <h1 class="text-2xl font-semibold text-center">Edit {{ .Entity.GetKind }}</h1>
+
+        <div id="error-container"></div>
+
+        <form hx-post="/ui/entities/{{ .Entity.GetRef }}/edit" hx-target="#error-container" hx-swap="innerHTML">
+            <div class="space-y-4">
+                <div>
+                    <label for="yaml-editor" class="block text-sm font-medium text-gray-700">YAML</label>
+                    <textarea id="yaml-editor" name="yaml">{{ .YAML }}</textarea>
+                </div>
+
+                <div class="flex justify-end space-x-4">
+                    <a href="{{ .Entity.GetRef | toURL }}" class="bg-gray-600 text-white font-bold py-2 px-4 rounded">
+                        Cancel
+                    </a>
+                    <button type="submit" class="bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                        Save
+                    </button>
+                </div>
+            </div>
+        </form>
+    </main>
+
+    <script type="module" src="/static/dist/main.js"></script>
+
+</body>
+
+</html>

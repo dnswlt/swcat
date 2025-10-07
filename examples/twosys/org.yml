@@ -1,10 +1,10 @@
----
 apiVersion: backstage.io/v1alpha1
 kind: Group
 metadata:
   name: plants-owners-team
   description: >
     Owners group for the whole plants domain.
+
 spec:
   type: team
   # children is a mandatory field.
@@ -20,6 +20,7 @@ metadata:
   name: banana-team
   description: >
     Team Banana owns the banana system and its components.
+
 spec:
   type: team
   # children is a mandatory field.
@@ -35,6 +36,7 @@ metadata:
   name: cucumber-team
   description: >
     Team Cucumber owns the cucumber system and its components.
+
 spec:
   type: team
   # children is a mandatory field.

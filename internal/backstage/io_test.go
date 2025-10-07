@@ -130,3 +130,53 @@ func writeTempFile(t *testing.T, name, content string) string {
 	}
 	return tmpfile
 }
+
+func TestReadEntityFromString(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		content := `
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: my-component
+spec:
+  type: service
+  owner: my-group
+  lifecycle: experimental
+`
+		entity, err := ReadEntityFromString(content)
+		if err != nil {
+			t.Fatalf("ReadEntityFromString() error = %v, wantErr %v", err, false)
+		}
+		if entity == nil {
+			t.Fatal("entity is nil")
+		}
+		if component, ok := entity.(*api.Component); !ok {
+			t.Fatalf("entity is not a *Component")
+		} else {
+			if component.Metadata.Name != "my-component" {
+				t.Errorf("component.Metadata.Name = %s, want %s", component.Metadata.Name, "my-component")
+			}
+			if component.Spec.Type != "service" {
+				t.Errorf("component.Spec.Type = %s, want %s", component.Spec.Type, "service")
+			}
+		}
+	})
+
+	t.Run("unknown field", func(t *testing.T) {
+		content := `
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: my-component
+spec:
+  type: service
+  owner: my-group
+  lifecycle: experimental
+  foo: bar
+`
+		_, err := ReadEntityFromString(content)
+		if err == nil {
+			t.Errorf("ReadEntityFromString() error = %v, wantErr %v", err, true)
+		}
+	})
+}

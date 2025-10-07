@@ -43,12 +43,7 @@ func (r *Repository) Size() int {
 	return len(r.allEntities)
 }
 
-func (r *Repository) AddEntity(e api.Entity) error {
-	ref := e.GetRef()
-	if _, ok := r.allEntities[ref]; ok {
-		return fmt.Errorf("entity %q already exists in the repository", ref)
-	}
-
+func (r *Repository) setEntity(e api.Entity) error {
 	qname := e.GetQName()
 
 	switch x := e.(type) {
@@ -68,9 +63,52 @@ func (r *Repository) AddEntity(e api.Entity) error {
 		return fmt.Errorf("invalid type: %T", e)
 	}
 
+	ref := e.GetRef()
 	r.allEntities[ref] = e
+	return nil
+}
+
+func (r *Repository) UpdateEntity(e api.Entity) error {
+	// This is a fairly heavyweight, but effective approach:
+	// Rebuild the repository from scratch (as a copy), validate, copy the maps back.
+	// It avoids having to deal with complex deletions and additions of relationships
+	// and their inverses.
+
+	eRef := e.GetRef()
+	if _, ok := r.allEntities[eRef]; !ok {
+		return fmt.Errorf("entity %q does not exist in the repository", eRef)
+	}
+
+	r2 := NewRepository()
+	for _, n := range r.allEntities {
+		var toAdd api.Entity
+		if n.GetRef() == eRef {
+			toAdd = e // Replace old entity by the new one
+		} else {
+			toAdd = n.Reset() // Add a shallow copy with cleared computed fields
+		}
+
+		if err := r2.AddEntity(toAdd); err != nil {
+			return fmt.Errorf("failed to rebuild repository: %v", err)
+		}
+	}
+
+	if err := r2.Validate(); err != nil {
+		return fmt.Errorf("repository validation failed: %v", err)
+	}
+
+	// Copy over all data from the updated repo to the current one.
+	*r = *r2
 
 	return nil
+}
+
+func (r *Repository) AddEntity(e api.Entity) error {
+	ref := e.GetRef()
+	if _, ok := r.allEntities[ref]; ok {
+		return fmt.Errorf("entity %q already exists in the repository", ref)
+	}
+	return r.setEntity(e)
 }
 
 func getEntity[T any](m map[string]*T, ref, expectedKind string) *T {
