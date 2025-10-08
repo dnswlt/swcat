@@ -39,7 +39,9 @@ apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
   name: banana-backend
-  title: Banana Backend
+  title: bananas for everyone! </html>
+  description: |
+    This is a wonderful backend.
   labels:
     foobar.dev/language: java
     foobar.dev/deployment: k8s
@@ -59,7 +61,7 @@ apiVersion: backstage.io/v1alpha1
 kind: Resource
 metadata:
   name: banana-db
-  title: banana Database
+  title: Banana Database
   labels:
     foobar.dev/technology: postgres
 spec:
@@ -74,10 +76,10 @@ metadata:
   title: banana API
   links:
     - url: https://example.com/apis/banana-api
-      title: banana API Schema
+      title: Banana API Schema
       type: schema
 spec:
-  type: rest
+  type: http/rest
   lifecycle: production
   owner: banana-team
   system: banana-system

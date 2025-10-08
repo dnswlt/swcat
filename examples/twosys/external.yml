@@ -5,6 +5,7 @@ metadata:
   namespace: external
   title: The external domain
 spec:
+  # This comment should be retained across edits.
   owner: external/owners-team
   type: external
 ---
@@ -42,7 +43,7 @@ metadata:
 spec:
   type: external
   owner: external/owners-team
-  lifecycle: production
+  lifecycle: development
   system: external/system-one
   consumesApis:
     - banana-api

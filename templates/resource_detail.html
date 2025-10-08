@@ -14,9 +14,22 @@
 
         {{ with .Resource }}
         <div class="space-y-4">
-            <div class="flex justify-between items-center">
+            <div class="flex justify-between items-start">
+                {{ if .Metadata.Title }}
+                <div>
+                    <h2 class="text-xl font-semibold">{{ .GetQName }}</h2>
+                    <p class="text-m text-gray-500">{{ .Metadata.Title }}</p>
+                </div>
+                {{ else }}
                 <h2 class="text-xl font-semibold">{{ .GetQName }}</h2>
-                <span class="text-gray-500">{{ .Spec.Type }}</span>
+                {{ end }}
+                <div class="flex items-center space-x-4">
+                    <span class="text-gray-500">{{ .Spec.Type }}</span>
+                    <a href="/ui/entities/{{ .GetRef | urlencode }}/edit"
+                        class="bg-blue-600 text-white py-1 px-3 rounded text-sm">
+                        Edit YAML
+                    </a>
+                </div>
             </div>
             <p class="text-gray-700">{{ .Metadata.Description }}</p>
             <div class="grid grid-cols-2 gap-4">
