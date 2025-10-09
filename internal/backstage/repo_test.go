@@ -136,6 +136,13 @@ func TestRepository_Entity(t *testing.T) {
 		})
 	}
 
+	t.Run("non-existing ref", func(t *testing.T) {
+		e := repo.Entity("component:s1")
+		if e != nil {
+			t.Error("Entity() returned non-nil for non-existing ref")
+		}
+	})
+
 	t.Run("invalid ref", func(t *testing.T) {
 		e := repo.Entity("invalid:ref")
 		if e != nil {

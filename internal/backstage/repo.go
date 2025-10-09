@@ -2,6 +2,7 @@ package backstage
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 	"slices"
 	"strings"
@@ -146,6 +147,9 @@ func (r *Repository) Resource(ref string) *api.Resource {
 	return getEntity(r.resources, ref, "resource")
 }
 
+// Entity returns the entity identified by the entity reference ref, if it exists.
+// If the entity does not exist, it returns the nil interface.
+// The entity reference must be fully qualified, i.e. <kind>:[<namespace>/]<name>
 func (r *Repository) Entity(ref string) api.Entity {
 	kind, qn, found := strings.Cut(ref, ":")
 	if !found {
@@ -153,17 +157,29 @@ func (r *Repository) Entity(ref string) api.Entity {
 	}
 	switch kind {
 	case "component":
-		return r.Component(qn)
+		if c := r.Component(qn); c != nil {
+			return c
+		}
 	case "system":
-		return r.System(qn)
+		if s := r.System(qn); s != nil {
+			return s
+		}
 	case "domain":
-		return r.Domain(qn)
+		if d := r.Domain(qn); d != nil {
+			return d
+		}
 	case "api":
-		return r.API(qn)
+		if a := r.API(qn); a != nil {
+			return a
+		}
 	case "resource":
-		return r.Resource(qn)
+		if res := r.Resource(qn); res != nil {
+			return res
+		}
 	case "group":
-		return r.Group(qn)
+		if g := r.Group(qn); g != nil {
+			return g
+		}
 	}
 	return nil
 }
@@ -437,7 +453,7 @@ func (r *Repository) populateRelationships() {
 		case *api.Resource:
 			x.AddDependent(entityRef)
 		default:
-			// Ignore: we only track dependents for components and resources for now.
+			log.Fatalf("Invalid dependency: %s", depName)
 		}
 	}
 
