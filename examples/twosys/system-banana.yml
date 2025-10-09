@@ -22,6 +22,11 @@ kind: Component
 metadata:
   name: banana-api-gateway
   title: Banana API Gateway
+  description: |
+    This is foobar.
+
+    * Everyone loves it.
+    * Really!
   labels:
     foobar.dev/language: java
     foobar.dev/deployment: k8s

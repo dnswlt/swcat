@@ -31,8 +31,18 @@
                     </a>
                 </div>
             </div>
-            <p class="text-gray-700">{{ .Metadata.Description }}</p>
-            <div class="grid grid-cols-2 gap-4">
+
+            {{ if .Metadata.Description }}
+            <div class="prose text-gray-700">
+                {{ .Metadata.Description | markdown }}
+            </div>
+            {{ end }}
+
+            <div class="grid grid-cols-3 gap-4">
+                <div>
+                    <h3 class="font-semibold">System</h3>
+                    <p><a href="/ui/systems/{{ .Spec.System | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.System }}</a></p>
+                </div>
                 <div>
                     <h3 class="font-semibold">Owner</h3>
                     <p><a href="/ui/groups/{{ .Spec.Owner | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.Owner }}</a></p>
@@ -41,17 +51,7 @@
                     <h3 class="font-semibold">Lifecycle</h3>
                     <p>{{ .Spec.Lifecycle }}</p>
                 </div>
-                <div>
-                    <h3 class="font-semibold">System</h3>
-                    <p><a href="/ui/systems/{{ .Spec.System | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.System }}</a></p>
-                </div>
             </div>
-            <!--
-            <div>
-                <h3 class="font-semibold">Definition</h3>
-                <pre class="bg-gray-100 p-4 rounded-md">{{ .Spec.Definition }}</pre>
-            </div>
-            -->
         </div>
 
         {{ if .Metadata.Links }}

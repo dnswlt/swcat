@@ -1,9 +1,14 @@
 package web
 
 import (
+	"bytes"
+	"fmt"
+	"html/template"
 	"net/url"
 	"slices"
 	"strings"
+
+	"github.com/yuin/goldmark"
 )
 
 type NavBar []*NavBarItem
@@ -80,4 +85,12 @@ func (ns NavBar) SetParams(q url.Values) NavBar {
 		}
 	}
 	return ns
+}
+
+func Markdown(input string) (template.HTML, error) {
+	var buf bytes.Buffer
+	if err := goldmark.Convert([]byte(input), &buf); err != nil {
+		return "", fmt.Errorf("failed to process markdown: %v", err)
+	}
+	return template.HTML(buf.String()), nil
 }

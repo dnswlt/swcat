@@ -31,15 +31,21 @@
                     </a>
                 </div>
             </div>
-            <p class="text-gray-700">{{ .Metadata.Description }}</p>
+
+            {{ if .Metadata.Description }}
+            <div class="prose text-gray-700">
+                {{ .Metadata.Description | markdown }}
+            </div>
+            {{ end }}
+
             <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <h3 class="font-semibold">Owner</h3>
-                    <p><a href="/ui/groups/{{ .Spec.Owner | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.Owner }}</a></p>
-                </div>
                 <div>
                     <h3 class="font-semibold">System</h3>
                     <p><a href="/ui/systems/{{ .Spec.System | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.System }}</a></p>
+                </div>
+                <div>
+                    <h3 class="font-semibold">Owner</h3>
+                    <p><a href="/ui/groups/{{ .Spec.Owner | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.Owner }}</a></p>
                 </div>
             </div>
         </div>

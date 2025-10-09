@@ -134,6 +134,7 @@ func (s *Server) reloadTemplates() error {
 	tmpl = tmpl.Funcs(map[string]any{
 		"toURL":     entityURL,
 		"urlencode": url.PathEscape,
+		"markdown":  Markdown,
 	})
 	var err error
 	s.template, err = tmpl.ParseGlob(path.Join(s.opts.BaseDir, "templates/*.html"))

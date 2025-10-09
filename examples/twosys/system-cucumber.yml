@@ -3,6 +3,12 @@ kind: System
 metadata:
   name: cucumber-system
   title: Cucumber System
+  description: |
+    The Cucumber System does many wonderful things:
+
+    * Download stuff
+    * Process items
+    * **New**: execute code: `3 < 4`.
   tags:
     - mission-critical
   links:
