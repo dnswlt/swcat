@@ -134,6 +134,15 @@ func (n *Node) Shape() string {
 	}
 }
 
+func (n *Node) Style() string {
+	switch n.Kind {
+	case KindSystem:
+		return "filled"
+	default:
+		return "filled,rounded"
+	}
+}
+
 type EdgeStyle int
 
 const (
@@ -186,7 +195,7 @@ func (dw *Writer) Start() {
 	// size boxes and edge labels appropriately. The ultimate font style is defined
 	// via CSS (see style.css).
 	dw.w.WriteString("class=\"graphviz-svg\"\n")
-	dw.w.WriteString("node[shape=\"box\",fontname=\"sans-serif\",fontsize=\"11\",style=\"filled,rounded\"]\n")
+	dw.w.WriteString("node[shape=\"box\",fontname=\"sans-serif\",fontsize=\"11\",style=\"filled\"]\n")
 	dw.w.WriteString("edge[fontname=\"sans-serif\",fontsize=\"11\",minlen=\"4\"]\n")
 }
 
@@ -199,8 +208,8 @@ func (dw *Writer) AddNode(node Node) {
 		// Ignore duplicate node definitions.
 		return
 	}
-	fmt.Fprintf(dw.w, `"%s"[id="%s",label="%s",fillcolor="%s",shape="%s",class="clickable-node"]`,
-		node.ID, node.ID, node.Label, node.FillColor(), node.Shape())
+	fmt.Fprintf(dw.w, `"%s"[id="%s",label="%s",fillcolor="%s",shape="%s",style="%s",class="clickable-node"]`,
+		node.ID, node.ID, node.Label, node.FillColor(), node.Shape(), node.Style())
 	fmt.Fprintln(dw.w)
 	dw.nodeInfo[node.ID] = &NodeInfo{
 		Label: node.Label,

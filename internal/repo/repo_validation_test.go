@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
@@ -657,4 +658,186 @@ func TestValidateMandatoryGroupFields(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateSortsRefs(t *testing.T) {
+	owner := &catalog.Group{
+		Metadata: &catalog.Metadata{Name: "group"},
+		Spec:     &catalog.GroupSpec{Type: "team"},
+	}
+	domain := &catalog.Domain{
+		Metadata: &catalog.Metadata{Name: "domain"},
+		Spec: &catalog.DomainSpec{
+			Owner: owner.GetRef(),
+		},
+	}
+	system := &catalog.System{
+		Metadata: &catalog.Metadata{Name: "system"},
+		Spec: &catalog.SystemSpec{
+			Owner:  owner.GetRef(),
+			Domain: domain.GetRef(),
+		},
+	}
+	resource1 := &catalog.Resource{
+		Metadata: &catalog.Metadata{
+			Name: "resource1",
+		},
+		Spec: &catalog.ResourceSpec{
+			Type:   "resource",
+			Owner:  owner.GetRef(),
+			System: system.GetRef(),
+		},
+	}
+	resource2 := &catalog.Resource{
+		Metadata: &catalog.Metadata{
+			Name: "resource2",
+		},
+		Spec: &catalog.ResourceSpec{
+			Type:   "resource",
+			Owner:  owner.GetRef(),
+			System: system.GetRef(),
+		},
+	}
+	api1 := &catalog.API{
+		Metadata: &catalog.Metadata{
+			Name: "api1",
+		},
+		Spec: &catalog.APISpec{
+			Type:      "api",
+			Lifecycle: "test",
+			Owner:     owner.GetRef(),
+			System:    system.GetRef(),
+		},
+	}
+	api2 := &catalog.API{
+		Metadata: &catalog.Metadata{
+			Name: "api2",
+		},
+		Spec: &catalog.APISpec{
+			Type:      "api",
+			Lifecycle: "test",
+			Owner:     owner.GetRef(),
+			System:    system.GetRef(),
+		},
+	}
+	component1 := &catalog.Component{
+		Metadata: &catalog.Metadata{
+			Name: "component1",
+		},
+		Spec: &catalog.ComponentSpec{
+			Type:      "component",
+			Lifecycle: "test",
+			Owner:     owner.GetRef(),
+			System:    system.GetRef(),
+			ProvidesAPIs: []*catalog.LabelRef{
+				{Ref: api2.GetRef(), Label: "use"},
+				{Ref: api1.GetRef(), Label: "use"},
+			},
+			ConsumesAPIs: []*catalog.LabelRef{
+				{Ref: api2.GetRef(), Label: "use"},
+				{Ref: api1.GetRef(), Label: "use"},
+			},
+			DependsOn: []*catalog.LabelRef{
+				{Ref: resource2.GetRef(), Label: "write"},
+				{Ref: resource1.GetRef(), Label: "read"},
+			},
+		},
+	}
+	component2 := &catalog.Component{
+		Metadata: &catalog.Metadata{
+			Name: "component2",
+		},
+		Spec: &catalog.ComponentSpec{
+			Type:      "component",
+			Lifecycle: "test",
+			Owner:     owner.GetRef(),
+			System:    system.GetRef(),
+			ProvidesAPIs: []*catalog.LabelRef{
+				{Ref: api2.GetRef(), Label: "use"},
+				{Ref: api1.GetRef(), Label: "use"},
+			},
+			ConsumesAPIs: []*catalog.LabelRef{
+				{Ref: api2.GetRef(), Label: "use"},
+				{Ref: api1.GetRef(), Label: "use"},
+			},
+			DependsOn: []*catalog.LabelRef{
+				{Ref: resource2.GetRef(), Label: "write"},
+				{Ref: resource1.GetRef(), Label: "read"},
+				{Ref: component1.GetRef(), Label: "use"},
+			},
+		},
+	}
+	repo := NewRepository()
+	for _, entity := range []catalog.Entity{
+		owner, domain, system, resource1, resource2, api1, api2, component1, component2,
+	} {
+		if err := repo.AddEntity(entity); err != nil {
+			t.Fatalf("failed to add entity: %v", err)
+		}
+	}
+	if err := repo.Validate(); err != nil {
+		t.Fatalf("failed to validate repo: %v", err)
+	}
+
+	// Now, finally, test that all ref lists are sorted.
+	c1 := repo.Component(component1.GetRef())
+	if !slices.Equal(getLabelRefNames(c1.Spec.ProvidesAPIs), []string{"api1", "api2"}) {
+		t.Errorf("ProvidesAPIs not sorted")
+	}
+	if !slices.Equal(getLabelRefNames(c1.Spec.ConsumesAPIs), []string{"api1", "api2"}) {
+		t.Errorf("ConsumesAPIs not sorted")
+	}
+	if !slices.Equal(getLabelRefNames(c1.Spec.DependsOn), []string{"resource1", "resource2"}) {
+		t.Errorf("DependsOn not sorted")
+	}
+
+	c2 := repo.Component(component2.GetRef())
+	if !slices.Equal(getLabelRefNames(c2.Spec.DependsOn), []string{"component1", "resource1", "resource2"}) {
+		t.Errorf("DependsOn not sorted")
+	}
+
+	a1 := repo.API(api1.GetRef())
+	if !slices.Equal(getLabelRefNames(a1.GetProviders()), []string{"component1", "component2"}) {
+		t.Errorf("Providers not sorted")
+	}
+	if !slices.Equal(getLabelRefNames(a1.GetConsumers()), []string{"component1", "component2"}) {
+		t.Errorf("Consumers not sorted")
+	}
+
+	r1 := repo.Resource(resource1.GetRef())
+	if !slices.Equal(getLabelRefNames(r1.GetDependents()), []string{"component1", "component2"}) {
+		t.Errorf("Dependents not sorted")
+	}
+
+	s := repo.System(system.GetRef())
+	if !slices.Equal(getRefNames(s.GetComponents()), []string{"component1", "component2"}) {
+		t.Errorf("Components not sorted")
+	}
+	if !slices.Equal(getRefNames(s.GetAPIs()), []string{"api1", "api2"}) {
+		t.Errorf("APIs not sorted")
+	}
+	if !slices.Equal(getRefNames(s.GetResources()), []string{"resource1", "resource2"}) {
+		t.Errorf("Resources not sorted")
+	}
+
+	d := repo.Domain(domain.GetRef())
+	if !slices.Equal(getRefNames(d.GetSystems()), []string{"system"}) {
+		t.Errorf("Systems not sorted")
+	}
+}
+
+func getRefNames(refs []*catalog.Ref) []string {
+	var names []string
+	for _, r := range refs {
+		names = append(names, r.Name)
+	}
+	return names
+}
+
+func getLabelRefNames(refs []*catalog.LabelRef) []string {
+	var names []string
+	for _, r := range refs {
+		names = append(names, r.Ref.Name)
+	}
+	return names
 }

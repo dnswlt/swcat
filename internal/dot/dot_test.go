@@ -82,17 +82,17 @@ rankdir="LR"
 fontname="sans-serif"
 splines="spline"
 class="graphviz-svg"
-node[shape="box",fontname="sans-serif",fontsize="11",style="filled,rounded"]
+node[shape="box",fontname="sans-serif",fontsize="11",style="filled"]
 edge[fontname="sans-serif",fontsize="11",minlen="4"]
 subgraph "cluster_svg-cluster-0" {
 id="svg-cluster-0"
 label="sys1"
 style=filled
 fillcolor="#f3f4f6"
-"c1"[id="c1",label="c1",fillcolor="#CBDCEB",shape="box",class="clickable-node"]
-"api1"[id="api1",label="api1",fillcolor="#FADA7A",shape="box",class="clickable-node"]
+"c1"[id="c1",label="c1",fillcolor="#CBDCEB",shape="box",style="filled,rounded",class="clickable-node"]
+"api1"[id="api1",label="api1",fillcolor="#FADA7A",shape="box",style="filled,rounded",class="clickable-node"]
 }
-"s1"[id="s1",label="s1",fillcolor="#6D94C5",shape="box",class="clickable-node"]
+"s1"[id="s1",label="s1",fillcolor="#6D94C5",shape="box",style="filled",class="clickable-node"]
 "s1" -> "api1"[class="clickable-edge system-link-edge",id="svg-edge-0"]
 "c1" -> "api1"[id="svg-edge-1",style="dashed"]
 }

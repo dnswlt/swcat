@@ -4,6 +4,7 @@ package catalog
 
 import (
 	"cmp"
+	"slices"
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/api"
@@ -386,12 +387,38 @@ func newRef(kind Kind, meta *Metadata) *Ref {
 	}
 }
 
-// CompareEntityByName compares two entities lexicographically by (namespace, name).
-func CompareEntityByName(a, b Entity) int {
-	if c := cmp.Compare(a.GetMetadata().Namespace, b.GetMetadata().Namespace); c != 0 {
+// Compare compares two Refs lexicographically by (kind, namespace, name).
+func (r *Ref) Compare(s *Ref) int {
+	// kind
+	if c := cmp.Compare(r.Kind, s.Kind); c != 0 {
 		return c
 	}
-	return cmp.Compare(a.GetMetadata().Name, b.GetMetadata().Name)
+	// namespace
+	rDef := r.Namespace == DefaultNamespace
+	sDef := s.Namespace == DefaultNamespace
+	if rDef != sDef {
+		if rDef {
+			return -1
+		}
+		return 1
+	}
+	if c := cmp.Compare(r.Namespace, s.Namespace); c != 0 {
+		return c
+	}
+	// name
+	return cmp.Compare(r.Name, s.Name)
+}
+
+func (r *LabelRef) Compare(s *LabelRef) int {
+	if c := r.Ref.Compare(s.Ref); c != 0 {
+		return c
+	}
+	return cmp.Compare(r.Label, s.Label)
+}
+
+// CompareEntityByRef compares two entities lexicographically by (namespace, name).
+func CompareEntityByRef(a, b Entity) int {
+	return a.GetRef().Compare(b.GetRef())
 }
 
 func (c *Component) GetKind() Kind              { return KindComponent }
@@ -415,6 +442,20 @@ func (c *Component) Reset() Entity {
 	return &clone
 }
 
+func compareRef(a, b *Ref) int {
+	return a.Compare(b)
+}
+func compareLabelRef(a, b *LabelRef) int {
+	return a.Compare(b)
+}
+
+func (c *Component) SortRefs() {
+	slices.SortFunc(c.Spec.ConsumesAPIs, compareLabelRef)
+	slices.SortFunc(c.Spec.ProvidesAPIs, compareLabelRef)
+	slices.SortFunc(c.Spec.DependsOn, compareLabelRef)
+	slices.SortFunc(c.Spec.inv.dependents, compareLabelRef)
+}
+
 func (s *System) GetKind() Kind                    { return KindSystem }
 func (s *System) GetMetadata() *Metadata           { return s.Metadata }
 func (s *System) GetRef() *Ref                     { return newRef(KindSystem, s.Metadata) }
@@ -435,6 +476,11 @@ func (s *System) Reset() Entity {
 	clone.Spec.inv = systemInvRel{}
 	return &clone
 }
+func (s *System) SortRefs() {
+	slices.SortFunc(s.Spec.inv.apis, compareRef)
+	slices.SortFunc(s.Spec.inv.components, compareRef)
+	slices.SortFunc(s.Spec.inv.resources, compareRef)
+}
 
 func (d *Domain) GetKind() Kind                    { return KindDomain }
 func (d *Domain) GetMetadata() *Metadata           { return d.Metadata }
@@ -450,6 +496,9 @@ func (d *Domain) Reset() Entity {
 	clone.Spec = &spec
 	clone.Spec.inv = domainInvRel{}
 	return &clone
+}
+func (d *Domain) SortRefs() {
+	slices.SortFunc(d.Spec.inv.systems, compareRef)
 }
 
 func (a *API) GetKind() Kind                    { return KindAPI }
@@ -470,6 +519,10 @@ func (a *API) Reset() Entity {
 	clone.Spec.inv = apiInvRel{}
 	return &clone
 }
+func (a *API) SortRefs() {
+	slices.SortFunc(a.Spec.inv.consumers, compareLabelRef)
+	slices.SortFunc(a.Spec.inv.providers, compareLabelRef)
+}
 
 func (r *Resource) GetKind() Kind              { return KindResource }
 func (r *Resource) GetMetadata() *Metadata     { return r.Metadata }
@@ -488,6 +541,10 @@ func (r *Resource) Reset() Entity {
 	clone.Spec = &spec
 	clone.Spec.inv = resourceInvRel{}
 	return &clone
+}
+func (r *Resource) SortRefs() {
+	slices.SortFunc(r.Spec.DependsOn, compareLabelRef)
+	slices.SortFunc(r.Spec.inv.dependents, compareLabelRef)
 }
 
 func (g *Group) GetKind() Kind                    { return KindGroup }

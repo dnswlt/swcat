@@ -269,8 +269,8 @@ func TestCompareEntityByName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := CompareEntityByName(tt.a, tt.b); got != tt.want {
-				t.Errorf("CompareEntityByName() = %v, want %v", got, tt.want)
+			if got := CompareEntityByRef(tt.a, tt.b); got != tt.want {
+				t.Errorf("CompareEntityByRef() = %v, want %v", got, tt.want)
 			}
 		})
 	}

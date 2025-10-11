@@ -212,7 +212,7 @@ func findEntities[T catalog.Entity](q string, items map[string]T) []T {
 		}
 	}
 	slices.SortFunc(result, func(c1, c2 T) int {
-		return catalog.CompareEntityByName(c1, c2)
+		return catalog.CompareEntityByRef(c1, c2)
 	})
 	return result
 }
@@ -463,8 +463,10 @@ func (r *Repository) Validate() error {
 		}
 	}
 
-	// Validation succeeded: populate computed fields
+	// Validation succeeded: populate computed fields and sort all refernce lists.
 	r.populateRelationships()
+	r.sortReferences()
+
 	return nil
 }
 
@@ -569,5 +571,29 @@ func LoadRepositoryFromPaths(catalogPaths []string) (*Repository, error) {
 	}
 
 	return repo, nil
+
+}
+
+func (r *Repository) sortReferences() {
+
+	// Components
+	for _, c := range r.components {
+		c.SortRefs()
+	}
+
+	// Resources
+	for _, res := range r.resources {
+		res.SortRefs()
+	}
+
+	// APIs
+	for _, ap := range r.apis {
+		ap.SortRefs()
+	}
+
+	// Systems
+	for _, system := range r.systems {
+		system.SortRefs()
+	}
 
 }
