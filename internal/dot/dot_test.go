@@ -7,6 +7,38 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+func TestEscLabel(t *testing.T) {
+	tcs := []struct {
+		in   string
+		want string
+	}{
+		{"hello", "hello"},
+		{`He said "hi"`, `He said \"hi\"`},
+		// Preserve dot escapes after backslash
+		{`line\ntwo`, `line\ntwo`},
+		{`left\lright\r`, `left\lright\r`},
+		// Literal newline -> \n
+		{"a\nb", `a\nb`},
+		// Literal CR dropped
+		{"a\rb", "ab"},
+		// Backslash not followed by n/l/r -> escape it
+		{`path\foo`, `path\\foo`},
+		// Tab becomes space
+		{"a\tb", "a b"},
+		// NBSP normalized to space
+		{"a\u00A0b", "a b"},
+		// Simple non-ASCII example replaced with '?'
+		{"emoji 😀", "emoji ?"},
+	}
+
+	for _, tc := range tcs {
+		got := escLabel(tc.in)
+		if got != tc.want {
+			t.Fatalf("escLabel(%q): got %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestWriter_AddNode_DuplicateIgnored(t *testing.T) {
 	dw := New()
 	dw.Start()

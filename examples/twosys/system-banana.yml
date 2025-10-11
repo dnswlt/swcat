@@ -60,7 +60,7 @@ spec:
   consumesApis:
     - cucumber-api
   dependsOn:
-    - resource:banana-db
+    - resource:banana-db "readonly"
 ---
 apiVersion: swcat/v1alpha1
 kind: Resource

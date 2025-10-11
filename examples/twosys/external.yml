@@ -46,4 +46,4 @@ spec:
   lifecycle: development
   system: external/system-one
   consumesApis:
-    - banana-api
+    - banana-api "use"

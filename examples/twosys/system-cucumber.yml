@@ -38,9 +38,12 @@ spec:
   owner: cucumber-team
   system: cucumber-system
   providesApis:
-    - cucumber-api
+    # You can add labels to references in two ways. As a ref/label struct:
+    - ref: cucumber-api
+      label: partial
   consumesApis:
-    - api:cucumber-backend-api # Using an entity reference including the kind: is optional here.
+    # Or as a "label" suffix
+    - cucumber-backend-api "fwd"
 ---
 apiVersion: swcat/v1alpha1
 kind: Component

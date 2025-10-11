@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 type NodeInfo struct {
@@ -206,6 +207,47 @@ func (dw *Writer) AddNode(node Node) {
 	}
 }
 
+// escLabel escapes the given label string for safe use as a graphviz/dot label.
+// Escape sequences that dot understands are passed through unchanged, to allow
+// users to e.g. specify multi-line labels using dot's "\n" "\r" or "\l" character sequences.
+// Only Latin1 characters are supported, other characters are replaced by "?".
+func escLabel(label string) string {
+	rs := []rune(label)
+	var b strings.Builder
+	for i := 0; i < len(rs); i++ {
+		switch rs[i] {
+		case '"':
+			b.WriteString(`\"`)
+		case '\\':
+			if i+1 < len(rs) && (rs[i+1] == 'n' || rs[i+1] == 'l' || rs[i+1] == 'r') {
+				b.WriteRune('\\')
+				b.WriteRune(rs[i+1])
+				i++
+			} else {
+				b.WriteString(`\\`)
+			}
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			// ignore CRs
+		case '\t':
+			b.WriteRune(' ')
+		default:
+			r := rs[i]
+			// allow only printable Latin-1; normalize NBSP to space
+			if r == '\u00A0' {
+				b.WriteRune(' ')
+			} else if r <= unicode.MaxLatin1 && unicode.IsPrint(r) {
+				b.WriteRune(r)
+			} else {
+				// Replace non-printable ASCII by ?
+				b.WriteRune('?')
+			}
+		}
+	}
+	return b.String()
+}
+
 func (dw *Writer) AddEdge(edge Edge) {
 	attrs := map[string]string{}
 
@@ -220,7 +262,7 @@ func (dw *Writer) AddEdge(edge Edge) {
 	}
 
 	if edge.Label != "" {
-		attrs["label"] = edge.Label
+		attrs["label"] = escLabel(edge.Label)
 	}
 	switch edge.Style {
 	case ESBackward:
