@@ -1,4 +1,4 @@
-package backstage
+package svg
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/dot"
+	"github.com/dnswlt/swcat/internal/repo"
 )
 
 func entityNodeKind(e catalog.Entity) dot.NodeKind {
@@ -51,14 +52,14 @@ func EntityEdge(from, to catalog.Entity, style dot.EdgeStyle) dot.Edge {
 	}
 }
 
-type SVGResult struct {
+type Result struct {
 	// The dot-generated SVG output. Only contains the <svg> element,
 	// <?xml> headers etc are stripped.
 	SVG      []byte
 	Metadata *dot.SVGGraphMetadata
 }
 
-func (d *SVGResult) MetadataJSON() []byte {
+func (d *Result) MetadataJSON() []byte {
 	json, err := json.Marshal(d.Metadata)
 	if err != nil {
 		// This is truly an application bug.
@@ -94,7 +95,7 @@ func (e extSysDep) String() string {
 	return fmt.Sprintf("%s -> %s / %v", e.source.GetRef().String(), e.targetSystem.GetRef().String(), e.direction)
 }
 
-func generateDomainDotSource(r *Repository, domain *catalog.Domain) *dot.DotSource {
+func generateDomainDotSource(r *repo.Repository, domain *catalog.Domain) *dot.DotSource {
 	dw := dot.New()
 	dw.Start()
 
@@ -112,13 +113,13 @@ func generateDomainDotSource(r *Repository, domain *catalog.Domain) *dot.DotSour
 	return dw.Result()
 }
 
-// GenerateDomainSVG generates an SVG for the given domain.
-func GenerateDomainSVG(ctx context.Context, runner dot.Runner, r *Repository, domain *catalog.Domain) (*SVGResult, error) {
+// DomainGraph generates an SVG for the given domain.
+func DomainGraph(ctx context.Context, runner dot.Runner, r *repo.Repository, domain *catalog.Domain) (*Result, error) {
 	dotSource := generateDomainDotSource(r, domain)
 	return runDot(ctx, runner, dotSource)
 }
 
-func generateSystemDotSource(r *Repository, system *catalog.System, contextSystems []*catalog.System) *dot.DotSource {
+func generateSystemDotSource(r *repo.Repository, system *catalog.System, contextSystems []*catalog.System) *dot.DotSource {
 	ctxSysMap := map[string]*catalog.System{}
 	for _, ctxSys := range contextSystems {
 		ctxSysMap[ctxSys.GetRef().QName()] = ctxSys
@@ -243,15 +244,15 @@ func generateSystemDotSource(r *Repository, system *catalog.System, contextSyste
 	return dw.Result()
 }
 
-// GenerateSystemSVG generates an SVG for the given system.
+// SystemGraph generates an SVG for the given system.
 // contextSystems are systems that should be expanded in the view. Other systems will be shown
 // as opaque single nodes.
-func GenerateSystemSVG(ctx context.Context, runner dot.Runner, r *Repository, system *catalog.System, contextSystems []*catalog.System) (*SVGResult, error) {
+func SystemGraph(ctx context.Context, runner dot.Runner, r *repo.Repository, system *catalog.System, contextSystems []*catalog.System) (*Result, error) {
 	dotSource := generateSystemDotSource(r, system, contextSystems)
 	return runDot(ctx, runner, dotSource)
 }
 
-func generateComponentDotSource(r *Repository, component *catalog.Component) *dot.DotSource {
+func generateComponentDotSource(r *repo.Repository, component *catalog.Component) *dot.DotSource {
 	dw := dot.New()
 	dw.Start()
 
@@ -306,13 +307,13 @@ func generateComponentDotSource(r *Repository, component *catalog.Component) *do
 	return dw.Result()
 }
 
-// GenerateComponentSVG generates an SVG for the given component.
-func GenerateComponentSVG(ctx context.Context, runner dot.Runner, r *Repository, component *catalog.Component) (*SVGResult, error) {
+// ComponentGraph generates an SVG for the given component.
+func ComponentGraph(ctx context.Context, runner dot.Runner, r *repo.Repository, component *catalog.Component) (*Result, error) {
 	dotSource := generateComponentDotSource(r, component)
 	return runDot(ctx, runner, dotSource)
 }
 
-func generateAPIDotSource(r *Repository, api *catalog.API) *dot.DotSource {
+func generateAPIDotSource(r *repo.Repository, api *catalog.API) *dot.DotSource {
 	dw := dot.New()
 	dw.Start()
 
@@ -354,13 +355,13 @@ func generateAPIDotSource(r *Repository, api *catalog.API) *dot.DotSource {
 	return dw.Result()
 }
 
-// GenerateAPISVG generates an SVG for the given API.
-func GenerateAPISVG(ctx context.Context, runner dot.Runner, r *Repository, api *catalog.API) (*SVGResult, error) {
+// APIGraph generates an SVG for the given API.
+func APIGraph(ctx context.Context, runner dot.Runner, r *repo.Repository, api *catalog.API) (*Result, error) {
 	dotSource := generateAPIDotSource(r, api)
 	return runDot(ctx, runner, dotSource)
 }
 
-func generateResourceDotSource(r *Repository, resource *catalog.Resource) *dot.DotSource {
+func generateResourceDotSource(r *repo.Repository, resource *catalog.Resource) *dot.DotSource {
 	dw := dot.New()
 	dw.Start()
 
@@ -393,18 +394,18 @@ func generateResourceDotSource(r *Repository, resource *catalog.Resource) *dot.D
 	return dw.Result()
 }
 
-// GenerateResourceSVG generates an SVG for the given resource.
-func GenerateResourceSVG(ctx context.Context, runner dot.Runner, r *Repository, resource *catalog.Resource) (*SVGResult, error) {
+// ResourceGraph generates an SVG for the given resource.
+func ResourceGraph(ctx context.Context, runner dot.Runner, r *repo.Repository, resource *catalog.Resource) (*Result, error) {
 	dotSource := generateResourceDotSource(r, resource)
 	return runDot(ctx, runner, dotSource)
 }
 
-func runDot(ctx context.Context, runner dot.Runner, ds *dot.DotSource) (*SVGResult, error) {
+func runDot(ctx context.Context, runner dot.Runner, ds *dot.DotSource) (*Result, error) {
 	svg, err := runner.Run(ctx, ds.DotSource)
 	if err != nil {
 		return nil, fmt.Errorf("running dot failed: %w", err)
 	}
-	return &SVGResult{
+	return &Result{
 		SVG:      svg,
 		Metadata: ds.Metadata,
 	}, nil

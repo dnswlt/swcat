@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dnswlt/swcat/internal/backstage"
+	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/web"
 )
@@ -31,8 +31,9 @@ func formatFiles(files []string) error {
 func main() {
 
 	serverAddrFlag := flag.String("addr", "localhost:8080", "Address to listen on")
-	formatFlag := flag.Bool("format", false, "Format input files and exit. This currently remvoes all comments!")
+	formatFlag := flag.Bool("format", false, "Format input files and exit.")
 	baseDir := flag.String("base-dir", ".", "Base directory")
+	maxDepth := flag.Int("max-depth", 3, "Maximum recursion depth when scanning directories for .yml files")
 	flag.Parse()
 
 	// Check if dot (graphviz) is in the PATH, else abort.
@@ -53,7 +54,7 @@ func main() {
 		log.Printf("Found dot program at %s (%s)", path, strings.TrimSpace(string(output)))
 	}()
 
-	files, err := store.CollectYMLFiles(flag.Args(), 3) // max 3 directory levels deep.
+	files, err := store.CollectYMLFiles(flag.Args(), *maxDepth)
 	if err != nil {
 		log.Fatalf("Failed to collect YAML files: %v", err)
 	}
@@ -66,7 +67,7 @@ func main() {
 		return
 	}
 
-	repo, err := backstage.LoadRepositoryFromPaths(files)
+	repo, err := repo.LoadRepositoryFromPaths(files)
 	if err != nil {
 		log.Fatalf("Failed to load repository: %v", err)
 	}

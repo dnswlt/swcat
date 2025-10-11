@@ -14,10 +14,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dnswlt/swcat/internal/backstage"
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/dot"
+	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
+	"github.com/dnswlt/swcat/internal/svg"
 	"gopkg.in/yaml.v3"
 )
 
@@ -30,17 +31,17 @@ type ServerOptions struct {
 type Server struct {
 	opts        ServerOptions
 	template    *template.Template
-	repo        *backstage.Repository
-	svgCache    map[string]*backstage.SVGResult
+	repo        *repo.Repository
+	svgCache    map[string]*svg.Result
 	svgCacheMut sync.Mutex
 	dotRunner   dot.Runner
 }
 
-func NewServer(opts ServerOptions, repo *backstage.Repository) (*Server, error) {
+func NewServer(opts ServerOptions, repo *repo.Repository) (*Server, error) {
 	s := &Server{
 		opts:      opts,
 		repo:      repo,
-		svgCache:  make(map[string]*backstage.SVGResult),
+		svgCache:  make(map[string]*svg.Result),
 		dotRunner: dot.NewRunner(opts.DotPath),
 	}
 	if err := s.reloadTemplates(); err != nil {
@@ -66,13 +67,13 @@ func (lrw *loggingResponseWriter) Write(b []byte) (int, error) {
 	return lrw.ResponseWriter.Write(b)
 }
 
-func (s *Server) lookupSVG(cacheKey string) (*backstage.SVGResult, bool) {
+func (s *Server) lookupSVG(cacheKey string) (*svg.Result, bool) {
 	s.svgCacheMut.Lock()
 	defer s.svgCacheMut.Unlock()
 	svg, ok := s.svgCache[cacheKey]
 	return svg, ok
 }
-func (s *Server) storeSVG(cacheKey string, svg *backstage.SVGResult) {
+func (s *Server) storeSVG(cacheKey string, svg *svg.Result) {
 	s.svgCacheMut.Lock()
 	defer s.svgCacheMut.Unlock()
 	s.svgCache[cacheKey] = svg
@@ -80,7 +81,7 @@ func (s *Server) storeSVG(cacheKey string, svg *backstage.SVGResult) {
 func (s *Server) clearSVGCache() {
 	s.svgCacheMut.Lock()
 	defer s.svgCacheMut.Unlock()
-	s.svgCache = make(map[string]*backstage.SVGResult)
+	s.svgCache = make(map[string]*svg.Result)
 }
 
 // withRequestLogging wraps a handler and logs each request if in debug mode.
@@ -180,21 +181,21 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	}
 	slices.Sort(cacheKeyIDs)
 	cacheKey := system.GetRef().String() + "?" + strings.Join(cacheKeyIDs, ",")
-	svg, ok := s.lookupSVG(cacheKey)
+	svgResult, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svg, err = backstage.GenerateSystemSVG(ctx, s.dotRunner, s.repo, system, contextSystems)
+		svgResult, err = svg.SystemGraph(ctx, s.dotRunner, s.repo, system, contextSystems)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		s.storeSVG(cacheKey, svg)
+		s.storeSVG(cacheKey, svgResult)
 	}
-	params["SVG"] = template.HTML(svg.SVG)
-	params["SVGMetadataJSON"] = template.JS(svg.MetadataJSON())
+	params["SVG"] = template.HTML(svgResult.SVG)
+	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
 	s.serveHTMLPage(w, r, "system_detail.html", params)
 }
 
@@ -213,21 +214,21 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 	params["Component"] = component
 
 	cacheKey := component.GetRef().String()
-	svg, ok := s.lookupSVG(cacheKey)
+	svgResult, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svg, err = backstage.GenerateComponentSVG(ctx, s.dotRunner, s.repo, component)
+		svgResult, err = svg.ComponentGraph(ctx, s.dotRunner, s.repo, component)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		s.storeSVG(cacheKey, svg)
+		s.storeSVG(cacheKey, svgResult)
 	}
-	params["SVG"] = template.HTML(svg.SVG)
-	params["SVGMetadataJSON"] = template.JS(svg.MetadataJSON())
+	params["SVG"] = template.HTML(svgResult.SVG)
+	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
 
 	s.serveHTMLPage(w, r, "component_detail.html", params)
 }
@@ -262,21 +263,21 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 	params["API"] = ap
 
 	cacheKey := ap.GetRef().String()
-	svg, ok := s.lookupSVG(cacheKey)
+	svgResult, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svg, err = backstage.GenerateAPISVG(ctx, s.dotRunner, s.repo, ap)
+		svgResult, err = svg.APIGraph(ctx, s.dotRunner, s.repo, ap)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		s.storeSVG(cacheKey, svg)
+		s.storeSVG(cacheKey, svgResult)
 	}
-	params["SVG"] = template.HTML(svg.SVG)
-	params["SVGMetadataJSON"] = template.JS(svg.MetadataJSON())
+	params["SVG"] = template.HTML(svgResult.SVG)
+	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
 
 	s.serveHTMLPage(w, r, "api_detail.html", params)
 }
@@ -311,21 +312,21 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 	params["Resource"] = resource
 
 	cacheKey := resource.GetRef().String()
-	svg, ok := s.lookupSVG(cacheKey)
+	svgResult, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svg, err = backstage.GenerateResourceSVG(ctx, s.dotRunner, s.repo, resource)
+		svgResult, err = svg.ResourceGraph(ctx, s.dotRunner, s.repo, resource)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		s.storeSVG(cacheKey, svg)
+		s.storeSVG(cacheKey, svgResult)
 	}
-	params["SVG"] = template.HTML(svg.SVG)
-	params["SVGMetadataJSON"] = template.JS(svg.MetadataJSON())
+	params["SVG"] = template.HTML(svgResult.SVG)
+	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
 
 	s.serveHTMLPage(w, r, "resource_detail.html", params)
 }
@@ -360,21 +361,21 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 	params["Domain"] = domain
 
 	cacheKey := domain.GetRef().String()
-	svg, ok := s.lookupSVG(cacheKey)
+	svgResult, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svg, err = backstage.GenerateDomainSVG(ctx, s.dotRunner, s.repo, domain)
+		svgResult, err = svg.DomainGraph(ctx, s.dotRunner, s.repo, domain)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		s.storeSVG(cacheKey, svg)
+		s.storeSVG(cacheKey, svgResult)
 	}
-	params["SVG"] = template.HTML(svg.SVG)
-	params["SVGMetadataJSON"] = template.JS(svg.MetadataJSON())
+	params["SVG"] = template.HTML(svgResult.SVG)
+	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
 
 	s.serveHTMLPage(w, r, "domain_detail.html", params)
 }

@@ -1,4 +1,4 @@
-package backstage
+package repo
 
 import (
 	"fmt"
@@ -382,7 +382,7 @@ func (r *Repository) Validate() error {
 			return fmt.Errorf("owner %q for API %s is undefined", s.Owner, qn)
 		}
 		// Allow an empty Definition.
-		// It is mandatory in the backstage.io/v1alpha1 schema, but this just
+		// It is mandatory in the swcat/v1alpha1 schema, but this just
 		// forces us to set it to "n/a" all over the place.
 	}
 

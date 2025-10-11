@@ -1,6 +1,6 @@
 //go:build integration
 
-package backstage
+package svg
 
 import (
 	"bytes"
@@ -12,11 +12,12 @@ import (
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/dot"
+	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/testutil"
 )
 
 func TestGenerateComponentSVG_WithDot(t *testing.T) {
-	repo, err := LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -29,7 +30,7 @@ func TestGenerateComponentSVG_WithDot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	res, err := GenerateComponentSVG(ctx, dot.NewRunner("dot"), repo, comp)
+	res, err := ComponentGraph(ctx, dot.NewRunner("dot"), repo, comp)
 	if err != nil {
 		t.Fatalf("GenerateComponentSVG failed: %v", err)
 	}
@@ -72,7 +73,7 @@ func TestGenerateComponentSVG_WithDot(t *testing.T) {
 }
 
 func TestGenerateSystemSVG_WithDot(t *testing.T) {
-	repo, err := LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -85,7 +86,7 @@ func TestGenerateSystemSVG_WithDot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	res, err := GenerateSystemSVG(ctx, dot.NewRunner("dot"), repo, system, nil)
+	res, err := SystemGraph(ctx, dot.NewRunner("dot"), repo, system, nil)
 	if err != nil {
 		t.Fatalf("GenerateSystemSVG failed: %v", err)
 	}

@@ -1,4 +1,4 @@
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Group
 metadata:
   name: plants-owners-team
@@ -14,7 +14,7 @@ spec:
     displayName: Plants Owners Team
     email: plants@example.com
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Group
 metadata:
   name: banana-team
@@ -30,7 +30,7 @@ spec:
     - Jakob Pedersen
     - Henry Fjord jr.
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Group
 metadata:
   name: cucumber-team

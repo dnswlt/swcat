@@ -1,4 +1,4 @@
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Domain
 metadata:
   name: domain
@@ -9,7 +9,7 @@ spec:
   owner: external/owners-team
   type: external
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Group
 metadata:
   name: owners-team
@@ -23,7 +23,7 @@ spec:
   profile:
     displayName: External Owners
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: System
 metadata:
   name: system-one
@@ -34,7 +34,7 @@ spec:
   domain: external/domain
   type: placeholder
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Component
 metadata:
   name: consumer

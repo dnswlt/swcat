@@ -1,4 +1,4 @@
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: System
 metadata:
   name: cucumber-system
@@ -23,7 +23,7 @@ spec:
   domain: plants-domain
   type: application
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Component
 metadata:
   name: cucumber-api-gateway
@@ -42,7 +42,7 @@ spec:
   consumesApis:
     - api:cucumber-backend-api # Using an entity reference including the kind: is optional here.
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Component
 metadata:
   name: cucumber-backend
@@ -60,7 +60,7 @@ spec:
   dependsOn:
     - resource:cucumber-db
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Resource
 metadata:
   name: cucumber-db
@@ -72,7 +72,7 @@ spec:
   owner: cucumber-team
   system: cucumber-system
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: API
 metadata:
   name: cucumber-api
@@ -87,7 +87,7 @@ spec:
   owner: cucumber-team
   system: cucumber-system
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: API
 metadata:
   name: cucumber-backend-api

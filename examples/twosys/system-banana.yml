@@ -1,4 +1,4 @@
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: System
 metadata:
   name: banana-system
@@ -17,7 +17,7 @@ spec:
   domain: plants-domain
   type: application
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Component
 metadata:
   name: banana-api-gateway
@@ -40,7 +40,7 @@ spec:
   consumesApis:
     - banana-backend-api
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Component
 metadata:
   name: banana-backend
@@ -62,7 +62,7 @@ spec:
   dependsOn:
     - resource:banana-db
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Resource
 metadata:
   name: banana-db
@@ -74,7 +74,7 @@ spec:
   owner: banana-team
   system: banana-system
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: API
 metadata:
   name: banana-api
@@ -89,7 +89,7 @@ spec:
   owner: banana-team
   system: banana-system
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: API
 metadata:
   name: banana-backend-api

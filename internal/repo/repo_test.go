@@ -1,4 +1,4 @@
-package backstage
+package repo
 
 import (
 	"fmt"

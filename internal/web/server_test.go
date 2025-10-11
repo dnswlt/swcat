@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/dnswlt/swcat/internal/backstage"
+	"github.com/dnswlt/swcat/internal/repo"
 )
 
 // fakeRunner is a fake implementation of dot.Runner.
@@ -24,7 +24,7 @@ func (f *fakeRunner) Run(ctx context.Context, dotSource string) ([]byte, error) 
 
 // newServer creates a Server with real templates (BaseDir = repo root)
 // and a fake dot runner.
-func newTestServer(t *testing.T, repo *backstage.Repository) *Server {
+func newTestServer(t *testing.T, repo *repo.Repository) *Server {
 	t.Helper()
 
 	s, err := NewServer(ServerOptions{
@@ -45,7 +45,7 @@ func newTestServer(t *testing.T, repo *backstage.Repository) *Server {
 // ---- Tests ------------------------------------------------------------------
 
 func TestHealth_OK(t *testing.T) {
-	repo := backstage.NewRepository()
+	repo := repo.NewRepository()
 	s := newTestServer(t, repo)
 	h := s.Handler()
 
@@ -63,7 +63,7 @@ func TestHealth_OK(t *testing.T) {
 }
 
 func TestRoot_Redirect(t *testing.T) {
-	repo := backstage.NewRepository()
+	repo := repo.NewRepository()
 	s := newTestServer(t, repo)
 	h := s.Handler()
 
@@ -81,7 +81,7 @@ func TestRoot_Redirect(t *testing.T) {
 }
 
 func TestListPages_RenderLinksForAllKinds(t *testing.T) {
-	repo, err := backstage.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestListPages_RenderLinksForAllKinds(t *testing.T) {
 }
 
 func TestComponentDetail_TriggersDotAndCaches(t *testing.T) {
-	repo, err := backstage.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestComponentDetail_TriggersDotAndCaches(t *testing.T) {
 }
 
 func TestDetailPages_RenderSVGAndName(t *testing.T) {
-	repo, err := backstage.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestDetailPages_RenderSVGAndName(t *testing.T) {
 }
 
 func TestDetail_NotFound_AllKinds(t *testing.T) {
-	repo := backstage.NewRepository()
+	repo := repo.NewRepository()
 	s := newTestServer(t, repo)
 	h := s.Handler()
 
@@ -249,7 +249,7 @@ func TestDetail_NotFound_AllKinds(t *testing.T) {
 	}
 }
 func TestGroupDetail_OK_NoSVG(t *testing.T) {
-	repo, err := backstage.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}

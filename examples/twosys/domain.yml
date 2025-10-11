@@ -1,4 +1,4 @@
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Domain
 metadata:
   name: plants-domain

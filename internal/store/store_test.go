@@ -11,7 +11,7 @@ import (
 func TestReadEntities(t *testing.T) {
 	t.Run("valid entities", func(t *testing.T) {
 		content := `
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Component
 metadata:
   name: my-component
@@ -20,7 +20,7 @@ spec:
   owner: my-group
   lifecycle: experimental
 ---
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Group
 metadata:
   name: my-group
@@ -70,7 +70,7 @@ spec:
 
 	t.Run("no kind", func(t *testing.T) {
 		content := `
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 metadata:
   name: no-kind
 `
@@ -85,7 +85,7 @@ metadata:
 
 	t.Run("invalid kind", func(t *testing.T) {
 		content := `
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: InvalidKind
 metadata:
   name: invalid-kind
@@ -134,7 +134,7 @@ func writeTempFile(t *testing.T, name, content string) string {
 func TestReadEntityFromString(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		content := `
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Component
 metadata:
   name: my-component
@@ -164,7 +164,7 @@ spec:
 
 	t.Run("unknown field", func(t *testing.T) {
 		content := `
-apiVersion: backstage.io/v1alpha1
+apiVersion: swcat/v1alpha1
 kind: Component
 metadata:
   name: my-component
