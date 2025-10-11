@@ -41,16 +41,11 @@ func TestMetadata_GetQName(t *testing.T) {
 			},
 			want: "my-component",
 		},
-		{
-			name:     "nil metadata",
-			metadata: nil,
-			want:     "",
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.metadata.GetQName(); got != tt.want {
-				t.Errorf("Metadata.GetQName() = %v, want %v", got, tt.want)
+			if got := tt.metadata.QName(); got != tt.want {
+				t.Errorf("Metadata.QName() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -107,8 +102,8 @@ func TestEntity_GetQName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.entity.GetQName(); got != tt.want {
-				t.Errorf("Entity.GetQName() = %v, want %v", got, tt.want)
+			if got := tt.entity.GetRef().QName(); got != tt.want {
+				t.Errorf("Entity.GetRef().QName() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -207,7 +202,7 @@ func TestEntity_GetRef(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.entity.GetRef(); got != tt.want {
+			if got := tt.entity.GetRef().String(); got != tt.want {
 				t.Errorf("Entity.GetRef() = %v, want %v", got, tt.want)
 			}
 		})

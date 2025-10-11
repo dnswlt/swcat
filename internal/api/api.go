@@ -5,6 +5,7 @@ package api
 
 import (
 	"cmp"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -16,17 +17,26 @@ const (
 	DefaultNamespace = "default"
 )
 
+type Ref struct {
+	Kind      string
+	Namespace string
+	Name      string
+}
+
+type LabelRef struct {
+	Ref   *Ref
+	Label string
+}
+
 // Entity is the interface implemented by all entity kinds (Component, System, etc.).
 type Entity interface {
 	GetKind() string
 	GetMetadata() *Metadata
-	// Returns the qualified entity name in the format
-	// <namespace>/<name>
-	// This form can presented to the user in cases where the entity kind is obvious or irrelevant.
+	// Returns the fully qualified entity reference.
+	GetRef() *Ref
+	// Returns the namespace qualified name, e.g. "ns1/foo". The default namespace
+	// is omitted, i.e. an entity "default/foo" is returned as "foo".
 	GetQName() string
-	// Returns the fully qualified entity reference in the format
-	// <kind>:<namespace>/<name>
-	GetRef() string
 
 	// GetSourceInfo returns internal bookkeeping data, e.g. for error logging
 	// and reconstructing YAML files (retaining the exact structure including comments).
@@ -50,7 +60,7 @@ type SourceInfo struct {
 type SystemPart interface {
 	Entity
 	// Returns the entity reference of the System that this entity is a part of.
-	GetSystem() string
+	GetSystem() *Ref
 }
 
 // Metadata
@@ -101,16 +111,16 @@ type Metadata struct {
 // Domain
 
 type domainInvRel struct {
-	systems []string
+	systems []*Ref
 }
 
 type DomainSpec struct {
 	// An entity reference to the owner of the domain.
 	// [required]
-	Owner string `yaml:"owner,omitempty"`
+	Owner *Ref `yaml:"owner,omitempty"`
 	// An entity reference to another domain of which the domain is a part.
 	// [optional]
-	SubdomainOf string `yaml:"subdomainOf,omitempty"`
+	SubdomainOf *Ref `yaml:"subdomainOf,omitempty"`
 	// The type of domain. There is currently no enforced set of values for this field,
 	// so it is left up to the adopting organization to choose a nomenclature that matches
 	// their catalog hierarchy.
@@ -135,18 +145,18 @@ type Domain struct {
 // System
 
 type systemInvRel struct {
-	components []string
-	apis       []string
-	resources  []string
+	components []*Ref
+	apis       []*Ref
+	resources  []*Ref
 }
 
 type SystemSpec struct {
 	// An entity reference to the owner of the system.
 	// [required]
-	Owner string `yaml:"owner,omitempty"`
+	Owner *Ref `yaml:"owner,omitempty"`
 	// An entity reference to the domain that the system belongs to.
 	// [optional]
-	Domain string `yaml:"domain,omitempty"`
+	Domain *Ref `yaml:"domain,omitempty"`
 	// The type of system. There is currently no enforced set of values for this field,
 	// so it is left up to the adopting organization to choose a nomenclature that matches
 	// their catalog hierarchy.
@@ -170,7 +180,7 @@ type System struct {
 
 // Component
 type componentInvRel struct {
-	dependents []string
+	dependents []*LabelRef
 }
 
 type ComponentSpec struct {
@@ -186,22 +196,22 @@ type ComponentSpec struct {
 	Lifecycle string `yaml:"lifecycle,omitempty"`
 	// An entity reference to the owner of the component.
 	// [required]
-	Owner string `yaml:"owner,omitempty"`
+	Owner *Ref `yaml:"owner,omitempty"`
 	// An entity reference to the system that the component belongs to.
-	// [optional]
-	System string `yaml:"system,omitempty"`
+	// [required]
+	System *Ref `yaml:"system,omitempty"`
 	// An entity reference to another component of which the component is a part.
 	// [optional]
-	SubcomponentOf string `yaml:"subcomponentOf,omitempty"`
+	SubcomponentOf *Ref `yaml:"subcomponentOf,omitempty"`
 	// An array of entity references to the APIs that are provided by the component.
 	// [optional]
-	ProvidesAPIs []string `yaml:"providesApis,omitempty"`
+	ProvidesAPIs []*LabelRef `yaml:"providesApis,omitempty"`
 	// An array of entity references to the APIs that are consumed by the component.
 	// [optional]
-	ConsumesAPIs []string `yaml:"consumesApis,omitempty"`
+	ConsumesAPIs []*LabelRef `yaml:"consumesApis,omitempty"`
 	// An array of references to other entities that the component depends on to function.
 	// [optional]
-	DependsOn []string `yaml:"dependsOn,omitempty"`
+	DependsOn []*LabelRef `yaml:"dependsOn,omitempty"`
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
@@ -221,7 +231,7 @@ type Component struct {
 // Resource
 
 type resourceInvRel struct {
-	dependents []string
+	dependents []*LabelRef
 }
 
 type ResourceSpec struct {
@@ -230,13 +240,13 @@ type ResourceSpec struct {
 	Type string `yaml:"type,omitempty"`
 	// An entity reference to the owner of the resource.
 	// [required]
-	Owner string `yaml:"owner,omitempty"`
+	Owner *Ref `yaml:"owner,omitempty"`
 	// An array of references to other entities that the resource depends on to function.
 	// [optional]
-	DependsOn []string `yaml:"dependsOn,omitempty"`
+	DependsOn []*LabelRef `yaml:"dependsOn,omitempty"`
 	// An entity reference to the system that the resource belongs to.
-	// [optional]
-	System string `yaml:"system,omitempty"`
+	// [required]
+	System *Ref `yaml:"system,omitempty"`
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
@@ -255,8 +265,8 @@ type Resource struct {
 
 // API
 type apiInvRel struct {
-	providers []string
-	consumers []string
+	providers []*LabelRef
+	consumers []*LabelRef
 }
 
 type APISpec struct {
@@ -268,10 +278,10 @@ type APISpec struct {
 	Lifecycle string `yaml:"lifecycle,omitempty"`
 	// An entity reference to the owner of the API.
 	// [required]
-	Owner string `yaml:"owner,omitempty"`
+	Owner *Ref `yaml:"owner,omitempty"`
 	// An entity reference to the system that the API belongs to.
-	// [optional]
-	System string `yaml:"system,omitempty"`
+	// [required]
+	System *Ref `yaml:"system,omitempty"`
 	// The definition of the API, based on the format defined by the type.
 	// A required field in the backstage.io schema, but we leave it as optional.
 	// [optional]
@@ -313,14 +323,14 @@ type GroupSpec struct {
 	Profile *GroupSpecProfile `yaml:"profile,omitempty"`
 	// The immediate parent group in the hierarchy, if any.
 	// [optional]
-	Parent string `yaml:"parent,omitempty"`
+	Parent *Ref `yaml:"parent,omitempty"`
 	// The immediate child groups of this group in the hierarchy (whose parent field points to this group).
 	// In the backstage.io schema the list must be present, but may be empty if there are no child groups.
 	// [optional]
-	Children []string `yaml:"children"`
+	Children []*Ref `yaml:"children"`
 	// The users that are members of this group. The entries of this array are entity references.
 	// [optional]
-	Members []string `yaml:"members,omitempty"`
+	Members []*Ref `yaml:"members,omitempty"`
 }
 
 type Group struct {
@@ -333,19 +343,63 @@ type Group struct {
 	*SourceInfo `yaml:"-"`
 }
 
-//
 // Interface implementations and helpers.
-//
+func (m *Metadata) QName() string {
+	if m.Namespace != "" && m.Namespace != DefaultNamespace {
+		return m.Namespace + "/" + m.Name
+	}
+	return m.Name
+}
 
-// GetQName returns the qualified name of the entity.
-func (m *Metadata) GetQName() string {
-	if m == nil {
-		return ""
+func (e *Ref) QName() string {
+	if e.Namespace != "" && e.Namespace != DefaultNamespace {
+		return e.Namespace + "/" + e.Name
 	}
-	if m.Namespace == "" || m.Namespace == DefaultNamespace {
-		return m.Name
+	return e.Name
+}
+
+func (e *Ref) Equal(other *Ref) bool {
+	return e.Kind == other.Kind && e.Namespace == other.Namespace && e.Name == other.Name
+}
+
+func (e *Ref) String() string {
+	var sb strings.Builder
+	if e.Kind != "" {
+		sb.WriteString(e.Kind + ":")
 	}
-	return m.Namespace + "/" + m.Name
+	if e.Namespace != "" && e.Namespace != DefaultNamespace {
+		sb.WriteString(e.Namespace + "/")
+	}
+	sb.WriteString(e.Name)
+	return sb.String()
+}
+
+func (e *LabelRef) QName() string {
+	return e.Ref.QName()
+}
+
+func (e *LabelRef) Equal(other *LabelRef) bool {
+	return e.Ref.Equal(other.Ref) && e.Label == other.Label
+}
+
+func (e *LabelRef) String() string {
+	refStr := e.Ref.String()
+	if e.Label == "" {
+		return refStr
+	}
+	return refStr + ` "` + e.Label + `"`
+}
+
+func eRef(kind string, meta *Metadata) *Ref {
+	namespace := meta.Namespace
+	if namespace == "" {
+		namespace = DefaultNamespace
+	}
+	return &Ref{
+		Kind:      kind,
+		Namespace: namespace,
+		Name:      meta.Name,
+	}
 }
 
 // CompareEntityByName compares two entities lexicographically by (namespace, name).
@@ -356,15 +410,17 @@ func CompareEntityByName(a, b Entity) int {
 	return cmp.Compare(a.GetMetadata().Name, b.GetMetadata().Name)
 }
 
-func (c *Component) GetKind() string              { return c.Kind }
-func (c *Component) GetMetadata() *Metadata       { return c.Metadata }
-func (c *Component) GetQName() string             { return c.Metadata.GetQName() }
-func (c *Component) GetRef() string               { return "component:" + c.GetQName() }
-func (c *Component) GetOwner() string             { return c.Spec.Owner }
-func (c *Component) GetLifecycle() string         { return c.Spec.Lifecycle }
-func (c *Component) GetSystem() string            { return c.Spec.System }
-func (c *Component) GetDependents() []string      { return c.Spec.inv.dependents }
-func (c *Component) AddDependent(d string)        { c.Spec.inv.dependents = append(c.Spec.inv.dependents, d) }
+func (c *Component) GetKind() string            { return c.Kind }
+func (c *Component) GetMetadata() *Metadata     { return c.Metadata }
+func (c *Component) GetRef() *Ref               { return eRef("component", c.Metadata) }
+func (c *Component) GetQName() string           { return c.Metadata.QName() }
+func (c *Component) GetOwner() *Ref             { return c.Spec.Owner }
+func (c *Component) GetLifecycle() string       { return c.Spec.Lifecycle }
+func (c *Component) GetSystem() *Ref            { return c.Spec.System }
+func (c *Component) GetDependents() []*LabelRef { return c.Spec.inv.dependents }
+func (c *Component) AddDependent(d *LabelRef) {
+	c.Spec.inv.dependents = append(c.Spec.inv.dependents, d)
+}
 func (c *Component) GetSourceInfo() *SourceInfo   { return c.SourceInfo }
 func (c *Component) SetSourceInfo(si *SourceInfo) { c.SourceInfo = si }
 func (c *Component) Reset() Entity {
@@ -377,15 +433,15 @@ func (c *Component) Reset() Entity {
 
 func (s *System) GetKind() string              { return s.Kind }
 func (s *System) GetMetadata() *Metadata       { return s.Metadata }
-func (s *System) GetQName() string             { return s.Metadata.GetQName() }
-func (s *System) GetRef() string               { return "system:" + s.GetQName() }
-func (s *System) GetComponents() []string      { return s.Spec.inv.components }
-func (s *System) GetAPIs() []string            { return s.Spec.inv.apis }
-func (s *System) GetResources() []string       { return s.Spec.inv.resources }
-func (s *System) GetSystem() string            { return s.GetQName() }
-func (s *System) AddAPI(a string)              { s.Spec.inv.apis = append(s.Spec.inv.apis, a) }
-func (s *System) AddComponent(c string)        { s.Spec.inv.components = append(s.Spec.inv.components, c) }
-func (s *System) AddResource(r string)         { s.Spec.inv.resources = append(s.Spec.inv.resources, r) }
+func (s *System) GetRef() *Ref                 { return eRef("system", s.Metadata) }
+func (s *System) GetQName() string             { return s.Metadata.QName() }
+func (s *System) GetComponents() []*Ref        { return s.Spec.inv.components }
+func (s *System) GetAPIs() []*Ref              { return s.Spec.inv.apis }
+func (s *System) GetResources() []*Ref         { return s.Spec.inv.resources }
+func (s *System) GetSystem() *Ref              { return s.GetRef() }
+func (s *System) AddAPI(a *Ref)                { s.Spec.inv.apis = append(s.Spec.inv.apis, a) }
+func (s *System) AddComponent(c *Ref)          { s.Spec.inv.components = append(s.Spec.inv.components, c) }
+func (s *System) AddResource(r *Ref)           { s.Spec.inv.resources = append(s.Spec.inv.resources, r) }
 func (s *System) GetSourceInfo() *SourceInfo   { return s.SourceInfo }
 func (s *System) SetSourceInfo(si *SourceInfo) { s.SourceInfo = si }
 func (s *System) Reset() Entity {
@@ -398,10 +454,10 @@ func (s *System) Reset() Entity {
 
 func (d *Domain) GetKind() string              { return d.Kind }
 func (d *Domain) GetMetadata() *Metadata       { return d.Metadata }
-func (d *Domain) GetQName() string             { return d.Metadata.GetQName() }
-func (d *Domain) GetRef() string               { return "domain:" + d.GetQName() }
-func (d *Domain) GetSystems() []string         { return d.Spec.inv.systems }
-func (d *Domain) AddSystem(s string)           { d.Spec.inv.systems = append(d.Spec.inv.systems, s) }
+func (d *Domain) GetRef() *Ref                 { return eRef("domain", d.Metadata) }
+func (d *Domain) GetQName() string             { return d.Metadata.QName() }
+func (d *Domain) GetSystems() []*Ref           { return d.Spec.inv.systems }
+func (d *Domain) AddSystem(s *Ref)             { d.Spec.inv.systems = append(d.Spec.inv.systems, s) }
 func (d *Domain) GetSourceInfo() *SourceInfo   { return d.SourceInfo }
 func (d *Domain) SetSourceInfo(si *SourceInfo) { d.SourceInfo = si }
 func (d *Domain) Reset() Entity {
@@ -414,13 +470,13 @@ func (d *Domain) Reset() Entity {
 
 func (a *API) GetKind() string              { return a.Kind }
 func (a *API) GetMetadata() *Metadata       { return a.Metadata }
-func (a *API) GetQName() string             { return a.Metadata.GetQName() }
-func (a *API) GetRef() string               { return "api:" + a.GetQName() }
-func (a *API) GetProviders() []string       { return a.Spec.inv.providers }
-func (a *API) GetConsumers() []string       { return a.Spec.inv.consumers }
-func (a *API) GetSystem() string            { return a.Spec.System }
-func (a *API) AddProvider(p string)         { a.Spec.inv.providers = append(a.Spec.inv.providers, p) }
-func (a *API) AddConsumer(c string)         { a.Spec.inv.consumers = append(a.Spec.inv.consumers, c) }
+func (a *API) GetRef() *Ref                 { return eRef("api", a.Metadata) }
+func (a *API) GetQName() string             { return a.Metadata.QName() }
+func (a *API) GetProviders() []*LabelRef    { return a.Spec.inv.providers }
+func (a *API) GetConsumers() []*LabelRef    { return a.Spec.inv.consumers }
+func (a *API) GetSystem() *Ref              { return a.Spec.System }
+func (a *API) AddProvider(p *LabelRef)      { a.Spec.inv.providers = append(a.Spec.inv.providers, p) }
+func (a *API) AddConsumer(c *LabelRef)      { a.Spec.inv.consumers = append(a.Spec.inv.consumers, c) }
 func (a *API) GetSourceInfo() *SourceInfo   { return a.SourceInfo }
 func (a *API) SetSourceInfo(si *SourceInfo) { a.SourceInfo = si }
 func (a *API) Reset() Entity {
@@ -431,13 +487,15 @@ func (a *API) Reset() Entity {
 	return &clone
 }
 
-func (r *Resource) GetKind() string              { return r.Kind }
-func (r *Resource) GetMetadata() *Metadata       { return r.Metadata }
-func (r *Resource) GetQName() string             { return r.Metadata.GetQName() }
-func (r *Resource) GetRef() string               { return "resource:" + r.GetQName() }
-func (r *Resource) GetDependents() []string      { return r.Spec.inv.dependents }
-func (r *Resource) GetSystem() string            { return r.Spec.System }
-func (r *Resource) AddDependent(d string)        { r.Spec.inv.dependents = append(r.Spec.inv.dependents, d) }
+func (r *Resource) GetKind() string            { return r.Kind }
+func (r *Resource) GetMetadata() *Metadata     { return r.Metadata }
+func (r *Resource) GetRef() *Ref               { return eRef("resource", r.Metadata) }
+func (r *Resource) GetQName() string           { return r.Metadata.QName() }
+func (r *Resource) GetDependents() []*LabelRef { return r.Spec.inv.dependents }
+func (r *Resource) GetSystem() *Ref            { return r.Spec.System }
+func (r *Resource) AddDependent(d *LabelRef) {
+	r.Spec.inv.dependents = append(r.Spec.inv.dependents, d)
+}
 func (r *Resource) GetSourceInfo() *SourceInfo   { return r.SourceInfo }
 func (r *Resource) SetSourceInfo(si *SourceInfo) { r.SourceInfo = si }
 func (r *Resource) Reset() Entity {
@@ -450,8 +508,8 @@ func (r *Resource) Reset() Entity {
 
 func (g *Group) GetKind() string              { return g.Kind }
 func (g *Group) GetMetadata() *Metadata       { return g.Metadata }
-func (g *Group) GetQName() string             { return g.Metadata.GetQName() }
-func (g *Group) GetRef() string               { return "group:" + g.GetQName() }
+func (g *Group) GetRef() *Ref                 { return eRef("group", g.Metadata) }
+func (g *Group) GetQName() string             { return g.Metadata.QName() }
 func (g *Group) GetDisplayName() string       { return g.Spec.Profile.DisplayName }
 func (g *Group) GetSourceInfo() *SourceInfo   { return g.SourceInfo }
 func (g *Group) SetSourceInfo(si *SourceInfo) { g.SourceInfo = si }

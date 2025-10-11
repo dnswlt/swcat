@@ -293,7 +293,7 @@ func LoadRepositoryFromPaths(catalogPaths []string) (*Repository, error) {
 		}
 		for _, e := range entities {
 			if err := repo.AddEntity(e); err != nil {
-				return nil, fmt.Errorf("failed to add entity %q to the repo: %v", e.GetQName(), err)
+				return nil, fmt.Errorf("failed to add entity %q to the repo: %v", e.GetRef().QName(), err)
 			}
 		}
 	}

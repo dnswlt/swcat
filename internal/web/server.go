@@ -104,37 +104,13 @@ func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 	})
 }
 
-func entityURL(ref string) string {
-	kind, name, found := strings.Cut(ref, ":")
-	if !found {
-		return "#"
-	}
-	var path string
-	switch kind {
-	case "component":
-		path = "/ui/components/"
-	case "resource":
-		path = "/ui/resources/"
-	case "system":
-		path = "/ui/systems/"
-	case "group":
-		path = "/ui/groups/"
-	case "domain":
-		path = "/ui/domains/"
-	case "api":
-		path = "/ui/apis/"
-	default:
-		return "#"
-	}
-	return path + url.PathEscape(name)
-}
-
 func (s *Server) reloadTemplates() error {
 	tmpl := template.New("root")
 	tmpl = tmpl.Funcs(map[string]any{
-		"toURL":     entityURL,
-		"urlencode": url.PathEscape,
-		"markdown":  Markdown,
+		"toURL":     toURL,
+		"refEncode": refEncode,
+		"urlencode": urlencode,
+		"markdown":  markdown,
 	})
 	var err error
 	s.template, err = tmpl.ParseGlob(path.Join(s.opts.BaseDir, "templates/*.html"))
@@ -172,8 +148,13 @@ func (s *Server) serveSystems(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID string) {
+	systemRef, err := api.ParseRef(systemID)
+	if err != nil {
+		http.Error(w, "Invalid systemID", http.StatusBadRequest)
+		return
+	}
 	params := map[string]any{}
-	system := s.repo.System(systemID)
+	system := s.repo.System(systemRef)
 	if system == nil {
 		http.Error(w, "Invalid system", http.StatusNotFound)
 		return
@@ -182,16 +163,22 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 
 	// Extract neighbor systems from context parameter c=.
 	var contextSystems []*api.System
-	var cacheKeyIDs []string
 	q := r.URL.Query()
 	for _, v := range q["c"] {
-		if c := s.repo.System(v); c != nil {
+		ref, err := api.ParseRef(v)
+		if err != nil {
+			continue // Ignore invalid refs
+		}
+		if c := s.repo.System(ref); c != nil {
 			contextSystems = append(contextSystems, c)
-			cacheKeyIDs = append(cacheKeyIDs, v)
 		}
 	}
+	cacheKeyIDs := make([]string, 0, len(contextSystems))
+	for _, s := range contextSystems {
+		cacheKeyIDs = append(cacheKeyIDs, s.GetRef().String())
+	}
 	slices.Sort(cacheKeyIDs)
-	cacheKey := "system:" + systemID + "?" + strings.Join(cacheKeyIDs, ",")
+	cacheKey := system.GetRef().String() + "?" + strings.Join(cacheKeyIDs, ",")
 	svg, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
@@ -211,15 +198,20 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 }
 
 func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componentID string) {
+	componentRef, err := api.ParseRef(componentID)
+	if err != nil {
+		http.Error(w, "Invalid componentID", http.StatusBadRequest)
+		return
+	}
 	params := map[string]any{}
-	component := s.repo.Component(componentID)
+	component := s.repo.Component(componentRef)
 	if component == nil {
 		http.Error(w, "Invalid component", http.StatusNotFound)
 		return
 	}
 	params["Component"] = component
 
-	cacheKey := "component:" + componentID
+	cacheKey := component.GetRef().String()
 	svg, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
@@ -255,15 +247,20 @@ func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) {
+	apiRef, err := api.ParseRef(apiID)
+	if err != nil {
+		http.Error(w, "Invalid apiID", http.StatusBadRequest)
+		return
+	}
 	params := map[string]any{}
-	ap := s.repo.API(apiID)
+	ap := s.repo.API(apiRef)
 	if ap == nil {
 		http.Error(w, "Invalid API", http.StatusNotFound)
 		return
 	}
 	params["API"] = ap
 
-	cacheKey := "api:" + apiID
+	cacheKey := ap.GetRef().String()
 	svg, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
@@ -299,15 +296,20 @@ func (s *Server) serveResources(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceID string) {
+	resourceRef, err := api.ParseRef(resourceID)
+	if err != nil {
+		http.Error(w, "Invalid resourceID", http.StatusBadRequest)
+		return
+	}
 	params := map[string]any{}
-	resource := s.repo.Resource(resourceID)
+	resource := s.repo.Resource(resourceRef)
 	if resource == nil {
 		http.Error(w, "Invalid resource", http.StatusNotFound)
 		return
 	}
 	params["Resource"] = resource
 
-	cacheKey := "resource:" + resourceID
+	cacheKey := resource.GetRef().String()
 	svg, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
@@ -343,15 +345,20 @@ func (s *Server) serveDomains(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID string) {
+	domainRef, err := api.ParseRef(domainID)
+	if err != nil {
+		http.Error(w, "Invalid domainID", http.StatusBadRequest)
+		return
+	}
 	params := map[string]any{}
-	domain := s.repo.Domain(domainID)
+	domain := s.repo.Domain(domainRef)
 	if domain == nil {
 		http.Error(w, "Invalid domain", http.StatusNotFound)
 		return
 	}
 	params["Domain"] = domain
 
-	cacheKey := "domain:" + domainID
+	cacheKey := domain.GetRef().String()
 	svg, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
@@ -387,8 +394,13 @@ func (s *Server) serveGroups(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID string) {
+	groupRef, err := api.ParseRef(groupID)
+	if err != nil {
+		http.Error(w, "Invalid groupID", http.StatusBadRequest)
+		return
+	}
 	params := map[string]any{}
-	group := s.repo.Group(groupID)
+	group := s.repo.Group(groupRef)
 	if group == nil {
 		http.Error(w, "Invalid group", http.StatusNotFound)
 		return
@@ -398,8 +410,13 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 }
 
 func (s *Server) serveEntityEdit(w http.ResponseWriter, r *http.Request, entityRef string) {
+	ref, err := api.ParseRef(entityRef)
+	if err != nil {
+		http.Error(w, "Invalid domainID", http.StatusBadRequest)
+		return
+	}
 	params := map[string]any{}
-	entity := s.repo.Entity(entityRef)
+	entity := s.repo.Entity(ref)
 	if entity == nil {
 		http.Error(w, "Invalid entity", http.StatusNotFound)
 		return
@@ -441,7 +458,13 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		return
 	}
 
-	originalEntity := s.repo.Entity(entityRef)
+	ref, err := api.ParseRef(entityRef)
+	if err != nil {
+		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
+		return
+	}
+
+	originalEntity := s.repo.Entity(ref)
 	if originalEntity == nil {
 		http.Error(w, "Invalid entity", http.StatusNotFound)
 		return
@@ -456,8 +479,10 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 
 	// Only update if the entity reference remains the same, i.e.:
 	// - no changes of the kind, namespace, or name
-	if newEntity.GetRef() != originalEntity.GetRef() {
-		s.renderErrorSnippet(w, "Updated entity reference does not match original")
+	if !newEntity.GetRef().Equal(originalEntity.GetRef()) {
+		errMsg := fmt.Sprintf("Updated entity reference does not match original (old: %q, new: %q)",
+			newEntity.GetRef(), originalEntity.GetRef())
+		s.renderErrorSnippet(w, errMsg)
 		return
 	}
 
@@ -482,7 +507,7 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 
 	var found bool
 	for i, e := range entitiesInFile {
-		if e.GetRef() == originalEntity.GetRef() {
+		if e.GetRef().Equal(originalEntity.GetRef()) {
 			entitiesInFile[i] = newEntity
 			found = true
 			break
@@ -500,9 +525,10 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		return
 	}
 
-	redirectURL := entityURL(entityRef)
-	if redirectURL == "#" {
-		redirectURL = "/ui/components" // fallback
+	redirectURL, err := toURL(ref)
+	if err != nil {
+		// This must not happen: we must always be able to get a URL for our own entities.
+		log.Fatalf("Failed to create entityURL for valid entity reference: %v", err)
 	}
 
 	w.Header().Set("HX-Redirect", redirectURL)

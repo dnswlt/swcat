@@ -23,9 +23,6 @@ metadata:
 
 spec:
   type: team
-  # children is a mandatory field.
-  # For simplicity, just use groups without members.
-  children: []
   profile:
     displayName: Team Banana
     email: banana-team@example.com

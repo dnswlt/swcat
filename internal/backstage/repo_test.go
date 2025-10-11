@@ -12,46 +12,32 @@ func TestRepository_AddAndGet(t *testing.T) {
 	repo := NewRepository()
 
 	tests := []struct {
-		entity   api.Entity
-		getRef   string
-		typeName string
+		entity api.Entity
 	}{
 		{
-			entity:   &api.Component{Metadata: &api.Metadata{Name: "c1"}},
-			getRef:   "c1",
-			typeName: "Component",
+			entity: &api.Component{Metadata: &api.Metadata{Name: "c1"}},
 		},
 		{
-			entity:   &api.System{Metadata: &api.Metadata{Name: "s1"}},
-			getRef:   "s1",
-			typeName: "System",
+			entity: &api.System{Metadata: &api.Metadata{Name: "s1"}},
 		},
 		{
-			entity:   &api.Domain{Metadata: &api.Metadata{Name: "d1"}},
-			getRef:   "d1",
-			typeName: "Domain",
+			entity: &api.Domain{Metadata: &api.Metadata{Name: "d1"}},
 		},
 		{
-			entity:   &api.API{Metadata: &api.Metadata{Name: "a1"}},
-			getRef:   "a1",
-			typeName: "API",
+			entity: &api.API{Metadata: &api.Metadata{Name: "a1"}},
 		},
 		{
-			entity:   &api.Resource{Metadata: &api.Metadata{Name: "r1"}},
-			getRef:   "r1",
-			typeName: "Resource",
+			entity: &api.Resource{Metadata: &api.Metadata{Name: "r1"}},
 		},
 		{
-			entity:   &api.Group{Metadata: &api.Metadata{Name: "g1"}},
-			getRef:   "g1",
-			typeName: "Group",
+			entity: &api.Group{Metadata: &api.Metadata{Name: "g1"}},
 		},
 	}
 
 	for _, tt := range tests {
 		err := repo.AddEntity(tt.entity)
 		if err != nil {
-			t.Fatalf("AddEntity() with %s error = %v", tt.typeName, err)
+			t.Fatalf("AddEntity() with %s error = %v", tt.entity.GetKind(), err)
 		}
 	}
 
@@ -60,30 +46,30 @@ func TestRepository_AddAndGet(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(fmt.Sprintf("get %s", tt.typeName), func(t *testing.T) {
+		t.Run(fmt.Sprintf("get %s", tt.entity.GetKind()), func(t *testing.T) {
 			var e api.Entity
-			switch tt.typeName {
-			case "Component":
-				e = repo.Component(tt.getRef)
-			case "System":
-				e = repo.System(tt.getRef)
-			case "Domain":
-				e = repo.Domain(tt.getRef)
-			case "API":
-				e = repo.API(tt.getRef)
-			case "Resource":
-				e = repo.Resource(tt.getRef)
-			case "Group":
-				e = repo.Group(tt.getRef)
+			switch tt.entity.(type) {
+			case *api.Component:
+				e = repo.Component(tt.entity.GetRef())
+			case *api.System:
+				e = repo.System(tt.entity.GetRef())
+			case *api.Domain:
+				e = repo.Domain(tt.entity.GetRef())
+			case *api.API:
+				e = repo.API(tt.entity.GetRef())
+			case *api.Resource:
+				e = repo.Resource(tt.entity.GetRef())
+			case *api.Group:
+				e = repo.Group(tt.entity.GetRef())
 			default:
-				t.Fatalf("unknown typeName: %s", tt.typeName)
+				t.Fatalf("unknown typeName: %s", tt.entity.GetKind())
 			}
 
 			if e == nil {
-				t.Fatalf("%s() returned nil", tt.typeName)
+				t.Fatalf("%s() returned nil", tt.entity.GetKind())
 			}
-			if e.GetMetadata().Name != tt.getRef {
-				t.Errorf("%s().Metadata.Name = %s, want %s", tt.typeName, e.GetMetadata().Name, tt.getRef)
+			if !e.GetRef().Equal(tt.entity.GetRef()) {
+				t.Errorf("e.GetRef().String() = %v, want %v", tt.entity.GetRef(), e.GetRef())
 			}
 		})
 	}
@@ -112,46 +98,34 @@ func TestRepository_Entity(t *testing.T) {
 		repo.AddEntity(e)
 	}
 
-	tests := []struct {
-		ref  string
-		name string
-	}{
-		{"component:c1", "c1"},
-		{"system:s1", "s1"},
-		{"domain:d1", "d1"},
-		{"api:a1", "a1"},
-		{"resource:r1", "r1"},
-		{"group:g1", "g1"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.ref, func(t *testing.T) {
-			e := repo.Entity(tt.ref)
+	for _, entity := range entities {
+		t.Run(entity.GetMetadata().Name, func(t *testing.T) {
+			e := repo.Entity(entity.GetRef())
 			if e == nil {
 				t.Fatal("Entity() returned nil")
 			}
-			if e.GetMetadata().Name != tt.name {
-				t.Errorf("Entity().GetMetadata().Name = %s, want %s", e.GetMetadata().Name, tt.name)
+			if e.GetRef().String() != entity.GetRef().String() {
+				t.Errorf("Entity().GetRef().String() = %s, want %s", e.GetRef().String(), entity.GetRef().String())
 			}
 		})
 	}
 
 	t.Run("non-existing ref", func(t *testing.T) {
-		e := repo.Entity("component:s1")
+		e := repo.Entity(&api.Ref{Kind: "component", Name: "s1"})
 		if e != nil {
 			t.Error("Entity() returned non-nil for non-existing ref")
 		}
 	})
 
 	t.Run("invalid ref", func(t *testing.T) {
-		e := repo.Entity("invalid:ref")
+		e := repo.Entity(&api.Ref{Kind: "invalid", Name: "ref"})
 		if e != nil {
 			t.Error("Entity() returned non-nil for invalid ref")
 		}
 	})
 
 	t.Run("ref without kind", func(t *testing.T) {
-		e := repo.Entity("c1")
+		e := repo.Entity(&api.Ref{Name: "c1"})
 		if e != nil {
 			t.Error("Entity() returned non-nil for ref without kind")
 		}
@@ -166,7 +140,7 @@ func TestRepository_Finders(t *testing.T) {
 		&api.Component{Metadata: &api.Metadata{Name: "c1", Namespace: "ns1"}},
 		&api.Component{Metadata: &api.Metadata{Name: "c3", Namespace: "ns2"}},
 		&api.Component{Metadata: &api.Metadata{Name: "c4", Namespace: "ns3"}, Spec: &api.ComponentSpec{
-			Owner: "o4", Lifecycle: "production",
+			Owner: &api.Ref{Name: "o4"}, Lifecycle: "production",
 		}},
 		&api.System{Metadata: &api.Metadata{Name: "s2"}},
 		&api.System{Metadata: &api.Metadata{Name: "s1"}},
@@ -196,7 +170,7 @@ func TestRepository_Finders(t *testing.T) {
 
 				var gotNames []string
 				for _, r := range results {
-					gotNames = append(gotNames, r.GetQName())
+					gotNames = append(gotNames, r.GetRef().QName())
 				}
 
 				if !slices.Equal(gotNames, tt.wantNames) {

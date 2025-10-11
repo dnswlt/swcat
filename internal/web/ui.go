@@ -8,8 +8,74 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/dnswlt/swcat/internal/api"
 	"github.com/yuin/goldmark"
 )
+
+func anyToRef(s any) (*api.Ref, error) {
+	switch r := s.(type) {
+	case string:
+		e, err := api.ParseRef(r)
+		if err != nil {
+			return nil, fmt.Errorf("invalid entity reference string for entityURL: %v", err)
+		}
+		return e, nil
+	case *api.Ref:
+		return r, nil
+	case *api.LabelRef:
+		return r.Ref, nil
+	}
+	return nil, fmt.Errorf("anyToRef: invalid argument type %T", s)
+}
+
+func refEncode(s any) (string, error) {
+	entityRef, err := anyToRef(s)
+	if err != nil {
+		return "", err
+	}
+	return url.PathEscape(entityRef.String()), nil
+}
+
+func toURL(s any) (string, error) {
+	entityRef, err := anyToRef(s)
+	if err != nil {
+		return "", err
+	}
+
+	if entityRef.Kind == "" {
+		return "", fmt.Errorf("entity reference has no kind: set: %v", entityRef)
+	}
+	var path string
+	switch entityRef.Kind {
+	case "component":
+		path = "/ui/components/"
+	case "resource":
+		path = "/ui/resources/"
+	case "system":
+		path = "/ui/systems/"
+	case "group":
+		path = "/ui/groups/"
+	case "domain":
+		path = "/ui/domains/"
+	case "api":
+		path = "/ui/apis/"
+	default:
+		return "", fmt.Errorf("unsupported kind %q in entityURL", entityRef.Kind)
+	}
+	return path + url.PathEscape(entityRef.QName()), nil
+}
+
+func urlencode(s any) (string, error) {
+	switch t := s.(type) {
+	case string:
+		return url.PathEscape(t), nil
+	case *api.Ref:
+		return url.PathEscape(t.QName()), nil
+	case *api.LabelRef:
+		return url.PathEscape(t.Ref.QName()), nil
+	}
+	return "", fmt.Errorf("invalid argument type %T for urlencode", s)
+}
 
 type NavBar []*NavBarItem
 
@@ -87,7 +153,7 @@ func (ns NavBar) SetParams(q url.Values) NavBar {
 	return ns
 }
 
-func Markdown(input string) (template.HTML, error) {
+func markdown(input string) (template.HTML, error) {
 	var buf bytes.Buffer
 	if err := goldmark.Convert([]byte(input), &buf); err != nil {
 		return "", fmt.Errorf("failed to process markdown: %v", err)

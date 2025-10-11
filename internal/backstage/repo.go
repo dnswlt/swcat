@@ -3,7 +3,6 @@ package backstage
 import (
 	"fmt"
 	"log"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -45,7 +44,7 @@ func (r *Repository) Size() int {
 }
 
 func (r *Repository) setEntity(e api.Entity) error {
-	qname := e.GetQName()
+	qname := e.GetRef().QName()
 
 	switch x := e.(type) {
 	case *api.Domain:
@@ -64,7 +63,7 @@ func (r *Repository) setEntity(e api.Entity) error {
 		return fmt.Errorf("invalid type: %T", e)
 	}
 
-	ref := e.GetRef()
+	ref := e.GetRef().String()
 	r.allEntities[ref] = e
 	return nil
 }
@@ -75,15 +74,15 @@ func (r *Repository) UpdateEntity(e api.Entity) error {
 	// It avoids having to deal with complex deletions and additions of relationships
 	// and their inverses.
 
-	eRef := e.GetRef()
-	if _, ok := r.allEntities[eRef]; !ok {
-		return fmt.Errorf("entity %q does not exist in the repository", eRef)
+	if !r.Exists(e) {
+		return fmt.Errorf("entity %q does not exist in the repository", e.GetRef())
 	}
 
+	eRef := e.GetRef()
 	r2 := NewRepository()
 	for _, n := range r.allEntities {
 		var toAdd api.Entity
-		if n.GetRef() == eRef {
+		if n.GetRef().Equal(eRef) {
 			toAdd = e // Replace old entity by the new one
 		} else {
 			toAdd = n.Reset() // Add a shallow copy with cleared computed fields
@@ -104,84 +103,86 @@ func (r *Repository) UpdateEntity(e api.Entity) error {
 	return nil
 }
 
+func (r *Repository) Exists(e api.Entity) bool {
+	_, ok := r.allEntities[e.GetRef().String()]
+	return ok
+}
+
 func (r *Repository) AddEntity(e api.Entity) error {
-	ref := e.GetRef()
-	if _, ok := r.allEntities[ref]; ok {
-		return fmt.Errorf("entity %q already exists in the repository", ref)
+	if e.GetMetadata() == nil {
+		return fmt.Errorf("entity metadata is nil")
+	}
+	if r.Exists(e) {
+		return fmt.Errorf("entity %q already exists in the repository", e.GetRef())
 	}
 	return r.setEntity(e)
 }
 
-func getEntity[T any](m map[string]*T, ref, expectedKind string) *T {
-	kind, qn, found := strings.Cut(ref, ":")
-	if !found {
-		return m[ref]
-	}
-	if kind != expectedKind {
+func getEntity[T any](m map[string]*T, ref *api.Ref, expectedKind string) *T {
+	if ref.Kind != "" && ref.Kind != expectedKind {
 		return nil
 	}
-	return m[qn]
+	return m[ref.QName()]
 }
 
-func (r *Repository) Group(ref string) *api.Group {
+func (r *Repository) Group(ref *api.Ref) *api.Group {
 	return getEntity(r.groups, ref, "group")
 }
 
-func (r *Repository) System(ref string) *api.System {
+func (r *Repository) System(ref *api.Ref) *api.System {
 	return getEntity(r.systems, ref, "system")
 }
 
-func (r *Repository) Domain(ref string) *api.Domain {
+func (r *Repository) Domain(ref *api.Ref) *api.Domain {
 	return getEntity(r.domains, ref, "domain")
 }
 
-func (r *Repository) API(ref string) *api.API {
+func (r *Repository) API(ref *api.Ref) *api.API {
 	return getEntity(r.apis, ref, "api")
 }
 
-func (r *Repository) Component(ref string) *api.Component {
+func (r *Repository) Component(ref *api.Ref) *api.Component {
 	return getEntity(r.components, ref, "component")
 }
 
-func (r *Repository) Resource(ref string) *api.Resource {
+func (r *Repository) Resource(ref *api.Ref) *api.Resource {
 	return getEntity(r.resources, ref, "resource")
 }
 
 // Entity returns the entity identified by the entity reference ref, if it exists.
 // If the entity does not exist, it returns the nil interface.
 // The entity reference must be fully qualified, i.e. <kind>:[<namespace>/]<name>
-func (r *Repository) Entity(ref string) api.Entity {
-	kind, qn, found := strings.Cut(ref, ":")
-	if !found {
+func (r *Repository) Entity(ref *api.Ref) api.Entity {
+	if ref.Kind == "" {
 		return nil // Entity lookup requires kind specifier
 	}
-	switch kind {
+	switch ref.Kind {
 	case "component":
-		if c := r.Component(qn); c != nil {
+		if c := r.Component(ref); c != nil {
 			return c
 		}
 	case "system":
-		if s := r.System(qn); s != nil {
+		if s := r.System(ref); s != nil {
 			return s
 		}
 	case "domain":
-		if d := r.Domain(qn); d != nil {
+		if d := r.Domain(ref); d != nil {
 			return d
 		}
 	case "api":
-		if a := r.API(qn); a != nil {
+		if a := r.API(ref); a != nil {
 			return a
 		}
 	case "resource":
-		if res := r.Resource(qn); res != nil {
+		if res := r.Resource(ref); res != nil {
 			return res
 		}
 	case "group":
-		if g := r.Group(qn); g != nil {
+		if g := r.Group(ref); g != nil {
 			return g
 		}
 	}
-	return nil
+	return nil // invalid kind specifier
 }
 
 func findEntities[T api.Entity](q string, items map[string]T) []T {
@@ -239,48 +240,44 @@ func (r *Repository) FindGroups(q string) []*api.Group {
 	return findEntities(q, r.groups)
 }
 
-var (
-	// Regexp to check for valid entity names
-	validNameRE = regexp.MustCompile("^[A-Za-z_][A-Za-z0-9_-]*$")
-)
-
 func (r *Repository) validateMetadata(m *api.Metadata) error {
 	if m == nil {
 		return fmt.Errorf("metadata is null")
 	}
-	if !validNameRE.MatchString(m.Name) {
+	if !api.IsValidName(m.Name) {
 		return fmt.Errorf("invalid name: %s", m.Name)
 	}
-	if m.Namespace != "" && !validNameRE.MatchString(m.Namespace) {
+	if m.Namespace != "" && !api.IsValidName(m.Namespace) {
 		return fmt.Errorf("invalid namespace: %s", m.Namespace)
 	}
 	return nil
 }
 
+func validRef(ref *api.Ref) error {
+	if ref == nil {
+		return fmt.Errorf("nil entity reference")
+	}
+	if ref.Namespace != "" && !api.IsValidName(ref.Namespace) {
+		return fmt.Errorf("not a valid namespace name %q", ref.Namespace)
+	}
+	if !api.IsValidName(ref.Name) {
+		return fmt.Errorf("not a valid entity name %q", ref.Name)
+	}
+	return nil
+}
+
 // validDependsOnRef checks if ref is a valid fully qualified entity reference.
-// It must include the entity type, e.g. "component:my-namespace/foo", or "component:bar".
+// It must include the entity kind, e.g. "component:my-namespace/foo", or "component:bar".
 // For now, only component and resource dependencies are supported.
-func validDependsOnRef(ref string) error {
-	kind, qname, found := strings.Cut(ref, ":")
-	if !found {
-		return fmt.Errorf("entity kind is missing in entity ref %q", ref)
+func validDependsOnRef(ref *api.Ref) error {
+	if err := validRef(ref); err != nil {
+		return err
 	}
-	if kind != "component" && kind != "resource" {
-		return fmt.Errorf("invalid entity kind %q", kind)
+	if ref.Kind == "" {
+		return fmt.Errorf("entity kind is missing in DependsOn entity ref %q", ref)
 	}
-	if validNameRE.MatchString(qname) {
-		// Entity without namespace
-		return nil
-	}
-	ns, name, found := strings.Cut(qname, "/")
-	if !found {
-		return fmt.Errorf("not a valid qualified entity name %q", qname)
-	}
-	if !validNameRE.MatchString(ns) {
-		return fmt.Errorf("not a valid namespace name %q", ns)
-	}
-	if !validNameRE.MatchString(name) {
-		return fmt.Errorf("not a valid entity name %q", name)
+	if ref.Kind != "component" && ref.Kind != "resource" {
+		return fmt.Errorf("invalid entity kind %q for DependsOn entity ref", ref.Kind)
 	}
 	return nil
 }
@@ -288,7 +285,8 @@ func validDependsOnRef(ref string) error {
 // Validate validates the repository (cross references exist, etc.).
 func (r *Repository) Validate() error {
 	// Groups
-	for qn, g := range r.groups {
+	for _, g := range r.groups {
+		qn := g.GetRef().QName()
 		if err := r.validateMetadata(g.Metadata); err != nil {
 			return fmt.Errorf("group %s has invalid metadata: %v", qn, err)
 		}
@@ -305,7 +303,8 @@ func (r *Repository) Validate() error {
 	}
 
 	// Components
-	for qn, c := range r.components {
+	for _, c := range r.components {
+		qn := c.GetRef().QName()
 		if err := r.validateMetadata(c.Metadata); err != nil {
 			return fmt.Errorf("component %s has invalid metadata: %v", qn, err)
 		}
@@ -319,38 +318,43 @@ func (r *Repository) Validate() error {
 		if s.Lifecycle == "" {
 			return fmt.Errorf("component %s has no spec.lifecycle", qn)
 		}
+		if s.Owner == nil {
+			return fmt.Errorf("component %s has no owner", qn)
+		}
 		if g := r.Group(s.Owner); g == nil {
 			return fmt.Errorf("owner %q for component %s is undefined", s.Owner, qn)
 		}
 
-		if s.System != "" {
-			if system := r.System(s.System); system == nil {
-				return fmt.Errorf("system %q for component %s is undefined", s.System, qn)
-			}
+		if s.System == nil {
+			return fmt.Errorf("component %s has no system reference", qn)
+		}
+		if system := r.System(s.System); system == nil {
+			return fmt.Errorf("system %q for component %s is undefined", s.System, qn)
 		}
 
 		for _, a := range s.ProvidesAPIs {
-			if ap := r.API(a); ap == nil {
+			if ap := r.API(a.Ref); ap == nil {
 				return fmt.Errorf("provided API %q for component %s is undefined", a, qn)
 			}
 		}
 		for _, a := range s.ConsumesAPIs {
-			if ap := r.API(a); ap == nil {
+			if ap := r.API(a.Ref); ap == nil {
 				return fmt.Errorf("consumed API %q for component %s is undefined", a, qn)
 			}
 		}
 		for _, a := range s.DependsOn {
-			if err := validDependsOnRef(a); err != nil {
+			if err := validDependsOnRef(a.Ref); err != nil {
 				return fmt.Errorf("invalid entity reference in dependency %q for component %s: %v ", a, qn, err)
 			}
-			if e := r.Entity(a); e == nil {
+			if e := r.Entity(a.Ref); e == nil {
 				return fmt.Errorf("dependency %q for component %s is undefined", a, qn)
 			}
 		}
 	}
 
 	// APIs
-	for qn, ap := range r.apis {
+	for _, ap := range r.apis {
+		qn := ap.GetRef().QName()
 		if err := r.validateMetadata(ap.Metadata); err != nil {
 			return fmt.Errorf("API %s has invalid metadata: %v", qn, err)
 		}
@@ -364,10 +368,14 @@ func (r *Repository) Validate() error {
 		if s.Lifecycle == "" {
 			return fmt.Errorf("API %s has no spec.lifecycle", qn)
 		}
-		if s.System != "" {
-			if system := r.System(s.System); system == nil {
-				return fmt.Errorf("system %q for API %s is undefined", s.System, qn)
-			}
+		if s.System == nil {
+			return fmt.Errorf("API %s has no system reference", qn)
+		}
+		if system := r.System(s.System); system == nil {
+			return fmt.Errorf("system %q for API %s is undefined", s.System, qn)
+		}
+		if s.Owner == nil {
+			return fmt.Errorf("API %s has no owner", qn)
 		}
 		if g := r.Group(s.Owner); g == nil {
 			return fmt.Errorf("owner %q for API %s is undefined", s.Owner, qn)
@@ -378,7 +386,8 @@ func (r *Repository) Validate() error {
 	}
 
 	// Resources
-	for qn, res := range r.resources {
+	for _, res := range r.resources {
+		qn := res.GetRef().QName()
 		if err := r.validateMetadata(res.Metadata); err != nil {
 			return fmt.Errorf("resource %s has invalid metadata: %v", qn, err)
 		}
@@ -389,24 +398,31 @@ func (r *Repository) Validate() error {
 		if s.Type == "" {
 			return fmt.Errorf("resource %s has no spec.type", qn)
 		}
-		if s.System != "" && r.System(s.System) == nil {
+		if s.System == nil {
+			return fmt.Errorf("resource %s has no system reference", qn)
+		}
+		if r.System(s.System) == nil {
 			return fmt.Errorf("system %q for resource %s is undefined", s.System, qn)
+		}
+		if s.Owner == nil {
+			return fmt.Errorf("resource %s has no owner", qn)
 		}
 		if g := r.Group(s.Owner); g == nil {
 			return fmt.Errorf("owner %q for resource %s is undefined", s.Owner, qn)
 		}
 		for _, a := range s.DependsOn {
-			if err := validDependsOnRef(a); err != nil {
+			if err := validDependsOnRef(a.Ref); err != nil {
 				return fmt.Errorf("invalid entity reference in dependency %q for component %s: %v ", a, qn, err)
 			}
-			if e := r.Entity(a); e == nil {
+			if e := r.Entity(a.Ref); e == nil {
 				return fmt.Errorf("dependency %q for resource %s is undefined", a, qn)
 			}
 		}
 	}
 
 	// Systems
-	for qn, system := range r.systems {
+	for _, system := range r.systems {
+		qn := system.GetRef().QName()
 		if err := r.validateMetadata(system.Metadata); err != nil {
 			return fmt.Errorf("system %s has invalid metadata: %v", qn, err)
 		}
@@ -414,8 +430,14 @@ func (r *Repository) Validate() error {
 		if s == nil {
 			return fmt.Errorf("system %s has no spec", qn)
 		}
+		if s.Owner == nil {
+			return fmt.Errorf("system %s has no owner", qn)
+		}
 		if g := r.Group(s.Owner); g == nil {
 			return fmt.Errorf("owner %q for system %s is undefined", s.Owner, qn)
+		}
+		if s.Domain == nil {
+			return fmt.Errorf("system %s has no domain reference", qn)
 		}
 		if d := r.Domain(s.Domain); d == nil {
 			return fmt.Errorf("domain %q for system %s is undefined", s.Domain, qn)
@@ -423,13 +445,17 @@ func (r *Repository) Validate() error {
 	}
 
 	// Domains
-	for qn, dom := range r.domains {
+	for _, dom := range r.domains {
+		qn := dom.GetRef().QName()
 		if err := r.validateMetadata(dom.Metadata); err != nil {
 			return fmt.Errorf("domain %s has invalid metadata: %v", qn, err)
 		}
 		s := dom.Spec
 		if s == nil {
 			return fmt.Errorf("domain %s has no spec", qn)
+		}
+		if s.Owner == nil {
+			return fmt.Errorf("domain %s has no owner", qn)
 		}
 		if g := r.Group(s.Owner); g == nil {
 			return fmt.Errorf("owner %q for domain %s is undefined", s.Owner, qn)
@@ -445,69 +471,69 @@ func (r *Repository) Validate() error {
 // Assumes that the repository has been validated already.
 func (r *Repository) populateRelationships() {
 
-	registerDependent := func(entityRef, depName string) {
-		dep := r.Entity(depName)
+	registerDependent := func(entityRef *api.Ref, depRef *api.LabelRef) {
+		dep := r.Entity(depRef.Ref)
 		switch x := dep.(type) {
 		case *api.Component:
-			x.AddDependent(entityRef)
+			x.AddDependent(&api.LabelRef{Ref: entityRef, Label: depRef.Label})
 		case *api.Resource:
-			x.AddDependent(entityRef)
+			x.AddDependent(&api.LabelRef{Ref: entityRef, Label: depRef.Label})
 		default:
-			log.Fatalf("Invalid dependency: %s", depName)
+			log.Fatalf("Invalid dependency: %s", depRef.String())
 		}
 	}
 
 	// Components
 	for _, c := range r.components {
-		qn := c.GetQName()
+		ref := c.GetRef()
 		// Register in APIs
 		for _, a := range c.Spec.ConsumesAPIs {
-			ap := r.API(a)
-			ap.AddConsumer(qn)
+			ap := r.API(a.Ref)
+			ap.AddConsumer(&api.LabelRef{Ref: ref, Label: a.Label})
 		}
 		for _, a := range c.Spec.ProvidesAPIs {
-			ap := r.API(a)
-			ap.AddProvider(qn)
+			ap := r.API(a.Ref)
+			ap.AddProvider(&api.LabelRef{Ref: ref, Label: a.Label})
 		}
-		if s := c.Spec.System; s != "" {
+		if s := c.Spec.System; s != nil {
 			system := r.System(s)
-			system.AddComponent(qn)
+			system.AddComponent(ref)
 		}
 
 		// Register in "DependsOn" dependencies.
 		for _, d := range c.Spec.DependsOn {
-			registerDependent("component:"+qn, d)
+			registerDependent(ref, d)
 		}
 	}
 
 	// Resources
 	for _, res := range r.resources {
-		qn := res.GetQName()
-		if s := res.Spec.System; s != "" {
+		ref := res.GetRef()
+		if s := res.Spec.System; s != nil {
 			system := r.System(s)
-			system.AddResource(qn)
+			system.AddResource(ref)
 		}
 		// Register in "DependsOn" dependencies.
 		for _, d := range res.Spec.DependsOn {
-			registerDependent("resource:"+qn, d)
+			registerDependent(ref, d)
 		}
 	}
 
 	// APIs
 	for _, ap := range r.apis {
-		qn := ap.GetQName()
-		if s := ap.Spec.System; s != "" {
+		ref := ap.GetRef()
+		if s := ap.Spec.System; s != nil {
 			system := r.System(s)
-			system.AddAPI(qn)
+			system.AddAPI(ref)
 		}
 	}
 
 	// Systems
 	for _, system := range r.systems {
-		qn := system.GetQName()
-		if d := system.Spec.Domain; d != "" {
+		ref := system.GetRef()
+		if d := system.Spec.Domain; d != nil {
 			domain := r.Domain(d)
-			domain.AddSystem(qn)
+			domain.AddSystem(ref)
 		}
 	}
 

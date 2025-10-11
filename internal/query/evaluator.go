@@ -51,27 +51,27 @@ var attributeAccessors = map[string]attributeAccessor{
 			if v.Spec == nil {
 				return nil, false
 			}
-			return []string{v.Spec.Owner}, true
+			return []string{v.Spec.Owner.QName()}, true
 		case *api.System:
 			if v.Spec == nil {
 				return nil, false
 			}
-			return []string{v.Spec.Owner}, true
+			return []string{v.Spec.Owner.QName()}, true
 		case *api.Domain:
 			if v.Spec == nil {
 				return nil, false
 			}
-			return []string{v.Spec.Owner}, true
+			return []string{v.Spec.Owner.QName()}, true
 		case *api.Resource:
 			if v.Spec == nil {
 				return nil, false
 			}
-			return []string{v.Spec.Owner}, true
+			return []string{v.Spec.Owner.QName()}, true
 		case *api.API:
 			if v.Spec == nil {
 				return nil, false
 			}
-			return []string{v.Spec.Owner}, true
+			return []string{v.Spec.Owner.QName()}, true
 		default:
 			return nil, false // Group and other types don't have an owner
 		}
@@ -140,7 +140,7 @@ func (ev *Evaluator) evaluateNode(e api.Entity, expr Expression) (bool, error) {
 	switch v := expr.(type) {
 	case *Term:
 		// A simple term matches against the entity's qualified name.
-		qn := e.GetQName()
+		qn := e.GetRef().QName()
 		return strings.Contains(strings.ToLower(qn), strings.ToLower(v.Value)), nil
 
 	case *AttributeTerm:

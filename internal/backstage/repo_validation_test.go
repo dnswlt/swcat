@@ -1,44 +1,75 @@
 package backstage
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/api"
 )
 
 func TestValidateMandatoryComponentFields(t *testing.T) {
+	owner := &api.Group{
+		Kind:     "Group",
+		Metadata: &api.Metadata{Name: "group"},
+		Spec:     &api.GroupSpec{Type: "team"},
+	}
+	domain := &api.Domain{
+		Kind:     "Domain",
+		Metadata: &api.Metadata{Name: "domain"},
+		Spec: &api.DomainSpec{
+			Owner: owner.GetRef(),
+		},
+	}
+	system := &api.System{
+		Kind:     "System",
+		Metadata: &api.Metadata{Name: "system"},
+		Spec: &api.SystemSpec{
+			Owner:  owner.GetRef(),
+			Domain: domain.GetRef(),
+		},
+	}
+	metadata := &api.Metadata{
+		Name: "component",
+	}
+	spec := &api.ComponentSpec{
+		System:    system.GetRef(),
+		Owner:     owner.GetRef(),
+		Type:      "service",
+		Lifecycle: "production",
+	}
 	cases := []struct {
 		name      string
 		component *api.Component
-		owner     *api.Group
-		system    *api.System
-		domain    *api.Domain
-		wantErr   string
+		wantErr   bool
 	}{
 		{
-			name: "no metadata",
+			name: "valid component",
 			component: &api.Component{
-				Kind: "Component",
+				Kind:     "Component",
+				Metadata: metadata,
+				Spec:     spec,
 			},
-			wantErr: "metadata is null",
+			wantErr: false,
 		},
 		{
 			name: "no spec",
 			component: &api.Component{
 				Kind:     "Component",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 			},
-			wantErr: "has no spec",
+			wantErr: true,
 		},
 		{
 			name: "no spec.type",
 			component: &api.Component{
 				Kind:     "Component",
 				Metadata: &api.Metadata{Name: "test"},
-				Spec:     &api.ComponentSpec{},
+				Spec: &api.ComponentSpec{
+					System:    system.GetRef(),
+					Owner:     owner.GetRef(),
+					Lifecycle: "production",
+				},
 			},
-			wantErr: "has no spec.type",
+			wantErr: true,
 		},
 		{
 			name: "no spec.lifecycle",
@@ -46,10 +77,12 @@ func TestValidateMandatoryComponentFields(t *testing.T) {
 				Kind:     "Component",
 				Metadata: &api.Metadata{Name: "test"},
 				Spec: &api.ComponentSpec{
-					Type: "service",
+					System: system.GetRef(),
+					Owner:  owner.GetRef(),
+					Type:   "service",
 				},
 			},
-			wantErr: "has no spec.lifecycle",
+			wantErr: true,
 		},
 		{
 			name: "no spec.owner",
@@ -57,11 +90,12 @@ func TestValidateMandatoryComponentFields(t *testing.T) {
 				Kind:     "Component",
 				Metadata: &api.Metadata{Name: "test"},
 				Spec: &api.ComponentSpec{
+					System:    system.GetRef(),
 					Type:      "service",
 					Lifecycle: "production",
 				},
 			},
-			wantErr: `owner "" for component test is undefined`,
+			wantErr: true,
 		},
 		{
 			name: "invalid spec.owner",
@@ -69,12 +103,13 @@ func TestValidateMandatoryComponentFields(t *testing.T) {
 				Kind:     "Component",
 				Metadata: &api.Metadata{Name: "test"},
 				Spec: &api.ComponentSpec{
+					System:    system.GetRef(),
+					Owner:     &api.Ref{Kind: "group", Name: "foo"},
 					Type:      "service",
 					Lifecycle: "production",
-					Owner:     "foo",
 				},
 			},
-			wantErr: `owner "foo" for component test is undefined`,
+			wantErr: true,
 		},
 		{
 			name: "invalid spec.system",
@@ -84,174 +119,101 @@ func TestValidateMandatoryComponentFields(t *testing.T) {
 				Spec: &api.ComponentSpec{
 					Type:      "service",
 					Lifecycle: "production",
-					Owner:     "foo",
-					System:    "bar",
+					Owner:     owner.GetRef(),
+					System:    &api.Ref{Kind: "system", Name: "bar"},
 				},
 			},
-			owner: &api.Group{
-				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "foo"},
-				Spec:     &api.GroupSpec{Type: "team"},
-			},
-			wantErr: `system "bar" for component test is undefined`,
-		},
-		{
-			name: "valid",
-			component: &api.Component{
-				Kind:     "Component",
-				Metadata: &api.Metadata{Name: "test"},
-				Spec: &api.ComponentSpec{
-					Type:      "service",
-					Lifecycle: "production",
-					Owner:     "foo",
-				},
-			},
-			owner: &api.Group{
-				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "foo"},
-				Spec:     &api.GroupSpec{Type: "team"},
-			},
-		},
-		{
-			name: "valid with system",
-			component: &api.Component{
-				Kind:     "Component",
-				Metadata: &api.Metadata{Name: "test"},
-				Spec: &api.ComponentSpec{
-					Type:      "service",
-					Lifecycle: "production",
-					Owner:     "foo",
-					System:    "bar",
-				},
-			},
-			owner: &api.Group{
-				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "foo"},
-				Spec:     &api.GroupSpec{Type: "team"},
-			},
-			system: &api.System{
-				Kind:     "System",
-				Metadata: &api.Metadata{Name: "bar"},
-				Spec: &api.SystemSpec{
-					Owner:  "foo",
-					Domain: "test-domain",
-				},
-			},
-			domain: &api.Domain{
-				Kind:     "Domain",
-				Metadata: &api.Metadata{Name: "test-domain"},
-				Spec: &api.DomainSpec{
-					Owner: "foo",
-				},
-			},
+			wantErr: true,
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := NewRepository()
-			if tc.owner != nil {
-				if err := r.AddEntity(tc.owner); err != nil {
-					t.Fatal(err)
+			for _, e := range []api.Entity{owner, domain, system} {
+				if err := r.AddEntity(e); err != nil {
+					t.Fatalf("r.AddEntity(%v): %v", e.GetRef(), err)
 				}
 			}
-			if tc.domain != nil {
-				if err := r.AddEntity(tc.domain); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if tc.system != nil {
-				if err := r.AddEntity(tc.system); err != nil {
-					t.Fatal(err)
-				}
-			}
+
 			if err := r.AddEntity(tc.component); err != nil {
 				t.Fatal(err)
 			}
 
 			err := r.Validate()
 
-			if tc.wantErr == "" {
+			if !tc.wantErr {
 				if err != nil {
 					t.Errorf("Validate() error = %v, wantErr %v", err, tc.wantErr)
 				}
-			} else {
-				if err == nil {
-					t.Errorf("Validate() error = %v, wantErr %v", err, tc.wantErr)
-				} else if !strings.Contains(err.Error(), tc.wantErr) {
-					t.Errorf("Validate() error = %q, wantErr %q", err, tc.wantErr)
-				}
+			} else if err == nil {
+				t.Errorf("Validate() no error, but wantErr %v", tc.wantErr)
 			}
 		})
 	}
 }
 
 func TestValidateMandatoryDomainFields(t *testing.T) {
+	owner := &api.Group{
+		Kind:     "Group",
+		Metadata: &api.Metadata{Name: "group"},
+		Spec:     &api.GroupSpec{Type: "team"},
+	}
+	metadata := &api.Metadata{
+		Name: "domain",
+	}
+	spec := &api.DomainSpec{
+		Owner: owner.GetRef(),
+	}
 	cases := []struct {
 		name    string
 		domain  *api.Domain
-		owner   *api.Group
-		wantErr string
+		wantErr bool
 	}{
 		{
-			name: "no metadata",
+			name: "valid domain",
 			domain: &api.Domain{
-				Kind: "Domain",
+				Kind:     "Domain",
+				Metadata: metadata,
+				Spec:     spec,
 			},
-			wantErr: "metadata is null",
+			wantErr: false,
 		},
 		{
 			name: "no spec",
 			domain: &api.Domain{
 				Kind:     "Domain",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 			},
-			wantErr: "has no spec",
+			wantErr: true,
 		},
 		{
 			name: "no spec.owner",
 			domain: &api.Domain{
 				Kind:     "Domain",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 				Spec:     &api.DomainSpec{},
 			},
-			wantErr: `owner "" for domain test is undefined`,
+			wantErr: true,
 		},
 		{
 			name: "invalid spec.owner",
 			domain: &api.Domain{
 				Kind:     "Domain",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 				Spec: &api.DomainSpec{
-					Owner: "foo",
+					Owner: &api.Ref{Kind: "group", Name: "foo"},
 				},
 			},
-			wantErr: `owner "foo" for domain test is undefined`,
-		},
-		{
-			name: "valid",
-			domain: &api.Domain{
-				Kind:     "Domain",
-				Metadata: &api.Metadata{Name: "test"},
-				Spec: &api.DomainSpec{
-					Owner: "foo",
-				},
-			},
-			owner: &api.Group{
-				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "foo"},
-				Spec:     &api.GroupSpec{Type: "team"},
-			},
+			wantErr: true,
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := NewRepository()
-			if tc.owner != nil {
-				if err := r.AddEntity(tc.owner); err != nil {
-					t.Fatal(err)
-				}
+			if err := r.AddEntity(owner); err != nil {
+				t.Fatalf("r.AddEntity(owner): %v", err)
 			}
 			if err := r.AddEntity(tc.domain); err != nil {
 				t.Fatal(err)
@@ -259,524 +221,468 @@ func TestValidateMandatoryDomainFields(t *testing.T) {
 
 			err := r.Validate()
 
-			if tc.wantErr == "" {
+			if !tc.wantErr {
 				if err != nil {
 					t.Errorf("Validate() error = %v, wantErr %v", err, tc.wantErr)
 				}
-			} else {
-				if err == nil {
-					t.Errorf("Validate() error = %v, wantErr %v", err, tc.wantErr)
-				} else if !strings.Contains(err.Error(), tc.wantErr) {
-					t.Errorf("Validate() error = %q, wantErr %q", err, tc.wantErr)
-				}
+			} else if err == nil {
+				t.Errorf("Validate() no error, but wantErr %v", tc.wantErr)
 			}
 		})
 	}
 }
 
 func TestValidateMandatorySystemFields(t *testing.T) {
+	owner := &api.Group{
+		Kind:     "Group",
+		Metadata: &api.Metadata{Name: "group"},
+		Spec:     &api.GroupSpec{Type: "team"},
+	}
+	domain := &api.Domain{
+		Kind:     "Domain",
+		Metadata: &api.Metadata{Name: "domain"},
+		Spec: &api.DomainSpec{
+			Owner: owner.GetRef(),
+		},
+	}
+	metadata := &api.Metadata{
+		Name: "system",
+	}
+	spec := &api.SystemSpec{
+		Owner:  owner.GetRef(),
+		Domain: domain.GetRef(),
+	}
 	cases := []struct {
 		name    string
 		system  *api.System
-		owner   *api.Group
-		domain  *api.Domain
-		wantErr string
+		wantErr bool
 	}{
 		{
-			name: "no metadata",
+			name: "valid system",
 			system: &api.System{
-				Kind: "System",
+				Kind:     "System",
+				Metadata: metadata,
+				Spec:     spec,
 			},
-			wantErr: "metadata is null",
+			wantErr: false,
 		},
 		{
 			name: "no spec",
 			system: &api.System{
 				Kind:     "System",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 			},
-			wantErr: "has no spec",
+			wantErr: true,
 		},
 		{
 			name: "no spec.owner",
 			system: &api.System{
 				Kind:     "System",
-				Metadata: &api.Metadata{Name: "test"},
-				Spec:     &api.SystemSpec{},
+				Metadata: metadata,
+				Spec: &api.SystemSpec{
+					Domain: domain.GetRef(),
+				},
 			},
-			wantErr: `owner "" for system test is undefined`,
+			wantErr: true,
+		},
+		{
+			name: "invalid spec.owner",
+			system: &api.System{
+				Kind:     "System",
+				Metadata: metadata,
+				Spec: &api.SystemSpec{
+					Owner:  &api.Ref{Kind: "group", Name: "foo"},
+					Domain: domain.GetRef(),
+				},
+			},
+			wantErr: true,
 		},
 		{
 			name: "no spec.domain",
 			system: &api.System{
 				Kind:     "System",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 				Spec: &api.SystemSpec{
-					Owner: "foo",
+					Owner: owner.GetRef(),
 				},
 			},
-			owner: &api.Group{
-				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "foo"},
-				Spec:     &api.GroupSpec{Type: "team"},
-			},
-			wantErr: `domain "" for system test is undefined`,
+			wantErr: true,
 		},
 		{
 			name: "invalid spec.domain",
 			system: &api.System{
 				Kind:     "System",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 				Spec: &api.SystemSpec{
-					Owner:  "foo",
-					Domain: "bar",
+					Owner:  owner.GetRef(),
+					Domain: &api.Ref{Kind: "domain", Name: "foo"},
 				},
 			},
-			owner: &api.Group{
-				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "foo"},
-				Spec:     &api.GroupSpec{Type: "team"},
-			},
-			wantErr: `domain "bar" for system test is undefined`,
-		},
-		{
-			name: "valid",
-			system: &api.System{
-				Kind:     "System",
-				Metadata: &api.Metadata{Name: "test"},
-				Spec: &api.SystemSpec{
-					Owner:  "foo",
-					Domain: "bar",
-				},
-			},
-			owner: &api.Group{
-				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "foo"},
-				Spec:     &api.GroupSpec{Type: "team"},
-			},
-			domain: &api.Domain{
-				Kind:     "Domain",
-				Metadata: &api.Metadata{Name: "bar"},
-				Spec: &api.DomainSpec{
-					Owner: "foo",
-				},
-			},
+			wantErr: true,
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := NewRepository()
-			if tc.owner != nil {
-				if err := r.AddEntity(tc.owner); err != nil {
-					t.Fatal(err)
+			for _, e := range []api.Entity{owner, domain} {
+				if err := r.AddEntity(e); err != nil {
+					t.Fatalf("r.AddEntity(%v): %v", e.GetRef(), err)
 				}
 			}
-			if tc.domain != nil {
-				if err := r.AddEntity(tc.domain); err != nil {
-					t.Fatal(err)
-				}
-			}
+
 			if err := r.AddEntity(tc.system); err != nil {
 				t.Fatal(err)
 			}
 
 			err := r.Validate()
 
-			if tc.wantErr == "" {
+			if !tc.wantErr {
 				if err != nil {
 					t.Errorf("Validate() error = %v, wantErr %v", err, tc.wantErr)
 				}
-			} else {
-				if err == nil {
-					t.Errorf("Validate() error = %v, wantErr %v", err, tc.wantErr)
-				} else if !strings.Contains(err.Error(), tc.wantErr) {
-					t.Errorf("Validate() error = %q, wantErr %q", err, tc.wantErr)
-				}
+			} else if err == nil {
+				t.Errorf("Validate() no error, but wantErr %v", tc.wantErr)
 			}
 		})
 	}
 }
 
 func TestValidateMandatoryApiFields(t *testing.T) {
+	owner := &api.Group{
+		Kind:     "Group",
+		Metadata: &api.Metadata{Name: "group"},
+		Spec:     &api.GroupSpec{Type: "team"},
+	}
+	domain := &api.Domain{
+		Kind:     "Domain",
+		Metadata: &api.Metadata{Name: "domain"},
+		Spec: &api.DomainSpec{
+			Owner: owner.GetRef(),
+		},
+	}
+	system := &api.System{
+		Kind:     "System",
+		Metadata: &api.Metadata{Name: "system"},
+		Spec: &api.SystemSpec{
+			Owner:  owner.GetRef(),
+			Domain: domain.GetRef(),
+		},
+	}
+	metadata := &api.Metadata{
+		Name: "api",
+	}
+	spec := &api.APISpec{
+		Type:      "openapi",
+		Lifecycle: "production",
+		Owner:     owner.GetRef(),
+		System:    system.GetRef(),
+	}
 	cases := []struct {
 		name    string
 		api     *api.API
-		owner   *api.Group
-		system  *api.System
-		domain  *api.Domain
-		wantErr string
+		wantErr bool
 	}{
 		{
-			name: "no metadata",
+			name: "valid api",
 			api: &api.API{
-				Kind: "API",
+				Kind:     "API",
+				Metadata: metadata,
+				Spec:     spec,
 			},
-			wantErr: "metadata is null",
 		},
 		{
 			name: "no spec",
 			api: &api.API{
 				Kind:     "API",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 			},
-			wantErr: "has no spec",
+			wantErr: true,
 		},
 		{
 			name: "no spec.type",
 			api: &api.API{
 				Kind:     "API",
-				Metadata: &api.Metadata{Name: "test"},
-				Spec:     &api.APISpec{},
+				Metadata: metadata,
+				Spec: &api.APISpec{
+					Lifecycle: "production",
+					Owner:     owner.GetRef(),
+					System:    system.GetRef(),
+				},
 			},
-			wantErr: "has no spec.type",
+			wantErr: true,
 		},
 		{
 			name: "no spec.lifecycle",
 			api: &api.API{
 				Kind:     "API",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 				Spec: &api.APISpec{
-					Type: "openapi",
+					Type:   "openapi",
+					Owner:  owner.GetRef(),
+					System: system.GetRef(),
 				},
 			},
-			wantErr: "has no spec.lifecycle",
+			wantErr: true,
 		},
 		{
 			name: "no spec.owner",
 			api: &api.API{
 				Kind:     "API",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 				Spec: &api.APISpec{
 					Type:      "openapi",
 					Lifecycle: "production",
+					System:    system.GetRef(),
 				},
 			},
-			wantErr: `owner "" for API test is undefined`,
+			wantErr: true,
 		},
 		{
 			name: "invalid spec.owner",
 			api: &api.API{
 				Kind:     "API",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 				Spec: &api.APISpec{
 					Type:      "openapi",
 					Lifecycle: "production",
-					Owner:     "foo",
+					Owner:     &api.Ref{Kind: "group", Name: "foo"},
+					System:    system.GetRef(),
 				},
 			},
-			wantErr: `owner "foo" for API test is undefined`,
+			wantErr: true,
+		},
+		{
+			name: "no spec.system",
+			api: &api.API{
+				Kind:     "API",
+				Metadata: metadata,
+				Spec: &api.APISpec{
+					Type:      "openapi",
+					Lifecycle: "production",
+					Owner:     owner.GetRef(),
+				},
+			},
+			wantErr: true,
 		},
 		{
 			name: "invalid spec.system",
 			api: &api.API{
 				Kind:     "API",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 				Spec: &api.APISpec{
 					Type:      "openapi",
 					Lifecycle: "production",
-					Owner:     "foo",
-					System:    "bar",
+					Owner:     owner.GetRef(),
+					System:    &api.Ref{Kind: "system", Name: "foo"},
 				},
 			},
-			owner: &api.Group{
-				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "foo"},
-				Spec:     &api.GroupSpec{Type: "team"},
-			},
-			wantErr: `system "bar" for API test is undefined`,
-		},
-		{
-			name: "valid",
-			api: &api.API{
-				Kind:     "API",
-				Metadata: &api.Metadata{Name: "test"},
-				Spec: &api.APISpec{
-					Type:      "openapi",
-					Lifecycle: "production",
-					Owner:     "foo",
-				},
-			},
-			owner: &api.Group{
-				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "foo"},
-				Spec:     &api.GroupSpec{Type: "team"},
-			},
-		},
-		{
-			name: "valid with system",
-			api: &api.API{
-				Kind:     "API",
-				Metadata: &api.Metadata{Name: "test"},
-				Spec: &api.APISpec{
-					Type:      "openapi",
-					Lifecycle: "production",
-					Owner:     "foo",
-					System:    "bar",
-				},
-			},
-			owner: &api.Group{
-				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "foo"},
-				Spec:     &api.GroupSpec{Type: "team"},
-			},
-			system: &api.System{
-				Kind:     "System",
-				Metadata: &api.Metadata{Name: "bar"},
-				Spec: &api.SystemSpec{
-					Owner:  "foo",
-					Domain: "test-domain",
-				},
-			},
-			domain: &api.Domain{
-				Kind:     "Domain",
-				Metadata: &api.Metadata{Name: "test-domain"},
-				Spec: &api.DomainSpec{
-					Owner: "foo",
-				},
-			},
+			wantErr: true,
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := NewRepository()
-			if tc.owner != nil {
-				if err := r.AddEntity(tc.owner); err != nil {
-					t.Fatal(err)
+			for _, e := range []api.Entity{owner, domain, system} {
+				if err := r.AddEntity(e); err != nil {
+					t.Fatalf("r.AddEntity(%v): %v", e.GetRef(), err)
 				}
 			}
-			if tc.domain != nil {
-				if err := r.AddEntity(tc.domain); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if tc.system != nil {
-				if err := r.AddEntity(tc.system); err != nil {
-					t.Fatal(err)
-				}
-			}
+
 			if err := r.AddEntity(tc.api); err != nil {
 				t.Fatal(err)
 			}
 
 			err := r.Validate()
 
-			if tc.wantErr == "" {
+			if !tc.wantErr {
 				if err != nil {
 					t.Errorf("Validate() error = %v, wantErr %v", err, tc.wantErr)
 				}
-			} else {
-				if err == nil {
-					t.Errorf("Validate() error = %v, wantErr %v", err, tc.wantErr)
-				} else if !strings.Contains(err.Error(), tc.wantErr) {
-					t.Errorf("Validate() error = %q, wantErr %q", err, tc.wantErr)
-				}
+			} else if err == nil {
+				t.Errorf("Validate() no error, but wantErr %v", tc.wantErr)
 			}
 		})
 	}
 }
 
 func TestValidateMandatoryResourceFields(t *testing.T) {
+	owner := &api.Group{
+		Kind:     "Group",
+		Metadata: &api.Metadata{Name: "group"},
+		Spec:     &api.GroupSpec{Type: "team"},
+	}
+	domain := &api.Domain{
+		Kind:     "Domain",
+		Metadata: &api.Metadata{Name: "domain"},
+		Spec: &api.DomainSpec{
+			Owner: owner.GetRef(),
+		},
+	}
+	system := &api.System{
+		Kind:     "System",
+		Metadata: &api.Metadata{Name: "system"},
+		Spec: &api.SystemSpec{
+			Owner:  owner.GetRef(),
+			Domain: domain.GetRef(),
+		},
+	}
+	metadata := &api.Metadata{
+		Name: "resource",
+	}
+	spec := &api.ResourceSpec{
+		Type:   "database",
+		Owner:  owner.GetRef(),
+		System: system.GetRef(),
+	}
 	cases := []struct {
 		name     string
 		resource *api.Resource
-		owner    *api.Group
-		system   *api.System
-		domain   *api.Domain
-		wantErr  string
+		wantErr  bool
 	}{
 		{
-			name: "no metadata",
+			name: "valid resource",
 			resource: &api.Resource{
-				Kind: "Resource",
+				Kind:     "Resource",
+				Metadata: metadata,
+				Spec:     spec,
 			},
-			wantErr: "metadata is null",
 		},
 		{
 			name: "no spec",
 			resource: &api.Resource{
 				Kind:     "Resource",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 			},
-			wantErr: "has no spec",
+			wantErr: true,
 		},
 		{
 			name: "no spec.type",
 			resource: &api.Resource{
 				Kind:     "Resource",
-				Metadata: &api.Metadata{Name: "test"},
-				Spec:     &api.ResourceSpec{},
+				Metadata: metadata,
+				Spec: &api.ResourceSpec{
+					Owner:  owner.GetRef(),
+					System: system.GetRef(),
+				},
 			},
-			wantErr: "has no spec.type",
+			wantErr: true,
 		},
 		{
 			name: "no spec.owner",
 			resource: &api.Resource{
 				Kind:     "Resource",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 				Spec: &api.ResourceSpec{
-					Type: "database",
+					Type:   "database",
+					System: system.GetRef(),
 				},
 			},
-			wantErr: `owner "" for resource test is undefined`,
+			wantErr: true,
 		},
 		{
 			name: "invalid spec.owner",
 			resource: &api.Resource{
 				Kind:     "Resource",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 				Spec: &api.ResourceSpec{
-					Type:  "database",
-					Owner: "foo",
+					Type:   "database",
+					Owner:  &api.Ref{Kind: "group", Name: "foo"},
+					System: system.GetRef(),
 				},
 			},
-			wantErr: `owner "foo" for resource test is undefined`,
+			wantErr: true,
+		},
+		{
+			name: "no spec.system",
+			resource: &api.Resource{
+				Kind:     "Resource",
+				Metadata: metadata,
+				Spec: &api.ResourceSpec{
+					Type:  "database",
+					Owner: owner.GetRef(),
+				},
+			},
+			wantErr: true,
 		},
 		{
 			name: "invalid spec.system",
 			resource: &api.Resource{
 				Kind:     "Resource",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 				Spec: &api.ResourceSpec{
 					Type:   "database",
-					Owner:  "foo",
-					System: "bar",
+					Owner:  owner.GetRef(),
+					System: &api.Ref{Kind: "system", Name: "foo"},
 				},
 			},
-			owner: &api.Group{
-				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "foo"},
-				Spec:     &api.GroupSpec{Type: "team"},
-			},
-			wantErr: `system "bar" for resource test is undefined`,
-		},
-		{
-			name: "valid",
-			resource: &api.Resource{
-				Kind:     "Resource",
-				Metadata: &api.Metadata{Name: "test"},
-				Spec: &api.ResourceSpec{
-					Type:  "database",
-					Owner: "foo",
-				},
-			},
-			owner: &api.Group{
-				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "foo"},
-				Spec:     &api.GroupSpec{Type: "team"},
-			},
-		},
-		{
-			name: "valid with system",
-			resource: &api.Resource{
-				Kind:     "Resource",
-				Metadata: &api.Metadata{Name: "test"},
-				Spec: &api.ResourceSpec{
-					Type:   "database",
-					Owner:  "foo",
-					System: "bar",
-				},
-			},
-			owner: &api.Group{
-				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "foo"},
-				Spec:     &api.GroupSpec{Type: "team"},
-			},
-			system: &api.System{
-				Kind:     "System",
-				Metadata: &api.Metadata{Name: "bar"},
-				Spec: &api.SystemSpec{
-					Owner:  "foo",
-					Domain: "test-domain",
-				},
-			},
-			domain: &api.Domain{
-				Kind:     "Domain",
-				Metadata: &api.Metadata{Name: "test-domain"},
-				Spec: &api.DomainSpec{
-					Owner: "foo",
-				},
-			},
+			wantErr: true,
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := NewRepository()
-			if tc.owner != nil {
-				if err := r.AddEntity(tc.owner); err != nil {
-					t.Fatal(err)
+			for _, e := range []api.Entity{owner, domain, system} {
+				if err := r.AddEntity(e); err != nil {
+					t.Fatalf("r.AddEntity(%v): %v", e.GetRef(), err)
 				}
 			}
-			if tc.domain != nil {
-				if err := r.AddEntity(tc.domain); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if tc.system != nil {
-				if err := r.AddEntity(tc.system); err != nil {
-					t.Fatal(err)
-				}
-			}
+
 			if err := r.AddEntity(tc.resource); err != nil {
 				t.Fatal(err)
 			}
 
 			err := r.Validate()
 
-			if tc.wantErr == "" {
+			if !tc.wantErr {
 				if err != nil {
 					t.Errorf("Validate() error = %v, wantErr %v", err, tc.wantErr)
 				}
-			} else {
-				if err == nil {
-					t.Errorf("Validate() error = %v, wantErr %v", err, tc.wantErr)
-				} else if !strings.Contains(err.Error(), tc.wantErr) {
-					t.Errorf("Validate() error = %q, wantErr %q", err, tc.wantErr)
-				}
+			} else if err == nil {
+				t.Errorf("Validate() no error, but wantErr %v", tc.wantErr)
 			}
 		})
 	}
 }
 
 func TestValidateMandatoryGroupFields(t *testing.T) {
+	metadata := &api.Metadata{
+		Name: "group",
+	}
+	spec := &api.GroupSpec{
+		Type: "team",
+	}
 	cases := []struct {
 		name    string
 		group   *api.Group
-		wantErr string
+		wantErr bool
 	}{
 		{
-			name: "no metadata",
+			name: "valid group",
 			group: &api.Group{
-				Kind: "Group",
+				Kind:     "Group",
+				Metadata: metadata,
+				Spec:     spec,
 			},
-			wantErr: "metadata is null",
 		},
 		{
 			name: "no spec",
 			group: &api.Group{
 				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 			},
-			wantErr: "has no spec",
+			wantErr: true,
 		},
 		{
 			name: "no spec.type",
 			group: &api.Group{
 				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "test"},
+				Metadata: metadata,
 				Spec:     &api.GroupSpec{},
 			},
-			wantErr: "has no spec.type",
-		},
-		{
-			name: "valid",
-			group: &api.Group{
-				Kind:     "Group",
-				Metadata: &api.Metadata{Name: "test"},
-				Spec:     &api.GroupSpec{Type: "team"},
-			},
+			wantErr: true,
 		},
 	}
 
@@ -789,16 +695,12 @@ func TestValidateMandatoryGroupFields(t *testing.T) {
 
 			err := r.Validate()
 
-			if tc.wantErr == "" {
+			if !tc.wantErr {
 				if err != nil {
 					t.Errorf("Validate() error = %v, wantErr %v", err, tc.wantErr)
 				}
-			} else {
-				if err == nil {
-					t.Errorf("Validate() error = %v, wantErr %v", err, tc.wantErr)
-				} else if !strings.Contains(err.Error(), tc.wantErr) {
-					t.Errorf("Validate() error = %q, wantErr %q", err, tc.wantErr)
-				}
+			} else if err == nil {
+				t.Errorf("Validate() no error, but wantErr %v", tc.wantErr)
 			}
 		})
 	}

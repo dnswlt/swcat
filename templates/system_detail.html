@@ -25,7 +25,7 @@
                 {{ end }}
                 <div class="flex items-center space-x-4">
                     <span class="text-gray-500">{{ .Spec.Type }}</span>
-                    <a href="/ui/entities/{{ .GetRef | urlencode }}/edit"
+                    <a href="/ui/entities/{{ .GetRef | refEncode }}/edit"
                         class="bg-blue-600 text-white py-1 px-3 rounded text-sm">
                         Edit YAML
                     </a>
@@ -70,7 +70,7 @@
                 <div class="p-4">
                     <ul class="list-disc list-inside">
                         {{ range .GetComponents }}
-                        <li><a href="/ui/components/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                        <li><a href="/ui/components/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ .QName }}</a></li>
                         {{ end }}
                     </ul>
                 </div>
@@ -83,7 +83,7 @@
                 <div class="p-4">
                     <ul class="list-disc list-inside">
                         {{ range .GetResources }}
-                        <li><a href="/ui/resources/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                        <li><a href="/ui/resources/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ .QName }}</a></li>
                         {{ end }}
                     </ul>
                 </div>
@@ -96,7 +96,7 @@
                 <div class="p-4">
                     <ul class="list-disc list-inside">
                         {{ range .GetAPIs }}
-                        <li><a href="/ui/apis/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ . }}</a></li>
+                        <li><a href="/ui/apis/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ .QName }}</a></li>
                         {{ end }}
                     </ul>
                 </div>

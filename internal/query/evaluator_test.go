@@ -19,7 +19,7 @@ func TestEvaluator_Matches(t *testing.T) {
 		Spec: &api.ComponentSpec{
 			Type:      "service",
 			Lifecycle: "experimental",
-			Owner:     "team-a",
+			Owner:     &api.Ref{Name: "team-a"},
 		},
 	}
 
@@ -34,7 +34,7 @@ func TestEvaluator_Matches(t *testing.T) {
 		},
 		Spec: &api.SystemSpec{
 			Type:  "workflow",
-			Owner: "team-b",
+			Owner: &api.Ref{Name: "team-b"},
 		},
 	}
 
