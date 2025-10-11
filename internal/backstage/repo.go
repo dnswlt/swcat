@@ -6,36 +6,37 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/dnswlt/swcat/internal/api"
+	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/query"
+	"github.com/dnswlt/swcat/internal/store"
 )
 
 type Repository struct {
 	// Maps containing the different kinds of entities in the repository.
 	//
 	// These maps are keyed by qnames without the kind: specifier: <namespace>/<name>
-	domains    map[string]*api.Domain
-	systems    map[string]*api.System
-	components map[string]*api.Component
-	resources  map[string]*api.Resource
-	apis       map[string]*api.API
-	groups     map[string]*api.Group
+	domains    map[string]*catalog.Domain
+	systems    map[string]*catalog.System
+	components map[string]*catalog.Component
+	resources  map[string]*catalog.Resource
+	apis       map[string]*catalog.API
+	groups     map[string]*catalog.Group
 	// Tracks all qualified names added to this repo
 	// (for duplicate detection and type-independent lookups)
 	//
 	// This map uses entity references including the kind: prefix: <kind>:<namespace>/<name>
-	allEntities map[string]api.Entity
+	allEntities map[string]catalog.Entity
 }
 
 func NewRepository() *Repository {
 	return &Repository{
-		domains:     make(map[string]*api.Domain),
-		systems:     make(map[string]*api.System),
-		components:  make(map[string]*api.Component),
-		resources:   make(map[string]*api.Resource),
-		apis:        make(map[string]*api.API),
-		groups:      make(map[string]*api.Group),
-		allEntities: make(map[string]api.Entity),
+		domains:     make(map[string]*catalog.Domain),
+		systems:     make(map[string]*catalog.System),
+		components:  make(map[string]*catalog.Component),
+		resources:   make(map[string]*catalog.Resource),
+		apis:        make(map[string]*catalog.API),
+		groups:      make(map[string]*catalog.Group),
+		allEntities: make(map[string]catalog.Entity),
 	}
 }
 
@@ -43,21 +44,21 @@ func (r *Repository) Size() int {
 	return len(r.allEntities)
 }
 
-func (r *Repository) setEntity(e api.Entity) error {
+func (r *Repository) setEntity(e catalog.Entity) error {
 	qname := e.GetRef().QName()
 
 	switch x := e.(type) {
-	case *api.Domain:
+	case *catalog.Domain:
 		r.domains[qname] = x
-	case *api.System:
+	case *catalog.System:
 		r.systems[qname] = x
-	case *api.Component:
+	case *catalog.Component:
 		r.components[qname] = x
-	case *api.Resource:
+	case *catalog.Resource:
 		r.resources[qname] = x
-	case *api.API:
+	case *catalog.API:
 		r.apis[qname] = x
-	case *api.Group:
+	case *catalog.Group:
 		r.groups[qname] = x
 	default:
 		return fmt.Errorf("invalid type: %T", e)
@@ -68,7 +69,7 @@ func (r *Repository) setEntity(e api.Entity) error {
 	return nil
 }
 
-func (r *Repository) UpdateEntity(e api.Entity) error {
+func (r *Repository) UpdateEntity(e catalog.Entity) error {
 	// This is a fairly heavyweight, but effective approach:
 	// Rebuild the repository from scratch (as a copy), validate, copy the maps back.
 	// It avoids having to deal with complex deletions and additions of relationships
@@ -81,7 +82,7 @@ func (r *Repository) UpdateEntity(e api.Entity) error {
 	eRef := e.GetRef()
 	r2 := NewRepository()
 	for _, n := range r.allEntities {
-		var toAdd api.Entity
+		var toAdd catalog.Entity
 		if n.GetRef().Equal(eRef) {
 			toAdd = e // Replace old entity by the new one
 		} else {
@@ -103,12 +104,12 @@ func (r *Repository) UpdateEntity(e api.Entity) error {
 	return nil
 }
 
-func (r *Repository) Exists(e api.Entity) bool {
+func (r *Repository) Exists(e catalog.Entity) bool {
 	_, ok := r.allEntities[e.GetRef().String()]
 	return ok
 }
 
-func (r *Repository) AddEntity(e api.Entity) error {
+func (r *Repository) AddEntity(e catalog.Entity) error {
 	if e.GetMetadata() == nil {
 		return fmt.Errorf("entity metadata is nil")
 	}
@@ -118,66 +119,66 @@ func (r *Repository) AddEntity(e api.Entity) error {
 	return r.setEntity(e)
 }
 
-func getEntity[T any](m map[string]*T, ref *api.Ref, expectedKind string) *T {
+func getEntity[T any](m map[string]*T, ref *catalog.Ref, expectedKind catalog.Kind) *T {
 	if ref.Kind != "" && ref.Kind != expectedKind {
 		return nil
 	}
 	return m[ref.QName()]
 }
 
-func (r *Repository) Group(ref *api.Ref) *api.Group {
-	return getEntity(r.groups, ref, "group")
+func (r *Repository) Group(ref *catalog.Ref) *catalog.Group {
+	return getEntity(r.groups, ref, catalog.KindGroup)
 }
 
-func (r *Repository) System(ref *api.Ref) *api.System {
-	return getEntity(r.systems, ref, "system")
+func (r *Repository) System(ref *catalog.Ref) *catalog.System {
+	return getEntity(r.systems, ref, catalog.KindSystem)
 }
 
-func (r *Repository) Domain(ref *api.Ref) *api.Domain {
-	return getEntity(r.domains, ref, "domain")
+func (r *Repository) Domain(ref *catalog.Ref) *catalog.Domain {
+	return getEntity(r.domains, ref, catalog.KindDomain)
 }
 
-func (r *Repository) API(ref *api.Ref) *api.API {
-	return getEntity(r.apis, ref, "api")
+func (r *Repository) API(ref *catalog.Ref) *catalog.API {
+	return getEntity(r.apis, ref, catalog.KindAPI)
 }
 
-func (r *Repository) Component(ref *api.Ref) *api.Component {
-	return getEntity(r.components, ref, "component")
+func (r *Repository) Component(ref *catalog.Ref) *catalog.Component {
+	return getEntity(r.components, ref, catalog.KindComponent)
 }
 
-func (r *Repository) Resource(ref *api.Ref) *api.Resource {
-	return getEntity(r.resources, ref, "resource")
+func (r *Repository) Resource(ref *catalog.Ref) *catalog.Resource {
+	return getEntity(r.resources, ref, catalog.KindResource)
 }
 
 // Entity returns the entity identified by the entity reference ref, if it exists.
 // If the entity does not exist, it returns the nil interface.
 // The entity reference must be fully qualified, i.e. <kind>:[<namespace>/]<name>
-func (r *Repository) Entity(ref *api.Ref) api.Entity {
+func (r *Repository) Entity(ref *catalog.Ref) catalog.Entity {
 	if ref.Kind == "" {
 		return nil // Entity lookup requires kind specifier
 	}
 	switch ref.Kind {
-	case "component":
+	case catalog.KindComponent:
 		if c := r.Component(ref); c != nil {
 			return c
 		}
-	case "system":
+	case catalog.KindSystem:
 		if s := r.System(ref); s != nil {
 			return s
 		}
-	case "domain":
+	case catalog.KindDomain:
 		if d := r.Domain(ref); d != nil {
 			return d
 		}
-	case "api":
+	case catalog.KindAPI:
 		if a := r.API(ref); a != nil {
 			return a
 		}
-	case "resource":
+	case catalog.KindResource:
 		if res := r.Resource(ref); res != nil {
 			return res
 		}
-	case "group":
+	case catalog.KindGroup:
 		if g := r.Group(ref); g != nil {
 			return g
 		}
@@ -185,7 +186,7 @@ func (r *Repository) Entity(ref *api.Ref) api.Entity {
 	return nil // invalid kind specifier
 }
 
-func findEntities[T api.Entity](q string, items map[string]T) []T {
+func findEntities[T catalog.Entity](q string, items map[string]T) []T {
 	var result []T
 
 	if strings.TrimSpace(q) == "" {
@@ -211,56 +212,56 @@ func findEntities[T api.Entity](q string, items map[string]T) []T {
 		}
 	}
 	slices.SortFunc(result, func(c1, c2 T) int {
-		return api.CompareEntityByName(c1, c2)
+		return catalog.CompareEntityByName(c1, c2)
 	})
 	return result
 }
 
-func (r *Repository) FindComponents(q string) []*api.Component {
+func (r *Repository) FindComponents(q string) []*catalog.Component {
 	return findEntities(q, r.components)
 }
 
-func (r *Repository) FindSystems(q string) []*api.System {
+func (r *Repository) FindSystems(q string) []*catalog.System {
 	return findEntities(q, r.systems)
 }
 
-func (r *Repository) FindAPIs(q string) []*api.API {
+func (r *Repository) FindAPIs(q string) []*catalog.API {
 	return findEntities(q, r.apis)
 }
 
-func (r *Repository) FindResources(q string) []*api.Resource {
+func (r *Repository) FindResources(q string) []*catalog.Resource {
 	return findEntities(q, r.resources)
 }
 
-func (r *Repository) FindDomains(q string) []*api.Domain {
+func (r *Repository) FindDomains(q string) []*catalog.Domain {
 	return findEntities(q, r.domains)
 }
 
-func (r *Repository) FindGroups(q string) []*api.Group {
+func (r *Repository) FindGroups(q string) []*catalog.Group {
 	return findEntities(q, r.groups)
 }
 
-func (r *Repository) validateMetadata(m *api.Metadata) error {
+func (r *Repository) validateMetadata(m *catalog.Metadata) error {
 	if m == nil {
 		return fmt.Errorf("metadata is null")
 	}
-	if !api.IsValidName(m.Name) {
+	if !catalog.IsValidName(m.Name) {
 		return fmt.Errorf("invalid name: %s", m.Name)
 	}
-	if m.Namespace != "" && !api.IsValidName(m.Namespace) {
+	if m.Namespace != "" && !catalog.IsValidNamespace(m.Namespace) {
 		return fmt.Errorf("invalid namespace: %s", m.Namespace)
 	}
 	return nil
 }
 
-func validRef(ref *api.Ref) error {
+func validRef(ref *catalog.Ref) error {
 	if ref == nil {
 		return fmt.Errorf("nil entity reference")
 	}
-	if ref.Namespace != "" && !api.IsValidName(ref.Namespace) {
+	if ref.Namespace != "" && !catalog.IsValidName(ref.Namespace) {
 		return fmt.Errorf("not a valid namespace name %q", ref.Namespace)
 	}
-	if !api.IsValidName(ref.Name) {
+	if !catalog.IsValidName(ref.Name) {
 		return fmt.Errorf("not a valid entity name %q", ref.Name)
 	}
 	return nil
@@ -269,7 +270,7 @@ func validRef(ref *api.Ref) error {
 // validDependsOnRef checks if ref is a valid fully qualified entity reference.
 // It must include the entity kind, e.g. "component:my-namespace/foo", or "component:bar".
 // For now, only component and resource dependencies are supported.
-func validDependsOnRef(ref *api.Ref) error {
+func validDependsOnRef(ref *catalog.Ref) error {
 	if err := validRef(ref); err != nil {
 		return err
 	}
@@ -298,7 +299,7 @@ func (r *Repository) Validate() error {
 		}
 		if g.Spec.Profile == nil {
 			// Avoid nil checks elsewhere. Profile is optional according to the spec.
-			g.Spec.Profile = &api.GroupSpecProfile{}
+			g.Spec.Profile = &catalog.GroupSpecProfile{}
 		}
 	}
 
@@ -471,13 +472,13 @@ func (r *Repository) Validate() error {
 // Assumes that the repository has been validated already.
 func (r *Repository) populateRelationships() {
 
-	registerDependent := func(entityRef *api.Ref, depRef *api.LabelRef) {
+	registerDependent := func(entityRef *catalog.Ref, depRef *catalog.LabelRef) {
 		dep := r.Entity(depRef.Ref)
 		switch x := dep.(type) {
-		case *api.Component:
-			x.AddDependent(&api.LabelRef{Ref: entityRef, Label: depRef.Label})
-		case *api.Resource:
-			x.AddDependent(&api.LabelRef{Ref: entityRef, Label: depRef.Label})
+		case *catalog.Component:
+			x.AddDependent(&catalog.LabelRef{Ref: entityRef, Label: depRef.Label})
+		case *catalog.Resource:
+			x.AddDependent(&catalog.LabelRef{Ref: entityRef, Label: depRef.Label})
 		default:
 			log.Fatalf("Invalid dependency: %s", depRef.String())
 		}
@@ -489,11 +490,11 @@ func (r *Repository) populateRelationships() {
 		// Register in APIs
 		for _, a := range c.Spec.ConsumesAPIs {
 			ap := r.API(a.Ref)
-			ap.AddConsumer(&api.LabelRef{Ref: ref, Label: a.Label})
+			ap.AddConsumer(&catalog.LabelRef{Ref: ref, Label: a.Label})
 		}
 		for _, a := range c.Spec.ProvidesAPIs {
 			ap := r.API(a.Ref)
-			ap.AddProvider(&api.LabelRef{Ref: ref, Label: a.Label})
+			ap.AddProvider(&catalog.LabelRef{Ref: ref, Label: a.Label})
 		}
 		if s := c.Spec.System; s != nil {
 			system := r.System(s)
@@ -536,5 +537,37 @@ func (r *Repository) populateRelationships() {
 			domain.AddSystem(ref)
 		}
 	}
+
+}
+
+// LoadRepositoryFromPath reads entities from the given catalog paths
+// and returns a validated repository.
+// Elements in catalogPaths must be .yml file paths.
+func LoadRepositoryFromPaths(catalogPaths []string) (*Repository, error) {
+	repo := NewRepository()
+
+	for _, catalogPath := range catalogPaths {
+		log.Printf("Reading catalog file %s", catalogPath)
+		entities, err := store.ReadEntities(catalogPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read entities from %s: %v", catalogPath, err)
+		}
+		for _, e := range entities {
+			entity, err := catalog.NewEntityFromAPI(e)
+			if err != nil {
+				return nil, fmt.Errorf("failed to convert api entity %s:%s/%s (source: %s:%d) to catalog entity: %v",
+					e.GetKind(), e.GetMetadata().Namespace, e.GetMetadata().Namespace,
+					e.GetSourceInfo().Path, e.GetSourceInfo().Line, err)
+			}
+			if err := repo.AddEntity(entity); err != nil {
+				return nil, fmt.Errorf("failed to add entity %q to the repo: %v", entity.GetRef(), err)
+			}
+		}
+	}
+	if err := repo.Validate(); err != nil {
+		return nil, fmt.Errorf("repository validation failed: %v", err)
+	}
+
+	return repo, nil
 
 }

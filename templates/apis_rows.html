@@ -8,11 +8,11 @@
         </a>
     </td>
     <td class="px-4 py-2">
-        <a href="/ui/systems/{{ .Spec.System | urlencode }}" class="text-blue-600 hover:underline">
-            {{ .Spec.System }}
+        <a href="/ui/systems/{{ .Spec.System.QName | urlencode }}" class="text-blue-600 hover:underline">
+            {{ .Spec.System.QName }}
         </a>
     </td>
-    <td class="px-4 py-2">{{ .Spec.Owner }}</td>
+    <td class="px-4 py-2">{{ .Spec.Owner.QName }}</td>
     <td class="px-4 py-2">{{ .Spec.Type }}</td>
 </tr>
 {{- end }}

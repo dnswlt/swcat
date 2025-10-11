@@ -19,6 +19,9 @@ type EdgeInfo struct {
 	To    string `json:"to"`    // To entity reference.
 	Label string `json:"label"` // Optional edge label.
 }
+type ClusterInfo struct {
+	Label string `json:"label"`
+}
 
 // SVGGraphMetadata provides "sidecar" metadata for nodes and edges that are hard or impossible
 // to encode in the SVG itself. It is marshalled as JSON and embedded in HTML pages along with
@@ -28,6 +31,8 @@ type SVGGraphMetadata struct {
 	Nodes map[string]*NodeInfo `json:"nodes"`
 	// Maps the IDs of edges in the generated SVG (id= attributes) to their edge info.
 	Edges map[string]*EdgeInfo `json:"edges"`
+	// Maps the IDs of clusters in the generated SVG (id= attributes) to their cluster info.
+	Clusters map[string]*ClusterInfo `json:"clusters"`
 }
 
 type DotSource struct {
@@ -156,16 +161,18 @@ type Edge struct {
 }
 
 type Writer struct {
-	w        *strings.Builder
-	nodeInfo map[string]*NodeInfo
-	edgeInfo map[string]*EdgeInfo
+	w           *strings.Builder
+	nodeInfo    map[string]*NodeInfo
+	edgeInfo    map[string]*EdgeInfo
+	clusterInfo map[string]*ClusterInfo
 }
 
 func New() *Writer {
 	return &Writer{
-		w:        &strings.Builder{},
-		nodeInfo: make(map[string]*NodeInfo),
-		edgeInfo: make(map[string]*EdgeInfo),
+		w:           &strings.Builder{},
+		nodeInfo:    make(map[string]*NodeInfo),
+		edgeInfo:    make(map[string]*EdgeInfo),
+		clusterInfo: make(map[string]*ClusterInfo),
 	}
 }
 
@@ -256,9 +263,14 @@ func (dw *Writer) AddEdge(edge Edge) {
 	fmt.Fprintln(dw.w)
 }
 
-func (dw *Writer) StartCluster(name string) {
-	fmt.Fprintf(dw.w, "subgraph \"cluster_%s\" {\n", name)
-	fmt.Fprintf(dw.w, "label=\"%s\"\n", name)
+func (dw *Writer) StartCluster(label string) {
+	clusterID := fmt.Sprintf("svg-cluster-%d", len(dw.clusterInfo))
+	dw.clusterInfo[clusterID] = &ClusterInfo{
+		Label: label,
+	}
+	fmt.Fprintf(dw.w, "subgraph \"cluster_%s\" {\n", clusterID)
+	fmt.Fprintf(dw.w, "id=\"%s\"\n", clusterID)
+	fmt.Fprintf(dw.w, "label=\"%s\"\n", label)
 	fmt.Fprintf(dw.w, "style=filled\n")
 	fmt.Fprintf(dw.w, "fillcolor=\"#f3f4f6\"\n")
 }

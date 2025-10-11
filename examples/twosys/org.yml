@@ -26,6 +26,9 @@ spec:
   profile:
     displayName: Team Banana
     email: banana-team@example.com
+  members:
+    - Jakob Pedersen
+    - Henry Fjord jr.
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Group

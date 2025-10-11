@@ -10,17 +10,18 @@ import (
 	"time"
 
 	"github.com/dnswlt/swcat/internal/backstage"
+	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/web"
 )
 
 func formatFiles(files []string) error {
 	for _, f := range files {
 		log.Printf("Reading input file %s", f)
-		es, err := backstage.ReadEntities(f)
+		es, err := store.ReadEntities(f)
 		if err != nil {
 			return fmt.Errorf("failed to read %s: %v", f, err)
 		}
-		if err := backstage.WriteEntities(f, es); err != nil {
+		if err := store.WriteEntities(f, es); err != nil {
 			return err
 		}
 	}
@@ -52,7 +53,7 @@ func main() {
 		log.Printf("Found dot program at %s (%s)", path, strings.TrimSpace(string(output)))
 	}()
 
-	files, err := backstage.CollectYMLFiles(flag.Args(), 3) // max 3 directory levels deep.
+	files, err := store.CollectYMLFiles(flag.Args(), 3) // max 3 directory levels deep.
 	if err != nil {
 		log.Fatalf("Failed to collect YAML files: %v", err)
 	}

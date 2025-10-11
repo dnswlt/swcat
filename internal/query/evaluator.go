@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/dnswlt/swcat/internal/api"
+	"github.com/dnswlt/swcat/internal/catalog"
 )
 
 // Evaluator holds a compiled query expression and provides methods to match it against entities.
@@ -25,16 +25,16 @@ func NewEvaluator(expr Expression) *Evaluator {
 
 // attributeAccessor defines a function that extracts specific string attribute values from an entity.
 // It returns a slice of strings and a boolean indicating if the attribute is applicable.
-type attributeAccessor func(e api.Entity) (values []string, ok bool)
+type attributeAccessor func(e catalog.Entity) (values []string, ok bool)
 
 // attributeAccessors maps query attribute names to functions that can retrieve them from an entity.
 var attributeAccessors = map[string]attributeAccessor{
-	"kind":      func(e api.Entity) ([]string, bool) { return []string{e.GetKind()}, true },
-	"name":      func(e api.Entity) ([]string, bool) { return []string{e.GetMetadata().Name}, true },
-	"namespace": func(e api.Entity) ([]string, bool) { return []string{e.GetMetadata().Namespace}, true },
-	"title":     func(e api.Entity) ([]string, bool) { return []string{e.GetMetadata().Title}, true },
-	"tag":       func(e api.Entity) ([]string, bool) { return e.GetMetadata().Tags, true },
-	"label": func(e api.Entity) ([]string, bool) {
+	"kind":      func(e catalog.Entity) ([]string, bool) { return []string{e.GetKind()}, true },
+	"name":      func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Name}, true },
+	"namespace": func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Namespace}, true },
+	"title":     func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Title}, true },
+	"tag":       func(e catalog.Entity) ([]string, bool) { return e.GetMetadata().Tags, true },
+	"label": func(e catalog.Entity) ([]string, bool) {
 		if e.GetMetadata().Labels == nil {
 			return nil, true
 		}
@@ -45,29 +45,29 @@ var attributeAccessors = map[string]attributeAccessor{
 		}
 		return results, true
 	},
-	"owner": func(e api.Entity) ([]string, bool) {
+	"owner": func(e catalog.Entity) ([]string, bool) {
 		switch v := e.(type) {
-		case *api.Component:
+		case *catalog.Component:
 			if v.Spec == nil {
 				return nil, false
 			}
 			return []string{v.Spec.Owner.QName()}, true
-		case *api.System:
+		case *catalog.System:
 			if v.Spec == nil {
 				return nil, false
 			}
 			return []string{v.Spec.Owner.QName()}, true
-		case *api.Domain:
+		case *catalog.Domain:
 			if v.Spec == nil {
 				return nil, false
 			}
 			return []string{v.Spec.Owner.QName()}, true
-		case *api.Resource:
+		case *catalog.Resource:
 			if v.Spec == nil {
 				return nil, false
 			}
 			return []string{v.Spec.Owner.QName()}, true
-		case *api.API:
+		case *catalog.API:
 			if v.Spec == nil {
 				return nil, false
 			}
@@ -76,34 +76,34 @@ var attributeAccessors = map[string]attributeAccessor{
 			return nil, false // Group and other types don't have an owner
 		}
 	},
-	"type": func(e api.Entity) ([]string, bool) {
+	"type": func(e catalog.Entity) ([]string, bool) {
 		switch v := e.(type) {
-		case *api.Component:
+		case *catalog.Component:
 			if v.Spec == nil {
 				return nil, false
 			}
 			return []string{v.Spec.Type}, true
-		case *api.System:
+		case *catalog.System:
 			if v.Spec == nil {
 				return nil, false
 			}
 			return []string{v.Spec.Type}, true
-		case *api.Domain:
+		case *catalog.Domain:
 			if v.Spec == nil {
 				return nil, false
 			}
 			return []string{v.Spec.Type}, true
-		case *api.Resource:
+		case *catalog.Resource:
 			if v.Spec == nil {
 				return nil, false
 			}
 			return []string{v.Spec.Type}, true
-		case *api.API:
+		case *catalog.API:
 			if v.Spec == nil {
 				return nil, false
 			}
 			return []string{v.Spec.Type}, true
-		case *api.Group:
+		case *catalog.Group:
 			if v.Spec == nil {
 				return nil, false
 			}
@@ -112,14 +112,14 @@ var attributeAccessors = map[string]attributeAccessor{
 			return nil, false
 		}
 	},
-	"lifecycle": func(e api.Entity) ([]string, bool) {
+	"lifecycle": func(e catalog.Entity) ([]string, bool) {
 		switch v := e.(type) {
-		case *api.Component:
+		case *catalog.Component:
 			if v.Spec == nil {
 				return nil, false
 			}
 			return []string{v.Spec.Lifecycle}, true
-		case *api.API:
+		case *catalog.API:
 			if v.Spec == nil {
 				return nil, false
 			}
@@ -131,12 +131,12 @@ var attributeAccessors = map[string]attributeAccessor{
 }
 
 // Matches returns true if the entity matches the expression held by the Evaluator.
-func (ev *Evaluator) Matches(e api.Entity) (bool, error) {
+func (ev *Evaluator) Matches(e catalog.Entity) (bool, error) {
 	return ev.evaluateNode(e, ev.expr)
 }
 
 // evaluateNode recursively walks the expression tree.
-func (ev *Evaluator) evaluateNode(e api.Entity, expr Expression) (bool, error) {
+func (ev *Evaluator) evaluateNode(e catalog.Entity, expr Expression) (bool, error) {
 	switch v := expr.(type) {
 	case *Term:
 		// A simple term matches against the entity's qualified name.

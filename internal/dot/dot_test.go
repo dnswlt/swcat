@@ -52,7 +52,8 @@ splines="spline"
 class="graphviz-svg"
 node[shape="box",fontname="sans-serif",fontsize="11",style="filled,rounded"]
 edge[fontname="sans-serif",fontsize="11",minlen="4"]
-subgraph "cluster_sys1" {
+subgraph "cluster_svg-cluster-0" {
+id="svg-cluster-0"
 label="sys1"
 style=filled
 fillcolor="#f3f4f6"

@@ -1,4 +1,4 @@
-package backstage
+package store
 
 import (
 	"bytes"
@@ -22,12 +22,12 @@ const (
 
 var (
 	kindFactories = map[string]func() api.Entity{
-		"Domain":    func() api.Entity { return &api.Domain{} },
-		"System":    func() api.Entity { return &api.System{} },
-		"Component": func() api.Entity { return &api.Component{} },
-		"Resource":  func() api.Entity { return &api.Resource{} },
-		"API":       func() api.Entity { return &api.API{} },
-		"Group":     func() api.Entity { return &api.Group{} },
+		api.YAMLKindDomain:    func() api.Entity { return &api.Domain{} },
+		api.YAMLKindSystem:    func() api.Entity { return &api.System{} },
+		api.YAMLKindComponent: func() api.Entity { return &api.Component{} },
+		api.YAMLKindResource:  func() api.Entity { return &api.Resource{} },
+		api.YAMLKindAPI:       func() api.Entity { return &api.API{} },
+		api.YAMLKindGroup:     func() api.Entity { return &api.Group{} },
 	}
 )
 
@@ -276,31 +276,5 @@ func CollectYMLFiles(args []string, maxDepth int) ([]string, error) {
 		}
 	}
 	return allFiles, nil
-
-}
-
-// LoadRepositoryFromPath reads entities from the given catalog paths
-// and returns a validated repository.
-// Elements in catalogPaths must be .yml file paths.
-func LoadRepositoryFromPaths(catalogPaths []string) (*Repository, error) {
-	repo := NewRepository()
-
-	for _, catalogPath := range catalogPaths {
-		log.Printf("Reading catalog file %s", catalogPath)
-		entities, err := ReadEntities(catalogPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read entities from %s: %v", catalogPath, err)
-		}
-		for _, e := range entities {
-			if err := repo.AddEntity(e); err != nil {
-				return nil, fmt.Errorf("failed to add entity %q to the repo: %v", e.GetRef().QName(), err)
-			}
-		}
-	}
-	if err := repo.Validate(); err != nil {
-		return nil, fmt.Errorf("repository validation failed: %v", err)
-	}
-
-	return repo, nil
 
 }

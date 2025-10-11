@@ -14,9 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/backstage"
+	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/dot"
+	"github.com/dnswlt/swcat/internal/store"
 	"gopkg.in/yaml.v3"
 )
 
@@ -148,7 +149,7 @@ func (s *Server) serveSystems(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID string) {
-	systemRef, err := api.ParseRef(systemID)
+	systemRef, err := catalog.ParseRefAs(catalog.KindSystem, systemID)
 	if err != nil {
 		http.Error(w, "Invalid systemID", http.StatusBadRequest)
 		return
@@ -162,10 +163,10 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	params["System"] = system
 
 	// Extract neighbor systems from context parameter c=.
-	var contextSystems []*api.System
+	var contextSystems []*catalog.System
 	q := r.URL.Query()
 	for _, v := range q["c"] {
-		ref, err := api.ParseRef(v)
+		ref, err := catalog.ParseRefAs(catalog.KindSystem, v)
 		if err != nil {
 			continue // Ignore invalid refs
 		}
@@ -198,7 +199,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 }
 
 func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componentID string) {
-	componentRef, err := api.ParseRef(componentID)
+	componentRef, err := catalog.ParseRefAs(catalog.KindComponent, componentID)
 	if err != nil {
 		http.Error(w, "Invalid componentID", http.StatusBadRequest)
 		return
@@ -247,7 +248,7 @@ func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) {
-	apiRef, err := api.ParseRef(apiID)
+	apiRef, err := catalog.ParseRefAs(catalog.KindAPI, apiID)
 	if err != nil {
 		http.Error(w, "Invalid apiID", http.StatusBadRequest)
 		return
@@ -296,7 +297,7 @@ func (s *Server) serveResources(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceID string) {
-	resourceRef, err := api.ParseRef(resourceID)
+	resourceRef, err := catalog.ParseRefAs(catalog.KindResource, resourceID)
 	if err != nil {
 		http.Error(w, "Invalid resourceID", http.StatusBadRequest)
 		return
@@ -345,7 +346,7 @@ func (s *Server) serveDomains(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID string) {
-	domainRef, err := api.ParseRef(domainID)
+	domainRef, err := catalog.ParseRefAs(catalog.KindDomain, domainID)
 	if err != nil {
 		http.Error(w, "Invalid domainID", http.StatusBadRequest)
 		return
@@ -394,7 +395,7 @@ func (s *Server) serveGroups(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID string) {
-	groupRef, err := api.ParseRef(groupID)
+	groupRef, err := catalog.ParseRefAs(catalog.KindGroup, groupID)
 	if err != nil {
 		http.Error(w, "Invalid groupID", http.StatusBadRequest)
 		return
@@ -410,7 +411,7 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 }
 
 func (s *Server) serveEntityEdit(w http.ResponseWriter, r *http.Request, entityRef string) {
-	ref, err := api.ParseRef(entityRef)
+	ref, err := catalog.ParseRef(entityRef)
 	if err != nil {
 		http.Error(w, "Invalid domainID", http.StatusBadRequest)
 		return
@@ -425,7 +426,7 @@ func (s *Server) serveEntityEdit(w http.ResponseWriter, r *http.Request, entityR
 
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(backstage.YAMLIndent)
+	enc.SetIndent(store.YAMLIndent)
 	if err := enc.Encode(entity.GetSourceInfo().Node); err != nil {
 		http.Error(w, "Failed to get YAML", http.StatusInternalServerError)
 		log.Printf("Failed to encode YAML for %q: %v", entityRef, err)
@@ -458,7 +459,7 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		return
 	}
 
-	ref, err := api.ParseRef(entityRef)
+	ref, err := catalog.ParseRef(entityRef)
 	if err != nil {
 		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
 		return
@@ -471,16 +472,21 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	}
 
 	newYAML := r.FormValue("yaml")
-	newEntity, err := backstage.ReadEntityFromString(newYAML)
+	newAPIEntity, err := store.ReadEntityFromString(newYAML)
 	if err != nil {
 		s.renderErrorSnippet(w, fmt.Sprintf("Failed to parse new YAML: %v", err))
+		return
+	}
+	newEntity, err := catalog.NewEntityFromAPI(newAPIEntity)
+	if err != nil {
+		s.renderErrorSnippet(w, fmt.Sprintf("Invalid entity: %v", err))
 		return
 	}
 
 	// Only update if the entity reference remains the same, i.e.:
 	// - no changes of the kind, namespace, or name
 	if !newEntity.GetRef().Equal(originalEntity.GetRef()) {
-		errMsg := fmt.Sprintf("Updated entity reference does not match original (old: %q, new: %q)",
+		errMsg := fmt.Sprintf("Updated entity ID does not match original (old: %q, new: %q)",
 			newEntity.GetRef(), originalEntity.GetRef())
 		s.renderErrorSnippet(w, errMsg)
 		return
@@ -491,24 +497,27 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		s.renderErrorSnippet(w, fmt.Sprintf("Failed to update entity in repo: %v", err))
 		return
 	}
-	// Invalidate the SVg cache
+	// Invalidate the SVG cache
 	s.clearSVGCache()
 
-	// Update the YAML file.
+	// Copy over path information for re-editing later.
 	path := originalEntity.GetSourceInfo().Path
 	newEntity.GetSourceInfo().Path = path
-
-	entitiesInFile, err := backstage.ReadEntities(path)
+	// Update the YAML file.
+	entitiesInFile, err := store.ReadEntities(path)
 	if err != nil {
 		http.Error(w, "Failed to read entity file", http.StatusInternalServerError)
 		log.Printf("Failed to read entities from %q: %v", path, err)
 		return
 	}
 
+	// Find and replace the modified entity in the list of entities read from its path.
 	var found bool
+	originalRef := catalog.APIRef(originalEntity.GetRef())
 	for i, e := range entitiesInFile {
-		if e.GetRef().Equal(originalEntity.GetRef()) {
-			entitiesInFile[i] = newEntity
+		if e.GetRef().Equal(originalRef) {
+			// Replace old with new for writing back to disk
+			entitiesInFile[i] = newAPIEntity
 			found = true
 			break
 		}
@@ -519,7 +528,7 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		return
 	}
 
-	if err := backstage.WriteEntities(path, entitiesInFile); err != nil {
+	if err := store.WriteEntities(path, entitiesInFile); err != nil {
 		http.Error(w, "Failed to write updated entity file", http.StatusInternalServerError)
 		log.Printf("Failed to write entities to %q: %v", path, err)
 		return

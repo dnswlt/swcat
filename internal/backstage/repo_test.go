@@ -5,32 +5,32 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/dnswlt/swcat/internal/api"
+	"github.com/dnswlt/swcat/internal/catalog"
 )
 
 func TestRepository_AddAndGet(t *testing.T) {
 	repo := NewRepository()
 
 	tests := []struct {
-		entity api.Entity
+		entity catalog.Entity
 	}{
 		{
-			entity: &api.Component{Metadata: &api.Metadata{Name: "c1"}},
+			entity: &catalog.Component{Metadata: &catalog.Metadata{Name: "c1"}},
 		},
 		{
-			entity: &api.System{Metadata: &api.Metadata{Name: "s1"}},
+			entity: &catalog.System{Metadata: &catalog.Metadata{Name: "s1"}},
 		},
 		{
-			entity: &api.Domain{Metadata: &api.Metadata{Name: "d1"}},
+			entity: &catalog.Domain{Metadata: &catalog.Metadata{Name: "d1"}},
 		},
 		{
-			entity: &api.API{Metadata: &api.Metadata{Name: "a1"}},
+			entity: &catalog.API{Metadata: &catalog.Metadata{Name: "a1"}},
 		},
 		{
-			entity: &api.Resource{Metadata: &api.Metadata{Name: "r1"}},
+			entity: &catalog.Resource{Metadata: &catalog.Metadata{Name: "r1"}},
 		},
 		{
-			entity: &api.Group{Metadata: &api.Metadata{Name: "g1"}},
+			entity: &catalog.Group{Metadata: &catalog.Metadata{Name: "g1"}},
 		},
 	}
 
@@ -47,19 +47,19 @@ func TestRepository_AddAndGet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("get %s", tt.entity.GetKind()), func(t *testing.T) {
-			var e api.Entity
+			var e catalog.Entity
 			switch tt.entity.(type) {
-			case *api.Component:
+			case *catalog.Component:
 				e = repo.Component(tt.entity.GetRef())
-			case *api.System:
+			case *catalog.System:
 				e = repo.System(tt.entity.GetRef())
-			case *api.Domain:
+			case *catalog.Domain:
 				e = repo.Domain(tt.entity.GetRef())
-			case *api.API:
+			case *catalog.API:
 				e = repo.API(tt.entity.GetRef())
-			case *api.Resource:
+			case *catalog.Resource:
 				e = repo.Resource(tt.entity.GetRef())
-			case *api.Group:
+			case *catalog.Group:
 				e = repo.Group(tt.entity.GetRef())
 			default:
 				t.Fatalf("unknown typeName: %s", tt.entity.GetKind())
@@ -75,7 +75,7 @@ func TestRepository_AddAndGet(t *testing.T) {
 	}
 
 	t.Run("add duplicate", func(t *testing.T) {
-		err := repo.AddEntity(&api.Component{Metadata: &api.Metadata{Name: "c1"}})
+		err := repo.AddEntity(&catalog.Component{Metadata: &catalog.Metadata{Name: "c1"}})
 		if err == nil {
 			t.Error("AddEntity() error = nil, want error")
 		}
@@ -85,13 +85,13 @@ func TestRepository_AddAndGet(t *testing.T) {
 func TestRepository_Entity(t *testing.T) {
 	repo := NewRepository()
 
-	entities := []api.Entity{
-		&api.Component{Metadata: &api.Metadata{Name: "c1"}},
-		&api.System{Metadata: &api.Metadata{Name: "s1"}},
-		&api.Domain{Metadata: &api.Metadata{Name: "d1"}},
-		&api.API{Metadata: &api.Metadata{Name: "a1"}},
-		&api.Resource{Metadata: &api.Metadata{Name: "r1"}},
-		&api.Group{Metadata: &api.Metadata{Name: "g1"}},
+	entities := []catalog.Entity{
+		&catalog.Component{Metadata: &catalog.Metadata{Name: "c1"}},
+		&catalog.System{Metadata: &catalog.Metadata{Name: "s1"}},
+		&catalog.Domain{Metadata: &catalog.Metadata{Name: "d1"}},
+		&catalog.API{Metadata: &catalog.Metadata{Name: "a1"}},
+		&catalog.Resource{Metadata: &catalog.Metadata{Name: "r1"}},
+		&catalog.Group{Metadata: &catalog.Metadata{Name: "g1"}},
 	}
 
 	for _, e := range entities {
@@ -111,21 +111,21 @@ func TestRepository_Entity(t *testing.T) {
 	}
 
 	t.Run("non-existing ref", func(t *testing.T) {
-		e := repo.Entity(&api.Ref{Kind: "component", Name: "s1"})
+		e := repo.Entity(&catalog.Ref{Kind: "component", Name: "s1"})
 		if e != nil {
 			t.Error("Entity() returned non-nil for non-existing ref")
 		}
 	})
 
 	t.Run("invalid ref", func(t *testing.T) {
-		e := repo.Entity(&api.Ref{Kind: "invalid", Name: "ref"})
+		e := repo.Entity(&catalog.Ref{Kind: "invalid", Name: "ref"})
 		if e != nil {
 			t.Error("Entity() returned non-nil for invalid ref")
 		}
 	})
 
 	t.Run("ref without kind", func(t *testing.T) {
-		e := repo.Entity(&api.Ref{Name: "c1"})
+		e := repo.Entity(&catalog.Ref{Name: "c1"})
 		if e != nil {
 			t.Error("Entity() returned non-nil for ref without kind")
 		}
@@ -135,20 +135,20 @@ func TestRepository_Entity(t *testing.T) {
 func TestRepository_Finders(t *testing.T) {
 	repo := NewRepository()
 
-	entities := []api.Entity{
-		&api.Component{Metadata: &api.Metadata{Name: "c2", Namespace: "ns1"}}, // Add in different order
-		&api.Component{Metadata: &api.Metadata{Name: "c1", Namespace: "ns1"}},
-		&api.Component{Metadata: &api.Metadata{Name: "c3", Namespace: "ns2"}},
-		&api.Component{Metadata: &api.Metadata{Name: "c4", Namespace: "ns3"}, Spec: &api.ComponentSpec{
-			Owner: &api.Ref{Name: "o4"}, Lifecycle: "production",
+	entities := []catalog.Entity{
+		&catalog.Component{Metadata: &catalog.Metadata{Name: "c2", Namespace: "ns1"}}, // Add in different order
+		&catalog.Component{Metadata: &catalog.Metadata{Name: "c1", Namespace: "ns1"}},
+		&catalog.Component{Metadata: &catalog.Metadata{Name: "c3", Namespace: "ns2"}},
+		&catalog.Component{Metadata: &catalog.Metadata{Name: "c4", Namespace: "ns3"}, Spec: &catalog.ComponentSpec{
+			Owner: &catalog.Ref{Name: "o4"}, Lifecycle: "production",
 		}},
-		&api.System{Metadata: &api.Metadata{Name: "s2"}},
-		&api.System{Metadata: &api.Metadata{Name: "s1"}},
-		&api.Domain{Metadata: &api.Metadata{Name: "d1"}},
-		&api.API{Metadata: &api.Metadata{Name: "a1"}},
-		&api.Resource{Metadata: &api.Metadata{Name: "r1"}},
-		&api.Group{Metadata: &api.Metadata{Name: "g2"}},
-		&api.Group{Metadata: &api.Metadata{Name: "g1"}},
+		&catalog.System{Metadata: &catalog.Metadata{Name: "s2"}},
+		&catalog.System{Metadata: &catalog.Metadata{Name: "s1"}},
+		&catalog.Domain{Metadata: &catalog.Metadata{Name: "d1"}},
+		&catalog.API{Metadata: &catalog.Metadata{Name: "a1"}},
+		&catalog.Resource{Metadata: &catalog.Metadata{Name: "r1"}},
+		&catalog.Group{Metadata: &catalog.Metadata{Name: "g2"}},
+		&catalog.Group{Metadata: &catalog.Metadata{Name: "g1"}},
 	}
 
 	for _, e := range entities {
@@ -160,7 +160,7 @@ func TestRepository_Finders(t *testing.T) {
 		wantNames []string
 	}
 
-	testFinder := func(t *testing.T, finder func(string) []api.Entity, tests []finderTest) {
+	testFinder := func(t *testing.T, finder func(string) []catalog.Entity, tests []finderTest) {
 		for _, tt := range tests {
 			t.Run(tt.query, func(t *testing.T) {
 				results := finder(tt.query)
@@ -181,8 +181,8 @@ func TestRepository_Finders(t *testing.T) {
 	}
 
 	t.Run("FindComponents", func(t *testing.T) {
-		finder := func(q string) []api.Entity {
-			var entities []api.Entity
+		finder := func(q string) []catalog.Entity {
+			var entities []catalog.Entity
 			for _, e := range repo.FindComponents(q) {
 				entities = append(entities, e)
 			}
@@ -201,8 +201,8 @@ func TestRepository_Finders(t *testing.T) {
 	})
 
 	t.Run("FindSystems", func(t *testing.T) {
-		finder := func(q string) []api.Entity {
-			var entities []api.Entity
+		finder := func(q string) []catalog.Entity {
+			var entities []catalog.Entity
 			for _, e := range repo.FindSystems(q) {
 				entities = append(entities, e)
 			}
@@ -217,8 +217,8 @@ func TestRepository_Finders(t *testing.T) {
 	})
 
 	t.Run("FindDomains", func(t *testing.T) {
-		finder := func(q string) []api.Entity {
-			var entities []api.Entity
+		finder := func(q string) []catalog.Entity {
+			var entities []catalog.Entity
 			for _, e := range repo.FindDomains(q) {
 				entities = append(entities, e)
 			}
@@ -232,8 +232,8 @@ func TestRepository_Finders(t *testing.T) {
 	})
 
 	t.Run("FindAPIs", func(t *testing.T) {
-		finder := func(q string) []api.Entity {
-			var entities []api.Entity
+		finder := func(q string) []catalog.Entity {
+			var entities []catalog.Entity
 			for _, e := range repo.FindAPIs(q) {
 				entities = append(entities, e)
 			}
@@ -247,8 +247,8 @@ func TestRepository_Finders(t *testing.T) {
 	})
 
 	t.Run("FindResources", func(t *testing.T) {
-		finder := func(q string) []api.Entity {
-			var entities []api.Entity
+		finder := func(q string) []catalog.Entity {
+			var entities []catalog.Entity
 			for _, e := range repo.FindResources(q) {
 				entities = append(entities, e)
 			}
@@ -262,8 +262,8 @@ func TestRepository_Finders(t *testing.T) {
 	})
 
 	t.Run("FindGroups", func(t *testing.T) {
-		finder := func(q string) []api.Entity {
-			var entities []api.Entity
+		finder := func(q string) []catalog.Entity {
+			var entities []catalog.Entity
 			for _, e := range repo.FindGroups(q) {
 				entities = append(entities, e)
 			}

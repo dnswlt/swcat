@@ -3,45 +3,43 @@ package query
 import (
 	"testing"
 
-	"github.com/dnswlt/swcat/internal/api"
+	"github.com/dnswlt/swcat/internal/catalog"
 )
 
 func TestEvaluator_Matches(t *testing.T) {
-	comp1 := &api.Component{
-		Kind: "Component",
-		Metadata: &api.Metadata{
+	comp1 := &catalog.Component{
+		Metadata: &catalog.Metadata{
 			Name:      "test-component",
 			Namespace: "default",
 			Title:     "Test Component",
 			Tags:      []string{"go", "test"},
 			Labels:    map[string]string{"env": "dev", "team": "a"},
 		},
-		Spec: &api.ComponentSpec{
+		Spec: &catalog.ComponentSpec{
 			Type:      "service",
 			Lifecycle: "experimental",
-			Owner:     &api.Ref{Name: "team-a"},
+			Owner:     &catalog.Ref{Name: "team-a"},
 		},
 	}
 
-	sys1 := &api.System{
-		Kind: "System",
-		Metadata: &api.Metadata{
+	sys1 := &catalog.System{
+		Metadata: &catalog.Metadata{
 			Name:      "my-system",
 			Namespace: "production",
 			Title:     "My Production System",
 			Tags:      []string{"java", "prod"},
 			Labels:    map[string]string{"env": "prod", "critical": "true"},
 		},
-		Spec: &api.SystemSpec{
+		Spec: &catalog.SystemSpec{
 			Type:  "workflow",
-			Owner: &api.Ref{Name: "team-b"},
+			Owner: &catalog.Ref{Name: "team-b"},
 		},
 	}
 
 	tests := []struct {
 		name      string
 		query     string
-		entity    api.Entity
+		entity    catalog.Entity
 		wantMatch bool
 		wantErr   bool
 	}{

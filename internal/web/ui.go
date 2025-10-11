@@ -8,22 +8,24 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/dnswlt/swcat/internal/api"
+	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/yuin/goldmark"
 )
 
-func anyToRef(s any) (*api.Ref, error) {
+func anyToRef(s any) (*catalog.Ref, error) {
 	switch r := s.(type) {
 	case string:
-		e, err := api.ParseRef(r)
+		e, err := catalog.ParseRef(r)
 		if err != nil {
 			return nil, fmt.Errorf("invalid entity reference string for entityURL: %v", err)
 		}
 		return e, nil
-	case *api.Ref:
+	case *catalog.Ref:
 		return r, nil
-	case *api.LabelRef:
+	case *catalog.LabelRef:
 		return r.Ref, nil
+	case catalog.Entity:
+		return r.GetRef(), nil
 	}
 	return nil, fmt.Errorf("anyToRef: invalid argument type %T", s)
 }
@@ -65,16 +67,8 @@ func toURL(s any) (string, error) {
 	return path + url.PathEscape(entityRef.QName()), nil
 }
 
-func urlencode(s any) (string, error) {
-	switch t := s.(type) {
-	case string:
-		return url.PathEscape(t), nil
-	case *api.Ref:
-		return url.PathEscape(t.QName()), nil
-	case *api.LabelRef:
-		return url.PathEscape(t.Ref.QName()), nil
-	}
-	return "", fmt.Errorf("invalid argument type %T for urlencode", s)
+func urlencode(s string) (string, error) {
+	return url.PathEscape(s), nil
 }
 
 type NavBar []*NavBarItem

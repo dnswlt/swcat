@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dnswlt/swcat/internal/api"
+	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/dot"
 	"github.com/dnswlt/swcat/internal/testutil"
 )
@@ -21,7 +21,7 @@ func TestGenerateComponentSVG_WithDot(t *testing.T) {
 		t.Fatalf("failed to load repository: %v", err)
 	}
 
-	comp := repo.Component(&api.Ref{Name: "test-component"})
+	comp := repo.Component(&catalog.Ref{Name: "test-component"})
 	if comp == nil {
 		t.Fatalf("test-component not found in repo")
 	}
@@ -77,7 +77,7 @@ func TestGenerateSystemSVG_WithDot(t *testing.T) {
 		t.Fatalf("failed to load repository: %v", err)
 	}
 
-	system := repo.System(&api.Ref{Name: "test-system"})
+	system := repo.System(&catalog.Ref{Name: "test-system"})
 	if system == nil {
 		t.Fatalf("test-system not found in repo")
 	}

@@ -6,33 +6,33 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/dnswlt/swcat/internal/api"
+	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/dot"
 )
 
-func entityNodeKind(e api.Entity) dot.NodeKind {
+func entityNodeKind(e catalog.Entity) dot.NodeKind {
 	switch e.(type) {
-	case *api.Domain:
+	case *catalog.Domain:
 		return dot.KindDomain
-	case *api.System:
+	case *catalog.System:
 		return dot.KindSystem
-	case *api.Component:
+	case *catalog.Component:
 		return dot.KindComponent
-	case *api.Resource:
+	case *catalog.Resource:
 		return dot.KindResource
-	case *api.API:
+	case *catalog.API:
 		return dot.KindAPI
-	case *api.Group:
+	case *catalog.Group:
 		return dot.KindGroup
 	default:
 		return dot.KindUnspecified
 	}
 }
 
-func EntityNode(e api.Entity) dot.Node {
+func EntityNode(e catalog.Entity) dot.Node {
 	meta := e.GetMetadata()
 	label := meta.Name
-	if meta.Namespace != "" && meta.Namespace != api.DefaultNamespace {
+	if meta.Namespace != "" && meta.Namespace != catalog.DefaultNamespace {
 		// Two-line label for namespaced entities.
 		label = meta.Namespace + `/\n` + meta.Name
 	}
@@ -43,7 +43,7 @@ func EntityNode(e api.Entity) dot.Node {
 	}
 }
 
-func EntityEdge(from, to api.Entity, style dot.EdgeStyle) dot.Edge {
+func EntityEdge(from, to catalog.Entity, style dot.EdgeStyle) dot.Edge {
 	return dot.Edge{
 		From:  from.GetRef().String(),
 		To:    to.GetRef().String(),
@@ -76,8 +76,8 @@ const (
 
 // extSysPartDep represents a dependency on an external system in a system diagram.
 type extSysDep struct {
-	source       api.Entity
-	targetSystem *api.System
+	source       catalog.Entity
+	targetSystem *catalog.System
 	direction    DependencyDir
 }
 
@@ -85,8 +85,8 @@ type extSysDep struct {
 // In contrast to extSysDep, it points to a SystemPart of the target system,
 // not the target system itself.
 type extSysPartDep struct {
-	source    api.Entity
-	target    api.SystemPart
+	source    catalog.Entity
+	target    catalog.SystemPart
 	direction DependencyDir
 }
 
@@ -94,11 +94,11 @@ func (e extSysDep) String() string {
 	return fmt.Sprintf("%s -> %s / %v", e.source.GetRef().String(), e.targetSystem.GetRef().String(), e.direction)
 }
 
-func generateDomainDotSource(r *Repository, domain *api.Domain) *dot.DotSource {
+func generateDomainDotSource(r *Repository, domain *catalog.Domain) *dot.DotSource {
 	dw := dot.New()
 	dw.Start()
 
-	dw.StartCluster(domain.GetRef().String())
+	dw.StartCluster(domain.GetQName())
 
 	for _, s := range domain.GetSystems() {
 		system := r.System(s)
@@ -113,13 +113,13 @@ func generateDomainDotSource(r *Repository, domain *api.Domain) *dot.DotSource {
 }
 
 // GenerateDomainSVG generates an SVG for the given domain.
-func GenerateDomainSVG(ctx context.Context, runner dot.Runner, r *Repository, domain *api.Domain) (*SVGResult, error) {
+func GenerateDomainSVG(ctx context.Context, runner dot.Runner, r *Repository, domain *catalog.Domain) (*SVGResult, error) {
 	dotSource := generateDomainDotSource(r, domain)
 	return runDot(ctx, runner, dotSource)
 }
 
-func generateSystemDotSource(r *Repository, system *api.System, contextSystems []*api.System) *dot.DotSource {
-	ctxSysMap := map[string]*api.System{}
+func generateSystemDotSource(r *Repository, system *catalog.System, contextSystems []*catalog.System) *dot.DotSource {
+	ctxSysMap := map[string]*catalog.System{}
 	for _, ctxSys := range contextSystems {
 		ctxSysMap[ctxSys.GetRef().QName()] = ctxSys
 	}
@@ -132,7 +132,7 @@ func generateSystemDotSource(r *Repository, system *api.System, contextSystems [
 	// Adds the src->dst dependency to either extDeps or extSPDeps, depending on whether
 	// full context was requested for dst.
 	// Ignore intra-system dependencies.
-	addExtDep := func(src api.SystemPart, dst api.SystemPart, dir DependencyDir) {
+	addExtDep := func(src catalog.SystemPart, dst catalog.SystemPart, dir DependencyDir) {
 		if dst.GetSystem().Equal(src.GetSystem()) {
 			return
 		}
@@ -164,14 +164,14 @@ func generateSystemDotSource(r *Repository, system *api.System, contextSystems [
 		// Add links for direct dependencies of the component.
 		for _, d := range comp.Spec.DependsOn {
 			entity := r.Entity(d.Ref)
-			if sp, ok := entity.(api.SystemPart); ok {
+			if sp, ok := entity.(catalog.SystemPart); ok {
 				addExtDep(comp, sp, DirOutgoing)
 			}
 		}
 		// Add links for direct dependents of the component.
 		for _, d := range comp.GetDependents() {
 			entity := r.Entity(d.Ref)
-			if sp, ok := entity.(api.SystemPart); ok {
+			if sp, ok := entity.(catalog.SystemPart); ok {
 				addExtDep(comp, sp, DirIncoming)
 			}
 		}
@@ -197,14 +197,14 @@ func generateSystemDotSource(r *Repository, system *api.System, contextSystems [
 		// Add links to external systems that the resource depends on.
 		for _, d := range resource.Spec.DependsOn {
 			entity := r.Entity(d.Ref)
-			if sp, ok := entity.(api.SystemPart); ok {
+			if sp, ok := entity.(catalog.SystemPart); ok {
 				addExtDep(resource, sp, DirOutgoing)
 			}
 		}
 		// Add links for direct dependents of the resource.
 		for _, d := range resource.GetDependents() {
 			entity := r.Entity(d.Ref)
-			if sp, ok := entity.(api.SystemPart); ok {
+			if sp, ok := entity.(catalog.SystemPart); ok {
 				addExtDep(resource, sp, DirIncoming)
 			}
 		}
@@ -246,12 +246,12 @@ func generateSystemDotSource(r *Repository, system *api.System, contextSystems [
 // GenerateSystemSVG generates an SVG for the given system.
 // contextSystems are systems that should be expanded in the view. Other systems will be shown
 // as opaque single nodes.
-func GenerateSystemSVG(ctx context.Context, runner dot.Runner, r *Repository, system *api.System, contextSystems []*api.System) (*SVGResult, error) {
+func GenerateSystemSVG(ctx context.Context, runner dot.Runner, r *Repository, system *catalog.System, contextSystems []*catalog.System) (*SVGResult, error) {
 	dotSource := generateSystemDotSource(r, system, contextSystems)
 	return runDot(ctx, runner, dotSource)
 }
 
-func generateComponentDotSource(r *Repository, component *api.Component) *dot.DotSource {
+func generateComponentDotSource(r *Repository, component *catalog.Component) *dot.DotSource {
 	dw := dot.New()
 	dw.Start()
 
@@ -307,12 +307,12 @@ func generateComponentDotSource(r *Repository, component *api.Component) *dot.Do
 }
 
 // GenerateComponentSVG generates an SVG for the given component.
-func GenerateComponentSVG(ctx context.Context, runner dot.Runner, r *Repository, component *api.Component) (*SVGResult, error) {
+func GenerateComponentSVG(ctx context.Context, runner dot.Runner, r *Repository, component *catalog.Component) (*SVGResult, error) {
 	dotSource := generateComponentDotSource(r, component)
 	return runDot(ctx, runner, dotSource)
 }
 
-func generateAPIDotSource(r *Repository, api *api.API) *dot.DotSource {
+func generateAPIDotSource(r *Repository, api *catalog.API) *dot.DotSource {
 	dw := dot.New()
 	dw.Start()
 
@@ -355,12 +355,12 @@ func generateAPIDotSource(r *Repository, api *api.API) *dot.DotSource {
 }
 
 // GenerateAPISVG generates an SVG for the given API.
-func GenerateAPISVG(ctx context.Context, runner dot.Runner, r *Repository, api *api.API) (*SVGResult, error) {
+func GenerateAPISVG(ctx context.Context, runner dot.Runner, r *Repository, api *catalog.API) (*SVGResult, error) {
 	dotSource := generateAPIDotSource(r, api)
 	return runDot(ctx, runner, dotSource)
 }
 
-func generateResourceDotSource(r *Repository, resource *api.Resource) *dot.DotSource {
+func generateResourceDotSource(r *Repository, resource *catalog.Resource) *dot.DotSource {
 	dw := dot.New()
 	dw.Start()
 
@@ -394,7 +394,7 @@ func generateResourceDotSource(r *Repository, resource *api.Resource) *dot.DotSo
 }
 
 // GenerateResourceSVG generates an SVG for the given resource.
-func GenerateResourceSVG(ctx context.Context, runner dot.Runner, r *Repository, resource *api.Resource) (*SVGResult, error) {
+func GenerateResourceSVG(ctx context.Context, runner dot.Runner, r *Repository, resource *catalog.Resource) (*SVGResult, error) {
 	dotSource := generateResourceDotSource(r, resource)
 	return runDot(ctx, runner, dotSource)
 }

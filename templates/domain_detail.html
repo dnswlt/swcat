@@ -25,7 +25,7 @@
                 {{ end }}
                 <div class="flex items-center space-x-4">
                     <span class="text-gray-500">{{ .Spec.Type }}</span>
-                    <a href="/ui/entities/{{ .GetRef | refEncode }}/edit"
+                    <a href="/ui/entities/{{ . | refEncode }}/edit"
                         class="bg-blue-600 text-white py-1 px-3 rounded text-sm">
                         Edit YAML
                     </a>
@@ -41,12 +41,12 @@
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <h3 class="font-semibold">Owner</h3>
-                    <p><a href="/ui/groups/{{ .Spec.Owner | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.Owner }}</a></p>
+                    <p><a href="/ui/groups/{{ .Spec.Owner.QName | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.Owner.QName }}</a></p>
                 </div>
                 {{ if .Spec.SubdomainOf }}
                 <div>
                     <h3 class="font-semibold">Subdomain Of</h3>
-                    <p><a href="/ui/domains/{{ .Spec.SubdomainOf | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.SubdomainOf }}</a></p>
+                    <p><a href="/ui/domains/{{ .Spec.SubdomainOf.QName | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.SubdomainOf.QName }}</a></p>
                 </div>
                 {{ end }}
             </div>
@@ -71,7 +71,7 @@
             <div class="p-4">
                 <ul class="list-disc list-inside">
                     {{ range .GetSystems }}
-                    <li><a href="/ui/systems/{{ . | urlencode }}" class="text-blue-600 hover:underline">{{ .QName }}</a></li>
+                    <li><a href="/ui/systems/{{ .QName | urlencode }}" class="text-blue-600 hover:underline">{{ .QName }}</a></li>
                     {{ end }}
                 </ul>
             </div>

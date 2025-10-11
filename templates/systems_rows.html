@@ -9,11 +9,11 @@
     </td>
     <td class="px-4 py-2">{{ .Metadata.Title }}</td>
     <td class="px-4 py-2">
-        <a href="/ui/domains/{{ .Spec.Domain | urlencode }}" class="text-blue-600 hover:underline">
-            {{ .Spec.Domain }}
+        <a href="/ui/domains/{{ .Spec.Domain.QName | urlencode }}" class="text-blue-600 hover:underline">
+            {{ .Spec.Domain.QName }}
         </a>
     </td>
-    <td class="px-4 py-2">{{ .Spec.Owner }}</td>
+    <td class="px-4 py-2">{{ .Spec.Owner.QName }}</td>
 </tr>
 {{- end }}
 {{- else }}

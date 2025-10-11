@@ -3,47 +3,42 @@ package backstage
 import (
 	"testing"
 
-	"github.com/dnswlt/swcat/internal/api"
+	"github.com/dnswlt/swcat/internal/catalog"
 )
 
 func TestComponentConsumesApi(t *testing.T) {
-	owner := &api.Group{
-		Kind:     "Group",
-		Metadata: &api.Metadata{Name: "my-team"},
-		Spec:     &api.GroupSpec{Type: "team"},
+	owner := &catalog.Group{
+		Metadata: &catalog.Metadata{Name: "my-team"},
+		Spec:     &catalog.GroupSpec{Type: "team"},
 	}
-	domain := &api.Domain{
-		Kind:     "Domain",
-		Metadata: &api.Metadata{Name: "my-domain"},
-		Spec:     &api.DomainSpec{Owner: owner.GetRef()},
+	domain := &catalog.Domain{
+		Metadata: &catalog.Metadata{Name: "my-domain"},
+		Spec:     &catalog.DomainSpec{Owner: owner.GetRef()},
 	}
-	system := &api.System{
-		Kind:     "System",
-		Metadata: &api.Metadata{Name: "my-system"},
-		Spec: &api.SystemSpec{
+	system := &catalog.System{
+		Metadata: &catalog.Metadata{Name: "my-system"},
+		Spec: &catalog.SystemSpec{
 			Owner:  owner.GetRef(),
 			Domain: domain.GetRef(),
 		},
 	}
-	ap := &api.API{
-		Kind:     "API",
-		Metadata: &api.Metadata{Name: "my-api"},
-		Spec: &api.APISpec{
+	ap := &catalog.API{
+		Metadata: &catalog.Metadata{Name: "my-api"},
+		Spec: &catalog.APISpec{
 			Type:      "openapi",
 			Lifecycle: "production",
 			Owner:     owner.GetRef(),
 			System:    system.GetRef(),
 		},
 	}
-	component := &api.Component{
-		Kind:     "Component",
-		Metadata: &api.Metadata{Name: "my-component"},
-		Spec: &api.ComponentSpec{
+	component := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "my-component"},
+		Spec: &catalog.ComponentSpec{
 			Type:      "service",
 			Lifecycle: "production",
 			Owner:     owner.GetRef(),
 			System:    system.GetRef(),
-			ConsumesAPIs: []*api.LabelRef{
+			ConsumesAPIs: []*catalog.LabelRef{
 				{Ref: ap.GetRef()},
 			},
 		},
@@ -71,51 +66,46 @@ func TestComponentConsumesApi(t *testing.T) {
 	}
 
 	if len(ap.GetConsumers()) != 1 {
-		t.Fatalf("len(api.GetConsumers()) = %d, want 1", len(ap.GetConsumers()))
+		t.Fatalf("len(catalog.GetConsumers()) = %d, want 1", len(ap.GetConsumers()))
 	}
 	if !ap.GetConsumers()[0].Ref.Equal(component.GetRef()) {
-		t.Errorf("api.GetConsumers()[0] = %q, want %q", ap.GetConsumers()[0], component.GetRef())
+		t.Errorf("catalog.GetConsumers()[0] = %q, want %q", ap.GetConsumers()[0], component.GetRef())
 	}
 }
 
 func TestComponentConsumesApiQualified(t *testing.T) {
-	owner := &api.Group{
-		Kind:     "Group",
-		Metadata: &api.Metadata{Name: "my-team"},
-		Spec:     &api.GroupSpec{Type: "team"},
+	owner := &catalog.Group{
+		Metadata: &catalog.Metadata{Name: "my-team"},
+		Spec:     &catalog.GroupSpec{Type: "team"},
 	}
-	domain := &api.Domain{
-		Kind:     "Domain",
-		Metadata: &api.Metadata{Name: "my-domain"},
-		Spec:     &api.DomainSpec{Owner: owner.GetRef()},
+	domain := &catalog.Domain{
+		Metadata: &catalog.Metadata{Name: "my-domain"},
+		Spec:     &catalog.DomainSpec{Owner: owner.GetRef()},
 	}
-	system := &api.System{
-		Kind:     "System",
-		Metadata: &api.Metadata{Name: "my-system"},
-		Spec: &api.SystemSpec{
+	system := &catalog.System{
+		Metadata: &catalog.Metadata{Name: "my-system"},
+		Spec: &catalog.SystemSpec{
 			Owner:  owner.GetRef(),
 			Domain: domain.GetRef(),
 		},
 	}
-	ap := &api.API{
-		Kind:     "API",
-		Metadata: &api.Metadata{Name: "my-api", Namespace: "ns"},
-		Spec: &api.APISpec{
+	ap := &catalog.API{
+		Metadata: &catalog.Metadata{Name: "my-api", Namespace: "ns"},
+		Spec: &catalog.APISpec{
 			Type:      "openapi",
 			Lifecycle: "production",
 			Owner:     owner.GetRef(),
 			System:    system.GetRef(),
 		},
 	}
-	component := &api.Component{
-		Kind:     "Component",
-		Metadata: &api.Metadata{Name: "my-component"},
-		Spec: &api.ComponentSpec{
+	component := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "my-component"},
+		Spec: &catalog.ComponentSpec{
 			Type:      "service",
 			Lifecycle: "production",
 			Owner:     owner.GetRef(),
 			System:    system.GetRef(),
-			ConsumesAPIs: []*api.LabelRef{
+			ConsumesAPIs: []*catalog.LabelRef{
 				{Ref: ap.GetRef()},
 			},
 		},
@@ -143,51 +133,46 @@ func TestComponentConsumesApiQualified(t *testing.T) {
 	}
 
 	if len(ap.GetConsumers()) != 1 {
-		t.Fatalf("len(api.GetConsumers()) = %d, want 1", len(ap.GetConsumers()))
+		t.Fatalf("len(catalog.GetConsumers()) = %d, want 1", len(ap.GetConsumers()))
 	}
 	if !ap.GetConsumers()[0].Ref.Equal(component.GetRef()) {
-		t.Errorf("api.GetConsumers()[0] = %q, want %q", ap.GetConsumers()[0], component.GetRef())
+		t.Errorf("catalog.GetConsumers()[0] = %q, want %q", ap.GetConsumers()[0], component.GetRef())
 	}
 }
 
 func TestComponentProvidesApi(t *testing.T) {
-	owner := &api.Group{
-		Kind:     "Group",
-		Metadata: &api.Metadata{Name: "my-team"},
-		Spec:     &api.GroupSpec{Type: "team"},
+	owner := &catalog.Group{
+		Metadata: &catalog.Metadata{Name: "my-team"},
+		Spec:     &catalog.GroupSpec{Type: "team"},
 	}
-	domain := &api.Domain{
-		Kind:     "Domain",
-		Metadata: &api.Metadata{Name: "my-domain"},
-		Spec:     &api.DomainSpec{Owner: owner.GetRef()},
+	domain := &catalog.Domain{
+		Metadata: &catalog.Metadata{Name: "my-domain"},
+		Spec:     &catalog.DomainSpec{Owner: owner.GetRef()},
 	}
-	system := &api.System{
-		Kind:     "System",
-		Metadata: &api.Metadata{Name: "my-system"},
-		Spec: &api.SystemSpec{
+	system := &catalog.System{
+		Metadata: &catalog.Metadata{Name: "my-system"},
+		Spec: &catalog.SystemSpec{
 			Owner:  owner.GetRef(),
 			Domain: domain.GetRef(),
 		},
 	}
-	ap := &api.API{
-		Kind:     "API",
-		Metadata: &api.Metadata{Name: "my-api"},
-		Spec: &api.APISpec{
+	ap := &catalog.API{
+		Metadata: &catalog.Metadata{Name: "my-api"},
+		Spec: &catalog.APISpec{
 			Type:      "openapi",
 			Lifecycle: "production",
 			Owner:     owner.GetRef(),
 			System:    system.GetRef(),
 		},
 	}
-	component := &api.Component{
-		Kind:     "Component",
-		Metadata: &api.Metadata{Name: "my-component"},
-		Spec: &api.ComponentSpec{
+	component := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "my-component"},
+		Spec: &catalog.ComponentSpec{
 			Type:      "service",
 			Lifecycle: "production",
 			Owner:     owner.GetRef(),
 			System:    system.GetRef(),
-			ProvidesAPIs: []*api.LabelRef{
+			ProvidesAPIs: []*catalog.LabelRef{
 				{Ref: ap.GetRef()},
 			},
 		},
@@ -215,42 +200,38 @@ func TestComponentProvidesApi(t *testing.T) {
 	}
 
 	if len(ap.GetProviders()) != 1 {
-		t.Fatalf("len(api.GetProviders()) = %d, want 1", len(ap.GetProviders()))
+		t.Fatalf("len(catalog.GetProviders()) = %d, want 1", len(ap.GetProviders()))
 	}
 	if !ap.GetProviders()[0].Ref.Equal(component.GetRef()) {
-		t.Errorf("api.GetProviders()[0] = %q, want %q", ap.GetProviders()[0], component.GetRef())
+		t.Errorf("catalog.GetProviders()[0] = %q, want %q", ap.GetProviders()[0], component.GetRef())
 	}
 }
 
 func TestComponentProvidesApiInvalid(t *testing.T) {
-	owner := &api.Group{
-		Kind:     "Group",
-		Metadata: &api.Metadata{Name: "my-team"},
-		Spec:     &api.GroupSpec{Type: "team"},
+	owner := &catalog.Group{
+		Metadata: &catalog.Metadata{Name: "my-team"},
+		Spec:     &catalog.GroupSpec{Type: "team"},
 	}
-	domain := &api.Domain{
-		Kind:     "Domain",
-		Metadata: &api.Metadata{Name: "my-domain"},
-		Spec:     &api.DomainSpec{Owner: owner.GetRef()},
+	domain := &catalog.Domain{
+		Metadata: &catalog.Metadata{Name: "my-domain"},
+		Spec:     &catalog.DomainSpec{Owner: owner.GetRef()},
 	}
-	system := &api.System{
-		Kind:     "System",
-		Metadata: &api.Metadata{Name: "my-system"},
-		Spec: &api.SystemSpec{
+	system := &catalog.System{
+		Metadata: &catalog.Metadata{Name: "my-system"},
+		Spec: &catalog.SystemSpec{
 			Owner:  owner.GetRef(),
 			Domain: domain.GetRef(),
 		},
 	}
-	component := &api.Component{
-		Kind:     "Component",
-		Metadata: &api.Metadata{Name: "my-component"},
-		Spec: &api.ComponentSpec{
+	component := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "my-component"},
+		Spec: &catalog.ComponentSpec{
 			Type:      "service",
 			Lifecycle: "production",
 			Owner:     owner.GetRef(),
 			System:    system.GetRef(),
-			ProvidesAPIs: []*api.LabelRef{
-				{Ref: &api.Ref{Kind: "api", Name: "no-such-api"}},
+			ProvidesAPIs: []*catalog.LabelRef{
+				{Ref: &catalog.Ref{Kind: "api", Name: "no-such-api"}},
 			},
 		},
 	}
@@ -276,42 +257,37 @@ func TestComponentProvidesApiInvalid(t *testing.T) {
 }
 
 func TestComponentDependsOnResource(t *testing.T) {
-	owner := &api.Group{
-		Kind:     "Group",
-		Metadata: &api.Metadata{Name: "my-team"},
-		Spec:     &api.GroupSpec{Type: "team"},
+	owner := &catalog.Group{
+		Metadata: &catalog.Metadata{Name: "my-team"},
+		Spec:     &catalog.GroupSpec{Type: "team"},
 	}
-	domain := &api.Domain{
-		Kind:     "Domain",
-		Metadata: &api.Metadata{Name: "my-domain"},
-		Spec:     &api.DomainSpec{Owner: owner.GetRef()},
+	domain := &catalog.Domain{
+		Metadata: &catalog.Metadata{Name: "my-domain"},
+		Spec:     &catalog.DomainSpec{Owner: owner.GetRef()},
 	}
-	system := &api.System{
-		Kind:     "System",
-		Metadata: &api.Metadata{Name: "my-system"},
-		Spec: &api.SystemSpec{
+	system := &catalog.System{
+		Metadata: &catalog.Metadata{Name: "my-system"},
+		Spec: &catalog.SystemSpec{
 			Owner:  owner.GetRef(),
 			Domain: domain.GetRef(),
 		},
 	}
-	resource := &api.Resource{
-		Kind:     "Resource",
-		Metadata: &api.Metadata{Name: "my-resource"},
-		Spec: &api.ResourceSpec{
+	resource := &catalog.Resource{
+		Metadata: &catalog.Metadata{Name: "my-resource"},
+		Spec: &catalog.ResourceSpec{
 			Type:   "database",
 			Owner:  owner.GetRef(),
 			System: system.GetRef(),
 		},
 	}
-	component := &api.Component{
-		Kind:     "Component",
-		Metadata: &api.Metadata{Name: "my-component"},
-		Spec: &api.ComponentSpec{
+	component := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "my-component"},
+		Spec: &catalog.ComponentSpec{
 			Type:      "service",
 			Lifecycle: "production",
 			Owner:     owner.GetRef(),
 			System:    system.GetRef(),
-			DependsOn: []*api.LabelRef{
+			DependsOn: []*catalog.LabelRef{
 				{Ref: resource.GetRef()},
 			},
 		},

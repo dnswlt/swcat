@@ -8,20 +8,42 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	// Uppercase kind names, as used in YAML (e.g, "kind: Component")
+	YAMLKindDomain    = "Domain"
+	YAMLKindSystem    = "System"
+	YAMLKindComponent = "Component"
+	YAMLKindResource  = "Resource"
+	YAMLKindAPI       = "API"
+	YAMLKindGroup     = "Group"
+	// Lowercase kind names, as used in entity references (e.g. "resource:ns1/foo")
+	KindDomain    = "domain"
+	KindSystem    = "system"
+	KindComponent = "component"
+	KindResource  = "resource"
+	KindAPI       = "api"
+	KindGroup     = "group"
+)
+
 var (
-	// Valid entity kinds
-	validEntityKinds = map[string]bool{
-		"domain":    true,
-		"system":    true,
-		"component": true,
-		"resource":  true,
-		"api":       true,
-		"group":     true,
+	// Valid entity kinds for use in entity references
+	validRefKinds = map[string]bool{
+		KindDomain:    true,
+		KindSystem:    true,
+		KindComponent: true,
+		KindResource:  true,
+		KindAPI:       true,
+		KindGroup:     true,
 	}
 
 	// Regexp defining valid entity names and namespaces
 	validNameRE = regexp.MustCompile("^[A-Za-z_][A-Za-z0-9_-]*$")
 )
+
+func IsValidRefKind(kind string) bool {
+	_, ok := validRefKinds[kind]
+	return ok
+}
 
 func IsValidName(s string) bool {
 	return validNameRE.MatchString(s)
@@ -35,7 +57,7 @@ func ParseRef(s string) (*Ref, error) {
 	// --- Parse the EntityRef part (refStr) ---
 	kind, qname, found := strings.Cut(s, ":")
 	if found {
-		if !validEntityKinds[kind] {
+		if !IsValidRefKind(kind) {
 			return nil, fmt.Errorf("invalid entity kind %q", kind)
 		}
 		ref.Kind = kind
@@ -46,7 +68,7 @@ func ParseRef(s string) (*Ref, error) {
 
 	ns, name, found := strings.Cut(qname, "/")
 	if found {
-		if !IsValidName(ns) {
+		if !IsValidNamespace(ns) {
 			return nil, fmt.Errorf("invalid namespace %q", ns)
 		}
 		if !IsValidName(name) {
