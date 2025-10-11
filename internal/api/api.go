@@ -1,5 +1,5 @@
 // This file contains the API classes that define a software catalog.
-// The types are broadly compatible with backstage.io's types:
+// The types are inspired by backstage.io's types:
 // https://backstage.io/docs/features/software-catalog/descriptor-format#contents
 package api
 
@@ -306,7 +306,7 @@ func (e *LabelRef) String() string {
 	return refStr + ` "` + e.Label + `"`
 }
 
-func eRef(kind string, meta *Metadata) *Ref {
+func newRef(kind string, meta *Metadata) *Ref {
 	namespace := meta.Namespace
 	if namespace == "" {
 		namespace = DefaultNamespace
@@ -319,42 +319,42 @@ func eRef(kind string, meta *Metadata) *Ref {
 }
 func (c *Component) GetKind() string        { return c.Kind }
 func (c *Component) GetMetadata() *Metadata { return c.Metadata }
-func (c *Component) GetRef() *Ref           { return eRef("component", c.Metadata) }
+func (c *Component) GetRef() *Ref           { return newRef("component", c.Metadata) }
 
 func (c *Component) GetSourceInfo() *SourceInfo   { return c.SourceInfo }
 func (c *Component) SetSourceInfo(si *SourceInfo) { c.SourceInfo = si }
 
 func (s *System) GetKind() string        { return s.Kind }
 func (s *System) GetMetadata() *Metadata { return s.Metadata }
-func (s *System) GetRef() *Ref           { return eRef("system", s.Metadata) }
+func (s *System) GetRef() *Ref           { return newRef("system", s.Metadata) }
 
 func (s *System) GetSourceInfo() *SourceInfo   { return s.SourceInfo }
 func (s *System) SetSourceInfo(si *SourceInfo) { s.SourceInfo = si }
 
 func (d *Domain) GetKind() string        { return d.Kind }
 func (d *Domain) GetMetadata() *Metadata { return d.Metadata }
-func (d *Domain) GetRef() *Ref           { return eRef("domain", d.Metadata) }
+func (d *Domain) GetRef() *Ref           { return newRef("domain", d.Metadata) }
 
 func (d *Domain) GetSourceInfo() *SourceInfo   { return d.SourceInfo }
 func (d *Domain) SetSourceInfo(si *SourceInfo) { d.SourceInfo = si }
 
 func (a *API) GetKind() string        { return a.Kind }
 func (a *API) GetMetadata() *Metadata { return a.Metadata }
-func (a *API) GetRef() *Ref           { return eRef("api", a.Metadata) }
+func (a *API) GetRef() *Ref           { return newRef("api", a.Metadata) }
 
 func (a *API) GetSourceInfo() *SourceInfo   { return a.SourceInfo }
 func (a *API) SetSourceInfo(si *SourceInfo) { a.SourceInfo = si }
 
 func (r *Resource) GetKind() string        { return r.Kind }
 func (r *Resource) GetMetadata() *Metadata { return r.Metadata }
-func (r *Resource) GetRef() *Ref           { return eRef("resource", r.Metadata) }
+func (r *Resource) GetRef() *Ref           { return newRef("resource", r.Metadata) }
 
 func (r *Resource) GetSourceInfo() *SourceInfo   { return r.SourceInfo }
 func (r *Resource) SetSourceInfo(si *SourceInfo) { r.SourceInfo = si }
 
 func (g *Group) GetKind() string        { return g.Kind }
 func (g *Group) GetMetadata() *Metadata { return g.Metadata }
-func (g *Group) GetRef() *Ref           { return eRef("group", g.Metadata) }
+func (g *Group) GetRef() *Ref           { return newRef("group", g.Metadata) }
 
 func (g *Group) GetSourceInfo() *SourceInfo   { return g.SourceInfo }
 func (g *Group) SetSourceInfo(si *SourceInfo) { g.SourceInfo = si }

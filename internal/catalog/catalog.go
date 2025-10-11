@@ -40,7 +40,7 @@ type LabelRef struct {
 
 // Entity is the interface implemented by all entity kinds (Component, System, etc.).
 type Entity interface {
-	GetKind() string
+	GetKind() Kind
 	GetMetadata() *Metadata
 	// Returns the fully qualified entity reference.
 	GetRef() *Ref
@@ -374,7 +374,7 @@ func (e *LabelRef) String() string {
 	return refStr + ` "` + e.Label + `"`
 }
 
-func eRef(kind Kind, meta *Metadata) *Ref {
+func newRef(kind Kind, meta *Metadata) *Ref {
 	namespace := meta.Namespace
 	if namespace == "" {
 		namespace = DefaultNamespace
@@ -394,9 +394,9 @@ func CompareEntityByName(a, b Entity) int {
 	return cmp.Compare(a.GetMetadata().Name, b.GetMetadata().Name)
 }
 
-func (c *Component) GetKind() string            { return api.YAMLKindComponent }
+func (c *Component) GetKind() Kind              { return KindComponent }
 func (c *Component) GetMetadata() *Metadata     { return c.Metadata }
-func (c *Component) GetRef() *Ref               { return eRef(KindComponent, c.Metadata) }
+func (c *Component) GetRef() *Ref               { return newRef(KindComponent, c.Metadata) }
 func (c *Component) GetQName() string           { return c.Metadata.QName() }
 func (c *Component) GetOwner() *Ref             { return c.Spec.Owner }
 func (c *Component) GetLifecycle() string       { return c.Spec.Lifecycle }
@@ -415,9 +415,9 @@ func (c *Component) Reset() Entity {
 	return &clone
 }
 
-func (s *System) GetKind() string                  { return api.YAMLKindSystem }
+func (s *System) GetKind() Kind                    { return KindSystem }
 func (s *System) GetMetadata() *Metadata           { return s.Metadata }
-func (s *System) GetRef() *Ref                     { return eRef(KindSystem, s.Metadata) }
+func (s *System) GetRef() *Ref                     { return newRef(KindSystem, s.Metadata) }
 func (s *System) GetQName() string                 { return s.Metadata.QName() }
 func (s *System) GetComponents() []*Ref            { return s.Spec.inv.components }
 func (s *System) GetAPIs() []*Ref                  { return s.Spec.inv.apis }
@@ -436,9 +436,9 @@ func (s *System) Reset() Entity {
 	return &clone
 }
 
-func (d *Domain) GetKind() string                  { return api.YAMLKindDomain }
+func (d *Domain) GetKind() Kind                    { return KindDomain }
 func (d *Domain) GetMetadata() *Metadata           { return d.Metadata }
-func (d *Domain) GetRef() *Ref                     { return eRef(KindDomain, d.Metadata) }
+func (d *Domain) GetRef() *Ref                     { return newRef(KindDomain, d.Metadata) }
 func (d *Domain) GetQName() string                 { return d.Metadata.QName() }
 func (d *Domain) GetSystems() []*Ref               { return d.Spec.inv.systems }
 func (d *Domain) AddSystem(s *Ref)                 { d.Spec.inv.systems = append(d.Spec.inv.systems, s) }
@@ -452,9 +452,9 @@ func (d *Domain) Reset() Entity {
 	return &clone
 }
 
-func (a *API) GetKind() string                  { return api.YAMLKindAPI }
+func (a *API) GetKind() Kind                    { return KindAPI }
 func (a *API) GetMetadata() *Metadata           { return a.Metadata }
-func (a *API) GetRef() *Ref                     { return eRef(KindAPI, a.Metadata) }
+func (a *API) GetRef() *Ref                     { return newRef(KindAPI, a.Metadata) }
 func (a *API) GetQName() string                 { return a.Metadata.QName() }
 func (a *API) GetProviders() []*LabelRef        { return a.Spec.inv.providers }
 func (a *API) GetConsumers() []*LabelRef        { return a.Spec.inv.consumers }
@@ -471,9 +471,9 @@ func (a *API) Reset() Entity {
 	return &clone
 }
 
-func (r *Resource) GetKind() string            { return api.YAMLKindResource }
+func (r *Resource) GetKind() Kind              { return KindResource }
 func (r *Resource) GetMetadata() *Metadata     { return r.Metadata }
-func (r *Resource) GetRef() *Ref               { return eRef(KindResource, r.Metadata) }
+func (r *Resource) GetRef() *Ref               { return newRef(KindResource, r.Metadata) }
 func (r *Resource) GetQName() string           { return r.Metadata.QName() }
 func (r *Resource) GetDependents() []*LabelRef { return r.Spec.inv.dependents }
 func (r *Resource) GetSystem() *Ref            { return r.Spec.System }
@@ -490,9 +490,9 @@ func (r *Resource) Reset() Entity {
 	return &clone
 }
 
-func (g *Group) GetKind() string                  { return api.YAMLKindGroup }
+func (g *Group) GetKind() Kind                    { return KindGroup }
 func (g *Group) GetMetadata() *Metadata           { return g.Metadata }
-func (g *Group) GetRef() *Ref                     { return eRef(KindGroup, g.Metadata) }
+func (g *Group) GetRef() *Ref                     { return newRef(KindGroup, g.Metadata) }
 func (g *Group) GetQName() string                 { return g.Metadata.QName() }
 func (g *Group) GetDisplayName() string           { return g.Spec.Profile.DisplayName }
 func (g *Group) GetSourceInfo() *api.SourceInfo   { return g.sourceInfo }

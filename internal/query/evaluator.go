@@ -29,7 +29,7 @@ type attributeAccessor func(e catalog.Entity) (values []string, ok bool)
 
 // attributeAccessors maps query attribute names to functions that can retrieve them from an entity.
 var attributeAccessors = map[string]attributeAccessor{
-	"kind":      func(e catalog.Entity) ([]string, bool) { return []string{e.GetKind()}, true },
+	"kind":      func(e catalog.Entity) ([]string, bool) { return []string{string(e.GetKind())}, true },
 	"name":      func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Name}, true },
 	"namespace": func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Namespace}, true },
 	"title":     func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Title}, true },
