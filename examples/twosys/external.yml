@@ -40,6 +40,8 @@ metadata:
   name: consumer
   namespace: external
   title: External Consumer
+  annotations:
+    swcat/fillcolor: '#F08080'
 spec:
   type: external
   owner: external/owners-team

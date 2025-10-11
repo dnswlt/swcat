@@ -5,10 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/dot"
 	"github.com/dnswlt/swcat/internal/repo"
+)
+
+const (
+	AnnotSterotype = "swcat/stereotype"
+	AnnotFillColor = "swcat/fillcolor"
 )
 
 func entityNodeKind(e catalog.Entity) dot.NodeKind {
@@ -32,15 +38,27 @@ func entityNodeKind(e catalog.Entity) dot.NodeKind {
 
 func EntityNode(e catalog.Entity) dot.Node {
 	meta := e.GetMetadata()
-	label := meta.Name
+	// Label
+	var label strings.Builder
+	if st, ok := meta.Annotations[AnnotSterotype]; ok {
+		label.WriteString(`&laquo;` + st + `&raquo;\n`)
+	}
 	if meta.Namespace != "" && meta.Namespace != catalog.DefaultNamespace {
 		// Two-line label for namespaced entities.
-		label = meta.Namespace + `/\n` + meta.Name
+		label.WriteString(meta.Namespace + `/\n`)
 	}
+	label.WriteString(meta.Name)
+	// FillColor
+	var fillColor string
+	if c, ok := meta.Annotations[AnnotFillColor]; ok {
+		fillColor = c
+	}
+
 	return dot.Node{
-		ID:    e.GetRef().String(),
-		Kind:  entityNodeKind(e),
-		Label: label,
+		ID:        e.GetRef().String(),
+		Kind:      entityNodeKind(e),
+		Label:     label.String(),
+		FillColor: fillColor,
 	}
 }
 

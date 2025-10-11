@@ -29,6 +29,8 @@ metadata:
   name: cucumber-api-gateway
   title: Cucumber API Gateway
   tags: [public]
+  annotations:
+    swcat/stereotype: load-balanced
   labels:
     foobar.dev/language: java
     foobar.dev/deployment: k8s

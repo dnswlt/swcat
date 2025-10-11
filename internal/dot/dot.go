@@ -104,12 +104,16 @@ const (
 )
 
 type Node struct {
-	ID    string // ID of this node in the dot graph.
-	Kind  NodeKind
-	Label string
+	ID        string // ID of this node in the dot graph.
+	Kind      NodeKind
+	Label     string
+	FillColor string // Either hex ("#ff00aa") or a well-known color name ("red").
 }
 
-func (n *Node) FillColor() string {
+func (n *Node) GetFillColor() string {
+	if n.FillColor != "" {
+		return n.FillColor
+	}
 	switch n.Kind {
 	case KindComponent:
 		return "#CBDCEB"
@@ -204,12 +208,15 @@ func (dw *Writer) End() {
 }
 
 func (dw *Writer) AddNode(node Node) {
+	node.Label = escLabel(node.Label)
+	node.FillColor = escLabel(node.FillColor)
+
 	if _, ok := dw.nodeInfo[node.ID]; ok {
 		// Ignore duplicate node definitions.
 		return
 	}
 	fmt.Fprintf(dw.w, `"%s"[id="%s",label="%s",fillcolor="%s",shape="%s",style="%s",class="clickable-node"]`,
-		node.ID, node.ID, node.Label, node.FillColor(), node.Shape(), node.Style())
+		node.ID, node.ID, node.Label, node.GetFillColor(), node.Shape(), node.Style())
 	fmt.Fprintln(dw.w)
 	dw.nodeInfo[node.ID] = &NodeInfo{
 		Label: node.Label,
