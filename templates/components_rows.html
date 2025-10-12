@@ -14,7 +14,7 @@
     </td>
     <td class="px-4 py-2">{{ .Spec.Owner.QName }}</td>
     <td class="px-4 py-2">
-        {{ range .Metadata.Tags }}
+        {{ range formatTags .Metadata.Tags }}
         <span class="inline-block bg-gray-200 rounded-full px-2 py-1 text-xs font-semibold text-gray-700 mr-2">{{ . }}</span>
         {{ end }}
     </td>

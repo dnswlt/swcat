@@ -13,7 +13,7 @@
         <h1 class="text-2xl font-semibold text-center">Resource Details</h1>
 
         {{ with .Resource }}
-        <div class="space-y-4">
+        <div class="space-y-3">
             <div class="flex justify-between items-start">
                 {{ if .Metadata.Title }}
                 <div>
@@ -31,6 +31,17 @@
                     </a>
                 </div>
             </div>
+
+            {{ if or .Metadata.Tags .Metadata.Labels }}
+            <div class="flex flex-wrap items-center gap-2">
+                {{ range formatTags .Metadata.Tags }}
+                <span title="tag" class="inline-block bg-gray-200 rounded-full px-2 py-1 text-xs font-semibold text-gray-700">{{ . }}</span>
+                {{ end }}
+                {{ range formatLabels .Metadata }}
+                <span title="label" class="inline-block bg-blue-200 rounded-full px-2 py-1 text-xs font-semibold text-blue-700">{{ . }}</span>
+                {{ end }}
+            </div>
+            {{ end }}
 
             {{ if .Metadata.Description }}
             <div class="prose text-gray-700">

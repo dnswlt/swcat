@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"net/url"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
@@ -66,6 +67,66 @@ func toURL(s any) (string, error) {
 	}
 	return path + url.PathEscape(entityRef.QName()), nil
 }
+
+func formatTags(tags []string) []string {
+	out := make([]string, len(tags))
+	copy(out, tags)
+	slices.Sort(out)
+	return out
+}
+
+// formatLabels formats all labels of the given metadata.
+// Labels that have "qualified" keys, such as "example.com/some-label"
+// will be formatted in their simple form ("some-label") for readability,
+// *unless* the simple label is ambiguous. In that case, the qualified
+// key is used.
+func formatLabels(meta *catalog.Metadata) []string {
+	if meta == nil || len(meta.Labels) == 0 {
+		return nil
+	}
+	unqualify := func(s string) string {
+		if _, tail, ok := strings.Cut(s, "/"); ok {
+			return tail
+		}
+		return s
+	}
+	counts := make(map[string]int, len(meta.Labels))
+	for k := range meta.Labels {
+		counts[unqualify(k)]++
+	}
+
+	type pair struct {
+		showKey string
+		val     string
+	}
+	pairs := make([]pair, 0, len(meta.Labels))
+	for k, v := range meta.Labels {
+		s := unqualify(k)
+		show := s
+		if counts[s] > 1 {
+			show = k // keep fully-qualified to disambiguate
+		}
+		pairs = append(pairs, pair{showKey: show, val: v})
+	}
+
+	sort.Slice(pairs, func(i, j int) bool {
+		if pairs[i].showKey != pairs[j].showKey {
+			return pairs[i].showKey < pairs[j].showKey
+		}
+		return pairs[i].val < pairs[j].val
+	})
+
+	out := make([]string, len(pairs))
+	for i, p := range pairs {
+		out[i] = fmt.Sprintf("%s: %s", p.showKey, p.val)
+	}
+	return out
+
+}
+
+//
+// Navigation bar utilities
+//
 
 type NavBar []*NavBarItem
 
