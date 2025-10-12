@@ -32,7 +32,7 @@ func main() {
 
 	serverAddrFlag := flag.String("addr", "localhost:8080", "Address to listen on")
 	formatFlag := flag.Bool("format", false, "Format input files and exit.")
-	baseDir := flag.String("base-dir", ".", "Base directory")
+	baseDir := flag.String("base-dir", "", "Base directory for resource files. If empty, uses embedded resources.")
 	maxDepth := flag.Int("max-depth", 3, "Maximum recursion depth when scanning directories for .yml files")
 	flag.Parse()
 

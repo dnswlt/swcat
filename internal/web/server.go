@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dnswlt/swcat"
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/dot"
 	"github.com/dnswlt/swcat/internal/repo"
@@ -115,7 +116,11 @@ func (s *Server) reloadTemplates() error {
 		"markdown":  markdown,
 	})
 	var err error
-	s.template, err = tmpl.ParseGlob(path.Join(s.opts.BaseDir, "templates/*.html"))
+	if s.opts.BaseDir == "" {
+		s.template, err = tmpl.ParseFS(swcat.Files, "templates/*.html")
+	} else {
+		s.template, err = tmpl.ParseGlob(path.Join(s.opts.BaseDir, "templates/*.html"))
+	}
 	return err
 }
 
@@ -639,12 +644,12 @@ func (s *Server) routes() *http.ServeMux {
 	})
 
 	// Static resources (JavaScript, CSS, etc.)
-	staticDir := path.Join(s.opts.BaseDir, "static")
-	mux.Handle("GET /static/",
-		http.StripPrefix("/static/",
-			http.FileServer(http.Dir(staticDir)),
-		),
-	)
+	if s.opts.BaseDir == "" {
+		mux.Handle("GET /static/", http.FileServer(http.FS(swcat.Files)))
+	} else {
+		staticFS := http.Dir(path.Join(s.opts.BaseDir, "static"))
+		mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(staticFS)))
+	}
 
 	// Default route (all other paths): redirect to the UI home page
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
