@@ -83,7 +83,7 @@ fontname="sans-serif"
 splines="spline"
 class="graphviz-svg"
 node[shape="box",fontname="sans-serif",fontsize="11",style="filled"]
-edge[fontname="sans-serif",fontsize="11",minlen="4"]
+edge[fontname="sans-serif",fontsize="11",minlen="3"]
 subgraph "cluster_svg-cluster-0" {
 id="svg-cluster-0"
 label="sys1"

@@ -185,19 +185,32 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		cacheKeyIDs = append(cacheKeyIDs, s.GetRef().String())
 	}
 	slices.Sort(cacheKeyIDs)
-	cacheKey := system.GetRef().String() + "?" + strings.Join(cacheKeyIDs, ",")
+	internalView := r.URL.Query().Get("view") == "internal"
+	cacheKey := fmt.Sprintf("%s?%s%t", system.GetRef(), strings.Join(cacheKeyIDs, ","), internalView)
 	svgResult, ok := s.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svgResult, err = svg.SystemGraph(ctx, s.dotRunner, s.repo, system, contextSystems)
+		if internalView {
+			svgResult, err = svg.SystemInternalGraph(ctx, s.dotRunner, s.repo, system)
+		} else {
+			svgResult, err = svg.SystemExternalGraph(ctx, s.dotRunner, s.repo, system, contextSystems)
+		}
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
 		s.storeSVG(cacheKey, svgResult)
+	}
+	params["SVGTabs"] = []struct {
+		Active bool
+		Name   string
+		Href   string
+	}{
+		{Active: !internalView, Name: "External", Href: setQueryParam(r.URL, "view", "external").RequestURI()},
+		{Active: internalView, Name: "Internal", Href: setQueryParam(r.URL, "view", "internal").RequestURI()},
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())

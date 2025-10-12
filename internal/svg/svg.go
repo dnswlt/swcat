@@ -143,7 +143,8 @@ func DomainGraph(ctx context.Context, runner dot.Runner, r *repo.Repository, dom
 	return runDot(ctx, runner, dotSource)
 }
 
-func generateSystemDotSource(r *repo.Repository, system *catalog.System, contextSystems []*catalog.System) *dot.DotSource {
+func generateSystemExternalDotSource(r *repo.Repository, system *catalog.System, contextSystems []*catalog.System) *dot.DotSource {
+	// Potential neighboring systems for which a detailed view is requested.
 	ctxSysMap := map[string]*catalog.System{}
 	for _, ctxSys := range contextSystems {
 		ctxSysMap[ctxSys.GetRef().QName()] = ctxSys
@@ -156,10 +157,11 @@ func generateSystemDotSource(r *repo.Repository, system *catalog.System, context
 	extSPDeps := map[string][]extSysPartDep{}
 	// Adds the src->dst dependency to either extDeps or extSPDeps, depending on whether
 	// full context was requested for dst.
-	// Ignore intra-system dependencies.
-	addExtDep := func(src catalog.SystemPart, dst catalog.SystemPart, label string, dir DependencyDir) {
+	// Ignores intra-system dependencies.
+	// Returns true if the dependency was added.
+	addExtDep := func(src, dst catalog.SystemPart, label string, dir DependencyDir) bool {
 		if dst.GetSystem().Equal(src.GetSystem()) {
-			return
+			return false
 		}
 		dstSys := r.System(dst.GetSystem())
 		if _, ok := ctxSysMap[dstSys.GetRef().QName()]; ok {
@@ -173,6 +175,7 @@ func generateSystemDotSource(r *repo.Repository, system *catalog.System, context
 				source: src, targetSystem: dstSys, direction: dir,
 			})
 		}
+		return true
 	}
 
 	dw.StartCluster(system.GetRef().QName())
@@ -180,59 +183,76 @@ func generateSystemDotSource(r *repo.Repository, system *catalog.System, context
 	// Components
 	for _, c := range system.GetComponents() {
 		comp := r.Component(c)
-		dw.AddNode(EntityNode(comp))
-
+		hasEdges := false
 		// Add links to external systems of which the component consumes APIs.
-		for _, a := range comp.Spec.ConsumesAPIs {
-			ap := r.API(a.Ref)
-			addExtDep(comp, ap, a.Label, DirOutgoing)
+		for _, ref := range comp.Spec.ConsumesAPIs {
+			ap := r.API(ref.Ref)
+			if addExtDep(comp, ap, ref.Label, DirOutgoing) {
+				hasEdges = true
+			}
 		}
 		// Add links for direct dependencies of the component.
-		for _, d := range comp.Spec.DependsOn {
-			entity := r.Entity(d.Ref)
+		for _, ref := range comp.Spec.DependsOn {
+			entity := r.Entity(ref.Ref)
 			if sp, ok := entity.(catalog.SystemPart); ok {
-				addExtDep(comp, sp, d.Label, DirOutgoing)
+				if addExtDep(comp, sp, ref.Label, DirOutgoing) {
+					hasEdges = true
+				}
 			}
 		}
 		// Add links for direct dependents of the component.
-		for _, d := range comp.GetDependents() {
-			entity := r.Entity(d.Ref)
+		for _, ref := range comp.GetDependents() {
+			entity := r.Entity(ref.Ref)
 			if sp, ok := entity.(catalog.SystemPart); ok {
-				addExtDep(comp, sp, d.Label, DirIncoming)
+				hasEdges = hasEdges || addExtDep(comp, sp, ref.Label, DirIncoming)
 			}
+		}
+		if hasEdges {
+			dw.AddNode(EntityNode(comp))
 		}
 	}
 
 	// APIs
 	for _, a := range system.GetAPIs() {
 		ap := r.API(a)
-		dw.AddNode(EntityNode(ap))
-
+		hasEdges := false
 		// Add links for consumers of any API of this system.
 		for _, c := range ap.GetConsumers() {
 			consumer := r.Component(c.Ref)
-			addExtDep(ap, consumer, c.Label, DirIncoming)
+			if addExtDep(ap, consumer, c.Label, DirIncoming) {
+				hasEdges = true
+			}
+		}
+		if hasEdges {
+			dw.AddNode(EntityNode(ap))
 		}
 	}
 
 	// Resources
 	for _, res := range system.GetResources() {
 		resource := r.Resource(res)
-		dw.AddNode(EntityNode(resource))
+		hasEdges := false
 
 		// Add links to external systems that the resource depends on.
 		for _, d := range resource.Spec.DependsOn {
 			entity := r.Entity(d.Ref)
 			if sp, ok := entity.(catalog.SystemPart); ok {
-				addExtDep(resource, sp, d.Label, DirOutgoing)
+				if addExtDep(resource, sp, d.Label, DirOutgoing) {
+					hasEdges = true
+				}
 			}
 		}
 		// Add links for direct dependents of the resource.
 		for _, d := range resource.GetDependents() {
 			entity := r.Entity(d.Ref)
 			if sp, ok := entity.(catalog.SystemPart); ok {
-				addExtDep(resource, sp, d.Label, DirIncoming)
+				if addExtDep(resource, sp, d.Label, DirIncoming) {
+					hasEdges = true
+				}
 			}
+		}
+		if hasEdges {
+			dw.AddNode(EntityNode(resource))
 		}
 	}
 
@@ -269,11 +289,96 @@ func generateSystemDotSource(r *repo.Repository, system *catalog.System, context
 	return dw.Result()
 }
 
-// SystemGraph generates an SVG for the given system.
+func generateSystemInternalDotSource(r *repo.Repository, system *catalog.System) *dot.DotSource {
+	dw := dot.NewWithConfig(dot.WriterConfig{
+		EdgeMinLen: 1, // The internal view will have many nodes. Draw it as compactly as possible.
+	})
+	dw.Start()
+
+	// Add nodes to the system cluster first to avoid any surprises with dot's rendering.
+	// Edges are defined below, outside the cluster.
+	dw.StartCluster(system.GetRef().QName())
+
+	// Components
+	for _, c := range system.GetComponents() {
+		comp := r.Component(c)
+		dw.AddNode(EntityNode(comp))
+	}
+
+	// APIs
+	for _, a := range system.GetAPIs() {
+		ap := r.API(a)
+		dw.AddNode(EntityNode(ap))
+	}
+
+	// Resources
+	for _, res := range system.GetResources() {
+		resource := r.Resource(res)
+		dw.AddNode(EntityNode(resource))
+	}
+
+	dw.EndCluster()
+
+	// Convenience helper to add an internal dependency edge.
+	addInternalDep := func(src, dst catalog.SystemPart, label string, style dot.EdgeStyle) {
+		if !src.GetSystem().Equal(dst.GetSystem()) {
+			return
+		}
+		dw.AddEdge(EntityEdgeLabel(src, dst, label, style))
+	}
+
+	// Components
+	for _, c := range system.GetComponents() {
+		comp := r.Component(c)
+		// API links
+		for _, ref := range comp.Spec.ConsumesAPIs {
+			ap := r.API(ref.Ref)
+			addInternalDep(comp, ap, ref.Label, dot.ESNormal)
+		}
+		for _, ref := range comp.Spec.ProvidesAPIs {
+			ap := r.API(ref.Ref)
+			addInternalDep(ap, comp, ref.Label, dot.ESProvidedBy)
+		}
+		// Dependency links
+		for _, ref := range comp.Spec.DependsOn {
+			entity := r.Entity(ref.Ref)
+			if sp, ok := entity.(catalog.SystemPart); ok {
+				addInternalDep(comp, sp, ref.Label, dot.ESDependsOn)
+			}
+		}
+	}
+
+	// APIs don't have outgoing references.
+
+	// Resources
+	for _, res := range system.GetResources() {
+		resource := r.Resource(res)
+		// Dependency links
+		for _, d := range resource.Spec.DependsOn {
+			entity := r.Entity(d.Ref)
+			if sp, ok := entity.(catalog.SystemPart); ok {
+				addInternalDep(resource, sp, d.Label, dot.ESDependsOn)
+			}
+		}
+	}
+
+	dw.End()
+
+	return dw.Result()
+}
+
+// SystemExternalGraph generates an SVG for an "external" view of the given system.
 // contextSystems are systems that should be expanded in the view. Other systems will be shown
 // as opaque single nodes.
-func SystemGraph(ctx context.Context, runner dot.Runner, r *repo.Repository, system *catalog.System, contextSystems []*catalog.System) (*Result, error) {
-	dotSource := generateSystemDotSource(r, system, contextSystems)
+func SystemExternalGraph(ctx context.Context, runner dot.Runner, r *repo.Repository, system *catalog.System, contextSystems []*catalog.System) (*Result, error) {
+	dotSource := generateSystemExternalDotSource(r, system, contextSystems)
+	return runDot(ctx, runner, dotSource)
+}
+
+// SystemInternalGraph generates an SVG for an "internal" view of the given system.
+// Only entities that are part of the system and their relationships are shown.
+func SystemInternalGraph(ctx context.Context, runner dot.Runner, r *repo.Repository, system *catalog.System) (*Result, error) {
+	dotSource := generateSystemInternalDotSource(r, system)
 	return runDot(ctx, runner, dotSource)
 }
 

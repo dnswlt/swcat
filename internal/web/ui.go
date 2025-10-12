@@ -118,13 +118,23 @@ func NewNavBar(items ...*NavBarItem) NavBar {
 	return items
 }
 
+// SetActive sets the .Active flags of all NavItems of this NavBar.
+// The item whose path is a prefix (or equal to) activePath is set to active.
 func (ns NavBar) SetActive(activePath string) NavBar {
-	activePath = strings.TrimSuffix(activePath, "/")
+	segments := strings.Split(activePath, "/")
 	for _, n := range ns {
-		if activePath == strings.TrimSuffix(n.path, "/") {
-			n.Active = true
-			break
+		navSegments := strings.Split(n.path, "/")
+		if len(navSegments) > len(segments) {
+			continue
 		}
+		isPrefix := true
+		for i, segment := range navSegments {
+			if segments[i] != segment {
+				isPrefix = false
+				break
+			}
+		}
+		n.Active = isPrefix
 	}
 	return ns
 }
@@ -153,4 +163,12 @@ func markdown(input string) (template.HTML, error) {
 		return "", fmt.Errorf("failed to process markdown: %v", err)
 	}
 	return template.HTML(buf.String()), nil
+}
+
+func setQueryParam(u *url.URL, key, value string) *url.URL {
+	u2 := *u
+	q := u2.Query()
+	q.Set(key, value)
+	u2.RawQuery = q.Encode()
+	return &u2
 }

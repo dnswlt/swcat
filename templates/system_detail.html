@@ -41,11 +41,13 @@
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <h3 class="font-semibold">Domain</h3>
-                    <p><a href="/ui/domains/{{ .Spec.Domain.QName | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.Domain.QName }}</a></p>
+                    <p><a href="/ui/domains/{{ .Spec.Domain.QName | urlencode }}"
+                            class="text-blue-600 hover:underline">{{ .Spec.Domain.QName }}</a></p>
                 </div>
                 <div>
                     <h3 class="font-semibold">Owner</h3>
-                    <p><a href="/ui/groups/{{ .Spec.Owner.QName | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.Owner.QName }}</a></p>
+                    <p><a href="/ui/groups/{{ .Spec.Owner.QName | urlencode }}" class="text-blue-600 hover:underline">{{
+                            .Spec.Owner.QName }}</a></p>
                 </div>
             </div>
         </div>
@@ -70,7 +72,8 @@
                 <div class="p-4">
                     <ul class="list-disc list-inside">
                         {{ range .GetComponents }}
-                        <li><a href="/ui/components/{{ .QName | urlencode }}" class="text-blue-600 hover:underline">{{ .QName }}</a></li>
+                        <li><a href="/ui/components/{{ .QName | urlencode }}" class="text-blue-600 hover:underline">{{
+                                .QName }}</a></li>
                         {{ end }}
                     </ul>
                 </div>
@@ -83,7 +86,8 @@
                 <div class="p-4">
                     <ul class="list-disc list-inside">
                         {{ range .GetResources }}
-                        <li><a href="/ui/resources/{{ .QName | urlencode }}" class="text-blue-600 hover:underline">{{ .QName }}</a></li>
+                        <li><a href="/ui/resources/{{ .QName | urlencode }}" class="text-blue-600 hover:underline">{{
+                                .QName }}</a></li>
                         {{ end }}
                     </ul>
                 </div>
@@ -96,7 +100,8 @@
                 <div class="p-4">
                     <ul class="list-disc list-inside">
                         {{ range .GetAPIs }}
-                        <li><a href="/ui/apis/{{ .QName | urlencode }}" class="text-blue-600 hover:underline">{{ .QName }}</a></li>
+                        <li><a href="/ui/apis/{{ .QName | urlencode }}" class="text-blue-600 hover:underline">{{ .QName
+                                }}</a></li>
                         {{ end }}
                     </ul>
                 </div>
@@ -105,17 +110,39 @@
         </div>
 
         {{ else }}
+
         <p class="text-center text-gray-500">System not found</p>
+
         {{ end }}
 
+
         {{ if .SVG }}
-        <div id="relationships-svg">
-            {{ .SVG }}
+        <div id="svg-wrapper">
+
+            <!-- Tabs to select the internal or external view. -->
+            <div id="svg-tabs" class="flex space-x-4 border-b">
+                {{ range .SVGTabs }}
+                {{ if .Active }}
+                <a role="button" href="{{ .Href }}#svg-wrapper"
+                    class="py-1 px-2 text-blue-600 border-b-2 border-blue-600">{{ .Name }}</a>
+                {{ else }}
+                <a role="button" href="{{ .Href }}#svg-wrapper"
+                    class="py-1 px-2 text-gray-700 hover:text-blue-600">{{ .Name }}</a>
+                {{ end }}
+                {{ end }}
+            </div>
+
+            <!-- SVG and its metadata JSON. -->
+            <div id="relationships-svg">
+                {{ .SVG }}
+            </div>
+            <script type="application/json" id="relationships-svg-meta">
+                {{ .SVGMetadataJSON }}
+            </script>
+
         </div>
-        <script type="application/json" id="relationships-svg-meta">
-            {{ .SVGMetadataJSON }}
-        </script>        
         {{ end }}
+
     </main>
 
     <script type="module" src="/static/dist/main.js"></script>

@@ -1,5 +1,4 @@
-# A simple catalog with one entity per kind.
-# See catalog2.yml for a domain with two systems.
+# A simple catalog with two systems. One has an API, the other has a component that consumes the API.
 ---
 apiVersion: swcat/v1alpha1
 kind: Domain
@@ -22,8 +21,24 @@ spec:
 apiVersion: swcat/v1alpha1
 kind: System
 metadata:
-  name: test-system
-  title: Test System
+  name: test-system-1
+  title: Test System 1
+  tags:
+    - test-tag
+  links:
+    - url: https://example.com/docs/testing
+      title: Documentation
+      type: docs
+spec:
+  owner: test-group
+  domain: test-domain
+  type: application
+---
+apiVersion: swcat/v1alpha1
+kind: System
+metadata:
+  name: test-system-2
+  title: Test System 2
   tags:
     - test-tag
   links:
@@ -47,11 +62,9 @@ spec:
   type: service
   lifecycle: production
   owner: test-group
-  system: test-system
-  providesApis:
+  system: test-system-1
+  consumesApis:
     - test-api
-  dependsOn:
-    - resource:test-resource
 ---
 apiVersion: swcat/v1alpha1
 kind: API
@@ -66,16 +79,4 @@ spec:
   type: grpc
   lifecycle: production
   owner: test-group
-  system: test-system
----
-apiVersion: swcat/v1alpha1
-kind: Resource
-metadata:
-  name: test-resource
-  title: Test Resource
-  labels:
-    foobar.dev/technology: postgres
-spec:
-  type: database
-  owner: test-group
-  system: test-system
+  system: test-system-2

@@ -174,19 +174,35 @@ type Edge struct {
 	Style EdgeStyle
 }
 
+type WriterConfig struct {
+	EdgeMinLen int
+}
+
 type Writer struct {
 	w           *strings.Builder
 	nodeInfo    map[string]*NodeInfo
 	edgeInfo    map[string]*EdgeInfo
 	clusterInfo map[string]*ClusterInfo
+	config      WriterConfig
+}
+
+func DefaultConfig() WriterConfig {
+	return WriterConfig{
+		EdgeMinLen: 3,
+	}
 }
 
 func New() *Writer {
+	return NewWithConfig(DefaultConfig())
+}
+
+func NewWithConfig(config WriterConfig) *Writer {
 	return &Writer{
 		w:           &strings.Builder{},
 		nodeInfo:    make(map[string]*NodeInfo),
 		edgeInfo:    make(map[string]*EdgeInfo),
 		clusterInfo: make(map[string]*ClusterInfo),
+		config:      config,
 	}
 }
 
@@ -200,7 +216,7 @@ func (dw *Writer) Start() {
 	// via CSS (see style.css).
 	dw.w.WriteString("class=\"graphviz-svg\"\n")
 	dw.w.WriteString("node[shape=\"box\",fontname=\"sans-serif\",fontsize=\"11\",style=\"filled\"]\n")
-	dw.w.WriteString("edge[fontname=\"sans-serif\",fontsize=\"11\",minlen=\"4\"]\n")
+	dw.w.WriteString(fmt.Sprintf("edge[fontname=\"sans-serif\",fontsize=\"11\",minlen=\"%d\"]\n", dw.config.EdgeMinLen))
 }
 
 func (dw *Writer) End() {
