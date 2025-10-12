@@ -30,12 +30,12 @@ func anyToRef(s any) (*catalog.Ref, error) {
 	return nil, fmt.Errorf("anyToRef: invalid argument type %T", s)
 }
 
-func refEncode(s any) (string, error) {
+func toEntityURL(s any) (string, error) {
 	entityRef, err := anyToRef(s)
 	if err != nil {
 		return "", err
 	}
-	return url.PathEscape(entityRef.String()), nil
+	return "/ui/entities/" + url.PathEscape(entityRef.String()), nil
 }
 
 func toURL(s any) (string, error) {
@@ -65,10 +65,6 @@ func toURL(s any) (string, error) {
 		return "", fmt.Errorf("unsupported kind %q in entityURL", entityRef.Kind)
 	}
 	return path + url.PathEscape(entityRef.QName()), nil
-}
-
-func urlencode(s string) (string, error) {
-	return url.PathEscape(s), nil
 }
 
 type NavBar []*NavBarItem

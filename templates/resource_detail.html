@@ -25,7 +25,7 @@
                 {{ end }}
                 <div class="flex items-center space-x-4">
                     <span class="text-gray-500">{{ .Spec.Type }}</span>
-                    <a href="/ui/entities/{{ . | refEncode }}/edit"
+                    <a href="{{ . | toEntityURL }}/edit"
                         class="bg-blue-600 text-white py-1 px-3 rounded text-sm">
                         Edit YAML
                     </a>
@@ -41,11 +41,11 @@
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <h3 class="font-semibold">System</h3>
-                    <p><a href="/ui/systems/{{ .Spec.System.QName | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.System.QName }}</a></p>
+                    <p><a href="{{ .Spec.System | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.System.QName }}</a></p>
                 </div>
                 <div>
                     <h3 class="font-semibold">Owner</h3>
-                    <p><a href="/ui/groups/{{ .Spec.Owner.QName | urlencode }}" class="text-blue-600 hover:underline">{{ .Spec.Owner.QName }}</a></p>
+                    <p><a href="{{ .Spec.Owner | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.Owner.QName }}</a></p>
                 </div>
             </div>
         </div>
@@ -72,7 +72,10 @@
                     <h3 class="font-semibold">Incoming</h3>
                     <ul class="list-disc list-inside">
                         {{ range .GetDependents }}
-                        <li><a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ .QName }}</a></li>
+                        <li>
+                            <a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ .QName }}</a>
+                            {{ if .Label }} <span class="text-gray-500">{{ .Label }}</span> {{ end }}
+                        </li>
                         {{ end }}
                     </ul>
                 </div>
@@ -83,7 +86,10 @@
                     <h3 class="font-semibold">Outgoing</h3>
                     <ul class="list-disc list-inside">
                         {{ range .Spec.DependsOn }}
-                        <li><a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ .QName }}</a></li>
+                        <li>
+                            <a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ .QName }}</a>
+                            {{ if .Label }} <span class="text-gray-500">{{ .Label }}</span> {{ end }}
+                        </li>
                         {{ end }}
                     </ul>
                 </div>

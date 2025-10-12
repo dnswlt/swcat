@@ -25,7 +25,7 @@
                 {{ end }}
                 <div class="flex items-center space-x-4">
                     <span class="text-gray-500">{{ .Spec.Type }}</span>
-                    <a href="/ui/entities/{{ . | refEncode }}/edit"
+                    <a href="{{ . | toEntityURL }}/edit"
                         class="bg-blue-600 text-white py-1 px-3 rounded text-sm">
                         Edit YAML
                     </a>
@@ -41,12 +41,12 @@
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <h3 class="font-semibold">Domain</h3>
-                    <p><a href="/ui/domains/{{ .Spec.Domain.QName | urlencode }}"
+                    <p><a href="{{ .Spec.Domain | toURL }}"
                             class="text-blue-600 hover:underline">{{ .Spec.Domain.QName }}</a></p>
                 </div>
                 <div>
                     <h3 class="font-semibold">Owner</h3>
-                    <p><a href="/ui/groups/{{ .Spec.Owner.QName | urlencode }}" class="text-blue-600 hover:underline">{{
+                    <p><a href="{{ .Spec.Owner | toURL }}" class="text-blue-600 hover:underline">{{
                             .Spec.Owner.QName }}</a></p>
                 </div>
             </div>
@@ -72,7 +72,7 @@
                 <div class="p-4">
                     <ul class="list-disc list-inside">
                         {{ range .GetComponents }}
-                        <li><a href="/ui/components/{{ .QName | urlencode }}" class="text-blue-600 hover:underline">{{
+                        <li><a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{
                                 .QName }}</a></li>
                         {{ end }}
                     </ul>
@@ -86,7 +86,7 @@
                 <div class="p-4">
                     <ul class="list-disc list-inside">
                         {{ range .GetResources }}
-                        <li><a href="/ui/resources/{{ .QName | urlencode }}" class="text-blue-600 hover:underline">{{
+                        <li><a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{
                                 .QName }}</a></li>
                         {{ end }}
                     </ul>
@@ -100,7 +100,7 @@
                 <div class="p-4">
                     <ul class="list-disc list-inside">
                         {{ range .GetAPIs }}
-                        <li><a href="/ui/apis/{{ .QName | urlencode }}" class="text-blue-600 hover:underline">{{ .QName
+                        <li><a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ .QName
                                 }}</a></li>
                         {{ end }}
                     </ul>

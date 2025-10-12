@@ -110,10 +110,9 @@ func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 func (s *Server) reloadTemplates() error {
 	tmpl := template.New("root")
 	tmpl = tmpl.Funcs(map[string]any{
-		"toURL":     toURL,
-		"refEncode": refEncode,
-		"urlencode": urlencode,
-		"markdown":  markdown,
+		"toURL":       toURL,
+		"toEntityURL": toEntityURL,
+		"markdown":    markdown,
 	})
 	var err error
 	if s.opts.BaseDir == "" {
