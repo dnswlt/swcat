@@ -31,6 +31,35 @@ var (
 	}
 )
 
+func InsertOrReplace(path string, entity api.Entity) error {
+	entities, err := ReadEntities(path)
+	if err != nil {
+		return fmt.Errorf("failed to read entity file %s: %v", path, err)
+	}
+
+	// Find and replace the modified entity in the list of entities read from its path.
+	var found bool
+	ref := entity.GetRef()
+	for i, e := range entities {
+		if e.GetRef().Equal(ref) {
+			// Replace old with new for writing back to disk
+			entities[i] = entity
+			found = true
+			break
+		}
+	}
+	if !found {
+		// New entity: append
+		entities = append(entities, entity)
+	}
+
+	if err := WriteEntities(path, entities); err != nil {
+		return fmt.Errorf("failed to write updated entity file %s: %v", path, err)
+	}
+
+	return nil
+}
+
 // WriteEntities safely writes a slice of entities to a given path.
 // It writes to a temporary file first and then atomically moves it to the final destination.
 func WriteEntities(path string, entities []api.Entity) error {

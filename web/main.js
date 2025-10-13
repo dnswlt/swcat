@@ -109,7 +109,7 @@ async function initPage(pageId) {
         loadSVGMetadata();
         addSVGListener();
     }
-    if (pageId === 'entity-edit') {
+    if (['entity-edit', 'entity-clone'].includes(pageId)) {
         const { initEditor } = await import('./editor.js');
         initEditor();
     }

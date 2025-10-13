@@ -69,21 +69,25 @@ func (r *Repository) setEntity(e catalog.Entity) error {
 	return nil
 }
 
-func (r *Repository) UpdateEntity(e catalog.Entity) error {
-	// This is a fairly heavyweight, but effective approach:
-	// Rebuild the repository from scratch (as a copy), validate, copy the maps back.
-	// It avoids having to deal with complex deletions and additions of relationships
-	// and their inverses.
+func (r *Repository) Exists(e catalog.Entity) bool {
+	_, ok := r.allEntities[e.GetRef().String()]
+	return ok
+}
 
-	if !r.Exists(e) {
-		return fmt.Errorf("entity %q does not exist in the repository", e.GetRef())
-	}
-
-	eRef := e.GetRef()
+// InsertOrUpdateEntity inserts e into the repository or updates an existing version of e.
+//
+// This method uses a fairly heavyweight, but effective approach:
+// Rebuild the repository from scratch (as a copy), validate, copy the maps back.
+// It avoids having to deal with complex deletions and additions of relationships
+// and their inverses. If the operation fails, the repository will be in an unchanged state.
+func (r *Repository) InsertOrUpdateEntity(e catalog.Entity) error {
 	r2 := NewRepository()
+	ref := e.GetRef()
+	found := false
 	for _, n := range r.allEntities {
 		var toAdd catalog.Entity
-		if n.GetRef().Equal(eRef) {
+		if n.GetRef().Equal(ref) {
+			found = true
 			toAdd = e // Replace old entity by the new one
 		} else {
 			toAdd = n.Reset() // Add a shallow copy with cleared computed fields
@@ -91,6 +95,12 @@ func (r *Repository) UpdateEntity(e catalog.Entity) error {
 
 		if err := r2.AddEntity(toAdd); err != nil {
 			return fmt.Errorf("failed to rebuild repository: %v", err)
+		}
+	}
+	if !found {
+		// e not found in repository => insert
+		if err := r2.AddEntity(e); err != nil {
+			return fmt.Errorf("failed to insert new entity: %v", err)
 		}
 	}
 
@@ -104,11 +114,10 @@ func (r *Repository) UpdateEntity(e catalog.Entity) error {
 	return nil
 }
 
-func (r *Repository) Exists(e catalog.Entity) bool {
-	_, ok := r.allEntities[e.GetRef().String()]
-	return ok
-}
-
+// AddEntity adds an entity to the repository *during construction*.
+// This method is intended to be used while a repository is constructed,
+// but before it is validated and back-references etc. are built.
+// See InsertOrUpdateEntity for operations on an "active" repository.
 func (r *Repository) AddEntity(e catalog.Entity) error {
 	if e.GetMetadata() == nil {
 		return fmt.Errorf("entity metadata is nil")

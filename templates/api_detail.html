@@ -10,7 +10,7 @@
     {{template "nav.html" .}}
 
     <main class="w-full max-w-screen-lg mx-auto space-y-6 bg-white shadow rounded-xl p-6">
-        <h1 class="text-2xl font-semibold text-center">API Details</h1>
+        <h1 class="text-2xl font-semibold text-center">API details </h1>
 
         {{ with .API }}
         <div class="space-y-3">
@@ -23,11 +23,15 @@
                 {{ else }}
                 <h2 class="text-xl font-semibold">{{ .GetQName }}</h2>
                 {{ end }}
-                <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-2">
                     <span class="text-gray-500">{{ .Spec.Type }}</span>
                     <a href="{{ . | toEntityURL }}/edit"
-                        class="bg-blue-600 text-white py-1 px-3 rounded text-sm">
-                        Edit YAML
+                        class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm">
+                        Edit
+                    </a>
+                    <a href="{{ . | toEntityURL }}/clone"
+                        class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm">
+                        Clone
                     </a>
                 </div>
             </div>

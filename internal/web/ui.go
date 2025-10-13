@@ -68,6 +68,7 @@ func toURL(s any) (string, error) {
 	return path + url.PathEscape(entityRef.QName()), nil
 }
 
+// formatTags returns the given tags in sorted order.
 func formatTags(tags []string) []string {
 	out := make([]string, len(tags))
 	copy(out, tags)

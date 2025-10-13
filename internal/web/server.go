@@ -430,10 +430,10 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 	s.serveHTMLPage(w, r, "group_detail.html", params)
 }
 
-func (s *Server) serveEntityEdit(w http.ResponseWriter, r *http.Request, entityRef string) {
+func (s *Server) serveEntityYAML(w http.ResponseWriter, r *http.Request, entityRef string, templateFile string) {
 	ref, err := catalog.ParseRef(entityRef)
 	if err != nil {
-		http.Error(w, "Invalid domainID", http.StatusBadRequest)
+		http.Error(w, "Invalid entity ref", http.StatusBadRequest)
 		return
 	}
 	params := map[string]any{}
@@ -454,7 +454,15 @@ func (s *Server) serveEntityEdit(w http.ResponseWriter, r *http.Request, entityR
 	}
 	params["YAML"] = buf.String()
 
-	s.serveHTMLPage(w, r, "entity_edit.html", params)
+	s.serveHTMLPage(w, r, templateFile, params)
+}
+
+func (s *Server) serveEntityClone(w http.ResponseWriter, r *http.Request, entityRef string) {
+	s.serveEntityYAML(w, r, entityRef, "entity_clone.html")
+}
+
+func (s *Server) serveEntityEdit(w http.ResponseWriter, r *http.Request, entityRef string) {
+	s.serveEntityYAML(w, r, entityRef, "entity_edit.html")
 }
 
 func (s *Server) isHX(r *http.Request) bool {
@@ -463,9 +471,79 @@ func (s *Server) isHX(r *http.Request) bool {
 
 func (s *Server) renderErrorSnippet(w http.ResponseWriter, errorMsg string) {
 	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
-	s.template.ExecuteTemplate(w, "_error.html", map[string]any{
+	err := s.template.ExecuteTemplate(w, "error_message.html", map[string]any{
 		"Error": errorMsg,
 	})
+	if err != nil {
+		log.Printf("Failed to render error message: %v", err)
+	}
+}
+
+func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
+	if !s.isHX(r) {
+		http.Error(w, "Entity updates must be done via HTMX", http.StatusBadRequest)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		return
+	}
+
+	clonedFrom := r.FormValue("cloned_from")
+	clonedRef, err := catalog.ParseRef(clonedFrom)
+	if err != nil {
+		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
+		return
+	}
+	clonedEntity := s.repo.Entity(clonedRef)
+	if clonedEntity == nil {
+		http.Error(w, "Invalid entity", http.StatusNotFound)
+		return
+	}
+
+	newYAML := r.FormValue("yaml")
+	newAPIEntity, err := store.ReadEntityFromString(newYAML)
+	if err != nil {
+		s.renderErrorSnippet(w, fmt.Sprintf("Failed to parse new YAML: %v", err))
+		return
+	}
+	// Copy over path: the cloned entity will be stored in the same file.
+	path := clonedEntity.GetSourceInfo().Path
+	newAPIEntity.GetSourceInfo().Path = path
+
+	newEntity, err := catalog.NewEntityFromAPI(newAPIEntity)
+	if err != nil {
+		s.renderErrorSnippet(w, fmt.Sprintf("Invalid entity: %v", err))
+		return
+	}
+
+	if s.repo.Exists(newEntity) {
+		s.renderErrorSnippet(w, fmt.Sprintf("Entity %s already exists", newEntity.GetRef()))
+		return
+	}
+
+	if err := s.repo.InsertOrUpdateEntity(newEntity); err != nil {
+		s.renderErrorSnippet(w, fmt.Sprintf("Failed to insert entity into repo: %v", err))
+		return
+	}
+	// Invalidate the SVG cache
+	s.clearSVGCache()
+
+	// Update the YAML file.
+	if err := store.InsertOrReplace(path, newAPIEntity); err != nil {
+		http.Error(w, "Failed to update store", http.StatusInternalServerError)
+		log.Printf("Error updating store: %v", err)
+	}
+
+	redirectURL, err := toURL(newEntity.GetRef())
+	if err != nil {
+		// This must not happen: we must always be able to get a URL for our own entities.
+		log.Fatalf("Failed to create entityURL for valid entity reference: %v", err)
+	}
+
+	w.Header().Set("HX-Redirect", redirectURL)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef string) {
@@ -513,7 +591,7 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	}
 
 	// Update the repo
-	if err := s.repo.UpdateEntity(newEntity); err != nil {
+	if err := s.repo.InsertOrUpdateEntity(newEntity); err != nil {
 		s.renderErrorSnippet(w, fmt.Sprintf("Failed to update entity in repo: %v", err))
 		return
 	}
@@ -523,35 +601,11 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	// Copy over path information for re-editing later.
 	path := originalEntity.GetSourceInfo().Path
 	newEntity.GetSourceInfo().Path = path
+
 	// Update the YAML file.
-	entitiesInFile, err := store.ReadEntities(path)
-	if err != nil {
-		http.Error(w, "Failed to read entity file", http.StatusInternalServerError)
-		log.Printf("Failed to read entities from %q: %v", path, err)
-		return
-	}
-
-	// Find and replace the modified entity in the list of entities read from its path.
-	var found bool
-	originalRef := catalog.APIRef(originalEntity.GetRef())
-	for i, e := range entitiesInFile {
-		if e.GetRef().Equal(originalRef) {
-			// Replace old with new for writing back to disk
-			entitiesInFile[i] = newAPIEntity
-			found = true
-			break
-		}
-	}
-	if !found {
-		http.Error(w, "Could not find entity to update in file", http.StatusInternalServerError)
-		log.Printf("Could not find entity to update in its alleged path %q", path)
-		return
-	}
-
-	if err := store.WriteEntities(path, entitiesInFile); err != nil {
-		http.Error(w, "Failed to write updated entity file", http.StatusInternalServerError)
-		log.Printf("Failed to write entities to %q: %v", path, err)
-		return
+	if err := store.InsertOrReplace(path, newAPIEntity); err != nil {
+		http.Error(w, "Failed to update store", http.StatusInternalServerError)
+		log.Printf("Error updating store: %v", err)
 	}
 
 	redirectURL, err := toURL(ref)
@@ -649,6 +703,13 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("POST /ui/entities/{entityRef}/edit", func(w http.ResponseWriter, r *http.Request) {
 		entityRef := r.PathValue("entityRef")
 		s.updateEntity(w, r, entityRef)
+	})
+	mux.HandleFunc("GET /ui/entities/{entityRef}/clone", func(w http.ResponseWriter, r *http.Request) {
+		entityRef := r.PathValue("entityRef")
+		s.serveEntityClone(w, r, entityRef)
+	})
+	mux.HandleFunc("POST /ui/entities", func(w http.ResponseWriter, r *http.Request) {
+		s.createEntity(w, r)
 	})
 
 	// Health check. Useful for cloud deployments.
