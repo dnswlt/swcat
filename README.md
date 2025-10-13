@@ -81,6 +81,6 @@ with minor adjustments to required and optional fields:
   * An organizational entity (team or business unit) used to model ownership and contact information.
 
 The fields of each entity kind are documented in
-[internal/backstage/api.go](./internal/api/api.go).
+[internal/api/api.go](./internal/api/api.go).
 
 See [examples/twosys/](./examples/twosys/) for example definitions.
