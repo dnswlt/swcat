@@ -465,6 +465,10 @@ func (s *Server) serveEntityEdit(w http.ResponseWriter, r *http.Request, entityR
 	s.serveEntityYAML(w, r, entityRef, "entity_edit.html")
 }
 
+func (s *Server) serveEntityDelete(w http.ResponseWriter, r *http.Request, entityRef string) {
+	s.serveEntityYAML(w, r, entityRef, "entity_delete.html")
+}
+
 func (s *Server) isHX(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true"
 }
@@ -531,7 +535,7 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 	s.clearSVGCache()
 
 	// Update the YAML file.
-	if err := store.InsertOrReplace(path, newAPIEntity); err != nil {
+	if err := store.InsertOrReplaceEntity(path, newAPIEntity); err != nil {
 		http.Error(w, "Failed to update store", http.StatusInternalServerError)
 		log.Printf("Error updating store: %v", err)
 	}
@@ -542,6 +546,53 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 		log.Fatalf("Failed to create entityURL for valid entity reference: %v", err)
 	}
 
+	w.Header().Set("HX-Redirect", redirectURL)
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) deleteEntity(w http.ResponseWriter, r *http.Request, entityRef string) {
+	if !s.isHX(r) {
+		http.Error(w, "Entity updates must be done via HTMX", http.StatusBadRequest)
+		return
+	}
+
+	ref, err := catalog.ParseRef(entityRef)
+	if err != nil {
+		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
+		return
+	}
+
+	entity := s.repo.Entity(ref)
+	if entity == nil {
+		http.Error(w, "Invalid entity", http.StatusNotFound)
+		return
+	}
+
+	// Update the repo
+	if err := s.repo.DeleteEntity(entity.GetRef()); err != nil {
+		s.renderErrorSnippet(w, fmt.Sprintf("Failed to delete entity from repo: %v", err))
+		return
+	}
+	// Invalidate the SVG cache
+	s.clearSVGCache()
+
+	// Update the YAML file.
+	apiRef := catalog.APIRef(ref)
+	if err := store.DeleteEntity(entity.GetSourceInfo().Path, apiRef); err != nil {
+		http.Error(w, "Failed to update store", http.StatusInternalServerError)
+		log.Printf("Error updating store: %v", err)
+	}
+
+	// Redirect to parent system, if it exists. Else redirect to list view.
+	redirectURL := urlPrefix(entity.GetRef())
+	if sp, ok := entity.(catalog.SystemPart); ok {
+		var err error
+		redirectURL, err = toURL(sp.GetSystem())
+		if err != nil {
+			// This must not happen: we must always be able to get a URL for our own entities.
+			log.Fatalf("Failed to create entityURL for valid entity reference: %v", err)
+		}
+	}
 	w.Header().Set("HX-Redirect", redirectURL)
 	w.WriteHeader(http.StatusOK)
 }
@@ -603,7 +654,7 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	newEntity.GetSourceInfo().Path = path
 
 	// Update the YAML file.
-	if err := store.InsertOrReplace(path, newAPIEntity); err != nil {
+	if err := store.InsertOrReplaceEntity(path, newAPIEntity); err != nil {
 		http.Error(w, "Failed to update store", http.StatusInternalServerError)
 		log.Printf("Error updating store: %v", err)
 	}
@@ -710,6 +761,14 @@ func (s *Server) routes() *http.ServeMux {
 	})
 	mux.HandleFunc("POST /ui/entities", func(w http.ResponseWriter, r *http.Request) {
 		s.createEntity(w, r)
+	})
+	mux.HandleFunc("GET /ui/entities/{entityRef}/delete", func(w http.ResponseWriter, r *http.Request) {
+		entityRef := r.PathValue("entityRef")
+		s.serveEntityDelete(w, r, entityRef)
+	})
+	mux.HandleFunc("POST /ui/entities/{entityRef}/delete", func(w http.ResponseWriter, r *http.Request) {
+		entityRef := r.PathValue("entityRef")
+		s.deleteEntity(w, r, entityRef)
 	})
 
 	// Health check. Useful for cloud deployments.

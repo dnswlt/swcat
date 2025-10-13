@@ -23,17 +23,9 @@
                 {{ else }}
                 <h2 class="text-xl font-semibold">{{ .GetQName }}</h2>
                 {{ end }}
-                <div class="flex items-center space-x-2">
-                    <span class="text-gray-500">{{ .Spec.Type }}</span>
-                    <a href="{{ . | toEntityURL }}/edit"
-                        class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm">
-                        Edit
-                    </a>
-                    <a href="{{ . | toEntityURL }}/clone"
-                        class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm">
-                        Clone
-                    </a>
-                </div>
+
+                {{ template "entity_toolbar.html" . }}
+
             </div>
 
             {{ if or .Metadata.Tags .Metadata.Labels }}

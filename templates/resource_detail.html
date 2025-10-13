@@ -23,26 +23,20 @@
                 {{ else }}
                 <h2 class="text-xl font-semibold">{{ .GetQName }}</h2>
                 {{ end }}
-                <div class="flex items-center space-x-2">
-                    <span class="text-gray-500">{{ .Spec.Type }}</span>
-                    <a href="{{ . | toEntityURL }}/edit"
-                        class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm">
-                        Edit
-                    </a>
-                    <a href="{{ . | toEntityURL }}/clone"
-                        class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm">
-                        Clone
-                    </a>
-                </div>
+                {{ template "entity_toolbar.html" . }}
             </div>
 
             {{ if or .Metadata.Tags .Metadata.Labels }}
             <div class="flex flex-wrap items-center gap-2">
                 {{ range formatTags .Metadata.Tags }}
-                <span title="tag" class="inline-block bg-gray-200 rounded-full px-2 py-1 text-xs font-semibold text-gray-700">{{ . }}</span>
+                <span title="tag"
+                    class="inline-block bg-gray-200 rounded-full px-2 py-1 text-xs font-semibold text-gray-700">{{ .
+                    }}</span>
                 {{ end }}
                 {{ range formatLabels .Metadata }}
-                <span title="label" class="inline-block bg-blue-200 rounded-full px-2 py-1 text-xs font-semibold text-blue-700">{{ . }}</span>
+                <span title="label"
+                    class="inline-block bg-blue-200 rounded-full px-2 py-1 text-xs font-semibold text-blue-700">{{ .
+                    }}</span>
                 {{ end }}
             </div>
             {{ end }}
@@ -56,11 +50,13 @@
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <h3 class="font-semibold">System</h3>
-                    <p><a href="{{ .Spec.System | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.System.QName }}</a></p>
+                    <p><a href="{{ .Spec.System | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.System.QName
+                            }}</a></p>
                 </div>
                 <div>
                     <h3 class="font-semibold">Owner</h3>
-                    <p><a href="{{ .Spec.Owner | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.Owner.QName }}</a></p>
+                    <p><a href="{{ .Spec.Owner | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.Owner.QName
+                            }}</a></p>
                 </div>
             </div>
         </div>
@@ -124,7 +120,7 @@
         </div>
         <script type="application/json" id="relationships-svg-meta">
             {{ .SVGMetadataJSON }}
-        </script>        
+        </script>
         {{ end }}
 
     </main>

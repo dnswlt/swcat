@@ -114,6 +114,64 @@ func (r *Repository) InsertOrUpdateEntity(e catalog.Entity) error {
 	return nil
 }
 
+// DeleteEntity removes the given entity from the repository.
+// Deletions are only allowed if the given entity does not have remaining
+// ingoing dependencies (i.e. references from other entities) of any kind.
+// See InsertOrUpdateEntity for the procedure.
+func (r *Repository) DeleteEntity(ref *catalog.Ref) error {
+	refList := func(refs []*catalog.LabelRef) []string {
+		result := make([]string, len(refs))
+		for i, ref := range refs {
+			result[i] = ref.String()
+		}
+		return result
+	}
+
+	// Validate that there are no inbound dependencies left.
+	e := r.Entity(ref)
+	if e == nil {
+		return fmt.Errorf("entity %q does not exist", ref)
+	}
+	switch entity := e.(type) {
+	case *catalog.Component:
+		if len(entity.GetDependents()) != 0 {
+			return fmt.Errorf("remaining ingoing dependencies: %v", refList(entity.GetDependents()))
+		}
+	case *catalog.Resource:
+		if len(entity.GetDependents()) != 0 {
+			return fmt.Errorf("remaining ingoing dependencies: %v", refList(entity.GetDependents()))
+		}
+	case *catalog.API:
+		if len(entity.GetProviders()) != 0 {
+			return fmt.Errorf("remaining API providers: %v", refList(entity.GetProviders()))
+		}
+		if len(entity.GetConsumers()) != 0 {
+			return fmt.Errorf("remaining API providers: %v", refList(entity.GetConsumers()))
+		}
+	default:
+		return fmt.Errorf("deleting entities of type %T is currently not supported", e)
+	}
+
+	// Rebuild repo without entity
+	r2 := NewRepository()
+	for _, n := range r.allEntities {
+		if n.GetRef().Equal(ref) {
+			continue // Skip the entity to be deleted
+		}
+		toAdd := n.Reset()
+		if err := r2.AddEntity(toAdd); err != nil {
+			return fmt.Errorf("failed to rebuild repository: %v", err)
+		}
+	}
+	if err := r2.Validate(); err != nil {
+		return fmt.Errorf("repository validation failed: %v", err)
+	}
+
+	// Copy over all data from the updated repo to the current one.
+	*r = *r2
+	return nil
+}
+
 // AddEntity adds an entity to the repository *during construction*.
 // This method is intended to be used while a repository is constructed,
 // but before it is validated and back-references etc. are built.

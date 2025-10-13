@@ -39,6 +39,27 @@ func toEntityURL(s any) (string, error) {
 	return "/ui/entities/" + url.PathEscape(entityRef.String()), nil
 }
 
+// urlPrefix returns the URL prefix for the entity kind of the given ref.
+// The returned value does not end in a trailing slash.
+// Example: "/ui/components"
+func urlPrefix(ref *catalog.Ref) string {
+	switch ref.Kind {
+	case "component":
+		return "/ui/components"
+	case "resource":
+		return "/ui/resources"
+	case "system":
+		return "/ui/systems"
+	case "group":
+		return "/ui/groups"
+	case "domain":
+		return "/ui/domains"
+	case "api":
+		return "/ui/apis"
+	}
+	return ""
+}
+
 func toURL(s any) (string, error) {
 	entityRef, err := anyToRef(s)
 	if err != nil {
@@ -48,24 +69,11 @@ func toURL(s any) (string, error) {
 	if entityRef.Kind == "" {
 		return "", fmt.Errorf("entity reference has no kind: set: %v", entityRef)
 	}
-	var path string
-	switch entityRef.Kind {
-	case "component":
-		path = "/ui/components/"
-	case "resource":
-		path = "/ui/resources/"
-	case "system":
-		path = "/ui/systems/"
-	case "group":
-		path = "/ui/groups/"
-	case "domain":
-		path = "/ui/domains/"
-	case "api":
-		path = "/ui/apis/"
-	default:
+	path := urlPrefix(entityRef)
+	if path == "" {
 		return "", fmt.Errorf("unsupported kind %q in entityURL", entityRef.Kind)
 	}
-	return path + url.PathEscape(entityRef.QName()), nil
+	return path + "/" + url.PathEscape(entityRef.QName()), nil
 }
 
 // formatTags returns the given tags in sorted order.

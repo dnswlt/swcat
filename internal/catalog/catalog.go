@@ -176,6 +176,7 @@ type System struct {
 }
 
 // Component
+
 type componentInvRel struct {
 	dependents []*LabelRef
 }

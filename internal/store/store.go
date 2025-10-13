@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -31,7 +30,35 @@ var (
 	}
 )
 
-func InsertOrReplace(path string, entity api.Entity) error {
+func DeleteEntity(path string, ref *api.Ref) error {
+	entities, err := ReadEntities(path)
+	if err != nil {
+		return fmt.Errorf("failed to read entity file %s: %v", path, err)
+	}
+
+	// Remove the modified entity from the list of entities read from its path.
+	remaining := make([]api.Entity, 0, len(entities))
+	var found bool
+	for _, e := range entities {
+		if e.GetRef().Equal(ref) {
+			// Replace old with new for writing back to disk
+			found = true
+			continue
+		}
+		remaining = append(remaining, e)
+	}
+	if !found {
+		return fmt.Errorf("failed to delete entity %s from file %s", ref, path)
+	}
+
+	if err := WriteEntities(path, remaining); err != nil {
+		return fmt.Errorf("failed to write updated entity file %s: %v", path, err)
+	}
+
+	return nil
+}
+
+func InsertOrReplaceEntity(path string, entity api.Entity) error {
 	entities, err := ReadEntities(path)
 	if err != nil {
 		return fmt.Errorf("failed to read entity file %s: %v", path, err)
@@ -83,34 +110,6 @@ func WriteEntities(path string, entities []api.Entity) error {
 	tmpFile.Close()
 
 	return os.Rename(tmpFile.Name(), path)
-}
-
-// WriteEntitiesByPath groups entities by their source path, sorts them by line number,
-// and writes them back to their original files.
-func WriteEntitiesByPath(allEntities []api.Entity) error {
-	// Group entities by their source file path.
-	entitiesByPath := make(map[string][]api.Entity)
-	for _, e := range allEntities {
-		path := e.GetSourceInfo().Path
-		entitiesByPath[path] = append(entitiesByPath[path], e)
-	}
-
-	// Process each file.
-	for path, entities := range entitiesByPath {
-		// Sort the entities for this path by their original line number.
-		sort.Slice(entities, func(i, j int) bool {
-			return entities[i].GetSourceInfo().Line < entities[j].GetSourceInfo().Line
-		})
-
-		// Use the safe, atomic write pattern.
-		err := WriteEntities(path, entities)
-		if err != nil {
-			return fmt.Errorf("failed to write entities to %s: %w", path, err)
-		}
-		log.Printf("Successfully wrote %d entities to %s\n", len(entities), path)
-	}
-
-	return nil
 }
 
 func ReadEntities(path string) ([]api.Entity, error) {
