@@ -5,7 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -36,22 +39,39 @@ func main() {
 	maxDepth := flag.Int("max-depth", 3, "Maximum recursion depth when scanning directories for .yml files")
 	flag.Parse()
 
-	// Check if dot (graphviz) is in the PATH, else abort.
-	// We need dot to render SVG graphs.
-	func() {
+	// Check if dot (graphviz) is in the PATH, else try Windows default install path.
+	dotPath := func() string {
 		path, err := exec.LookPath("dot")
+		if err != nil && runtime.GOOS == "windows" {
+			if pf := os.Getenv("ProgramFiles"); pf != "" {
+				// Try Graphviz default install path.
+				candidate := filepath.Join(pf, "Graphviz", "bin", "dot.exe")
+				if _, statErr := os.Stat(candidate); statErr == nil {
+					path = candidate
+					err = nil
+				} else if matches, _ := filepath.Glob(filepath.Join(pf, "Graphviz*", "bin", "dot.exe")); len(matches) > 0 {
+					// Installed in a specific version folder (e.g. Graphviz-12.0)
+					path = matches[0]
+					err = nil
+				}
+			}
+		}
+
 		if err != nil {
 			log.Fatalf("dot was not found in your PATH. Please install Graphviz and add it to the PATH.")
 		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "dot", "-V")
+
+		cmd := exec.CommandContext(ctx, path, "-V")
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			// This error is returned if the command cannot be found or exits with a non-zero status.
-			log.Fatalf("Failed to run 'dot -V': %v", err)
+			log.Fatalf("Failed to run '%s -V': %v", path, err)
 		}
+
 		log.Printf("Found dot program at %s (%s)", path, strings.TrimSpace(string(output)))
+		return path
 	}()
 
 	files, err := store.CollectYMLFiles(flag.Args(), *maxDepth)
@@ -79,7 +99,7 @@ func main() {
 			web.ServerOptions{
 				Addr:    *serverAddrFlag,
 				BaseDir: *baseDir,
-				DotPath: "dot",
+				DotPath: dotPath,
 			},
 			repo,
 		)
