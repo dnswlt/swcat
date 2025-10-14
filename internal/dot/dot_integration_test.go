@@ -21,9 +21,9 @@ func TestDotRunner_Simple(t *testing.T) {
 
 	dw := New()
 	dw.Start()
-	dw.AddNode(Node{ID: "a", Label: "A"})
-	dw.AddNode(Node{ID: "b", Label: "B"})
-	dw.AddEdge(Edge{From: "a", To: "b", Style: ESSystemLink})
+	dw.AddNode(Node{ID: "a", Layout: NodeLayout{Label: "A"}})
+	dw.AddNode(Node{ID: "b", Layout: NodeLayout{Label: "B"}})
+	dw.AddEdge(Edge{From: "a", To: "b", Layout: EdgeLayout{Style: ESSystemLink}})
 	dw.End()
 
 	svg, err := r.Run(ctx, dw.Result().DotSource)

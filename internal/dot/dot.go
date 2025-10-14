@@ -91,60 +91,50 @@ func (r *dotRunner) Run(ctx context.Context, dotSource string) ([]byte, error) {
 	return output, nil
 }
 
-type NodeKind int
+type NodeLayout struct {
+	Label     string // Multi-line labels should use Graphviz \n \l \r sequences.
+	FillColor string // Either hex ("#ff00aa") or a well-known color name ("red").
+	Shape     NodeShape
+}
+
+type NodeShape int
 
 const (
-	KindUnspecified NodeKind = iota
-	KindDomain
-	KindSystem
-	KindComponent
-	KindResource
-	KindAPI
-	KindGroup
+	NSRoundedBox NodeShape = iota
+	NSBox
+	NSEllipse
 )
 
 type Node struct {
-	ID        string // ID of this node in the dot graph.
-	Kind      NodeKind
-	Label     string
-	FillColor string // Either hex ("#ff00aa") or a well-known color name ("red").
+	ID     string // ID of this node in the dot graph.
+	Layout NodeLayout
 }
 
-func (n *Node) GetFillColor() string {
-	if n.FillColor != "" {
-		return n.FillColor
-	}
-	switch n.Kind {
-	case KindComponent:
-		return "#CBDCEB"
-	case KindSystem:
-		return "#6D94C5"
-	case KindAPI:
-		return "#FADA7A"
-	case KindResource:
-		return "#B4DEBD"
-	case KindGroup:
-		return "#F5EEDC"
-	}
-	return "#F5EEDC" // neutral beige
+func (n *Node) Label() string {
+	return n.Layout.Label
 }
 
-func (n *Node) Shape() string {
-	switch n.Kind {
-	case KindGroup:
+func (n *Node) FillColor() string {
+	if n.Layout.FillColor != "" {
+		return n.Layout.FillColor
+	}
+	return "#FFFFFF"
+}
+
+func (n *Node) dotShape() string {
+	switch n.Layout.Shape {
+	case NSEllipse:
 		return "ellipse"
-	default:
-		return "box"
 	}
+	return "box"
 }
 
-func (n *Node) Style() string {
-	switch n.Kind {
-	case KindSystem:
-		return "filled"
-	default:
+func (n *Node) dotStyle() string {
+	switch n.Layout.Shape {
+	case NSRoundedBox:
 		return "filled,rounded"
 	}
+	return "filled"
 }
 
 type EdgeStyle int
@@ -167,11 +157,15 @@ const (
 	ESSystemLink
 )
 
-type Edge struct {
-	From  string
-	To    string
+type EdgeLayout struct {
 	Label string
 	Style EdgeStyle
+}
+
+type Edge struct {
+	From   string
+	To     string
+	Layout EdgeLayout
 }
 
 type WriterConfig struct {
@@ -224,18 +218,18 @@ func (dw *Writer) End() {
 }
 
 func (dw *Writer) AddNode(node Node) {
-	node.Label = escLabel(node.Label)
-	node.FillColor = escLabel(node.FillColor)
-
 	if _, ok := dw.nodeInfo[node.ID]; ok {
 		// Ignore duplicate node definitions.
 		return
 	}
+	label := escLabel(node.Label())
+	fillColor := escLabel(node.FillColor())
+
 	fmt.Fprintf(dw.w, `"%s"[id="%s",label="%s",fillcolor="%s",shape="%s",style="%s",class="clickable-node"]`,
-		node.ID, node.ID, node.Label, node.GetFillColor(), node.Shape(), node.Style())
+		node.ID, node.ID, label, fillColor, node.dotShape(), node.dotStyle())
 	fmt.Fprintln(dw.w)
 	dw.nodeInfo[node.ID] = &NodeInfo{
-		Label: node.Label,
+		Label: node.Label(),
 	}
 }
 
@@ -290,13 +284,13 @@ func (dw *Writer) AddEdge(edge Edge) {
 	dw.edgeInfo[edgeID] = &EdgeInfo{
 		From:  edge.From,
 		To:    edge.To,
-		Label: edge.Label,
+		Label: edge.Layout.Label,
 	}
 
-	if edge.Label != "" {
-		attrs["label"] = escLabel(edge.Label)
+	if edge.Layout.Label != "" {
+		attrs["label"] = escLabel(edge.Layout.Label)
 	}
-	switch edge.Style {
+	switch edge.Layout.Style {
 	case ESBackward:
 		attrs["dir"] = "back"
 	case ESProvidedBy:

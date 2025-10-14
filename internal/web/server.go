@@ -84,6 +84,11 @@ func (s *Server) clearSVGCache() {
 	defer s.svgCacheMut.Unlock()
 	s.svgCache = make(map[string]*svg.Result)
 }
+func (s *Server) svgRenderer() *svg.Renderer {
+	// TODO: pass in configurable config here.
+	layouter := svg.NewStandardLayouter(svg.LayouterConfig{})
+	return svg.NewRenderer(s.repo, s.dotRunner, layouter)
+}
 
 // withRequestLogging wraps a handler and logs each request if in debug mode.
 // Logs include method, path, remote address, and duration.
@@ -194,9 +199,9 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 		if internalView {
-			svgResult, err = svg.SystemInternalGraph(ctx, s.dotRunner, s.repo, system)
+			svgResult, err = s.svgRenderer().SystemInternalGraph(ctx, system)
 		} else {
-			svgResult, err = svg.SystemExternalGraph(ctx, s.dotRunner, s.repo, system, contextSystems)
+			svgResult, err = s.svgRenderer().SystemExternalGraph(ctx, system, contextSystems)
 		}
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
@@ -238,7 +243,7 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svgResult, err = svg.ComponentGraph(ctx, s.dotRunner, s.repo, component)
+		svgResult, err = s.svgRenderer().ComponentGraph(ctx, component)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
@@ -287,7 +292,7 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svgResult, err = svg.APIGraph(ctx, s.dotRunner, s.repo, ap)
+		svgResult, err = s.svgRenderer().APIGraph(ctx, ap)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
@@ -336,7 +341,7 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svgResult, err = svg.ResourceGraph(ctx, s.dotRunner, s.repo, resource)
+		svgResult, err = s.svgRenderer().ResourceGraph(ctx, resource)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
@@ -385,7 +390,7 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svgResult, err = svg.DomainGraph(ctx, s.dotRunner, s.repo, domain)
+		svgResult, err = s.svgRenderer().DomainGraph(ctx, domain)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)

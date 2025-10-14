@@ -42,8 +42,8 @@ func TestEscLabel(t *testing.T) {
 func TestWriter_AddNode_DuplicateIgnored(t *testing.T) {
 	dw := New()
 	dw.Start()
-	dw.AddNode(Node{ID: "x", Kind: KindComponent, Label: "X"})
-	dw.AddNode(Node{ID: "x", Kind: KindSystem, Label: "X2"}) // should be ignored
+	dw.AddNode(Node{ID: "x", Layout: NodeLayout{Label: "X"}})
+	dw.AddNode(Node{ID: "x", Layout: NodeLayout{Label: "X2"}}) // should be ignored
 	dw.End()
 	result := dw.Result()
 	ds := result.DotSource
@@ -61,16 +61,16 @@ func TestWriter_Golden_Simple(t *testing.T) {
 
 	// cluster sys1
 	dw.StartCluster("sys1")
-	dw.AddNode(Node{ID: "c1", Kind: KindComponent, Label: "c1"})
-	dw.AddNode(Node{ID: "api1", Kind: KindAPI, Label: "api1"})
+	dw.AddNode(Node{ID: "c1", Layout: NodeLayout{Shape: NSRoundedBox, Label: "c1", FillColor: "#D2E5EF"}})
+	dw.AddNode(Node{ID: "api1", Layout: NodeLayout{Shape: NSRoundedBox, Label: "api1", FillColor: "#FCE0BA"}})
 	dw.EndCluster()
 
 	// outside node
-	dw.AddNode(Node{ID: "s1", Kind: KindSystem, Label: "s1"})
+	dw.AddNode(Node{ID: "s1", Layout: NodeLayout{Shape: NSBox, Label: "s1", FillColor: "#6BABD0"}})
 
 	// edges (root-level)
-	dw.AddEdge(Edge{From: "s1", To: "api1", Style: ESSystemLink})
-	dw.AddEdge(Edge{From: "c1", To: "api1", Style: ESDependsOn})
+	dw.AddEdge(Edge{From: "s1", To: "api1", Layout: EdgeLayout{Style: ESSystemLink}})
+	dw.AddEdge(Edge{From: "c1", To: "api1", Layout: EdgeLayout{Style: ESDependsOn}})
 
 	dw.End()
 
@@ -89,10 +89,10 @@ id="svg-cluster-0"
 label="sys1"
 style=filled
 fillcolor="#f3f4f6"
-"c1"[id="c1",label="c1",fillcolor="#CBDCEB",shape="box",style="filled,rounded",class="clickable-node"]
-"api1"[id="api1",label="api1",fillcolor="#FADA7A",shape="box",style="filled,rounded",class="clickable-node"]
+"c1"[id="c1",label="c1",fillcolor="#D2E5EF",shape="box",style="filled,rounded",class="clickable-node"]
+"api1"[id="api1",label="api1",fillcolor="#FCE0BA",shape="box",style="filled,rounded",class="clickable-node"]
 }
-"s1"[id="s1",label="s1",fillcolor="#6D94C5",shape="box",style="filled",class="clickable-node"]
+"s1"[id="s1",label="s1",fillcolor="#6BABD0",shape="box",style="filled",class="clickable-node"]
 "s1" -> "api1"[class="clickable-edge system-link-edge",id="svg-edge-0"]
 "c1" -> "api1"[id="svg-edge-1",style="dashed"]
 }
