@@ -13,27 +13,20 @@ type Layouter interface {
 	EdgeLabel(src, dst catalog.Entity, ref *catalog.LabelRef, style dot.EdgeStyle) dot.EdgeLayout
 }
 
-type LayouterConfig struct {
-	// Labels that should be displayed as stereotypes in nodes.
-	StereotypeLabels []string
-	// Maps label keys and label values to node colors.
-	LabelColorMap map[string]map[string]string
-}
-
 type StandardLayouter struct {
-	config LayouterConfig
+	config LayoutConfig
 }
 
-func NewStandardLayouter(config LayouterConfig) *StandardLayouter {
+func NewStandardLayouter(config LayoutConfig) *StandardLayouter {
 	return &StandardLayouter{
 		config: config,
 	}
 }
 
 func (l *StandardLayouter) fillColor(e catalog.Entity) string {
-	if len(l.config.LabelColorMap) > 0 {
+	if len(l.config.NodeColorsByLabel) > 0 {
 		for k, v := range e.GetMetadata().Labels {
-			if m, ok := l.config.LabelColorMap[k]; ok && m != nil {
+			if m, ok := l.config.NodeColorsByLabel[k]; ok && m != nil {
 				if val, ok := m[v]; ok {
 					return val
 				}

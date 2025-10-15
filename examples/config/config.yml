@@ -1,0 +1,5 @@
+stereotypeLabels:
+  - foobar.dev/language
+nodeColorsByLabel:
+  foobar.dev/language:
+    perl: '#ff00ff'

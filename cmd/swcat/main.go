@@ -14,7 +14,9 @@ import (
 
 	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
+	"github.com/dnswlt/swcat/internal/svg"
 	"github.com/dnswlt/swcat/internal/web"
+	"gopkg.in/yaml.v3"
 )
 
 func formatFiles(files []string) error {
@@ -36,6 +38,7 @@ func main() {
 	serverAddrFlag := flag.String("addr", "localhost:8080", "Address to listen on")
 	formatFlag := flag.Bool("format", false, "Format input files and exit.")
 	baseDir := flag.String("base-dir", "", "Base directory for resource files. If empty, uses embedded resources.")
+	configYaml := flag.String("config", "", "Path to the configuration YAML file")
 	maxDepth := flag.Int("max-depth", 3, "Maximum recursion depth when scanning directories for .yml files")
 	flag.Parse()
 
@@ -94,12 +97,26 @@ func main() {
 
 	log.Printf("Read %d entities from %d files", repo.Size(), len(files))
 
+	var layoutConfig svg.LayoutConfig
+	if *configYaml != "" {
+		f, err := os.Open(*configYaml)
+		if err != nil {
+			log.Fatalf("Could not open configuration YAML: %v", err)
+		}
+		dec := yaml.NewDecoder(f)
+		dec.KnownFields(true)
+		if err := dec.Decode(&layoutConfig); err != nil {
+			log.Fatalf("Invalid configuration YAML: %v", err)
+		}
+	}
+
 	if *serverAddrFlag != "" {
 		server, err := web.NewServer(
 			web.ServerOptions{
-				Addr:    *serverAddrFlag,
-				BaseDir: *baseDir,
-				DotPath: dotPath,
+				Addr:         *serverAddrFlag,
+				BaseDir:      *baseDir,
+				DotPath:      dotPath,
+				LayoutConfig: layoutConfig,
 			},
 			repo,
 		)

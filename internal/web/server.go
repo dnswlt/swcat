@@ -24,9 +24,10 @@ import (
 )
 
 type ServerOptions struct {
-	Addr    string // E.g., "localhost:8080"
-	BaseDir string // Directory from which resources (templates etc.) are read.
-	DotPath string // E.g., "dot" (with dot on the PATH)
+	Addr         string           // E.g., "localhost:8080"
+	BaseDir      string           // Directory from which resources (templates etc.) are read.
+	DotPath      string           // E.g., "dot" (with dot on the PATH)
+	LayoutConfig svg.LayoutConfig // Config parameters for SVG graph layouts
 }
 
 type Server struct {
@@ -85,8 +86,7 @@ func (s *Server) clearSVGCache() {
 	s.svgCache = make(map[string]*svg.Result)
 }
 func (s *Server) svgRenderer() *svg.Renderer {
-	// TODO: pass in configurable config here.
-	layouter := svg.NewStandardLayouter(svg.LayouterConfig{})
+	layouter := svg.NewStandardLayouter(s.opts.LayoutConfig)
 	return svg.NewRenderer(s.repo, s.dotRunner, layouter)
 }
 

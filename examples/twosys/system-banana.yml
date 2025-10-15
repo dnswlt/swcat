@@ -48,7 +48,7 @@ metadata:
   description: |
     This is a wonderful backend.
   labels:
-    foobar.dev/language: java
+    foobar.dev/language: perl
     foobar.dev/deployment: k8s
 spec:
   type: service
