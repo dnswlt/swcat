@@ -1,5 +1,12 @@
-stereotypeLabels:
-  - foobar.dev/language
-nodeColorsByLabel:
-  foobar.dev/language:
-    perl: '#ff00ff'
+# Example configuration file.
+svg:
+  # Show the (programming) language label as a <<stereotype>> on nodes.
+  stereotypeLabels:
+    - foobar.dev/language
+  # Highlight nodes with a certain status in different fill colors.
+  nodeColorsByLabel:
+    foobar.dev/status:
+      deprecated: '#f3c1de'
+      critical: '#c7398a'
+  # Include the API provider (component) in labels of API entities.
+  showAPIProvider: true

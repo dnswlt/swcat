@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
-	"github.com/dnswlt/swcat/internal/svg"
 	"github.com/dnswlt/swcat/internal/web"
 	"gopkg.in/yaml.v3"
 )
@@ -97,7 +97,7 @@ func main() {
 
 	log.Printf("Read %d entities from %d files", repo.Size(), len(files))
 
-	var layoutConfig svg.LayoutConfig
+	var bundle config.Bundle
 	if *configYaml != "" {
 		f, err := os.Open(*configYaml)
 		if err != nil {
@@ -105,7 +105,7 @@ func main() {
 		}
 		dec := yaml.NewDecoder(f)
 		dec.KnownFields(true)
-		if err := dec.Decode(&layoutConfig); err != nil {
+		if err := dec.Decode(&bundle); err != nil {
 			log.Fatalf("Invalid configuration YAML: %v", err)
 		}
 	}
@@ -113,10 +113,10 @@ func main() {
 	if *serverAddrFlag != "" {
 		server, err := web.NewServer(
 			web.ServerOptions{
-				Addr:         *serverAddrFlag,
-				BaseDir:      *baseDir,
-				DotPath:      dotPath,
-				LayoutConfig: layoutConfig,
+				Addr:    *serverAddrFlag,
+				BaseDir: *baseDir,
+				DotPath: dotPath,
+				Config:  bundle,
 			},
 			repo,
 		)

@@ -39,4 +39,12 @@
         stroke: #808080;
         stroke-width: 3;
     }
+
+    .graphviz-svg text.node-label-small {
+        font-size: 9px;
+        font-style: italic;
+    }
+    .graphviz-svg text.node-label-em {
+        font-style: italic;
+    }
 }

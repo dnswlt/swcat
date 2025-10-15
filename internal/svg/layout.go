@@ -14,16 +14,21 @@ type Layouter interface {
 }
 
 type StandardLayouter struct {
-	config LayoutConfig
+	config Config
 }
 
-func NewStandardLayouter(config LayoutConfig) *StandardLayouter {
+func NewStandardLayouter(config Config) *StandardLayouter {
 	return &StandardLayouter{
 		config: config,
 	}
 }
 
 func (l *StandardLayouter) fillColor(e catalog.Entity) string {
+	if c, ok := e.GetMetadata().Annotations[AnnotFillColor]; ok {
+		// explicit annotation overrides everything
+		return c
+	}
+
 	if len(l.config.NodeColorsByLabel) > 0 {
 		for k, v := range e.GetMetadata().Labels {
 			if m, ok := l.config.NodeColorsByLabel[k]; ok && m != nil {
@@ -64,10 +69,16 @@ func (l *StandardLayouter) shape(e catalog.Entity) dot.NodeShape {
 }
 
 func (l *StandardLayouter) stereotype(e catalog.Entity) (string, bool) {
+	meta := e.GetMetadata()
+
+	if st, ok := meta.Annotations[AnnotSterotype]; ok {
+		// Explicit stereotype annotation overrides everything
+		return st, true
+	}
+
 	if len(l.config.StereotypeLabels) == 0 {
 		return "", false
 	}
-	meta := e.GetMetadata()
 
 	var values []string
 	for _, lbl := range l.config.StereotypeLabels {
@@ -81,33 +92,35 @@ func (l *StandardLayouter) stereotype(e catalog.Entity) (string, bool) {
 	return strings.Join(values, ", "), true
 }
 
-func (l *StandardLayouter) Node(e catalog.Entity) dot.NodeLayout {
-	meta := e.GetMetadata()
-	// Label
+func (l *StandardLayouter) label(e catalog.Entity) string {
 	var label strings.Builder
-	if st, ok := meta.Annotations[AnnotSterotype]; ok {
-		// Explicit stereotype annotation
-		label.WriteString(`&laquo;` + st + `&raquo;\n`)
-	} else if st, ok := l.stereotype(e); ok {
-		label.WriteString(`&laquo;` + st + `&raquo;\n`)
+
+	if st, ok := l.stereotype(e); ok {
+		label.WriteString(PrefixNodeLabelEm + `&laquo;` + st + `&raquo;\n`)
 	}
+
+	meta := e.GetMetadata()
 	if meta.Namespace != "" && meta.Namespace != catalog.DefaultNamespace {
 		// Two-line label for namespaced entities.
 		label.WriteString(meta.Namespace + `/\n`)
 	}
 	label.WriteString(meta.Name)
 
-	var fillColor string
-	if c, ok := meta.Annotations[AnnotFillColor]; ok {
-		// explicit annotation overrides everything
-		fillColor = c
-	} else {
-		fillColor = l.fillColor(e)
+	if a, ok := e.(*catalog.API); ok && l.config.ShowAPIProvider {
+		providers := a.GetProviders()
+		if len(providers) > 0 {
+			label.WriteString(`\n` + PrefixNodeLabelSmall + " " + providers[0].QName())
+		}
 	}
 
+	return label.String()
+}
+
+func (l *StandardLayouter) Node(e catalog.Entity) dot.NodeLayout {
+
 	return dot.NodeLayout{
-		Label:     label.String(),
-		FillColor: fillColor,
+		Label:     l.label(e),
+		FillColor: l.fillColor(e),
 		Shape:     l.shape(e),
 	}
 }

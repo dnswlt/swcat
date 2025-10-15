@@ -44,11 +44,12 @@ apiVersion: swcat/v1alpha1
 kind: Component
 metadata:
   name: banana-backend
-  title: bananas for everyone! </html>
+  title: bananas for everyone!
   description: |
     This is a wonderful backend.
   labels:
     foobar.dev/language: perl
+    foobar.dev/status: deprecated
     foobar.dev/deployment: k8s
 spec:
   type: service

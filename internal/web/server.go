@@ -16,6 +16,7 @@ import (
 
 	"github.com/dnswlt/swcat"
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/dot"
 	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
@@ -24,10 +25,10 @@ import (
 )
 
 type ServerOptions struct {
-	Addr         string           // E.g., "localhost:8080"
-	BaseDir      string           // Directory from which resources (templates etc.) are read.
-	DotPath      string           // E.g., "dot" (with dot on the PATH)
-	LayoutConfig svg.LayoutConfig // Config parameters for SVG graph layouts
+	Addr    string        // E.g., "localhost:8080"
+	BaseDir string        // Directory from which resources (templates etc.) are read.
+	DotPath string        // E.g., "dot" (with dot on the PATH)
+	Config  config.Bundle // Config parameters
 }
 
 type Server struct {
@@ -86,7 +87,7 @@ func (s *Server) clearSVGCache() {
 	s.svgCache = make(map[string]*svg.Result)
 }
 func (s *Server) svgRenderer() *svg.Renderer {
-	layouter := svg.NewStandardLayouter(s.opts.LayoutConfig)
+	layouter := svg.NewStandardLayouter(s.opts.Config.SVG)
 	return svg.NewRenderer(s.repo, s.dotRunner, layouter)
 }
 

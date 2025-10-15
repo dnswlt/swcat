@@ -30,7 +30,7 @@ func TestGenerateComponentSVG_WithDot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(LayoutConfig{}))
+	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(Config{}))
 	res, err := renderer.ComponentGraph(ctx, comp)
 	if err != nil {
 		t.Fatalf("GenerateComponentSVG failed: %v", err)
@@ -91,7 +91,7 @@ func TestSystemExternalGraph_WithDot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(LayoutConfig{}))
+	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(Config{}))
 	res, err := renderer.SystemExternalGraph(ctx, system1, []*catalog.System{system2})
 	if err != nil {
 		t.Fatalf("GenerateSystemSVG failed: %v", err)
@@ -130,7 +130,7 @@ func TestSystemInternalGraph_WithDot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(LayoutConfig{}))
+	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(Config{}))
 	res, err := renderer.SystemInternalGraph(ctx, system)
 	if err != nil {
 		t.Fatalf("GenerateSystemSVG failed: %v", err)
