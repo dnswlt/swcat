@@ -25,10 +25,11 @@ import (
 )
 
 type ServerOptions struct {
-	Addr    string        // E.g., "localhost:8080"
-	BaseDir string        // Directory from which resources (templates etc.) are read.
-	DotPath string        // E.g., "dot" (with dot on the PATH)
-	Config  config.Bundle // Config parameters
+	Addr     string        // E.g., "localhost:8080"
+	BaseDir  string        // Directory from which resources (templates etc.) are read.
+	DotPath  string        // E.g., "dot" (with dot on the PATH)
+	ReadOnly bool          // If true, no Edit/Clone/Delete operations will be supported.
+	Config   config.Bundle // Config parameters
 }
 
 type Server struct {
@@ -121,6 +122,7 @@ func (s *Server) reloadTemplates() error {
 		"markdown":     markdown,
 		"formatTags":   formatTags,
 		"formatLabels": formatLabels,
+		"isCloneable":  isCloneable,
 	})
 	var err error
 	if s.opts.BaseDir == "" {
@@ -494,6 +496,10 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Entity updates must be done via HTMX", http.StatusBadRequest)
 		return
 	}
+	if s.opts.ReadOnly {
+		http.Error(w, "Cannot update entities in read-only mode", http.StatusPreconditionFailed)
+		return
+	}
 
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
@@ -561,6 +567,10 @@ func (s *Server) deleteEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		http.Error(w, "Entity updates must be done via HTMX", http.StatusBadRequest)
 		return
 	}
+	if s.opts.ReadOnly {
+		http.Error(w, "Cannot update entities in read-only mode", http.StatusPreconditionFailed)
+		return
+	}
 
 	ref, err := catalog.ParseRef(entityRef)
 	if err != nil {
@@ -608,7 +618,10 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		http.Error(w, "Entity updates must be done via HTMX", http.StatusBadRequest)
 		return
 	}
-
+	if s.opts.ReadOnly {
+		http.Error(w, "Cannot update entities in read-only mode", http.StatusPreconditionFailed)
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
 		return
@@ -688,8 +701,9 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 	).SetActive(r.URL.Path).SetParams(r.URL.Query())
 
 	templateParams := map[string]any{
-		"Now":    time.Now().Format("2006-01-02 15:04:05"),
-		"NavBar": nav,
+		"Now":      time.Now().Format("2006-01-02 15:04:05"),
+		"NavBar":   nav,
+		"ReadOnly": s.opts.ReadOnly,
 	}
 	// Copy template params
 	for k, v := range params {

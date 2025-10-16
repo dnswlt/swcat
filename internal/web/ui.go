@@ -13,6 +13,11 @@ import (
 	"github.com/yuin/goldmark"
 )
 
+func isCloneable(e catalog.Entity) bool {
+	k := e.GetKind()
+	return k == catalog.KindAPI || k == catalog.KindComponent || k == catalog.KindResource
+}
+
 func anyToRef(s any) (*catalog.Ref, error) {
 	switch r := s.(type) {
 	case string:
