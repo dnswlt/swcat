@@ -99,6 +99,8 @@ metadata:
     - url: https://example.com/apis/banana-backend-api
       title: banana Backend API Schema
       type: schema
+  labels:
+    swcat/version: v1.0
 spec:
   type: grpc
   lifecycle: production

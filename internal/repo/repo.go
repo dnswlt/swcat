@@ -318,6 +318,21 @@ func (r *Repository) validateMetadata(m *catalog.Metadata) error {
 	if m.Namespace != "" && !catalog.IsValidNamespace(m.Namespace) {
 		return fmt.Errorf("invalid namespace: %s", m.Namespace)
 	}
+	for k, v := range m.Labels {
+		if !catalog.IsValidLabel(k, v) {
+			return fmt.Errorf("invalid label: \"%s: %s\"", k, v)
+		}
+	}
+	for k, v := range m.Annotations {
+		if !catalog.IsValidAnnotation(k, v) {
+			return fmt.Errorf("invalid annotation: \"%s: %s\"", k, v)
+		}
+	}
+	for _, tag := range m.Tags {
+		if !catalog.IsValidTag(tag) {
+			return fmt.Errorf("invalid tag: %q", tag)
+		}
+	}
 	return nil
 }
 

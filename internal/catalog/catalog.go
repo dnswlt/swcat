@@ -562,17 +562,6 @@ func (g *Group) Reset() Entity {
 	return &clone
 }
 
-func IsValidKind(kind string) bool {
-	return api.IsValidRefKind(kind)
-}
-
-func IsValidName(s string) bool {
-	return api.IsValidName(s)
-}
-func IsValidNamespace(s string) bool {
-	return api.IsValidNamespace(s)
-}
-
 func ParseRef(s string) (*Ref, error) {
 	r, err := api.ParseRef(s)
 	if err != nil {
