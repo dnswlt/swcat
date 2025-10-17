@@ -43,17 +43,9 @@ func IsValidLabel(key string, value string) bool {
 
 // IsValidAnnotation checks if "key: value" is a valid metadata annotation.
 // Validation follows the rules outlined in
-// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+// https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
 func IsValidAnnotation(key string, value string) bool {
-	if !isValidKey(key) {
-		return false
-	}
-	// As a special case, allow hex color codes like "#f7f7f7".
-	v := value
-	if len(v) > 0 && v[0] == '#' {
-		v = v[1:]
-	}
-	return isValidValue(v)
+	return isValidKey(key)
 }
 
 // IsValidTag checks if tag is a valid tag according to

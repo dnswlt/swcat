@@ -28,6 +28,13 @@ const (
 	KindGroup     Kind = api.KindGroup
 )
 
+// Well-known annotation and label names with defined interpretations.
+const (
+	AnnotRepository = "swcat/repo"
+	AnnotSterotype  = "swcat/stereotype"
+	AnnotFillColor  = "swcat/fillcolor"
+)
+
 type Ref struct {
 	Kind      Kind
 	Namespace string

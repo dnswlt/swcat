@@ -31,6 +31,7 @@ metadata:
   tags: [public]
   annotations:
     swcat/stereotype: load-balanced
+    swcat/repo: https://example.com/repo/components/
   labels:
     foobar.dev/language: java
     foobar.dev/deployment: k8s

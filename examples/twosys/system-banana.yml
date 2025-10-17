@@ -51,6 +51,8 @@ metadata:
     foobar.dev/language: perl
     foobar.dev/status: deprecated
     foobar.dev/deployment: k8s
+  annotations:
+    swcat/repo: default
 spec:
   type: service
   lifecycle: production

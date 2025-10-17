@@ -81,7 +81,7 @@ func TestRoot_Redirect(t *testing.T) {
 }
 
 func TestListPages_RenderLinksForAllKinds(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestListPages_RenderLinksForAllKinds(t *testing.T) {
 }
 
 func TestComponentDetail_TriggersDotAndCaches(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestComponentDetail_TriggersDotAndCaches(t *testing.T) {
 }
 
 func TestDetailPages_RenderSVGAndName(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestDetail_NotFound_AllKinds(t *testing.T) {
 	}
 }
 func TestGroupDetail_OK_NoSVG(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}

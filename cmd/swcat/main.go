@@ -93,13 +93,6 @@ func main() {
 		return
 	}
 
-	repo, err := repo.LoadRepositoryFromPaths(files)
-	if err != nil {
-		log.Fatalf("Failed to load repository: %v", err)
-	}
-
-	log.Printf("Read %d entities from %d files", repo.Size(), len(files))
-
 	var bundle config.Bundle
 	if *configYaml != "" {
 		f, err := os.Open(*configYaml)
@@ -112,6 +105,13 @@ func main() {
 			log.Fatalf("Invalid configuration YAML: %v", err)
 		}
 	}
+
+	repo, err := repo.LoadRepositoryFromPaths(bundle.Catalog, files)
+	if err != nil {
+		log.Fatalf("Failed to load repository: %v", err)
+	}
+
+	log.Printf("Read %d entities from %d files", repo.Size(), len(files))
 
 	if *serverAddrFlag != "" {
 		server, err := web.NewServer(

@@ -24,7 +24,7 @@ func NewStandardLayouter(config Config) *StandardLayouter {
 }
 
 func (l *StandardLayouter) fillColor(e catalog.Entity) string {
-	if c, ok := e.GetMetadata().Annotations[AnnotFillColor]; ok {
+	if c, ok := e.GetMetadata().Annotations[catalog.AnnotFillColor]; ok {
 		// explicit annotation overrides everything
 		return c
 	}
@@ -71,7 +71,7 @@ func (l *StandardLayouter) shape(e catalog.Entity) dot.NodeShape {
 func (l *StandardLayouter) stereotype(e catalog.Entity) (string, bool) {
 	meta := e.GetMetadata()
 
-	if st, ok := meta.Annotations[AnnotSterotype]; ok {
+	if st, ok := meta.Annotations[catalog.AnnotSterotype]; ok {
 		// Explicit stereotype annotation overrides everything
 		return st, true
 	}

@@ -68,18 +68,7 @@
             </div>
         </div>
 
-        {{ if .Metadata.Links }}
-        <div class="border rounded-xl">
-            <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Links</h3>
-            <div class="p-4">
-                <ul class="list-disc list-inside">
-                    {{ range .Metadata.Links }}
-                    <li><a href="{{ .URL }}" class="text-blue-600 hover:underline">{{ .Title }}</a></li>
-                    {{ end }}
-                </ul>
-            </div>
-        </div>
-        {{ end }}
+        {{ template "metadata_links.html" . }}
 
         {{ if or .Spec.DependsOn .GetDependents }}
         <div class="border rounded-xl">

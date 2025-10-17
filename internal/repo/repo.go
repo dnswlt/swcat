@@ -11,6 +11,22 @@ import (
 	"github.com/dnswlt/swcat/internal/store"
 )
 
+// Config holds repository-specific application configuration.
+// It is part of the config.Bundle that gets loaded at application startup.
+type Config struct {
+	// Prefix used to generate links to the source repository
+	// if the annotation "swcat/repo: default" is set.
+	// This is useful in setups where individual components and APIs live in
+	// separate repositories.
+	//
+	// Example:
+	//   repositoryURLPrefix: https://github.com/some-user
+	// In this case, each entity that has the "swcat/repo: default"
+	// annotation set will have an auto-generated metadata.links entry
+	// pointing to "https://github.com/example/some-user".
+	RepositoryURLPrefix string `yaml:"repositoryURLPrefix"`
+}
+
 type Repository struct {
 	// Maps containing the different kinds of entities in the repository.
 	//
@@ -26,9 +42,12 @@ type Repository struct {
 	//
 	// This map uses entity references including the kind: prefix: <kind>:<namespace>/<name>
 	allEntities map[string]catalog.Entity
+
+	// Repository configuration
+	config Config
 }
 
-func NewRepository() *Repository {
+func NewRepositoryWithConfig(config Config) *Repository {
 	return &Repository{
 		domains:     make(map[string]*catalog.Domain),
 		systems:     make(map[string]*catalog.System),
@@ -37,7 +56,12 @@ func NewRepository() *Repository {
 		apis:        make(map[string]*catalog.API),
 		groups:      make(map[string]*catalog.Group),
 		allEntities: make(map[string]catalog.Entity),
+		config:      config,
 	}
+}
+
+func NewRepository() *Repository {
+	return NewRepositoryWithConfig(Config{})
 }
 
 func (r *Repository) Size() int {
@@ -81,7 +105,7 @@ func (r *Repository) Exists(e catalog.Entity) bool {
 // It avoids having to deal with complex deletions and additions of relationships
 // and their inverses. If the operation fails, the repository will be in an unchanged state.
 func (r *Repository) InsertOrUpdateEntity(e catalog.Entity) error {
-	r2 := NewRepository()
+	r2 := NewRepositoryWithConfig(r.config)
 	ref := e.GetRef()
 	found := false
 	for _, n := range r.allEntities {
@@ -153,7 +177,7 @@ func (r *Repository) DeleteEntity(ref *catalog.Ref) error {
 	}
 
 	// Rebuild repo without entity
-	r2 := NewRepository()
+	r2 := NewRepositoryWithConfig(r.config)
 	for _, n := range r.allEntities {
 		if n.GetRef().Equal(ref) {
 			continue // Skip the entity to be deleted
@@ -545,9 +569,10 @@ func (r *Repository) Validate() error {
 		}
 	}
 
-	// Validation succeeded: populate computed fields and sort all refernce lists.
+	// Validation succeeded: postprocess entities.
 	r.populateRelationships()
 	r.sortReferences()
+	r.addGeneratedLinks()
 
 	return nil
 }
@@ -624,11 +649,58 @@ func (r *Repository) populateRelationships() {
 
 }
 
+func (r *Repository) sortReferences() {
+
+	// Components
+	for _, c := range r.components {
+		c.SortRefs()
+	}
+
+	// Resources
+	for _, res := range r.resources {
+		res.SortRefs()
+	}
+
+	// APIs
+	for _, ap := range r.apis {
+		ap.SortRefs()
+	}
+
+	// Systems
+	for _, system := range r.systems {
+		system.SortRefs()
+	}
+
+}
+
+func (r *Repository) addGeneratedLinks() {
+	defaultRepoPrefix := strings.TrimSuffix(r.config.RepositoryURLPrefix, "/")
+
+	for _, e := range r.allEntities {
+		m := e.GetMetadata()
+		if r, ok := m.Annotations[catalog.AnnotRepository]; ok && r != "" {
+			var baseUrl string
+			if r == "default" {
+				baseUrl = defaultRepoPrefix
+			} else {
+				baseUrl = strings.TrimSuffix(r, "/")
+			}
+			link := &catalog.Link{
+				Title: "Source",
+				URL:   baseUrl + "/" + m.Name,
+				Type:  "repository",
+				Icon:  "code",
+			}
+			m.Links = append(m.Links, link)
+		}
+	}
+}
+
 // LoadRepositoryFromPath reads entities from the given catalog paths
 // and returns a validated repository.
 // Elements in catalogPaths must be .yml file paths.
-func LoadRepositoryFromPaths(catalogPaths []string) (*Repository, error) {
-	repo := NewRepository()
+func LoadRepositoryFromPaths(config Config, catalogPaths []string) (*Repository, error) {
+	repo := NewRepositoryWithConfig(config)
 
 	for _, catalogPath := range catalogPaths {
 		log.Printf("Reading catalog file %s", catalogPath)
@@ -653,29 +725,5 @@ func LoadRepositoryFromPaths(catalogPaths []string) (*Repository, error) {
 	}
 
 	return repo, nil
-
-}
-
-func (r *Repository) sortReferences() {
-
-	// Components
-	for _, c := range r.components {
-		c.SortRefs()
-	}
-
-	// Resources
-	for _, res := range r.resources {
-		res.SortRefs()
-	}
-
-	// APIs
-	for _, ap := range r.apis {
-		ap.SortRefs()
-	}
-
-	// Systems
-	for _, system := range r.systems {
-		system.SortRefs()
-	}
 
 }

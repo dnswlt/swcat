@@ -3,5 +3,5 @@ catalogs/
 /static/dist/
 /static/.vite/
 swcat
-swcat.*
+swcat.exe
 .vscode

@@ -10,3 +10,5 @@ svg:
       critical: '#c7398a'
   # Include the API provider (component) in labels of API entities.
   showAPIProvider: true
+catalog:
+  repositoryURLPrefix: https://github.com/dnswlt/swcat

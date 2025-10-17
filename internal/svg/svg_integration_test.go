@@ -17,7 +17,7 @@ import (
 )
 
 func TestGenerateComponentSVG_WithDot(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestGenerateComponentSVG_WithDot(t *testing.T) {
 }
 
 func TestSystemExternalGraph_WithDot(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths([]string{"../../testdata/catalog2.yml"})
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog2.yml"})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestSystemExternalGraph_WithDot(t *testing.T) {
 }
 
 func TestSystemInternalGraph_WithDot(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths([]string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}

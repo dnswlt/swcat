@@ -11,11 +11,6 @@ import (
 	"github.com/dnswlt/swcat/internal/repo"
 )
 
-const (
-	AnnotSterotype = "swcat/stereotype"
-	AnnotFillColor = "swcat/fillcolor"
-)
-
 type Renderer struct {
 	repo     *repo.Repository
 	runner   dot.Runner
