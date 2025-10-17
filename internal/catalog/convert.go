@@ -376,6 +376,27 @@ func NewGroupFromAPI(g *api.Group) (*Group, error) {
 	}, nil
 }
 
+// CloneEntityFromAPI creates a clone (deep copy) of an entity by re-decoding its api.Entity node.
+// All computed fields of the catalog entity will be missing in the cloned result.
+func CloneEntityFromAPI[T api.Entity](e Entity) (Entity, error) {
+	var apiVal T
+	si := e.GetSourceInfo()
+	if si == nil {
+		return nil, fmt.Errorf("missing source info")
+	}
+	err := e.GetSourceInfo().Node.Decode(&apiVal)
+	if err != nil {
+		return nil, fmt.Errorf("CloneEntityFromAPI(): Could not decode api.API %s: %v", e.GetRef(), err)
+	}
+	// Copy over source info, which is not part of the decoded node.
+	apiVal.SetSourceInfo(e.GetSourceInfo())
+	cpy, err := NewEntityFromAPI(apiVal)
+	if err != nil {
+		return nil, fmt.Errorf("CloneEntityFromAPI(): Could not convert api.API %s: %v", e.GetRef(), err)
+	}
+	return cpy, nil
+}
+
 func NewEntityFromAPI(e api.Entity) (Entity, error) {
 	switch t := e.(type) {
 	case *api.Domain:

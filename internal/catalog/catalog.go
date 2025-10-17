@@ -4,6 +4,7 @@ package catalog
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -358,6 +359,12 @@ func (e *Ref) QName() string {
 }
 
 func (e *Ref) Equal(other *Ref) bool {
+	if e == nil {
+		return other == nil
+	}
+	if other == nil {
+		return false
+	}
 	return e.Kind == other.Kind && e.Namespace == other.Namespace && e.Name == other.Name
 }
 
@@ -378,6 +385,12 @@ func (e *LabelRef) QName() string {
 }
 
 func (e *LabelRef) Equal(other *LabelRef) bool {
+	if e == nil {
+		return other == nil
+	}
+	if other == nil {
+		return false
+	}
 	return e.Ref.Equal(other.Ref) && e.Label == other.Label
 }
 
@@ -450,11 +463,11 @@ func (c *Component) AddDependent(d *LabelRef) {
 func (c *Component) GetSourceInfo() *api.SourceInfo   { return c.sourceInfo }
 func (c *Component) SetSourceInfo(si *api.SourceInfo) { c.sourceInfo = si }
 func (c *Component) Reset() Entity {
-	clone := *c
-	spec := *c.Spec
-	clone.Spec = &spec
-	clone.Spec.inv = componentInvRel{}
-	return &clone
+	cpy, err := CloneEntityFromAPI[*api.Component](c)
+	if err != nil {
+		panic(fmt.Sprintf("Reset(): %v", err))
+	}
+	return cpy
 }
 
 func compareRef(a, b *Ref) int {
@@ -486,11 +499,11 @@ func (s *System) AddResource(r *Ref)               { s.Spec.inv.resources = appe
 func (s *System) GetSourceInfo() *api.SourceInfo   { return s.sourceInfo }
 func (s *System) SetSourceInfo(si *api.SourceInfo) { s.sourceInfo = si }
 func (s *System) Reset() Entity {
-	clone := *s
-	spec := *s.Spec
-	clone.Spec = &spec
-	clone.Spec.inv = systemInvRel{}
-	return &clone
+	cpy, err := CloneEntityFromAPI[*api.System](s)
+	if err != nil {
+		panic(fmt.Sprintf("Reset(): %v", err))
+	}
+	return cpy
 }
 func (s *System) SortRefs() {
 	slices.SortFunc(s.Spec.inv.apis, compareRef)
@@ -508,11 +521,11 @@ func (d *Domain) AddSystem(s *Ref)                 { d.Spec.inv.systems = append
 func (d *Domain) GetSourceInfo() *api.SourceInfo   { return d.sourceInfo }
 func (d *Domain) SetSourceInfo(si *api.SourceInfo) { d.sourceInfo = si }
 func (d *Domain) Reset() Entity {
-	clone := *d
-	spec := *d.Spec
-	clone.Spec = &spec
-	clone.Spec.inv = domainInvRel{}
-	return &clone
+	cpy, err := CloneEntityFromAPI[*api.Domain](d)
+	if err != nil {
+		panic(fmt.Sprintf("Reset(): %v", err))
+	}
+	return cpy
 }
 func (d *Domain) SortRefs() {
 	slices.SortFunc(d.Spec.inv.systems, compareRef)
@@ -531,11 +544,11 @@ func (a *API) AddConsumer(c *LabelRef)          { a.Spec.inv.consumers = append(
 func (a *API) GetSourceInfo() *api.SourceInfo   { return a.sourceInfo }
 func (a *API) SetSourceInfo(si *api.SourceInfo) { a.sourceInfo = si }
 func (a *API) Reset() Entity {
-	clone := *a
-	spec := *a.Spec
-	clone.Spec = &spec
-	clone.Spec.inv = apiInvRel{}
-	return &clone
+	cpy, err := CloneEntityFromAPI[*api.API](a)
+	if err != nil {
+		panic(fmt.Sprintf("Reset(): %v", err))
+	}
+	return cpy
 }
 func (a *API) SortRefs() {
 	slices.SortFunc(a.Spec.inv.consumers, compareLabelRef)
@@ -555,11 +568,11 @@ func (r *Resource) AddDependent(d *LabelRef) {
 func (r *Resource) GetSourceInfo() *api.SourceInfo   { return r.sourceInfo }
 func (r *Resource) SetSourceInfo(si *api.SourceInfo) { r.sourceInfo = si }
 func (r *Resource) Reset() Entity {
-	clone := *r
-	spec := *r.Spec
-	clone.Spec = &spec
-	clone.Spec.inv = resourceInvRel{}
-	return &clone
+	cpy, err := CloneEntityFromAPI[*api.Resource](r)
+	if err != nil {
+		panic(fmt.Sprintf("Reset(): %v", err))
+	}
+	return cpy
 }
 func (r *Resource) SortRefs() {
 	slices.SortFunc(r.Spec.DependsOn, compareLabelRef)
@@ -575,10 +588,11 @@ func (g *Group) GetDisplayName() string           { return g.Spec.Profile.Displa
 func (g *Group) GetSourceInfo() *api.SourceInfo   { return g.sourceInfo }
 func (g *Group) SetSourceInfo(si *api.SourceInfo) { g.sourceInfo = si }
 func (g *Group) Reset() Entity {
-	clone := *g
-	spec := *g.Spec
-	clone.Spec = &spec
-	return &clone
+	cpy, err := CloneEntityFromAPI[*api.Group](g)
+	if err != nil {
+		panic(fmt.Sprintf("Reset(): %v", err))
+	}
+	return cpy
 }
 
 func ParseRef(s string) (*Ref, error) {

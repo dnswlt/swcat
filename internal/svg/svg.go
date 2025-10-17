@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/dot"
@@ -59,7 +58,7 @@ func (d *Result) MetadataJSON() []byte {
 	json, err := json.Marshal(d.Metadata)
 	if err != nil {
 		// This is truly an application bug.
-		log.Fatalf("Cannot marshal MetadataJSON: %v", err)
+		panic(fmt.Sprintf("Cannot marshal MetadataJSON: %v", err))
 	}
 	return json
 }

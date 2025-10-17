@@ -589,7 +589,7 @@ func (r *Repository) populateRelationships() {
 		case *catalog.Resource:
 			x.AddDependent(&catalog.LabelRef{Ref: entityRef, Label: depRef.Label})
 		default:
-			log.Fatalf("Invalid dependency: %s", depRef.String())
+			panic(fmt.Sprintf("Invalid dependency: %s", depRef.String()))
 		}
 	}
 
@@ -678,15 +678,14 @@ func (r *Repository) addGeneratedLinks() {
 
 	for _, e := range r.allEntities {
 		m := e.GetMetadata()
-		// Remove old generated links
-		// TODO: This is not the right place. Clean up the whole entity Reset() logic.
-		links := make([]*catalog.Link, 0, len(m.Links))
-		for _, link := range m.Links {
-			if !link.IsGenerated {
-				links = append(links, link)
-			}
+		// Check that no generated links already exist (that would be a programming error)
+		if slices.ContainsFunc(m.Links, func(l *catalog.Link) bool {
+			return l.IsGenerated
+		}) {
+			panic(fmt.Sprintf("addGeneratedLinks called on entity %s that already has generated links", e.GetRef()))
 		}
 		// Generate new links
+		var links []*catalog.Link
 		if r, ok := m.Annotations[catalog.AnnotRepository]; ok && r != "" {
 			var baseUrl string
 			if r == "default" {
@@ -703,7 +702,7 @@ func (r *Repository) addGeneratedLinks() {
 			}
 			links = append(links, link)
 		}
-		m.Links = links
+		m.Links = append(m.Links, links...)
 	}
 }
 

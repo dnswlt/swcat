@@ -555,7 +555,7 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 	redirectURL, err := toURL(newEntity.GetRef())
 	if err != nil {
 		// This must not happen: we must always be able to get a URL for our own entities.
-		log.Fatalf("Failed to create entityURL for valid entity reference: %v", err)
+		panic(fmt.Sprintf("Failed to create entityURL for valid entity reference: %v", err))
 	}
 
 	w.Header().Set("HX-Redirect", redirectURL)
@@ -606,7 +606,7 @@ func (s *Server) deleteEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		redirectURL, err = toURL(sp.GetSystem())
 		if err != nil {
 			// This must not happen: we must always be able to get a URL for our own entities.
-			log.Fatalf("Failed to create entityURL for valid entity reference: %v", err)
+			panic(fmt.Sprintf("Failed to create entityURL for valid entity reference: %v", err))
 		}
 	}
 	w.Header().Set("HX-Redirect", redirectURL)
@@ -681,7 +681,7 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	redirectURL, err := toURL(ref)
 	if err != nil {
 		// This must not happen: we must always be able to get a URL for our own entities.
-		log.Fatalf("Failed to create entityURL for valid entity reference: %v", err)
+		panic(fmt.Sprintf("Failed to create entityURL for valid entity reference: %v", err))
 	}
 
 	w.Header().Set("HX-Redirect", redirectURL)
