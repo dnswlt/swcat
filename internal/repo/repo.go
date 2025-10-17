@@ -678,6 +678,15 @@ func (r *Repository) addGeneratedLinks() {
 
 	for _, e := range r.allEntities {
 		m := e.GetMetadata()
+		// Remove old generated links
+		// TODO: This is not the right place. Clean up the whole entity Reset() logic.
+		links := make([]*catalog.Link, 0, len(m.Links))
+		for _, link := range m.Links {
+			if !link.IsGenerated {
+				links = append(links, link)
+			}
+		}
+		// Generate new links
 		if r, ok := m.Annotations[catalog.AnnotRepository]; ok && r != "" {
 			var baseUrl string
 			if r == "default" {
@@ -686,13 +695,15 @@ func (r *Repository) addGeneratedLinks() {
 				baseUrl = strings.TrimSuffix(r, "/")
 			}
 			link := &catalog.Link{
-				Title: "Source",
-				URL:   baseUrl + "/" + m.Name,
-				Type:  "repository",
-				Icon:  "code",
+				Title:       "Source",
+				URL:         baseUrl + "/" + m.Name,
+				Type:        "repository",
+				Icon:        "code",
+				IsGenerated: true,
 			}
-			m.Links = append(m.Links, link)
+			links = append(links, link)
 		}
+		m.Links = links
 	}
 }
 

@@ -108,7 +108,7 @@ func WriteEntities(path string, entities []api.Entity) error {
 	}
 	enc.Close()
 	tmpFile.Close()
-	if err := os.Chmod(tmpFile.Name(), 0664); err != nil {
+	if err := os.Chmod(tmpFile.Name(), 0644); err != nil {
 		return fmt.Errorf("could not chmod temporary file: %v", err)
 	}
 

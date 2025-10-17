@@ -91,6 +91,9 @@ type Link struct {
 	// An optional value to categorize links into specific groups.
 	// [optional]
 	Type string
+
+	// Whether the link was auto-generated. False for user-provided links.
+	IsGenerated bool
 }
 
 type Metadata struct {
