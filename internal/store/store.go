@@ -96,18 +96,21 @@ func WriteEntities(path string, entities []api.Entity) error {
 	if err != nil {
 		return fmt.Errorf("could not create temporary file: %v", err)
 	}
+	defer os.Remove(tmpFile.Name())
 
 	enc := yaml.NewEncoder(tmpFile)
 	enc.SetIndent(YAMLIndent)
 	for _, e := range entities {
 		if err := enc.Encode(e.GetSourceInfo().Node); err != nil {
 			tmpFile.Close()
-			os.Remove(tmpFile.Name())
 			return fmt.Errorf("failed to encode node from line %d: %w", e.GetSourceInfo().Line, err)
 		}
 	}
 	enc.Close()
 	tmpFile.Close()
+	if err := os.Chmod(tmpFile.Name(), 0664); err != nil {
+		return fmt.Errorf("could not chmod temporary file: %v", err)
+	}
 
 	return os.Rename(tmpFile.Name(), path)
 }

@@ -38,4 +38,5 @@ COPY --from=webbuilder /app/static/dist /app/static/dist
 VOLUME ["/catalog"]
 
 EXPOSE 8080
-CMD ["/app/swcat", "-addr", "0.0.0.0:8080", "/catalog"]
+
+CMD ["/app/swcat", "-addr", "0.0.0.0:8080", "-base-dir", "/app", "/catalog"]

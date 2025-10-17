@@ -9,21 +9,38 @@ Inspired by the [backstage.io](https://backstage.io/)
 
 To run `swcat` locally in Docker and serve the example catalog folder (`./examples/twosys`):
 
+Before the first execution, set up the `.env` file, so files modified inside the container 
+have proper user and group IDs  on the host file system:
+
 ```bash
-# from the repo root
-docker compose up --build
+# in the repo root
+echo "UID=$(id -u)" > .env
+echo "GID=$(id -g)" >> .env
+```
+
+Then, run docker via `make`:
+
+```bash
+make docker-build
+make docker-up
 ```
 
 Then open: <http://localhost:9191>
 
+To stop the process:
+
+```bash
+make docker-stop
+```
+
 * Docker Compose maps host 9191 to container 8080.
-* The catalog is mounted read-only at `/catalog` inside the container.
+* The catalog is mounted in read-write (rw) mode at `/catalog` inside the container.
 
 If you want to work with your own catalog, pass its location (folder) in the
 `CATALOG_DIR` environment variable:
 
 ```bash
-CATALOG_DIR=/abs/path/to/your/catalog docker compose up --build
+CATALOG_DIR=/abs/path/to/your/catalog make docker-up
 ```
 
 ## Getting started (w/out Docker)
