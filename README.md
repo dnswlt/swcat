@@ -37,7 +37,8 @@ make docker-stop
 * The catalog is mounted in read-write (rw) mode at `/catalog` inside the container.
 
 If you want to work with your own catalog, pass its location (folder) in the
-`CATALOG_DIR` environment variable:
+`CATALOG_DIR` environment variable. Your (optional) configuration file must be located
+at `$CATALOG_DIR/swcat.yml`.
 
 ```bash
 CATALOG_DIR=/abs/path/to/your/catalog make docker-up
@@ -65,7 +66,7 @@ cd ..
 Now run the server, using the example catalog files:
 
 ```bash
-go run ./cmd/swcat -addr localhost:9191 examples/twosys
+go run ./cmd/swcat -addr localhost:9191 -config examples/config/swcat.yml examples/twosys
 ```
 
 Point your browser at <http://localhost:9191> and explore the example catalog.

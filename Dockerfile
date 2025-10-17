@@ -39,4 +39,4 @@ VOLUME ["/catalog"]
 
 EXPOSE 8080
 
-CMD ["/app/swcat", "-addr", "0.0.0.0:8080", "-base-dir", "/app", "/catalog"]
+CMD ["/app/swcat", "-addr", "0.0.0.0:8080", "-base-dir", "/app", "-config", "/catalog/swcat.yml", "/catalog"]

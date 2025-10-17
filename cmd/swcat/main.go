@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -67,6 +68,18 @@ func lookupDotPath() string {
 	return path
 }
 
+func filterOutFile(files []string, fileToRemove string) []string {
+	rem := filepath.Clean(fileToRemove)
+	result := make([]string, 0, len(files))
+	for _, f := range files {
+		if filepath.Clean(f) == rem {
+			continue
+		}
+		result = append(result, f)
+	}
+	return result
+}
+
 func main() {
 
 	serverAddrFlag := flag.String("addr", "localhost:8080", "Address to listen on")
@@ -84,6 +97,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to collect YAML files: %v", err)
 	}
+	// For the common case (e.g. in Docker) where the config YAML is among the scanned .yml files,
+	// filter it out from the list of entity YAML files.
+	files = filterOutFile(files, *configYaml)
 
 	if *formatFlag {
 		err := formatFiles(files)
@@ -95,14 +111,18 @@ func main() {
 
 	var bundle config.Bundle
 	if *configYaml != "" {
+		log.Printf("Reading configuration from %s", *configYaml)
 		f, err := os.Open(*configYaml)
-		if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			log.Printf("Specified configuration file %s does not exist", *configYaml)
+		} else if err != nil {
 			log.Fatalf("Could not open configuration YAML: %v", err)
-		}
-		dec := yaml.NewDecoder(f)
-		dec.KnownFields(true)
-		if err := dec.Decode(&bundle); err != nil {
-			log.Fatalf("Invalid configuration YAML: %v", err)
+		} else {
+			dec := yaml.NewDecoder(f)
+			dec.KnownFields(true)
+			if err := dec.Decode(&bundle); err != nil {
+				log.Fatalf("Invalid configuration YAML: %v", err)
+			}
 		}
 	}
 
