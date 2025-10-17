@@ -29,13 +29,22 @@ func (l *StandardLayouter) fillColor(e catalog.Entity) string {
 		return c
 	}
 
-	if len(l.config.NodeColorsByLabel) > 0 {
+	// Next priority: check colors per label.
+	if len(l.config.NodeColors.Labels) > 0 {
 		for k, v := range e.GetMetadata().Labels {
-			if m, ok := l.config.NodeColorsByLabel[k]; ok && m != nil {
+			if m, ok := l.config.NodeColors.Labels[k]; ok && m != nil {
 				if val, ok := m[v]; ok {
-					return val
+					return string(val)
 				}
 			}
+		}
+	}
+
+	// Check colors per type.
+	if len(l.config.NodeColors.Types) > 0 {
+		typ := e.GetType()
+		if col, ok := l.config.NodeColors.Types[typ]; ok {
+			return string(col)
 		}
 	}
 

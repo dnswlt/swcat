@@ -4,10 +4,14 @@ svg:
   stereotypeLabels:
     - foobar.dev/language
   # Highlight nodes with a certain status in different fill colors.
-  nodeColorsByLabel:
-    foobar.dev/status:
-      deprecated: '#f3c1de'
-      critical: '#c7398a'
+  nodeColors:
+    labels:
+      foobar.dev/status:
+        deprecated: '#f3c1de'
+        critical: '#c7398a'
+    types:
+      # Color entities (of any kind) with spec.type "external" in a special color. 
+      external: '#ffbf79'
   # Include the API provider (component) in labels of API entities.
   showAPIProvider: true
 catalog:

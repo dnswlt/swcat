@@ -56,6 +56,9 @@ type Entity interface {
 	// is omitted, i.e. an entity "default/foo" is returned as "foo".
 	GetQName() string
 
+	// Returns the spec.type of the entity, if one exists and is set.
+	GetType() string
+
 	// GetSourceInfo returns internal bookkeeping data, e.g. for error logging
 	// and reconstructing YAML files (retaining the exact structure including comments).
 	GetSourceInfo() *api.SourceInfo
@@ -433,6 +436,7 @@ func (c *Component) GetKind() Kind              { return KindComponent }
 func (c *Component) GetMetadata() *Metadata     { return c.Metadata }
 func (c *Component) GetRef() *Ref               { return newRef(KindComponent, c.Metadata) }
 func (c *Component) GetQName() string           { return c.Metadata.QName() }
+func (c *Component) GetType() string            { return c.Spec.Type }
 func (c *Component) GetOwner() *Ref             { return c.Spec.Owner }
 func (c *Component) GetLifecycle() string       { return c.Spec.Lifecycle }
 func (c *Component) GetSystem() *Ref            { return c.Spec.System }
@@ -468,6 +472,7 @@ func (s *System) GetKind() Kind                    { return KindSystem }
 func (s *System) GetMetadata() *Metadata           { return s.Metadata }
 func (s *System) GetRef() *Ref                     { return newRef(KindSystem, s.Metadata) }
 func (s *System) GetQName() string                 { return s.Metadata.QName() }
+func (s *System) GetType() string                  { return s.Spec.Type }
 func (s *System) GetComponents() []*Ref            { return s.Spec.inv.components }
 func (s *System) GetAPIs() []*Ref                  { return s.Spec.inv.apis }
 func (s *System) GetResources() []*Ref             { return s.Spec.inv.resources }
@@ -494,6 +499,7 @@ func (d *Domain) GetKind() Kind                    { return KindDomain }
 func (d *Domain) GetMetadata() *Metadata           { return d.Metadata }
 func (d *Domain) GetRef() *Ref                     { return newRef(KindDomain, d.Metadata) }
 func (d *Domain) GetQName() string                 { return d.Metadata.QName() }
+func (d *Domain) GetType() string                  { return d.Spec.Type }
 func (d *Domain) GetSystems() []*Ref               { return d.Spec.inv.systems }
 func (d *Domain) AddSystem(s *Ref)                 { d.Spec.inv.systems = append(d.Spec.inv.systems, s) }
 func (d *Domain) GetSourceInfo() *api.SourceInfo   { return d.sourceInfo }
@@ -513,6 +519,7 @@ func (a *API) GetKind() Kind                    { return KindAPI }
 func (a *API) GetMetadata() *Metadata           { return a.Metadata }
 func (a *API) GetRef() *Ref                     { return newRef(KindAPI, a.Metadata) }
 func (a *API) GetQName() string                 { return a.Metadata.QName() }
+func (a *API) GetType() string                  { return a.Spec.Type }
 func (a *API) GetProviders() []*LabelRef        { return a.Spec.inv.providers }
 func (a *API) GetConsumers() []*LabelRef        { return a.Spec.inv.consumers }
 func (a *API) GetSystem() *Ref                  { return a.Spec.System }
@@ -536,6 +543,7 @@ func (r *Resource) GetKind() Kind              { return KindResource }
 func (r *Resource) GetMetadata() *Metadata     { return r.Metadata }
 func (r *Resource) GetRef() *Ref               { return newRef(KindResource, r.Metadata) }
 func (r *Resource) GetQName() string           { return r.Metadata.QName() }
+func (r *Resource) GetType() string            { return r.Spec.Type }
 func (r *Resource) GetDependents() []*LabelRef { return r.Spec.inv.dependents }
 func (r *Resource) GetSystem() *Ref            { return r.Spec.System }
 func (r *Resource) AddDependent(d *LabelRef) {
@@ -559,6 +567,7 @@ func (g *Group) GetKind() Kind                    { return KindGroup }
 func (g *Group) GetMetadata() *Metadata           { return g.Metadata }
 func (g *Group) GetRef() *Ref                     { return newRef(KindGroup, g.Metadata) }
 func (g *Group) GetQName() string                 { return g.Metadata.QName() }
+func (g *Group) GetType() string                  { return g.Spec.Type }
 func (g *Group) GetDisplayName() string           { return g.Spec.Profile.DisplayName }
 func (g *Group) GetSourceInfo() *api.SourceInfo   { return g.sourceInfo }
 func (g *Group) SetSourceInfo(si *api.SourceInfo) { g.sourceInfo = si }
