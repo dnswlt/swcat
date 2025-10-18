@@ -44,11 +44,7 @@
             </div>
             {{ end }}
             
-            {{ if .Metadata.Description }}
-            <div class="prose text-gray-700">
-                {{ .Metadata.Description | markdown }}
-            </div>
-            {{ end }}
+            {{ template "metadata_description.html" . }}
 
             <div class="grid grid-cols-3 gap-4">
                 <div>

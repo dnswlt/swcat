@@ -1,0 +1,7 @@
+{{ if .Metadata.Description }}
+<div>
+    <article class="prose text-gray-700 max-w-none">
+        {{ .Metadata.Description | markdown }}
+    </article>
+</div>
+{{ end }}
