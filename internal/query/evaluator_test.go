@@ -9,11 +9,12 @@ import (
 func TestEvaluator_Matches(t *testing.T) {
 	comp1 := &catalog.Component{
 		Metadata: &catalog.Metadata{
-			Name:      "test-component",
-			Namespace: "default",
-			Title:     "Test Component",
-			Tags:      []string{"go", "test"},
-			Labels:    map[string]string{"env": "dev", "team": "a"},
+			Name:        "test-component",
+			Namespace:   "default",
+			Title:       "Test Component",
+			Description: "Super duper component",
+			Tags:        []string{"go", "test"},
+			Labels:      map[string]string{"env": "dev", "team": "a"},
 		},
 		Spec: &catalog.ComponentSpec{
 			Type:      "service",
@@ -67,6 +68,13 @@ func TestEvaluator_Matches(t *testing.T) {
 		},
 
 		// Attribute Matching (Operator ':')
+		{
+			name:      "exact attribute match",
+			query:     "description:'super duper'",
+			entity:    comp1,
+			wantMatch: true,
+			wantErr:   false,
+		},
 		{
 			name:      "exact attribute match",
 			query:     "owner:team-a",

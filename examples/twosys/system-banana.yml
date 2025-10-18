@@ -3,6 +3,8 @@ kind: System
 metadata:
   name: banana-system
   title: Banana System
+  description: |
+    Some info, very useful.
   tags:
     - mission-critical
   links:

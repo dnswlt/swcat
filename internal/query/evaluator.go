@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"gopkg.in/yaml.v3"
 )
 
 // Evaluator holds a compiled query expression and provides methods to match it against entities.
@@ -23,17 +24,70 @@ func NewEvaluator(expr Expression) *Evaluator {
 	}
 }
 
+// fulltextAccessor collects and returns all leaf values of the YAML from which e was built.
+// For convenience, metadata label and annotation keys are also included.
+func fulltextAccessor(e catalog.Entity) ([]string, bool) {
+	if e.GetSourceInfo() == nil {
+		return nil, false
+	}
+	node := e.GetSourceInfo().Node
+	if node == nil {
+		return nil, false
+	}
+	values := collectLeafValues(node)
+	// Collect metadata label and annotation keys as well.
+	m := e.GetMetadata()
+	if e == nil {
+		return values, true
+	}
+	for k := range m.Labels {
+		values = append(values, k)
+	}
+	for k := range m.Annotations {
+		values = append(values, k)
+	}
+	return values, true
+}
+
+// metadataAccessor returns all values of e's metadata.
+func metadataAccessor(e catalog.Entity) ([]string, bool) {
+	m := e.GetMetadata()
+	if m == nil {
+		return nil, false
+	}
+	values := []string{
+		m.Name,
+		m.Namespace,
+		m.Title,
+		m.Description,
+	}
+	for k, v := range m.Labels {
+		values = append(values, k, v)
+	}
+	for k, v := range m.Annotations {
+		values = append(values, k, v)
+	}
+	values = append(values, m.Tags...)
+	for _, l := range m.Links {
+		values = append(values, l.Title, l.URL)
+	}
+	return values, true
+}
+
 // attributeAccessor defines a function that extracts specific string attribute values from an entity.
 // It returns a slice of strings and a boolean indicating if the attribute is applicable.
 type attributeAccessor func(e catalog.Entity) (values []string, ok bool)
 
 // attributeAccessors maps query attribute names to functions that can retrieve them from an entity.
 var attributeAccessors = map[string]attributeAccessor{
-	"kind":      func(e catalog.Entity) ([]string, bool) { return []string{string(e.GetKind())}, true },
-	"name":      func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Name}, true },
-	"namespace": func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Namespace}, true },
-	"title":     func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Title}, true },
-	"tag":       func(e catalog.Entity) ([]string, bool) { return e.GetMetadata().Tags, true },
+	"*":           fulltextAccessor,
+	"meta":        metadataAccessor,
+	"kind":        func(e catalog.Entity) ([]string, bool) { return []string{string(e.GetKind())}, true },
+	"name":        func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Name}, true },
+	"namespace":   func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Namespace}, true },
+	"title":       func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Title}, true },
+	"description": func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Description}, true },
+	"tag":         func(e catalog.Entity) ([]string, bool) { return e.GetMetadata().Tags, true },
 	"label": func(e catalog.Entity) ([]string, bool) {
 		if e.GetMetadata().Labels == nil {
 			return nil, true
@@ -46,71 +100,16 @@ var attributeAccessors = map[string]attributeAccessor{
 		return results, true
 	},
 	"owner": func(e catalog.Entity) ([]string, bool) {
-		switch v := e.(type) {
-		case *catalog.Component:
-			if v.Spec == nil {
-				return nil, false
-			}
-			return []string{v.Spec.Owner.QName()}, true
-		case *catalog.System:
-			if v.Spec == nil {
-				return nil, false
-			}
-			return []string{v.Spec.Owner.QName()}, true
-		case *catalog.Domain:
-			if v.Spec == nil {
-				return nil, false
-			}
-			return []string{v.Spec.Owner.QName()}, true
-		case *catalog.Resource:
-			if v.Spec == nil {
-				return nil, false
-			}
-			return []string{v.Spec.Owner.QName()}, true
-		case *catalog.API:
-			if v.Spec == nil {
-				return nil, false
-			}
-			return []string{v.Spec.Owner.QName()}, true
-		default:
-			return nil, false // Group and other types don't have an owner
+		if o := e.GetOwner(); o != nil {
+			return []string{o.QName()}, true
 		}
+		return nil, false // No owner
 	},
 	"type": func(e catalog.Entity) ([]string, bool) {
-		switch v := e.(type) {
-		case *catalog.Component:
-			if v.Spec == nil {
-				return nil, false
-			}
-			return []string{v.Spec.Type}, true
-		case *catalog.System:
-			if v.Spec == nil {
-				return nil, false
-			}
-			return []string{v.Spec.Type}, true
-		case *catalog.Domain:
-			if v.Spec == nil {
-				return nil, false
-			}
-			return []string{v.Spec.Type}, true
-		case *catalog.Resource:
-			if v.Spec == nil {
-				return nil, false
-			}
-			return []string{v.Spec.Type}, true
-		case *catalog.API:
-			if v.Spec == nil {
-				return nil, false
-			}
-			return []string{v.Spec.Type}, true
-		case *catalog.Group:
-			if v.Spec == nil {
-				return nil, false
-			}
-			return []string{v.Spec.Type}, true
-		default:
-			return nil, false
+		if t := e.GetType(); t != "" {
+			return []string{t}, true
 		}
+		return nil, false
 	},
 	"lifecycle": func(e catalog.Entity) ([]string, bool) {
 		switch v := e.(type) {
@@ -219,4 +218,49 @@ func (ev *Evaluator) matchesOperator(entityValue, operator, queryValue string) (
 	default:
 		return false, nil
 	}
+}
+
+// CollectLeafValues walks a YAML node tree and returns all scalar "values"
+// (i.e., leaf nodes). Mapping keys are ignored; only mapping values are traversed.
+// Aliases are followed (cycle-safe). Null scalars are skipped.
+func collectLeafValues(root *yaml.Node) []string {
+	out := make([]string, 0, 16)
+	visited := make(map[*yaml.Node]struct{})
+
+	var walk func(*yaml.Node)
+	walk = func(n *yaml.Node) {
+		if n == nil {
+			return
+		}
+		if _, seen := visited[n]; seen {
+			return
+		}
+		visited[n] = struct{}{}
+
+		switch n.Kind {
+		case yaml.DocumentNode:
+			for _, c := range n.Content {
+				walk(c)
+			}
+		case yaml.MappingNode:
+			// Content is [k0, v0, k1, v1, ...]; collect only values.
+			for i := 0; i+1 < len(n.Content); i += 2 {
+				walk(n.Content[i+1])
+			}
+		case yaml.SequenceNode:
+			for _, c := range n.Content {
+				walk(c)
+			}
+		case yaml.AliasNode:
+			walk(n.Alias)
+		case yaml.ScalarNode:
+			// Skip nulls; include other scalar types as their string value.
+			if n.Tag != "!!null" {
+				out = append(out, n.Value)
+			}
+		}
+	}
+
+	walk(root)
+	return out
 }

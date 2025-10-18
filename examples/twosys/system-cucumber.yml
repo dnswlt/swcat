@@ -9,6 +9,8 @@ metadata:
     * Download stuff
     * Process items
     * **New**: execute code: `3 < 4`.
+  labels:
+    foobar.dev/release: v1
   tags:
     - mission-critical
   links:

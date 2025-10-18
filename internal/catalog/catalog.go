@@ -56,7 +56,8 @@ type Entity interface {
 	// Returns the namespace qualified name, e.g. "ns1/foo". The default namespace
 	// is omitted, i.e. an entity "default/foo" is returned as "foo".
 	GetQName() string
-
+	// Returns the spec.owner of the entity, if one exists and is set.
+	GetOwner() *Ref
 	// Returns the spec.type of the entity, if one exists and is set.
 	GetType() string
 
@@ -463,7 +464,7 @@ func (c *Component) AddDependent(d *LabelRef) {
 func (c *Component) GetSourceInfo() *api.SourceInfo   { return c.sourceInfo }
 func (c *Component) SetSourceInfo(si *api.SourceInfo) { c.sourceInfo = si }
 func (c *Component) Reset() Entity {
-	cpy, err := CloneEntityFromAPI[*api.Component](c)
+	cpy, err := cloneEntityFromAPI[*api.Component](c)
 	if err != nil {
 		panic(fmt.Sprintf("Reset(): %v", err))
 	}
@@ -489,6 +490,7 @@ func (s *System) GetMetadata() *Metadata           { return s.Metadata }
 func (s *System) GetRef() *Ref                     { return newRef(KindSystem, s.Metadata) }
 func (s *System) GetQName() string                 { return s.Metadata.QName() }
 func (s *System) GetType() string                  { return s.Spec.Type }
+func (s *System) GetOwner() *Ref                   { return s.Spec.Owner }
 func (s *System) GetComponents() []*Ref            { return s.Spec.inv.components }
 func (s *System) GetAPIs() []*Ref                  { return s.Spec.inv.apis }
 func (s *System) GetResources() []*Ref             { return s.Spec.inv.resources }
@@ -499,7 +501,7 @@ func (s *System) AddResource(r *Ref)               { s.Spec.inv.resources = appe
 func (s *System) GetSourceInfo() *api.SourceInfo   { return s.sourceInfo }
 func (s *System) SetSourceInfo(si *api.SourceInfo) { s.sourceInfo = si }
 func (s *System) Reset() Entity {
-	cpy, err := CloneEntityFromAPI[*api.System](s)
+	cpy, err := cloneEntityFromAPI[*api.System](s)
 	if err != nil {
 		panic(fmt.Sprintf("Reset(): %v", err))
 	}
@@ -516,12 +518,13 @@ func (d *Domain) GetMetadata() *Metadata           { return d.Metadata }
 func (d *Domain) GetRef() *Ref                     { return newRef(KindDomain, d.Metadata) }
 func (d *Domain) GetQName() string                 { return d.Metadata.QName() }
 func (d *Domain) GetType() string                  { return d.Spec.Type }
+func (d *Domain) GetOwner() *Ref                   { return d.Spec.Owner }
 func (d *Domain) GetSystems() []*Ref               { return d.Spec.inv.systems }
 func (d *Domain) AddSystem(s *Ref)                 { d.Spec.inv.systems = append(d.Spec.inv.systems, s) }
 func (d *Domain) GetSourceInfo() *api.SourceInfo   { return d.sourceInfo }
 func (d *Domain) SetSourceInfo(si *api.SourceInfo) { d.sourceInfo = si }
 func (d *Domain) Reset() Entity {
-	cpy, err := CloneEntityFromAPI[*api.Domain](d)
+	cpy, err := cloneEntityFromAPI[*api.Domain](d)
 	if err != nil {
 		panic(fmt.Sprintf("Reset(): %v", err))
 	}
@@ -536,6 +539,7 @@ func (a *API) GetMetadata() *Metadata           { return a.Metadata }
 func (a *API) GetRef() *Ref                     { return newRef(KindAPI, a.Metadata) }
 func (a *API) GetQName() string                 { return a.Metadata.QName() }
 func (a *API) GetType() string                  { return a.Spec.Type }
+func (a *API) GetOwner() *Ref                   { return a.Spec.Owner }
 func (a *API) GetProviders() []*LabelRef        { return a.Spec.inv.providers }
 func (a *API) GetConsumers() []*LabelRef        { return a.Spec.inv.consumers }
 func (a *API) GetSystem() *Ref                  { return a.Spec.System }
@@ -544,7 +548,7 @@ func (a *API) AddConsumer(c *LabelRef)          { a.Spec.inv.consumers = append(
 func (a *API) GetSourceInfo() *api.SourceInfo   { return a.sourceInfo }
 func (a *API) SetSourceInfo(si *api.SourceInfo) { a.sourceInfo = si }
 func (a *API) Reset() Entity {
-	cpy, err := CloneEntityFromAPI[*api.API](a)
+	cpy, err := cloneEntityFromAPI[*api.API](a)
 	if err != nil {
 		panic(fmt.Sprintf("Reset(): %v", err))
 	}
@@ -560,6 +564,7 @@ func (r *Resource) GetMetadata() *Metadata     { return r.Metadata }
 func (r *Resource) GetRef() *Ref               { return newRef(KindResource, r.Metadata) }
 func (r *Resource) GetQName() string           { return r.Metadata.QName() }
 func (r *Resource) GetType() string            { return r.Spec.Type }
+func (r *Resource) GetOwner() *Ref             { return r.Spec.Owner }
 func (r *Resource) GetDependents() []*LabelRef { return r.Spec.inv.dependents }
 func (r *Resource) GetSystem() *Ref            { return r.Spec.System }
 func (r *Resource) AddDependent(d *LabelRef) {
@@ -568,7 +573,7 @@ func (r *Resource) AddDependent(d *LabelRef) {
 func (r *Resource) GetSourceInfo() *api.SourceInfo   { return r.sourceInfo }
 func (r *Resource) SetSourceInfo(si *api.SourceInfo) { r.sourceInfo = si }
 func (r *Resource) Reset() Entity {
-	cpy, err := CloneEntityFromAPI[*api.Resource](r)
+	cpy, err := cloneEntityFromAPI[*api.Resource](r)
 	if err != nil {
 		panic(fmt.Sprintf("Reset(): %v", err))
 	}
@@ -584,11 +589,12 @@ func (g *Group) GetMetadata() *Metadata           { return g.Metadata }
 func (g *Group) GetRef() *Ref                     { return newRef(KindGroup, g.Metadata) }
 func (g *Group) GetQName() string                 { return g.Metadata.QName() }
 func (g *Group) GetType() string                  { return g.Spec.Type }
+func (g *Group) GetOwner() *Ref                   { return g.Spec.Parent }
 func (g *Group) GetDisplayName() string           { return g.Spec.Profile.DisplayName }
 func (g *Group) GetSourceInfo() *api.SourceInfo   { return g.sourceInfo }
 func (g *Group) SetSourceInfo(si *api.SourceInfo) { g.sourceInfo = si }
 func (g *Group) Reset() Entity {
-	cpy, err := CloneEntityFromAPI[*api.Group](g)
+	cpy, err := cloneEntityFromAPI[*api.Group](g)
 	if err != nil {
 		panic(fmt.Sprintf("Reset(): %v", err))
 	}

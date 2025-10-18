@@ -75,6 +75,9 @@ func NewLabelRefFromAPI(r *api.LabelRef) (*LabelRef, error) {
 }
 
 func NewLinkFromAPI(l *api.Link) (*Link, error) {
+	if l == nil {
+		return nil, fmt.Errorf("Link is nil")
+	}
 	return &Link{
 		URL:   l.URL,
 		Title: l.Title,
@@ -84,6 +87,9 @@ func NewLinkFromAPI(l *api.Link) (*Link, error) {
 }
 
 func NewMetadataFromAPI(m *api.Metadata) (*Metadata, error) {
+	if m == nil {
+		return nil, fmt.Errorf("Metadata is nil")
+	}
 	if !IsValidName(m.Name) {
 		return nil, fmt.Errorf("invalid name: %q", m.Name)
 	}
@@ -122,6 +128,9 @@ func NewMetadataFromAPI(m *api.Metadata) (*Metadata, error) {
 }
 
 func NewResourceSpecFromAPI(r *api.ResourceSpec) (*ResourceSpec, error) {
+	if r == nil {
+		return nil, fmt.Errorf("ResourceSpec is nil")
+	}
 	owner, err := NewRefFromAPIWithKind(api.KindGroup, r.Owner)
 	if err != nil {
 		return nil, fmt.Errorf("invalid owner ref: %v", err)
@@ -146,6 +155,9 @@ func NewResourceSpecFromAPI(r *api.ResourceSpec) (*ResourceSpec, error) {
 }
 
 func NewResourceFromAPI(r *api.Resource) (*Resource, error) {
+	if r == nil {
+		return nil, fmt.Errorf("Resource is nil")
+	}
 	meta, err := NewMetadataFromAPI(r.Metadata)
 	if err != nil {
 		return nil, err
@@ -163,6 +175,9 @@ func NewResourceFromAPI(r *api.Resource) (*Resource, error) {
 }
 
 func NewAPISpecFromAPI(a *api.APISpec) (*APISpec, error) {
+	if a == nil {
+		return nil, fmt.Errorf("APISpec is nil")
+	}
 	owner, err := NewRefFromAPIWithKind(api.KindGroup, a.Owner)
 	if err != nil {
 		return nil, fmt.Errorf("invalid owner ref: %v", err)
@@ -181,6 +196,9 @@ func NewAPISpecFromAPI(a *api.APISpec) (*APISpec, error) {
 }
 
 func NewAPIFromAPI(a *api.API) (*API, error) {
+	if a == nil {
+		return nil, fmt.Errorf("API is nil")
+	}
 	meta, err := NewMetadataFromAPI(a.Metadata)
 	if err != nil {
 		return nil, err
@@ -198,6 +216,9 @@ func NewAPIFromAPI(a *api.API) (*API, error) {
 }
 
 func NewSystemSpecFromAPI(s *api.SystemSpec) (*SystemSpec, error) {
+	if s == nil {
+		return nil, fmt.Errorf("SystemSpec is nil")
+	}
 	owner, err := NewRefFromAPIWithKind(api.KindGroup, s.Owner)
 	if err != nil {
 		return nil, fmt.Errorf("invalid owner ref: %v", err)
@@ -215,6 +236,9 @@ func NewSystemSpecFromAPI(s *api.SystemSpec) (*SystemSpec, error) {
 }
 
 func NewSystemFromAPI(s *api.System) (*System, error) {
+	if s == nil {
+		return nil, fmt.Errorf("System is nil")
+	}
 	meta, err := NewMetadataFromAPI(s.Metadata)
 	if err != nil {
 		return nil, err
@@ -232,6 +256,9 @@ func NewSystemFromAPI(s *api.System) (*System, error) {
 }
 
 func NewComponentSpecFromAPI(c *api.ComponentSpec) (*ComponentSpec, error) {
+	if c == nil {
+		return nil, fmt.Errorf("ComponentSpec is nil")
+	}
 	owner, err := NewRefFromAPIWithKind(api.KindGroup, c.Owner)
 	if err != nil {
 		return nil, fmt.Errorf("invalid owner ref: %v", err)
@@ -278,6 +305,9 @@ func NewComponentSpecFromAPI(c *api.ComponentSpec) (*ComponentSpec, error) {
 }
 
 func NewComponentFromAPI(c *api.Component) (*Component, error) {
+	if c == nil {
+		return nil, fmt.Errorf("Component is nil")
+	}
 	meta, err := NewMetadataFromAPI(c.Metadata)
 	if err != nil {
 		return nil, err
@@ -295,6 +325,9 @@ func NewComponentFromAPI(c *api.Component) (*Component, error) {
 }
 
 func NewDomainSpecFromAPI(d *api.DomainSpec) (*DomainSpec, error) {
+	if d == nil {
+		return nil, fmt.Errorf("DomainSpec is nil")
+	}
 	owner, err := NewRefFromAPIWithKind(api.KindGroup, d.Owner)
 	if err != nil {
 		return nil, fmt.Errorf("invalid owner ref: %v", err)
@@ -314,6 +347,9 @@ func NewDomainSpecFromAPI(d *api.DomainSpec) (*DomainSpec, error) {
 }
 
 func NewDomainFromAPI(d *api.Domain) (*Domain, error) {
+	if d == nil {
+		return nil, fmt.Errorf("Domain is nil")
+	}
 	meta, err := NewMetadataFromAPI(d.Metadata)
 	if err != nil {
 		return nil, err
@@ -331,6 +367,9 @@ func NewDomainFromAPI(d *api.Domain) (*Domain, error) {
 }
 
 func NewGroupSpecFromAPI(g *api.GroupSpec) (*GroupSpec, error) {
+	if g == nil {
+		return nil, fmt.Errorf("GroupSpec is nil")
+	}
 	spec := &GroupSpec{
 		Type: g.Type,
 		Profile: &GroupSpecProfile{
@@ -360,6 +399,9 @@ func NewGroupSpecFromAPI(g *api.GroupSpec) (*GroupSpec, error) {
 }
 
 func NewGroupFromAPI(g *api.Group) (*Group, error) {
+	if g == nil {
+		return nil, fmt.Errorf("Group is nil")
+	}
 	meta, err := NewMetadataFromAPI(g.Metadata)
 	if err != nil {
 		return nil, err
@@ -376,9 +418,9 @@ func NewGroupFromAPI(g *api.Group) (*Group, error) {
 	}, nil
 }
 
-// CloneEntityFromAPI creates a clone (deep copy) of an entity by re-decoding its api.Entity node.
+// cloneEntityFromAPI creates a clone (deep copy) of an entity by re-decoding its api.Entity node.
 // All computed fields of the catalog entity will be missing in the cloned result.
-func CloneEntityFromAPI[T api.Entity](e Entity) (Entity, error) {
+func cloneEntityFromAPI[T api.Entity](e Entity) (Entity, error) {
 	var apiVal T
 	si := e.GetSourceInfo()
 	if si == nil {

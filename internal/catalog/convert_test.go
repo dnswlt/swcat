@@ -34,7 +34,7 @@ spec:
 	if err != nil {
 		t.Fatalf("NewEntityFromAPI failed: %v", err)
 	}
-	cpy, err := CloneEntityFromAPI[*api.Component](c)
+	cpy, err := cloneEntityFromAPI[*api.Component](c)
 	if err != nil {
 		t.Fatalf("CloneEntityFromAPI failed: %v", err)
 	}

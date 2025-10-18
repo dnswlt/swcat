@@ -136,19 +136,19 @@ func TestRepository_Finders(t *testing.T) {
 	repo := NewRepository()
 
 	entities := []catalog.Entity{
-		&catalog.Component{Metadata: &catalog.Metadata{Name: "c2", Namespace: "ns1"}}, // Add in different order
-		&catalog.Component{Metadata: &catalog.Metadata{Name: "c1", Namespace: "ns1"}},
-		&catalog.Component{Metadata: &catalog.Metadata{Name: "c3", Namespace: "ns2"}},
+		&catalog.Component{Metadata: &catalog.Metadata{Name: "c2", Namespace: "ns1"}, Spec: &catalog.ComponentSpec{}}, // Add in different order
+		&catalog.Component{Metadata: &catalog.Metadata{Name: "c1", Namespace: "ns1"}, Spec: &catalog.ComponentSpec{}},
+		&catalog.Component{Metadata: &catalog.Metadata{Name: "c3", Namespace: "ns2"}, Spec: &catalog.ComponentSpec{}},
 		&catalog.Component{Metadata: &catalog.Metadata{Name: "c4", Namespace: "ns3"}, Spec: &catalog.ComponentSpec{
 			Owner: &catalog.Ref{Name: "o4"}, Lifecycle: "production",
 		}},
-		&catalog.System{Metadata: &catalog.Metadata{Name: "s2"}},
-		&catalog.System{Metadata: &catalog.Metadata{Name: "s1"}},
-		&catalog.Domain{Metadata: &catalog.Metadata{Name: "d1"}},
-		&catalog.API{Metadata: &catalog.Metadata{Name: "a1"}},
-		&catalog.Resource{Metadata: &catalog.Metadata{Name: "r1"}},
-		&catalog.Group{Metadata: &catalog.Metadata{Name: "g2"}},
-		&catalog.Group{Metadata: &catalog.Metadata{Name: "g1"}},
+		&catalog.System{Metadata: &catalog.Metadata{Name: "s2"}, Spec: &catalog.SystemSpec{}},
+		&catalog.System{Metadata: &catalog.Metadata{Name: "s1"}, Spec: &catalog.SystemSpec{}},
+		&catalog.Domain{Metadata: &catalog.Metadata{Name: "d1"}, Spec: &catalog.DomainSpec{}},
+		&catalog.API{Metadata: &catalog.Metadata{Name: "a1"}, Spec: &catalog.APISpec{}},
+		&catalog.Resource{Metadata: &catalog.Metadata{Name: "r1"}, Spec: &catalog.ResourceSpec{}},
+		&catalog.Group{Metadata: &catalog.Metadata{Name: "g2"}, Spec: &catalog.GroupSpec{}},
+		&catalog.Group{Metadata: &catalog.Metadata{Name: "g1"}, Spec: &catalog.GroupSpec{}},
 	}
 
 	for _, e := range entities {

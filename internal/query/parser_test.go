@@ -32,6 +32,11 @@ func TestParse(t *testing.T) {
 			expected: "owner:'helly r'",
 		},
 		{
+			name:     "use asterisk as attribute (full text search)",
+			input:    "*:jackson",
+			expected: "*:jackson",
+		},
+		{
 			name:     "simple OR",
 			input:    "a OR b",
 			expected: "(a OR b)",
