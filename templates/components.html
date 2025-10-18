@@ -23,6 +23,7 @@
             <input id="q" name="q" type="search" value="{{ .Query }}" placeholder="Filter components"
                     class="flex-1 px-3 py-2 border rounded-md" autocomplete="off"
                     hx-trigger="input changed delay:300ms">
+            <a href="/ui/help#search" title="Search Help" class="w-7 h-7 bg-gray-200 text-gray-600 flex items-center justify-center rounded-full hover:bg-gray-300 shrink-0 text-lg">?</a>
             <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md">Search</button>
             <span id="spinner" class="htmx-indicator text-gray-500 text-sm hidden">Loading...</span>
         </form>
