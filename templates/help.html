@@ -21,7 +21,7 @@
             <h3 class="text-xl font-semibold">Attribute search</h3>
             <p>You can also search for entities with specific attributes. The format is <code>attribute:value</code>. For example:</p>
             <pre class="bg-gray-100 p-2 rounded"><code class="text-gray-800">title:gateway</code></pre>
-            <p>This will find all entities of with "gateway" in their title.</p>
+            <p>This will find all entities with "gateway" in their title.</p>
             <p>The following attributes are available for filtering:</p>
             <ul>
                 <li><code>*</code>: Full-text search across all fields.</li>
@@ -49,14 +49,14 @@
             <h3 class="text-xl font-semibold">Combining expressions</h3>
             <p>You can combine multiple expressions using <code>AND</code> and <code>OR</code>. Parentheses can be used for grouping. If no operator is specified, <code>AND</code> is used by default.</p>
             <p>Examples:</p>
-            <pre class="bg-gray-100 p-2 rounded"><code class="text-gray-800">kind:component AND owner:my-team</code></pre>
-            <pre class="bg-gray-100 p-2 rounded"><code class="text-gray-800">kind:api OR kind:component</code></pre>
-            <pre class="bg-gray-100 p-2 rounded"><code class="text-gray-800">(kind:api OR kind:component) AND owner:my-team</code></pre>
+            <pre class="bg-gray-100 p-2 rounded"><code class="text-gray-800">owner:my-team AND tag:production</code></pre>
+            <pre class="bg-gray-100 p-2 rounded"><code class="text-gray-800">owner:team-a OR owner:team-b</code></pre>
+            <pre class="bg-gray-100 p-2 rounded"><code class="text-gray-800">(owner:team-a OR owner:team-b) AND tag:production</code></pre>
 
             <h3 class="text-xl font-semibold">Negation</h3>
             <p>You can negate an expression using <code>!</code>.</p>
             <p>Example:</p>
-            <pre class="bg-gray-100 p-2 rounded"><code class="text-gray-800">!kind:component</code></pre>
+            <pre class="bg-gray-100 p-2 rounded"><code class="text-gray-800">!owner:my-team</code></pre>
         </div>
     </main>
 
