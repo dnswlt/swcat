@@ -104,6 +104,67 @@ func (r *Renderer) generateDomainDotSource(domain *catalog.Domain) *dot.DotSourc
 
 	dw.EndCluster()
 
+	// Find relationships of components and resources in this domain to systems of other domains.
+	type sysLink struct {
+		src *catalog.System
+		tgt *catalog.System
+	}
+	var systemLinks []sysLink
+	seenLinks := make(map[string]bool)
+	for _, ref := range domain.GetSystems() {
+		s := r.repo.System(ref)
+
+		var outgoing []*catalog.LabelRef
+		var incoming []*catalog.LabelRef
+		for _, cRef := range s.GetComponents() {
+			c := r.repo.Component(cRef)
+			outgoing = append(outgoing, c.Spec.DependsOn...)
+			outgoing = append(outgoing, c.Spec.ConsumesAPIs...)
+			incoming = append(incoming, c.GetDependents()...)
+		}
+		for _, aRef := range s.GetAPIs() {
+			a := r.repo.API(aRef)
+			incoming = append(incoming, a.GetConsumers()...)
+		}
+		for _, rRef := range s.GetResources() {
+			res := r.repo.Resource(rRef)
+			incoming = append(incoming, res.GetDependents()...)
+		}
+		addLink := func(ref *catalog.Ref, incoming bool) {
+			e := r.repo.Entity(ref)
+			if sp, ok := e.(catalog.SystemPart); ok {
+				s2 := r.repo.System(sp.GetSystem())
+				if s == s2 {
+					return // Don't create self-links
+				}
+				var src, tgt *catalog.System
+				if incoming {
+					src, tgt = s2, s
+				} else {
+					src, tgt = s, s2
+				}
+				link := fmt.Sprintf("%s -> %s", src.GetRef(), tgt.GetRef())
+				if _, ok := seenLinks[link]; !ok {
+					systemLinks = append(systemLinks, sysLink{src: src, tgt: tgt})
+				}
+				seenLinks[link] = true
+			}
+
+		}
+		for _, dRef := range outgoing {
+			addLink(dRef.Ref, false)
+		}
+		for _, dRef := range incoming {
+			addLink(dRef.Ref, true)
+		}
+
+	}
+	for _, link := range systemLinks {
+		dw.AddNode(r.entityNode(link.src))
+		dw.AddNode(r.entityNode(link.tgt))
+		dw.AddEdge(r.entityEdge(link.src, link.tgt, dot.ESNormal))
+	}
+
 	dw.End()
 
 	return dw.Result()
