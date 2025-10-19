@@ -141,8 +141,15 @@ func (l *StandardLayouter) Edge(src, dst catalog.Entity, style dot.EdgeStyle) do
 }
 
 func (l *StandardLayouter) EdgeLabel(src, dst catalog.Entity, ref *catalog.LabelRef, style dot.EdgeStyle) dot.EdgeLayout {
+	label := ref.Label
+	if label == "" && l.config.ShowVersionAsLabel {
+		// No explicit label. Show version reference, if present.
+		if version, ok := ref.GetAttr(catalog.VersionAttrKey); ok {
+			label = version
+		}
+	}
 	return dot.EdgeLayout{
-		Label: ref.Label,
+		Label: label,
 		Style: style,
 	}
 }

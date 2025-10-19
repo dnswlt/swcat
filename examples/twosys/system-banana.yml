@@ -40,7 +40,7 @@ spec:
   providesApis:
     - banana-api
   consumesApis:
-    - banana-backend-api @v1
+    - banana-backend-api @v2
 ---
 apiVersion: swcat/v1alpha1
 kind: Component

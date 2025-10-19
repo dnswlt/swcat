@@ -14,5 +14,8 @@ svg:
       external: '#ffbf79'
   # Include the API provider (component) in labels of API entities.
   showAPIProvider: true
+  # Show the API version in consumedApis/providedApis references, if specified
+  # and unless an explicit label is present.
+  showVersionAsLabel: false
 catalog:
   repositoryURLPrefix: https://github.com/dnswlt/swcat

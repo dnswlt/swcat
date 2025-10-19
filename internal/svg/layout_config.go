@@ -23,6 +23,9 @@ type Config struct {
 	NodeColors NodeColorsConfig `yaml:"nodeColors"`
 	// Include the API provider (component) in labels of API entities.
 	ShowAPIProvider bool `yaml:"showAPIProvider"`
+	// Include the API version in labelled references if specified and if no
+	// explicit label is specified.
+	ShowVersionAsLabel bool `yaml:"showVersionAsLabel"`
 }
 
 var (
