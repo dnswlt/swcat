@@ -7,3 +7,6 @@ It automatically generates SVG diagrams to visualize your software landscape, an
 !!! tip
     [Get started](./getting-started.md) now and 
     check out the [User guide](./user-guide/index.md) for detailed information.
+
+    You can find the source code on GitHub:
+    <https://github.com/dnswlt/swcat>
