@@ -37,7 +37,8 @@ var (
 	}
 
 	// Regexp defining valid entity names and namespaces
-	validNameRE = regexp.MustCompile("^[A-Za-z_][A-Za-z0-9_-]*$")
+	// Alphanumeric characters and "-". Must start and end with an alphanumeric character.
+	validNameRE = regexp.MustCompile("^[A-Za-z]([A-Za-z0-9-]*[A-Za-z0-9])?$")
 )
 
 func IsValidRefKind(kind string) bool {
@@ -46,10 +47,10 @@ func IsValidRefKind(kind string) bool {
 }
 
 func IsValidName(s string) bool {
-	return validNameRE.MatchString(s)
+	return len(s) > 0 && len(s) <= 63 && validNameRE.MatchString(s)
 }
 func IsValidNamespace(s string) bool {
-	return validNameRE.MatchString(s)
+	return len(s) > 0 && len(s) <= 63 && validNameRE.MatchString(s)
 }
 
 func ParseRef(s string) (*Ref, error) {
@@ -86,26 +87,82 @@ func ParseRef(s string) (*Ref, error) {
 	return &ref, nil
 }
 
-// parseLabelRefString parses a string into an EntityRef and an optional label.
-// It parses strings in the format: 'kind:namespace/name "Optional Label"'
-func parseLabelRefString(s string) (ref *Ref, label string, err error) {
-	// Split the string by the first space to separate the ref from the optional label.
-	refStr, labelStr, _ := strings.Cut(s, " ")
-	ref, err = ParseRef(refStr)
-	if err != nil {
-		return
-	}
-	// Parse the Label part, which must be enclosed in double quotes.
-	label = strings.TrimSpace(labelStr)
-	if label != "" {
-		if len(label) > 1 && strings.HasPrefix(label, `"`) && strings.HasSuffix(label, `"`) {
-			label = label[1 : len(label)-1]
-		} else {
-			err = fmt.Errorf("label must be enclosed in double quotes, got '%s'", label)
-			return
+// parseLabelRef parses strings in the format: 'kind:namespace/name [@v1] ["label"]'.
+// Both the version @v1 and the label "label" are optional.
+func parseLabelRef(s string) (*LabelRef, error) {
+	s = strings.TrimSpace(s)
+	i := 0
+	n := len(s)
+
+	// skipSpace advances the cursor past any whitespace.
+	skipSpace := func() {
+		for i < n && s[i] == ' ' {
+			i++
 		}
 	}
-	return
+
+	// Step 1: Parse the Entity Reference.
+	refStart := 0
+	for i < n && s[i] != '@' && s[i] != ' ' {
+		i++
+	}
+
+	ref, err := ParseRef(s[refStart:i])
+	if err != nil {
+		return nil, err
+	}
+	labelRef := &LabelRef{
+		Ref: ref,
+	}
+	skipSpace()
+
+	// Step 2: Parse the optional version.
+	// A version is identified by a leading '@' and is terminated by whitespace or end of input.
+	if i < n && s[i] == '@' {
+		i++ // Consume the '@'.
+		versionStart := i
+		for i < n && s[i] != ' ' {
+			i++
+		}
+		version := s[versionStart:i]
+		if version == "" {
+			return nil, fmt.Errorf("invalid label ref: empty version in %q", s)
+		}
+		labelRef.Attrs = map[string]string{
+			VersionAttrKey: version,
+		}
+	}
+	skipSpace()
+
+	// Step 3: Parse the optional Label.
+	// A label is a double-quoted string.
+	if i < n && s[i] == '"' {
+		i++ // Consume the opening quote.
+		labelStart := i
+
+		// Find the closing quote.
+		labelEnd := -1
+		for j := i; j < n; j++ {
+			if s[j] == '"' {
+				labelEnd = j
+				break
+			}
+		}
+		if labelEnd == -1 {
+			return nil, fmt.Errorf("invalid format: unclosed label in %q", s)
+		}
+		labelRef.Label = s[labelStart:labelEnd]
+		i = labelEnd + 1
+	}
+
+	skipSpace()
+
+	// Step 4: Ensure there are no unexpected trailing characters.
+	if i < n {
+		return nil, fmt.Errorf("invalid format: unexpected trailing characters %q", s[i:])
+	}
+
+	return labelRef, nil
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface for EntityRef.
@@ -115,13 +172,9 @@ func (er *Ref) UnmarshalYAML(value *yaml.Node) error {
 		return fmt.Errorf("entity ref must be a string scalar, but got %s", value.Tag)
 	}
 
-	ref, label, err := parseLabelRefString(value.Value)
+	ref, err := ParseRef(value.Value)
 	if err != nil {
 		return err
-	}
-
-	if label != "" {
-		return fmt.Errorf("entity ref '%s' cannot have a label", value.Value)
 	}
 
 	*er = *ref
@@ -135,31 +188,27 @@ func (lr *LabelRef) UnmarshalYAML(value *yaml.Node) error {
 	switch value.Kind {
 	// Case 1: The value is a simple string, e.g., "kind:ns/name "label""
 	case yaml.ScalarNode:
-		ref, label, err := parseLabelRefString(value.Value)
+		labelRef, err := parseLabelRef(value.Value)
 		if err != nil {
 			return err
 		}
-		lr.Ref = ref
-		lr.Label = label
+		*lr = *labelRef
 		return nil
 
 	// Case 2: The value is a map, e.g., { ref: "...", label: "..." }
 	case yaml.MappingNode:
 		var aux struct {
-			Ref   string `yaml:"ref"`
-			Label string `yaml:"label"`
+			Ref   string            `yaml:"ref"`
+			Label string            `yaml:"label"`
+			Attrs map[string]string `yaml:"attrs"`
 		}
 		if err := value.Decode(&aux); err != nil {
 			return err
 		}
 
-		// The 'ref' field within the map must not contain its own label.
-		ref, label, err := parseLabelRefString(aux.Ref)
+		ref, err := ParseRef(aux.Ref)
 		if err != nil {
 			return err
-		}
-		if label != "" {
-			return fmt.Errorf("ref field '%s' inside a record cannot contain its own label", aux.Ref)
 		}
 
 		lr.Ref = ref

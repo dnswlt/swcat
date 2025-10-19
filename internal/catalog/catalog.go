@@ -16,6 +16,9 @@ const (
 	// In swcat, entity references typically omit the default namespace
 	// even in fully qualified form (e.g., resource:my-resource).
 	DefaultNamespace = api.DefaultNamespace
+	// The key used to store the version in labelled entity references (LabelRef)
+	// when using the shorthand notation (e.g., 'my-api @v2')
+	VersionAttrKey = api.VersionAttrKey
 )
 
 type Kind string
@@ -45,6 +48,7 @@ type Ref struct {
 type LabelRef struct {
 	Ref   *Ref
 	Label string
+	Attrs map[string]string
 }
 
 // Entity is the interface implemented by all entity kinds (Component, System, etc.).
@@ -276,6 +280,15 @@ type apiInvRel struct {
 	consumers []*LabelRef
 }
 
+type APISpecVersion struct {
+	// The name of the API version, e.g. "v1" or "1.2.3".
+	// [required]
+	Name string `yaml:"name,omitempty"`
+	// The lifecycle state of the API in this particular version.
+	// [optional]
+	Lifecycle string `yaml:"lifecycle,omitempty"`
+}
+
 type APISpec struct {
 	// The type of the API definition.
 	// [required]
@@ -293,6 +306,10 @@ type APISpec struct {
 	// A required field in the backstage.io schema, but we leave it as optional.
 	// [optional]
 	Definition string
+	// A list of versions in which this API currently exists.
+	// Consumers and providers can specify the version in entity references.
+	// [optional]
+	Versions []*APISpecVersion `yaml:"versions,omitempty"`
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
@@ -401,6 +418,14 @@ func (e *LabelRef) String() string {
 		return refStr
 	}
 	return refStr + ` "` + e.Label + `"`
+}
+
+func (e *LabelRef) GetAttr(key string) (string, bool) {
+	if e.Attrs == nil {
+		return "", false
+	}
+	val, ok := e.Attrs[key]
+	return val, ok
 }
 
 func newRef(kind Kind, meta *Metadata) *Ref {

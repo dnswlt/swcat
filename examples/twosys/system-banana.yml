@@ -40,7 +40,7 @@ spec:
   providesApis:
     - banana-api
   consumesApis:
-    - banana-backend-api
+    - banana-backend-api @v1
 ---
 apiVersion: swcat/v1alpha1
 kind: Component
@@ -110,3 +110,8 @@ spec:
   lifecycle: production
   owner: banana-team
   system: banana-system
+  versions:
+    - name: v1
+      lifecycle: deprecated
+    - name: v2
+      lifecycle: production

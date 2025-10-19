@@ -4,6 +4,8 @@
 package api
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -14,17 +16,25 @@ const (
 	// In swcat, entity references typically omit the default namespace
 	// even in fully qualified form (e.g., resource:my-resource).
 	DefaultNamespace = "default"
+	// The key used to store the version in labelled entity references (LabelRef)
+	// when using the shorthand notation (e.g., 'my-api @v2')
+	VersionAttrKey = "version"
 )
 
+// Ref represents entity references.
+// Their string format is <kind>:<namespace>/<name>.
 type Ref struct {
 	Kind      string
 	Namespace string
 	Name      string
 }
 
+// LabelRef represents labelled entity references with optional additional attributes.
+// Labelled refs can be used e.g. in providesApis, consumesApis, and dependsOn relationships.
 type LabelRef struct {
 	Ref   *Ref
 	Label string
+	Attrs map[string]string
 }
 
 // Entity is the interface implemented by all entity kinds (Component, System, etc.).
@@ -212,6 +222,15 @@ type Resource struct {
 	*SourceInfo `yaml:"-"`
 }
 
+type APISpecVersion struct {
+	// The name of the API version, e.g. "v1" or "1.2.3".
+	// [required]
+	Name string `yaml:"name,omitempty"`
+	// The lifecycle state of the API in this particular version.
+	// [optional]
+	Lifecycle string `yaml:"lifecycle,omitempty"`
+}
+
 type APISpec struct {
 	// The type of the API definition.
 	// [required]
@@ -229,6 +248,10 @@ type APISpec struct {
 	// A required field in the backstage.io schema, but we leave it as optional.
 	// [optional]
 	Definition string `yaml:"definition,omitempty"`
+	// A list of versions in which this API currently exists.
+	// Consumers and providers can specify the version in entity references.
+	// [optional]
+	Versions []*APISpecVersion `yaml:"versions,omitempty"`
 }
 
 type API struct {
@@ -303,7 +326,25 @@ func (e *LabelRef) String() string {
 	if e.Label == "" {
 		return refStr
 	}
-	return refStr + ` "` + e.Label + `"`
+	if len(e.Attrs) == 0 {
+		return refStr + ` "` + e.Label + `"`
+	}
+	// Add attrs in key-sorted order.
+	var keys []string
+	for k := range e.Attrs {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	var sb strings.Builder
+	sb.WriteString("{")
+	for i, k := range keys {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		fmt.Fprintf(&sb, `%s="%s"`, k, e.Attrs[k])
+	}
+	sb.WriteString("}")
+	return refStr + ` "` + e.Label + `" ` + sb.String()
 }
 
 func newRef(kind string, meta *Metadata) *Ref {

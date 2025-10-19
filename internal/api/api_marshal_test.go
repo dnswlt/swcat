@@ -4,8 +4,156 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"gopkg.in/yaml.v3"
 )
+
+func TestParseLabelRef(t *testing.T) {
+	testCases := []struct {
+		name    string
+		input   string
+		want    *LabelRef
+		wantErr bool
+	}{
+		{
+			name:  "name only",
+			input: "my-name",
+			want: &LabelRef{
+				Ref: &Ref{Kind: "", Namespace: DefaultNamespace, Name: "my-name"},
+			},
+		},
+		{
+			name:  "namespace and name",
+			input: "my-namespace/my-name",
+			want: &LabelRef{
+				Ref: &Ref{Kind: "", Namespace: "my-namespace", Name: "my-name"},
+			},
+		},
+		{
+			name:  "kind, namespace, and name",
+			input: "api:my-namespace/my-name",
+			want: &LabelRef{
+				Ref: &Ref{Kind: "api", Namespace: "my-namespace", Name: "my-name"},
+			},
+		},
+		{
+			name:  "ref with leading/trailing space",
+			input: "  api:my-namespace/my-name  ",
+			want: &LabelRef{
+				Ref: &Ref{Kind: "api", Namespace: "my-namespace", Name: "my-name"},
+			},
+		},
+		{
+			name:  "ref with attached version",
+			input: "foo/bar@v1",
+			want: &LabelRef{
+				Ref:   &Ref{Kind: "", Namespace: "foo", Name: "bar"},
+				Attrs: map[string]string{VersionAttrKey: "v1"},
+			},
+		},
+		{
+			name:  "ref with spaced version",
+			input: "foo/bar @v1",
+			want: &LabelRef{
+				Ref:   &Ref{Kind: "", Namespace: "foo", Name: "bar"},
+				Attrs: map[string]string{VersionAttrKey: "v1"},
+			},
+		},
+		{
+			name:  "ref with label",
+			input: `foo/bar "yankee"`,
+			want: &LabelRef{
+				Ref:   &Ref{Kind: "", Namespace: "foo", Name: "bar"},
+				Label: "yankee",
+			},
+		},
+		{
+			name:  "ref with attached version and label",
+			input: `api:foo/bar@v2 "yankee"`,
+			want: &LabelRef{
+				Ref:   &Ref{Kind: "api", Namespace: "foo", Name: "bar"},
+				Attrs: map[string]string{VersionAttrKey: "v2"},
+				Label: "yankee",
+			},
+		},
+		{
+			name:  "ref with spaced version and label",
+			input: `api:foo/bar @v1 "yankee"`,
+			want: &LabelRef{
+				Ref:   &Ref{Kind: "api", Namespace: "foo", Name: "bar"},
+				Attrs: map[string]string{VersionAttrKey: "v1"},
+				Label: "yankee",
+			},
+		},
+		{
+			name:  "empty label",
+			input: `foo/bar ""`,
+			want: &LabelRef{
+				Ref:   &Ref{Kind: "", Namespace: "foo", Name: "bar"},
+				Label: "",
+			},
+		},
+		{
+			name:    "empty input",
+			input:   "",
+			wantErr: true,
+		},
+		{
+			name:    "whitespace only",
+			input:   "   ",
+			wantErr: true,
+		},
+		{
+			name:    "version only",
+			input:   "@v1",
+			wantErr: true,
+		},
+		{
+			name:    "label only",
+			input:   `"yankee"`,
+			wantErr: true,
+		},
+		{
+			name:    "empty version string",
+			input:   "foo/bar @",
+			wantErr: true,
+		},
+		{
+			name:    "unclosed label",
+			input:   `foo/bar "yankee`,
+			wantErr: true,
+		},
+		{
+			name:    "trailing garbage",
+			input:   `foo/bar "yankee" oops`,
+			wantErr: true,
+		},
+		{
+			name:    "misplaced version after label",
+			input:   `foo/bar "yankee" @v1`,
+			wantErr: true,
+		},
+		{
+			name:    "multiple versions is an error",
+			input:   "foo/bar@v2 @v1",
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseLabelRef(tc.input)
+
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("parseLabelRef() error = %v, wantErr %v", err, tc.wantErr)
+			}
+
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("parseLabelRef() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
 
 func TestEntityRef_UnmarshalYAML(t *testing.T) {
 	testCases := []struct {
@@ -89,6 +237,31 @@ func TestLabelRef_UnmarshalYAML(t *testing.T) {
 			},
 		},
 		{
+			name: "String with Version",
+			yaml: `ref: component:default/frontend @v1.2`,
+			want: LabelRef{
+				Ref:   &Ref{Kind: "component", Namespace: "default", Name: "frontend"},
+				Attrs: map[string]string{VersionAttrKey: "v1.2"},
+			},
+		},
+		{
+			name: "String with Version (no space)",
+			yaml: `ref: component:default/frontend@v1.2`,
+			want: LabelRef{
+				Ref:   &Ref{Kind: "component", Namespace: "default", Name: "frontend"},
+				Attrs: map[string]string{VersionAttrKey: "v1.2"},
+			},
+		},
+		{
+			name: "String with Version and Label",
+			yaml: `ref: component:default/frontend @v1.2 "foo"`,
+			want: LabelRef{
+				Ref:   &Ref{Kind: "component", Namespace: "default", Name: "frontend"},
+				Label: "foo",
+				Attrs: map[string]string{VersionAttrKey: "v1.2"},
+			},
+		},
+		{
 			name: "Record Style with Namespace",
 			yaml: `
 ref:
@@ -120,6 +293,11 @@ ref:
 		{
 			name:    "String with Brace-Enclosed Label should fail",
 			yaml:    `ref: component:prod/api {API Gateway}`,
+			wantErr: true,
+		},
+		{
+			name:    "String with Label before Version should fail",
+			yaml:    `ref: component:prod/api "foo" @v1`,
 			wantErr: true,
 		},
 		{

@@ -440,13 +440,31 @@ func (r *Repository) Validate() error {
 		}
 
 		for _, a := range s.ProvidesAPIs {
-			if ap := r.API(a.Ref); ap == nil {
+			ap := r.API(a.Ref)
+			if ap == nil {
 				return fmt.Errorf("provided API %q for component %s is undefined", a, qn)
+			}
+			if val, ok := a.GetAttr(catalog.VersionAttrKey); ok {
+				// Check that referenced API version exists
+				if !slices.ContainsFunc(ap.Spec.Versions, func(v *catalog.APISpecVersion) bool {
+					return v.Name == val
+				}) {
+					return fmt.Errorf("provided API %q for component %s does not exist in version %q", a, qn, val)
+				}
 			}
 		}
 		for _, a := range s.ConsumesAPIs {
-			if ap := r.API(a.Ref); ap == nil {
+			ap := r.API(a.Ref)
+			if ap == nil {
 				return fmt.Errorf("consumed API %q for component %s is undefined", a, qn)
+			}
+			if val, ok := a.GetAttr(catalog.VersionAttrKey); ok {
+				// Check that referenced API version exists
+				if !slices.ContainsFunc(ap.Spec.Versions, func(v *catalog.APISpecVersion) bool {
+					return v.Name == val
+				}) {
+					return fmt.Errorf("consumed API %q for component %s does not exist in version %q", a, qn, val)
+				}
 			}
 		}
 		for _, a := range s.DependsOn {
@@ -486,6 +504,11 @@ func (r *Repository) Validate() error {
 		}
 		if g := r.Group(s.Owner); g == nil {
 			return fmt.Errorf("owner %q for API %s is undefined", s.Owner, qn)
+		}
+		for _, v := range s.Versions {
+			if v.Name == "" {
+				return fmt.Errorf("version name is empty for API %s", qn)
+			}
 		}
 		// Allow an empty Definition.
 		// It is mandatory in the swcat/v1alpha1 schema, but this just
@@ -585,9 +608,9 @@ func (r *Repository) populateRelationships() {
 		dep := r.Entity(depRef.Ref)
 		switch x := dep.(type) {
 		case *catalog.Component:
-			x.AddDependent(&catalog.LabelRef{Ref: entityRef, Label: depRef.Label})
+			x.AddDependent(&catalog.LabelRef{Ref: entityRef, Label: depRef.Label, Attrs: depRef.Attrs})
 		case *catalog.Resource:
-			x.AddDependent(&catalog.LabelRef{Ref: entityRef, Label: depRef.Label})
+			x.AddDependent(&catalog.LabelRef{Ref: entityRef, Label: depRef.Label, Attrs: depRef.Attrs})
 		default:
 			panic(fmt.Sprintf("Invalid dependency: %s", depRef.String()))
 		}
@@ -599,11 +622,11 @@ func (r *Repository) populateRelationships() {
 		// Register in APIs
 		for _, a := range c.Spec.ConsumesAPIs {
 			ap := r.API(a.Ref)
-			ap.AddConsumer(&catalog.LabelRef{Ref: ref, Label: a.Label})
+			ap.AddConsumer(&catalog.LabelRef{Ref: ref, Label: a.Label, Attrs: a.Attrs})
 		}
 		for _, a := range c.Spec.ProvidesAPIs {
 			ap := r.API(a.Ref)
-			ap.AddProvider(&catalog.LabelRef{Ref: ref, Label: a.Label})
+			ap.AddProvider(&catalog.LabelRef{Ref: ref, Label: a.Label, Attrs: a.Attrs})
 		}
 		if s := c.Spec.System; s != nil {
 			system := r.System(s)

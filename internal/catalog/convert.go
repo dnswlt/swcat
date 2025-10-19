@@ -60,6 +60,7 @@ func NewLabelRefFromAPIWithKind(kind Kind, r *api.LabelRef) (*LabelRef, error) {
 	return &LabelRef{
 		Ref:   ref,
 		Label: r.Label,
+		Attrs: maps.Clone(r.Attrs),
 	}, nil
 }
 
@@ -71,6 +72,7 @@ func NewLabelRefFromAPI(r *api.LabelRef) (*LabelRef, error) {
 	return &LabelRef{
 		Ref:   ref,
 		Label: r.Label,
+		Attrs: maps.Clone(r.Attrs),
 	}, nil
 }
 
@@ -187,10 +189,18 @@ func NewAPISpecFromAPI(a *api.APISpec) (*APISpec, error) {
 		return nil, fmt.Errorf("invalid system ref: %v", err)
 	}
 	spec := &APISpec{
-		Owner:     owner,
-		System:    system,
-		Type:      a.Type,
-		Lifecycle: a.Lifecycle,
+		Owner:      owner,
+		System:     system,
+		Type:       a.Type,
+		Lifecycle:  a.Lifecycle,
+		Definition: a.Definition,
+		Versions:   make([]*APISpecVersion, len(a.Versions)),
+	}
+	for i, v := range a.Versions {
+		spec.Versions[i] = &APISpecVersion{
+			Name:      v.Name,
+			Lifecycle: v.Lifecycle,
+		}
 	}
 	return spec, nil
 }
