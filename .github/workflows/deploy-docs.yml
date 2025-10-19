@@ -13,6 +13,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Allow workflow to write to a branch
     steps:
       # Step 1: Check out your repository's code
       - name: Checkout repository
