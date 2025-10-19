@@ -5,3 +5,4 @@ catalogs/
 swcat
 swcat.exe
 .vscode
+.venv/

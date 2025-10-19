@@ -1,0 +1,32 @@
+# mkdocs.yml
+
+# Project information
+site_name: swcat Documentation
+site_url: https://dnswlt.github.io/swcat/ # Replace with your actual URL
+site_description: 'Documentation for the swcat software catalog.'
+
+# Theme configuration
+# We're using the popular "Material for MkDocs" theme here.
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+
+# The navigation structure
+nav:
+  - 'Home': 'index.md'
+  - 'Getting started': 'getting-started.md'
+  - 'User guide':
+    - 'Overview': 'user-guide/index.md'
+    - 'Catalog': 'user-guide/catalog.md'
+    - 'Configuration': 'user-guide/configuration.md'
+    - 'Query syntax': 'user-guide/query-syntax.md'
+
+# Extensions (optional but recommended for a better experience)
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
