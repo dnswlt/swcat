@@ -19,6 +19,9 @@ func APIRef(r *Ref) *api.Ref {
 // All fields must be present and valid. In particular, an empty Kind
 // field is not allowed.
 func NewRefFromAPI(r *api.Ref) (*Ref, error) {
+	if r == nil {
+		return nil, fmt.Errorf("nil reference")
+	}
 	if !IsValidKind(r.Kind) {
 		return nil, fmt.Errorf("invalid kind: %q", r.Kind)
 	}
@@ -29,6 +32,9 @@ func NewRefFromAPI(r *api.Ref) (*Ref, error) {
 // It expects the Kind field of r either to be empty or to be equal to the given kind.
 // If r.Kind is empty, kind is assigned to the returned Ref.
 func NewRefFromAPIWithKind(kind Kind, r *api.Ref) (*Ref, error) {
+	if r == nil {
+		return nil, fmt.Errorf("nil reference for kind %q", kind)
+	}
 	if !IsValidKind(string(kind)) {
 		return nil, fmt.Errorf("invalid kind: %q", kind)
 	}

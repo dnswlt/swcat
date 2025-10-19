@@ -2,12 +2,16 @@ package web
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/repo"
 )
 
@@ -271,5 +275,479 @@ func TestGroupDetail_OK_NoSVG(t *testing.T) {
 	if !strings.Contains(body, "test-group") {
 		t.Fatalf("expected text %q not found; body (truncated):\n%s",
 			"test-group", body[:min(600, len(body))])
+	}
+}
+
+func TestCreateEntity_OK(t *testing.T) {
+	// Create a temporary copy of the catalog file
+	tmpfile, err := os.CreateTemp("", "catalog-*.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	src, err := os.Open("../../testdata/catalog.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+
+	_, err = io.Copy(tmpfile, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpfile.Close()
+
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{tmpfile.Name()})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	h := s.Handler()
+
+	newEntityYAML := `
+apiVersion: swcat.io/v1
+kind: Component
+metadata:
+  name: new-component
+spec:
+  type: service
+  lifecycle: experimental
+  owner: test-group
+  system: test-system
+`
+	form := url.Values{}
+	form.Set("cloned_from", "component:default/test-component")
+	form.Set("yaml", newEntityYAML)
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/entities", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	redirectURL := rr.Header().Get("HX-Redirect")
+	if redirectURL != "/ui/components/new-component" {
+		t.Fatalf("HX-Redirect = %q, want %q", redirectURL, "/ui/components/new-component")
+	}
+
+	// Check if the entity was actually created in the repo
+	ref, _ := catalog.ParseRef("component:default/new-component")
+	if s.repo.Entity(ref) == nil {
+		t.Fatalf("entity was not created in the repository")
+	}
+
+	// Check if the file was updated
+	updatedContent, err := os.ReadFile(tmpfile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(updatedContent), "new-component") {
+		t.Fatalf("new component was not written to the catalog file")
+	}
+}
+
+func TestCreateEntity_ReadOnly(t *testing.T) {
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	s.opts.ReadOnly = true // Set read-only mode
+	h := s.Handler()
+
+	newEntityYAML := `
+apiVersion: swcat.io/v1
+kind: Component
+metadata:
+  name: new-component
+spec:
+  type: service
+  lifecycle: experimental
+  owner: test-group
+  system: test-system
+`
+	form := url.Values{}
+	form.Set("cloned_from", "component:default/test-component")
+	form.Set("yaml", newEntityYAML)
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/entities", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusPreconditionFailed {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusPreconditionFailed)
+	}
+}
+
+func TestCreateEntity_MissingSystem(t *testing.T) {
+	// Create a temporary copy of the catalog file
+	tmpfile, err := os.CreateTemp("", "catalog-*.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	src, err := os.Open("../../testdata/catalog.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+
+	_, err = io.Copy(tmpfile, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpfile.Close()
+
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{tmpfile.Name()})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	h := s.Handler()
+
+	newEntityYAML := `
+apiVersion: swcat.io/v1
+kind: Component
+metadata:
+  name: new-component
+spec:
+  type: service
+  lifecycle: experimental
+  owner: test-group
+`
+	form := url.Values{}
+	form.Set("cloned_from", "component:default/test-component")
+	form.Set("yaml", newEntityYAML)
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/entities", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	body := rr.Body.String()
+	expectedError := "Invalid entity"
+	if !strings.Contains(body, expectedError) {
+		t.Fatalf("expected validation error %q not found in body: %s", expectedError, body)
+	}
+}
+
+func TestUpdateEntity_OK(t *testing.T) {
+	// Create a temporary copy of the catalog file
+	tmpfile, err := os.CreateTemp("", "catalog-*.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	src, err := os.Open("../../testdata/catalog.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+
+	_, err = io.Copy(tmpfile, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpfile.Close()
+
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{tmpfile.Name()})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	h := s.Handler()
+
+	updatedEntityYAML := `
+apiVersion: swcat.io/v1
+kind: Component
+metadata:
+  name: test-component
+  title: Updated Test Component
+spec:
+  type: service
+  lifecycle: production
+  owner: test-group
+  system: test-system
+`
+	form := url.Values{}
+	form.Set("yaml", updatedEntityYAML)
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/entities/component:default%2Ftest-component/edit", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	redirectURL := rr.Header().Get("HX-Redirect")
+	if redirectURL != "/ui/components/test-component" {
+		t.Fatalf("HX-Redirect = %q, want %q", redirectURL, "/ui/components/test-component")
+	}
+
+	// Check if the entity was actually updated in the repo
+	ref, _ := catalog.ParseRef("component:default/test-component")
+	entity := s.repo.Entity(ref)
+	if entity == nil {
+		t.Fatalf("entity not found in the repository")
+	}
+	if entity.GetMetadata().Title != "Updated Test Component" {
+		t.Fatalf("entity was not updated in the repository")
+	}
+
+	// Check if the file was updated
+	updatedContent, err := os.ReadFile(tmpfile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(updatedContent), "Updated Test Component") {
+		t.Fatalf("updated component was not written to the catalog file")
+	}
+}
+
+func TestUpdateEntity_ReadOnly(t *testing.T) {
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	s.opts.ReadOnly = true // Set read-only mode
+	h := s.Handler()
+
+	updatedEntityYAML := `
+apiVersion: swcat.io/v1
+kind: Component
+metadata:
+  name: test-component
+  title: Updated Test Component
+spec:
+  type: service
+  lifecycle: production
+  owner: test-group
+  system: test-system
+`
+	form := url.Values{}
+	form.Set("yaml", updatedEntityYAML)
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/entities/component:default%2Ftest-component/edit", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusPreconditionFailed {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusPreconditionFailed)
+	}
+}
+
+func TestUpdateEntity_NotFound(t *testing.T) {
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	h := s.Handler()
+
+	updatedEntityYAML := `
+apiVersion: swcat.io/v1
+kind: Component
+metadata:
+  name: not-found-component
+  title: Updated Test Component
+spec:
+  type: service
+  lifecycle: production
+  owner: test-group
+  system: test-system
+`
+	form := url.Values{}
+	form.Set("yaml", updatedEntityYAML)
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/entities/component:default%2Fnot-found-component/edit", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusNotFound)
+	}
+}
+
+func TestUpdateEntity_IDChange(t *testing.T) {
+	// Create a temporary copy of the catalog file
+	tmpfile, err := os.CreateTemp("", "catalog-*.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	src, err := os.Open("../../testdata/catalog.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+
+	_, err = io.Copy(tmpfile, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpfile.Close()
+
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{tmpfile.Name()})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	h := s.Handler()
+
+	updatedEntityYAML := `
+apiVersion: swcat.io/v1
+kind: Component
+metadata:
+  name: new-name-for-component
+  title: Updated Test Component
+spec:
+  type: service
+  lifecycle: production
+  owner: test-group
+  system: test-system
+`
+	form := url.Values{}
+	form.Set("yaml", updatedEntityYAML)
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/entities/component:default%2Ftest-component/edit", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	body := rr.Body.String()
+	if !strings.Contains(body, "Updated entity ID does not match original") {
+		t.Fatalf("expected error message not found in body: %s", body)
+	}
+}
+
+func TestDeleteEntity_OK(t *testing.T) {
+	// Create a temporary copy of the catalog file
+	tmpfile, err := os.CreateTemp("", "catalog-*.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	src, err := os.Open("../../testdata/catalog.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+
+	_, err = io.Copy(tmpfile, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpfile.Close()
+
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{tmpfile.Name()})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	h := s.Handler()
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/entities/component:default%2Ftest-component/delete", nil)
+	req.Header.Set("HX-Request", "true")
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	redirectURL := rr.Header().Get("HX-Redirect")
+	if redirectURL != "/ui/systems/test-system" {
+		t.Fatalf("HX-Redirect = %q, want %q", redirectURL, "/ui/systems/test-system")
+	}
+
+	// Check if the entity was actually deleted from the repo
+	ref, _ := catalog.ParseRef("component:default/test-component")
+	if s.repo.Entity(ref) != nil {
+		t.Fatalf("entity was not deleted from the repository")
+	}
+
+	// Check if the file was updated
+	updatedContent, err := os.ReadFile(tmpfile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(updatedContent), "name: test-component") {
+		t.Fatalf("deleted component was found in the catalog file")
+	}
+}
+
+func TestDeleteEntity_ReadOnly(t *testing.T) {
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	s.opts.ReadOnly = true // Set read-only mode
+	h := s.Handler()
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/entities/component:default%2Ftest-component/delete", nil)
+	req.Header.Set("HX-Request", "true")
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusPreconditionFailed {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusPreconditionFailed)
+	}
+}
+
+func TestDeleteEntity_NotFound(t *testing.T) {
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	h := s.Handler()
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/entities/component:default%2Fnot-found-component/delete", nil)
+	req.Header.Set("HX-Request", "true")
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusNotFound)
 	}
 }
