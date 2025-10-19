@@ -11,22 +11,6 @@ import (
 	"github.com/dnswlt/swcat/internal/store"
 )
 
-// Config holds repository-specific application configuration.
-// It is part of the config.Bundle that gets loaded at application startup.
-type Config struct {
-	// Prefix used to generate links to the source repository
-	// if the annotation "swcat/repo: default" is set.
-	// This is useful in setups where individual components and APIs live in
-	// separate repositories.
-	//
-	// Example:
-	//   repositoryURLPrefix: https://github.com/some-user
-	// In this case, each entity that has the "swcat/repo: default"
-	// annotation set will have an auto-generated metadata.links entry
-	// pointing to "https://github.com/example/some-user".
-	RepositoryURLPrefix string `yaml:"repositoryURLPrefix"`
-}
-
 type Repository struct {
 	// Maps containing the different kinds of entities in the repository.
 	//
@@ -391,6 +375,15 @@ func validDependsOnRef(ref *catalog.Ref) error {
 
 // Validate validates the repository (cross references exist, etc.).
 func (r *Repository) Validate() error {
+	// Validate against configured rules, if present
+	if v := r.config.Validation; v != nil {
+		for _, e := range r.allEntities {
+			if err := v.Accept(e); err != nil {
+				return fmt.Errorf("entity %s failed validation of configured rules: %v", e.GetRef(), err)
+			}
+		}
+	}
+
 	// Groups
 	for _, g := range r.groups {
 		qn := g.GetRef().QName()

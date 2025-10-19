@@ -19,3 +19,24 @@ svg:
   showVersionAsLabel: false
 catalog:
   repositoryURLPrefix: https://github.com/dnswlt/swcat
+  validation:
+    api:
+      type:
+        matches: 
+          - "http(s)?/.*"
+          - "grpc(/.*)?"
+          - "rest(/.*)?"
+      lifecycle: 
+        values: ["experimental", "production", "deprecated"]
+    resource:
+      type:
+        values: ["database", "cache"]
+    component:
+      type:
+        values: ["service", "batch", "support", "external"]
+      lifecycle: 
+        values: ["development", "production", "deprecated", "external"]
+    system:
+      type:
+        matches:
+          - ".*"  # just for fun

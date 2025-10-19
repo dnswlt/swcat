@@ -564,6 +564,7 @@ func (a *API) GetMetadata() *Metadata           { return a.Metadata }
 func (a *API) GetRef() *Ref                     { return newRef(KindAPI, a.Metadata) }
 func (a *API) GetQName() string                 { return a.Metadata.QName() }
 func (a *API) GetType() string                  { return a.Spec.Type }
+func (a *API) GetLifecycle() string             { return a.Spec.Lifecycle }
 func (a *API) GetOwner() *Ref                   { return a.Spec.Owner }
 func (a *API) GetProviders() []*LabelRef        { return a.Spec.inv.providers }
 func (a *API) GetConsumers() []*LabelRef        { return a.Spec.inv.consumers }
