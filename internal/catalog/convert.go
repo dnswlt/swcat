@@ -386,6 +386,9 @@ func NewGroupSpecFromAPI(g *api.GroupSpec) (*GroupSpec, error) {
 	if g == nil {
 		return nil, fmt.Errorf("GroupSpec is nil")
 	}
+	if g.Profile == nil {
+		return nil, fmt.Errorf("GroupSpecProfile is nil")
+	}
 	spec := &GroupSpec{
 		Type: g.Type,
 		Profile: &GroupSpecProfile{
