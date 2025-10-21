@@ -13,6 +13,10 @@ metadata:
   description: The owners of the flights domain.
 spec:
   type: team
+  members:
+    - Josef H.
+    - Peter K.
+    - Johnny B.
   profile:
     displayName: Flights Owner Group
     email: flights@example.com
@@ -163,6 +167,9 @@ kind: Component
 metadata:
   name: flights-avail-checker
   description: Checks for flight availability.
+  labels:
+    flights/language: java
+    flights/k8s-workload: Deployment
 spec:
   type: service
   lifecycle: production
@@ -202,6 +209,8 @@ kind: Component
 metadata:
   name: flights-routes
   description: Provides popular flight routes.
+  labels:
+    flights/k8s-workload: StatefulSet
 spec:
   type: service
   lifecycle: production

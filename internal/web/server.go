@@ -438,10 +438,6 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 	s.serveHTMLPage(w, r, "group_detail.html", params)
 }
 
-func (s *Server) serveHelp(w http.ResponseWriter, r *http.Request) {
-	s.serveHTMLPage(w, r, "help.html", nil)
-}
-
 func (s *Server) serveEntityYAML(w http.ResponseWriter, r *http.Request, entityRef string, templateFile string) {
 	ref, err := catalog.ParseRef(entityRef)
 	if err != nil {
@@ -769,10 +765,6 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("GET /ui/groups/{groupID}", func(w http.ResponseWriter, r *http.Request) {
 		groupID := r.PathValue("groupID")
 		s.serveGroup(w, r, groupID)
-	})
-
-	mux.HandleFunc("GET /ui/help", func(w http.ResponseWriter, r *http.Request) {
-		s.serveHelp(w, r)
 	})
 
 	mux.HandleFunc("GET /ui/entities/{entityRef}/edit", func(w http.ResponseWriter, r *http.Request) {

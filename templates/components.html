@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     {{ template "head.html" }}
 </head>
+
 <body class="min-h-screen bg-gray-50 p-4" data-page="components">
     {{ template "nav.html" . }}
 
@@ -10,42 +12,36 @@
         <h1 class="text-2xl font-semibold text-center">Components</h1>
 
         <!-- Search -->
-        <form role="search"
-            action="/ui/components"
-            method="get"
-            hx-get="/ui/components"
-            hx-target="#components-body"
-            hx-swap="innerHTML"
-            hx-indicator="#spinner"
-            hx-push-url="true"
-            hx-trigger="input from:#q delay:300ms, submit"
-            class="flex items-center gap-2">
+        <form role="search" action="/ui/components" method="get" hx-get="/ui/components" hx-target="#components-body"
+            hx-swap="innerHTML" hx-indicator="#spinner" hx-push-url="true"
+            hx-trigger="input from:#q delay:300ms, submit" class="flex items-center gap-2">
             <input id="q" name="q" type="search" value="{{ .Query }}" placeholder="Filter components"
-                    class="flex-1 px-3 py-2 border rounded-md" autocomplete="off"
-                    hx-trigger="input changed delay:300ms">
-            <a href="/ui/help#search" title="Search Help" class="w-7 h-7 bg-gray-200 text-gray-600 flex items-center justify-center rounded-full hover:bg-gray-300 shrink-0 text-lg">?</a>
+                class="flex-1 px-3 py-2 border rounded-md" autocomplete="off" hx-trigger="input changed delay:300ms">
+            <a href="https://dnswlt.github.io/swcat/user-guide/query-syntax/" target="_blank" title="Search Help"
+                class="w-7 h-7 bg-gray-200 text-gray-600 flex items-center justify-center rounded-full hover:bg-gray-300 shrink-0 text-lg">?</a>
             <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md">Search</button>
             <span id="spinner" class="htmx-indicator text-gray-500 text-sm hidden">Loading...</span>
         </form>
 
         <!-- Table -->
         <div class="overflow-x-auto">
-          <table class="min-w-full table-auto border-collapse">
-            <thead class="bg-gray-100">
-              <tr>
-                <th class="px-4 py-2 text-left">Name</th>
-                <th class="px-4 py-2 text-left">System</th>
-                <th class="px-4 py-2 text-left">Owner</th>
-                <th class="px-4 py-2 text-left">Tags</th>
-              </tr>
-            </thead>
-            <tbody id="components-body">
-              {{ template "components_rows.html" . }}
-            </tbody>
-          </table>
+            <table class="min-w-full table-auto border-collapse">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="px-4 py-2 text-left">Name</th>
+                        <th class="px-4 py-2 text-left">System</th>
+                        <th class="px-4 py-2 text-left">Owner</th>
+                        <th class="px-4 py-2 text-left">Tags</th>
+                    </tr>
+                </thead>
+                <tbody id="components-body">
+                    {{ template "components_rows.html" . }}
+                </tbody>
+            </table>
         </div>
     </main>
 
     <script type="module" src="/static/dist/main.js"></script>
 </body>
+
 </html>
