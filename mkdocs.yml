@@ -13,6 +13,7 @@ theme:
     - navigation.tabs
     - navigation.sections
     - navigation.top
+    - navigation.indexes
 
 # The navigation structure
 nav:
@@ -20,7 +21,16 @@ nav:
   - 'Getting started': 'getting-started.md'
   - 'User guide':
     - 'Overview': 'user-guide/index.md'
-    - 'Catalog': 'user-guide/catalog.md'
+    - 'Catalog': 
+      - 'user-guide/catalog/index.md'
+      - 'Metadata': 'user-guide/catalog/metadata.md'
+      - 'Entity References': 'user-guide/catalog/entity-references.md'
+      - 'Domain': 'user-guide/catalog/domain.md'
+      - 'System': 'user-guide/catalog/system.md'
+      - 'Component': 'user-guide/catalog/component.md'
+      - 'Resource': 'user-guide/catalog/resource.md'
+      - 'API': 'user-guide/catalog/api.md'
+      - 'Group': 'user-guide/catalog/group.md'
     - 'Configuration': 'user-guide/configuration.md'
     - 'Query syntax': 'user-guide/query-syntax.md'
 
