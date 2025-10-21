@@ -1,0 +1,76 @@
+apiVersion: swcat/v1
+kind: Domain
+metadata:
+  name: iam
+  description: Identity and access management, single sign-on.
+spec:
+  owner: iam-owner
+---
+apiVersion: swcat/v1
+kind: Group
+metadata:
+  name: iam-owner
+  description: The owners of the IAM domain.
+spec:
+  type: team
+  profile:
+    displayName: IAM Owner Group
+    email: iam@example.com
+---
+apiVersion: swcat/v1
+kind: System
+metadata:
+  name: iam-system
+  title: IAM
+  description: Handles all identity and access management.
+spec:
+  owner: iam-owner
+  domain: iam
+---
+apiVersion: swcat/v1
+kind: API
+metadata:
+  name: sso-api
+  description: API for Single Sign-On.
+spec:
+  type: oidc
+  lifecycle: production
+  owner: iam-owner
+  system: iam-system
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: sso-service
+  description: The Single Sign-On service.
+spec:
+  type: service
+  lifecycle: production
+  owner: iam-owner
+  system: iam-system
+  providesApis:
+    - sso-api
+---
+apiVersion: swcat/v1
+kind: API
+metadata:
+  name: user-management-api
+  description: API for managing user identities.
+spec:
+  type: grpc/protobuf
+  lifecycle: production
+  owner: iam-owner
+  system: iam-system
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: user-management-service
+  description: The user management service.
+spec:
+  type: service
+  lifecycle: production
+  owner: iam-owner
+  system: iam-system
+  providesApis:
+    - user-management-api

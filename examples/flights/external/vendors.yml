@@ -1,0 +1,89 @@
+apiVersion: swcat/v1
+kind: Domain
+metadata:
+  namespace: external
+  name: ticket-vendors
+  description: External ticket vendor systems.
+spec:
+  owner: external/vendor-owner
+---
+apiVersion: swcat/v1
+kind: Group
+metadata:
+  namespace: external
+  name: vendor-owner
+  description: The owners of the ticket vendor domain.
+spec:
+  type: team
+  profile:
+    displayName: Vendor Owner Group
+    email: vendors@example.com
+---
+apiVersion: swcat/v1
+kind: System
+metadata:
+  namespace: external
+  name: vendor-alpha
+  title: Ticket Vendor Alpha
+  description: Fictitious ticket vendor Alpha.
+spec:
+  owner: external/vendor-owner
+  domain: external/ticket-vendors
+---
+apiVersion: swcat/v1
+kind: API
+metadata:
+  namespace: external
+  name: vendor-alpha-api
+  description: API for ticket vendor Alpha.
+spec:
+  type: https/json
+  lifecycle: production
+  owner: external/vendor-owner
+  system: external/vendor-alpha
+---
+apiVersion: swcat/v1
+kind: System
+metadata:
+  namespace: external
+  name: vendor-beta
+  title: Ticket Vendor Beta
+  description: Fictitious ticket vendor Beta.
+spec:
+  owner: external/vendor-owner
+  domain: external/ticket-vendors
+---
+apiVersion: swcat/v1
+kind: API
+metadata:
+  namespace: external
+  name: vendor-beta-api
+  description: API for ticket vendor Beta.
+spec:
+  type: https/json
+  lifecycle: production
+  owner: external/vendor-owner
+  system: external/vendor-beta
+---
+apiVersion: swcat/v1
+kind: System
+metadata:
+  namespace: external
+  name: vendor-gamma
+  title: Ticket Vendor Gamma
+  description: Fictitious ticket vendor Gamma.
+spec:
+  owner: external/vendor-owner
+  domain: external/ticket-vendors
+---
+apiVersion: swcat/v1
+kind: API
+metadata:
+  namespace: external
+  name: vendor-gamma-api
+  description: API for ticket vendor Gamma.
+spec:
+  type: https/xml
+  lifecycle: production
+  owner: external/vendor-owner
+  system: external/vendor-gamma

@@ -1,0 +1,266 @@
+apiVersion: swcat/v1
+kind: Domain
+metadata:
+  name: flights
+  description: Everything related to flight search and booking.
+spec:
+  owner: flights-owner
+---
+apiVersion: swcat/v1
+kind: Group
+metadata:
+  name: flights-owner
+  description: The owners of the flights domain.
+spec:
+  type: team
+  profile:
+    displayName: Flights Owner Group
+    email: flights@example.com
+---
+apiVersion: swcat/v1
+kind: System
+metadata:
+  name: flights-frontend
+  title: Flights Frontend
+  description: The user-facing web application for searching and booking flights.
+spec:
+  owner: flights-owner
+  domain: flights
+---
+apiVersion: swcat/v1
+kind: System
+metadata:
+  name: flights-search
+  title: Flights Search
+  description: Backend service for searching flights.
+spec:
+  owner: flights-owner
+  domain: flights
+---
+apiVersion: swcat/v1
+kind: System
+metadata:
+  name: flights-cache
+  title: Flights Cache
+  description: Caching layer for flight search results.
+spec:
+  owner: flights-owner
+  domain: flights
+---
+apiVersion: swcat/v1
+kind: System
+metadata:
+  name: flights-tickets
+  title: Flights Tickets
+  description: Handles flight ticket purchases.
+spec:
+  owner: flights-owner
+  domain: flights
+---
+apiVersion: swcat/v1
+kind: API
+metadata:
+  name: flights-cache-api
+  description: API for caching flight search results.
+spec:
+  type: grpc/protobuf
+  lifecycle: production
+  owner: flights-owner
+  system: flights-cache
+---
+apiVersion: swcat/v1
+kind: API
+metadata:
+  name: flights-search-api
+  description: API for searching flights.
+spec:
+  type: grpc/protobuf
+  lifecycle: production
+  owner: flights-owner
+  system: flights-search
+---
+apiVersion: swcat/v1
+kind: API
+metadata:
+  name: flights-purchase-api
+  description: API for purchasing flight tickets.
+spec:
+  type: grpc/protobuf
+  lifecycle: production
+  owner: flights-owner
+  system: flights-tickets
+---
+apiVersion: swcat/v1
+kind: API
+metadata:
+  name: flights-availability-api
+  description: API for checking flight availability.
+spec:
+  type: grpc/protobuf
+  lifecycle: production
+  owner: flights-owner
+  system: flights-tickets
+---
+apiVersion: swcat/v1
+kind: Resource
+metadata:
+  name: flights-inmem-cache
+  description: The in-memory cache for flight data.
+spec:
+  type: cache
+  owner: flights-owner
+  system: flights-cache
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: cache-loader
+  description: Populates the flight cache.
+spec:
+  type: job
+  lifecycle: production
+  owner: flights-owner
+  system: flights-cache
+  dependsOn:
+    - resource:flights-inmem-cache "populate"
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: cache-server
+  description: Provides the flights cache API.
+spec:
+  type: service
+  lifecycle: production
+  owner: flights-owner
+  system: flights-cache
+  providesApis:
+    - flights-cache-api
+  dependsOn:
+    - resource:flights-inmem-cache "read"
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: flights-search-backend
+  description: The backend for searching flights.
+spec:
+  type: service
+  lifecycle: production
+  owner: flights-owner
+  system: flights-search
+  providesApis:
+    - flights-search-api
+  consumesApis:
+    - flights-cache-api
+    - analytics-events-api
+  dependsOn:
+    - component:flights-avail-checker
+    - component:flights-routes
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: flights-avail-checker
+  description: Checks for flight availability.
+spec:
+  type: service
+  lifecycle: production
+  owner: flights-owner
+  system: flights-search
+  consumesApis:
+    - flights-availability-api
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: flights-frontend-service
+  description: The user-facing frontend service.
+spec:
+  type: service
+  lifecycle: production
+  owner: flights-owner
+  system: flights-frontend
+  consumesApis:
+    - flights-search-api
+    - flights-purchase-api
+    - sso-api
+    - analytics-events-api
+---
+apiVersion: swcat/v1
+kind: Resource
+metadata:
+  name: routes-database
+  description: Stores the most popular routes per origin and destination.
+spec:
+  type: database
+  owner: flights-owner
+  system: flights-search
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: flights-routes
+  description: Provides popular flight routes.
+spec:
+  type: service
+  lifecycle: production
+  owner: flights-owner
+  system: flights-search
+  dependsOn:
+    - resource:routes-database
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: availability-aggregator
+  description: Aggregates availability from multiple ticket vendors.
+spec:
+  type: service
+  lifecycle: production
+  owner: flights-owner
+  system: flights-tickets
+  providesApis:
+    - flights-availability-api
+  consumesApis:
+    - external/vendor-alpha-api
+    - external/vendor-beta-api
+    - external/vendor-gamma-api
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: purchase-forwarder
+  description: Forwards purchase requests to the appropriate ticket vendor.
+spec:
+  type: service
+  lifecycle: production
+  owner: flights-owner
+  system: flights-tickets
+  providesApis:
+    - flights-purchase-api
+  consumesApis:
+    - external/vendor-alpha-api
+    - external/vendor-beta-api
+    - external/vendor-gamma-api
+  dependsOn:
+    - component:internal-payment-handler
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: internal-payment-handler
+  description: >
+    Handles internal payments and sends payment data to Vendor Alpha. This is a special case for Vendor Alpha, which lets us handle the payment.
+
+spec:
+  type: service
+  lifecycle: production
+  owner: flights-owner
+  system: flights-tickets
+  consumesApis:
+    - credit-card-process
+    - digital-wallet-process
+    - 'external/vendor-alpha-api "send payment data"'
+    - 'user-management-api "fetch user details"'
+    - analytics-events-api

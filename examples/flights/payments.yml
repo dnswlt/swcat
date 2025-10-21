@@ -1,0 +1,98 @@
+apiVersion: swcat/v1
+kind: Domain
+metadata:
+  name: payments
+  description: Services for handling flight purchases.
+spec:
+  owner: payments-owner
+---
+apiVersion: swcat/v1
+kind: Group
+metadata:
+  name: payments-owner
+  description: The owners of the payments domain.
+spec:
+  type: team
+  profile:
+    displayName: Payments Owner Group
+    email: payments@example.com
+---
+apiVersion: swcat/v1
+kind: System
+metadata:
+  name: credit-card-payments
+  title: Credit Card Payments
+  description: Handles all credit card payments.
+spec:
+  owner: payments-owner
+  domain: payments
+---
+apiVersion: swcat/v1
+kind: System
+metadata:
+  name: digital-wallet-payments
+  title: Digital Wallet Payments
+  description: Handles payments from digital wallets like PayPal.
+spec:
+  owner: payments-owner
+  domain: payments
+---
+apiVersion: swcat/v1
+kind: API
+metadata:
+  name: credit-card-check
+  description: Checks if a credit card is valid.
+spec:
+  type: https/json
+  lifecycle: production
+  owner: payments-owner
+  system: credit-card-payments
+---
+apiVersion: swcat/v1
+kind: API
+metadata:
+  name: credit-card-process
+  description: Processes a credit card payment.
+spec:
+  type: https/json
+  lifecycle: production
+  owner: payments-owner
+  system: credit-card-payments
+---
+apiVersion: swcat/v1
+kind: API
+metadata:
+  name: digital-wallet-process
+  description: Processes a digital wallet payment.
+spec:
+  type: https/json
+  lifecycle: production
+  owner: payments-owner
+  system: digital-wallet-payments
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: cc-payment-service
+  description: The credit card payment service.
+spec:
+  type: service
+  lifecycle: production
+  owner: payments-owner
+  system: credit-card-payments
+  providesApis:
+    - credit-card-check
+    - credit-card-process
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: dw-payment-service
+  description: The digital wallet payment service.
+spec:
+  type: service
+  lifecycle: production
+  owner: payments-owner
+  system: digital-wallet-payments
+  providesApis:
+    - digital-wallet-process

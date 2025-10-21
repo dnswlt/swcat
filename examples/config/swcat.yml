@@ -26,14 +26,16 @@ catalog:
           - "http(s)?/.*"
           - "grpc(/.*)?"
           - "rest(/.*)?"
+          - "kafka(/.*)?"
+          - "oidc"
       lifecycle: 
         values: ["experimental", "production", "deprecated"]
     resource:
       type:
-        values: ["database", "cache"]
+        values: ["database", "analytics-database", "cache", "kafka"]
     component:
       type:
-        values: ["service", "batch", "support", "external"]
+        values: ["service", "job", "support", "external"]
       lifecycle: 
         values: ["development", "production", "deprecated", "external"]
     system:

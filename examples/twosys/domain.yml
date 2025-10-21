@@ -1,8 +1,0 @@
-apiVersion: swcat/v1alpha1
-kind: Domain
-metadata:
-  name: plants-domain
-  title: The plants domain
-spec:
-  owner: plants-owners-team
-  type: division

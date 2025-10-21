@@ -30,4 +30,4 @@ with minor adjustments to required and optional fields:
 The fields of each entity kind are documented in
 [internal/api/api.go](https://github.com/dnswlt/swcat/blob/main/internal/api/api.go)
 
-See [examples/](https://github.com/dnswlt/swcat/tree/main/examples/twosys) for example definitions.
+See [examples/](https://github.com/dnswlt/swcat/tree/main/examples/flights) for example definitions.

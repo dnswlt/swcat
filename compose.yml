@@ -4,6 +4,6 @@ services:
     ports:
       - "9191:8080" # host:container
     volumes:
-      - ${CATALOG_DIR:-./examples/twosys}:/catalog:rw
+      - ${CATALOG_DIR:-./examples/flights}:/catalog:rw
     restart: unless-stopped
     user: "${UID}:${GID}" # Ensure files written on the host env have proper ownership.

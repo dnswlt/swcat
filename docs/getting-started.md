@@ -8,7 +8,7 @@ git clone https://github.com/dnswlt/swcat.git
 
 ## Getting started (Docker)
 
-To run `swcat` locally in Docker and serve the [example catalog folder](https://github.com/dnswlt/swcat/tree/main/examples/twosys):
+To run `swcat` locally in Docker and serve the [example catalog folder](https://github.com/dnswlt/swcat/tree/main/examples/flights):
 
 Before the first execution, set up the `.env` file, so files modified inside the container 
 have proper user and group IDs  on the host file system:
@@ -67,7 +67,7 @@ cd ..
 Now run the server, using the example catalog files:
 
 ```bash
-go run ./cmd/swcat -addr localhost:9191 -config examples/config/swcat.yml examples/twosys
+go run ./cmd/swcat -addr localhost:9191 -config examples/config/swcat.yml examples/flights
 ```
 
 Point your browser at <http://localhost:9191> and explore the example catalog.
