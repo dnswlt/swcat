@@ -45,6 +45,10 @@ at `$CATALOG_DIR/swcat.yml`.
 CATALOG_DIR=/abs/path/to/your/catalog make docker-up
 ```
 
+!!! tip
+    `swcat` refuses to start if there are catalog validation errors.
+    Check the stderr logs in such cases to understand the problem.
+
 ## Getting started (w/out Docker)
 
 ### Prequisites
