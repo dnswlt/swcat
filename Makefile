@@ -31,7 +31,7 @@ docker-build:
 	$(DC) build
 
 docker-up:
-	$(DC) up -d
+	$(DC) up
 
 docker-stop:
 	$(DC) stop

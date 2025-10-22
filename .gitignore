@@ -7,3 +7,4 @@ swcat.exe
 .vscode
 .venv/
 .markdownlint.json
+.env
