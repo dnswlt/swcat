@@ -105,6 +105,13 @@ var attributeAccessors = map[string]attributeAccessor{
 		}
 		return nil, false // No owner
 	},
+	"system": func(e catalog.Entity) ([]string, bool) {
+		sp, ok := e.(catalog.SystemPart)
+		if !ok {
+			return nil, false
+		}
+		return []string{sp.GetSystem().QName()}, true
+	},
 	"type": func(e catalog.Entity) ([]string, bool) {
 		if t := e.GetType(); t != "" {
 			return []string{t}, true

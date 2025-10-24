@@ -7,6 +7,19 @@ import (
 )
 
 func TestEvaluator_Matches(t *testing.T) {
+	sys1 := &catalog.System{
+		Metadata: &catalog.Metadata{
+			Name:      "my-system",
+			Namespace: "production",
+			Title:     "My Production System",
+			Tags:      []string{"java", "prod"},
+			Labels:    map[string]string{"env": "prod", "critical": "true"},
+		},
+		Spec: &catalog.SystemSpec{
+			Type:  "workflow",
+			Owner: &catalog.Ref{Name: "team-b"},
+		},
+	}
 	comp1 := &catalog.Component{
 		Metadata: &catalog.Metadata{
 			Name:        "test-component",
@@ -20,20 +33,7 @@ func TestEvaluator_Matches(t *testing.T) {
 			Type:      "service",
 			Lifecycle: "experimental",
 			Owner:     &catalog.Ref{Name: "team-a"},
-		},
-	}
-
-	sys1 := &catalog.System{
-		Metadata: &catalog.Metadata{
-			Name:      "my-system",
-			Namespace: "production",
-			Title:     "My Production System",
-			Tags:      []string{"java", "prod"},
-			Labels:    map[string]string{"env": "prod", "critical": "true"},
-		},
-		Spec: &catalog.SystemSpec{
-			Type:  "workflow",
-			Owner: &catalog.Ref{Name: "team-b"},
+			System:    sys1.GetRef(),
 		},
 	}
 
@@ -85,6 +85,13 @@ func TestEvaluator_Matches(t *testing.T) {
 		{
 			name:      "contains attribute match",
 			query:     "owner:team",
+			entity:    comp1,
+			wantMatch: true,
+			wantErr:   false,
+		},
+		{
+			name:      "system attribute match",
+			query:     "system:my-system",
 			entity:    comp1,
 			wantMatch: true,
 			wantErr:   false,

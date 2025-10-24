@@ -36,6 +36,7 @@ The following attributes are available for filtering:
 * `tag`: A tag associated with the entity.
 * `label`: A label associated with the entity (searches both key and value).
 * `owner`: The owner of the entity.
+* `system`: The system that the entity is a part of (for components, apis, resources).
 * `type`: The type of the entity (e.g., for components, apis, groups).
 * `lifecycle`: The lifecycle state of the entity (e.g., for components and apis).
 
