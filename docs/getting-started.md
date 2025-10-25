@@ -1,17 +1,38 @@
 # Getting started
 
-Whether you run swcat in Docker or natively, check out the source code repo first:
+## Getting started (Windows)
+
+### Prequisites
+
+* Install [Graphviz](https://graphviz.org/download/).
+* Download the latest binary release version `swcat-<version>.zip` from the
+   [GitHub releases page](https://github.com/dnswlt/swcat/releases).
+
+### Run swcat
+
+Unpack `swcat-<version>.zip` to any folder you like and run:
 
 ```bash
-git clone https://github.com/dnswlt/swcat.git
+swcat.exe -addr localhost:9191 -config examples/config/swcat.yml examples/flights
 ```
+
+Point your browser at <http://localhost:9191> and explore the example catalog.
+
+Adjust the `-config` path and path to the catalog files (`examples/flights`) to any
+software catalog you want to view or edit.
 
 ## Getting started (Docker)
 
 To run `swcat` locally in Docker and serve the [example catalog folder](https://github.com/dnswlt/swcat/tree/main/examples/flights):
 
-Before the first execution, set up the `.env` file, so files modified inside the container 
-have proper user and group IDs  on the host file system:
+Check out the source code repo:
+
+```bash
+git clone https://github.com/dnswlt/swcat.git
+```
+
+Before the first execution, set up the `.env` file, so files modified inside the
+container have proper user and group IDs  on the host file system:
 
 ```bash
 # in the repo root
@@ -58,6 +79,12 @@ CATALOG_DIR=/abs/path/to/your/catalog make docker-up
 * Install [Graphviz](https://graphviz.org/download/).
 
 ### Build and run
+
+Check out the source code repo:
+
+```bash
+git clone https://github.com/dnswlt/swcat.git
+```
 
 Build the frontend artifacts:
 
