@@ -23,12 +23,12 @@ The valid `metadata` fields are the following:
 * `title` - *optional* - A display name of the entity, used in certain places in the UI.
 
 * `description` - *optional* - A short description of the entity (one or a few lines max.)
-    Do not use this field to document a component, API, etc. in detail, but use links to
-    point to external documentation.
+    Do not use this field to document a component, API, etc. in detail, but use
+    the `links` field to reference external documentation.
 
 * `labels` - *optional* - User-specified key/value pairs
-    that are displayed as small chips in the swcat UI entity detail view and can be used
-    for filtering entities.
+    that are displayed as small chips in the swcat UI entity detail view and
+    that can be used for filtering entities.
     See the k8s documentation for the intended semantics of
     [labels](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/).
 
@@ -47,12 +47,20 @@ The valid `metadata` fields are the following:
         configuration file as `repositoryURLPrefix`.
     * `swcat/stereotype` - A `<<stereotype>>` label that should be shown for the node
         in SVG diagrams.
-    * `swcat/fillcolor` - An SVG color name or 6-digit hex color code (e.g., `#7f7f7f`) that
-        should be used to color the entity node in SVG diagrams.
+    * `swcat/fillcolor` - An SVG color name or 6-digit hex color code
+        (e.g., `#7f7f7f`) that should be used to color the entity node in SVG diagrams.
 
-* `tags` - *optional* - A list of single-valued strings that can used to, well, tag entities.
+* `tags` - *optional* - A list of single-valued strings that can used to, well,
+    tag entities.
 
-* `links` - *optional* - A list of external hyperlinks related to the entity (e.g., documentation).
+* `links` - *optional* - A list of external hyperlinks related to the entity
+    (e.g., documentation).
+
+    * `url` - *required* - The URL that the link points to.
+    * `title` - *optional* - The title of the link (shown instead of the raw URL, if given).
+    * `type` - *optional* - The type of link, e.g., "documentation".
+    * `icon` - *optional* - The name of an icon to display along with the link.
+        Currently not interpreted by `swcat`.
 
 Example:
 

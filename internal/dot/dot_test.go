@@ -87,6 +87,7 @@ edge[fontname="sans-serif",fontsize="11",minlen="3"]
 subgraph "cluster_svg-cluster-0" {
 id="svg-cluster-0"
 label="sys1"
+fontsize="11"
 style=filled
 fillcolor="#f3f4f6"
 "c1"[id="c1",label="c1",fillcolor="#D2E5EF",shape="box",style="filled,rounded",class="clickable-node"]

@@ -43,6 +43,7 @@
     .graphviz-svg text.node-label-small {
         font-size: 9px;
         font-style: italic;
+        fill: #6b7280;
     }
     .graphviz-svg text.node-label-em {
         font-style: italic;

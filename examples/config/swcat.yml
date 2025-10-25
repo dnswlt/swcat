@@ -14,6 +14,8 @@ svg:
       external: '#ffbf79'
   # Include the API provider (component) in labels of API entities.
   showAPIProvider: true
+  # Include the parent system in labels of component, resource, and API entities.
+  showParentSystem: true
   # Show the API version in consumedApis/providedApis references, if specified
   # and unless an explicit label is present.
   showVersionAsLabel: false

@@ -31,6 +31,13 @@ func (r *Renderer) entityNode(e catalog.Entity) dot.Node {
 	}
 }
 
+func (r *Renderer) entityNodeContext(e, contextEntity catalog.Entity) dot.Node {
+	return dot.Node{
+		ID:     e.GetRef().String(),
+		Layout: r.layouter.NodeContext(e, contextEntity),
+	}
+}
+
 func (r *Renderer) entityEdge(from, to catalog.Entity, style dot.EdgeStyle) dot.Edge {
 	return dot.Edge{
 		From:   from.GetRef().String(),
@@ -439,13 +446,13 @@ func (r *Renderer) generateComponentDotSource(component *catalog.Component) *dot
 	}
 	for _, a := range component.Spec.ProvidesAPIs {
 		ap := r.repo.API(a.Ref)
-		dw.AddNode(r.entityNode(ap))
+		dw.AddNode(r.entityNodeContext(ap, component))
 		dw.AddEdge(r.entityEdgeLabel(ap, component, a, dot.ESProvidedBy))
 	}
 	for _, d := range component.GetDependents() {
 		e := r.repo.Entity(d.Ref)
 		if e != nil {
-			dw.AddNode(r.entityNode(e))
+			dw.AddNode(r.entityNodeContext(e, component))
 			dw.AddEdge(r.entityEdgeLabel(e, component, d, dot.ESDependsOn))
 		}
 	}
@@ -455,13 +462,13 @@ func (r *Renderer) generateComponentDotSource(component *catalog.Component) *dot
 	// - DependsOn relationships of this entity
 	for _, a := range component.Spec.ConsumesAPIs {
 		ap := r.repo.API(a.Ref)
-		dw.AddNode(r.entityNode(ap))
+		dw.AddNode(r.entityNodeContext(ap, component))
 		dw.AddEdge(r.entityEdgeLabel(component, ap, a, dot.ESNormal))
 	}
 	for _, d := range component.Spec.DependsOn {
 		e := r.repo.Entity(d.Ref)
 		if e != nil {
-			dw.AddNode(r.entityNode(e))
+			dw.AddNode(r.entityNodeContext(e, component))
 			dw.AddEdge(r.entityEdgeLabel(component, e, d, dot.ESDependsOn))
 		}
 	}
@@ -500,7 +507,7 @@ func (r *Renderer) generateAPIDotSource(api *catalog.API) *dot.DotSource {
 	for _, p := range api.GetProviders() {
 		provider := r.repo.Component(p.Ref)
 		if provider != nil {
-			dw.AddNode(r.entityNode(provider))
+			dw.AddNode(r.entityNodeContext(provider, api))
 			dw.AddEdge(r.entityEdgeLabel(api, provider, p, dot.ESProvidedBy))
 		}
 	}
@@ -509,7 +516,7 @@ func (r *Renderer) generateAPIDotSource(api *catalog.API) *dot.DotSource {
 	for _, c := range api.GetConsumers() {
 		consumer := r.repo.Component(c.Ref)
 		if consumer != nil {
-			dw.AddNode(r.entityNode(consumer))
+			dw.AddNode(r.entityNodeContext(consumer, api))
 			dw.AddEdge(r.entityEdgeLabel(consumer, api, c, dot.ESNormal))
 		}
 	}

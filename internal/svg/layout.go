@@ -1,14 +1,24 @@
 package svg
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/dot"
 )
 
+type NodeOptions struct {
+	IncludeSystemPart bool
+}
+
 type Layouter interface {
 	Node(e catalog.Entity) dot.NodeLayout
+	// NodeContext lays out the given entity e as a node in the context of contextEntity.
+	// The context is used to determine how to lay out e. For example, a component
+	// might include the containing system's name in its label only if it is rendered
+	// in a context of an entity belonging to a different system.
+	NodeContext(e, contextEntity catalog.Entity) dot.NodeLayout
 	Edge(src, dst catalog.Entity, style dot.EdgeStyle) dot.EdgeLayout
 	EdgeLabel(src, dst catalog.Entity, ref *catalog.LabelRef, style dot.EdgeStyle) dot.EdgeLayout
 }
@@ -101,24 +111,64 @@ func (l *StandardLayouter) stereotype(e catalog.Entity) (string, bool) {
 	return strings.Join(values, ", "), true
 }
 
-func (l *StandardLayouter) label(e catalog.Entity) string {
+func sameSystem(e1, e2 catalog.Entity) bool {
+	sp1, ok1 := e1.(catalog.SystemPart)
+	if !ok1 {
+		return false
+	}
+	sp2, ok2 := e2.(catalog.SystemPart)
+	if !ok2 {
+		return false
+	}
+	return sp1.GetSystem().Equal(sp2.GetSystem())
+}
+
+func (l *StandardLayouter) label(e, contextEntity catalog.Entity) string {
 	var label strings.Builder
 
+	// <<Stereotypes>>
 	if st, ok := l.stereotype(e); ok {
 		label.WriteString(PrefixNodeLabelEm + `&laquo;` + st + `&raquo;\n`)
 	}
 
+	// Parent system, if applicable (e is not a system itself, and the contextEntity is from another system).
+	systemName := func() (string, bool) {
+		sp, isSystemPart := e.(catalog.SystemPart)
+		if !isSystemPart {
+			return "", false
+		}
+		if !l.config.ShowParentSystem || e.GetKind() == catalog.KindSystem {
+			return "", false
+		}
+		if contextEntity == nil || sameSystem(e, contextEntity) {
+			return "", false
+		}
+		return sp.GetSystem().QName(), true
+	}
+	sysName, addSystemName := systemName()
+	if addSystemName {
+		label.WriteString(PrefixNodeLabelSmall + sysName + `\n`)
+	}
+
+	// Qualified entity name
 	meta := e.GetMetadata()
 	if meta.Namespace != "" && meta.Namespace != catalog.DefaultNamespace {
-		// Two-line label for namespaced entities.
-		label.WriteString(meta.Namespace + `/\n`)
+		// Wrap line between namespace and name if label gets too long.
+		label.WriteString(meta.Namespace + "/")
+		if len(meta.Namespace+"/"+meta.Name) > 30 {
+			label.WriteString(`\n`)
+		}
 	}
 	label.WriteString(meta.Name)
 
-	if a, ok := e.(*catalog.API); ok && l.config.ShowAPIProvider {
+	// API provider component, if applicable and if parent system isn't already shown (to avoid visual overload).
+	if a, ok := e.(*catalog.API); ok && l.config.ShowAPIProvider && !addSystemName {
 		providers := a.GetProviders()
-		if len(providers) > 0 {
-			label.WriteString(`\n` + PrefixNodeLabelSmall + " " + providers[0].QName())
+		if l := len(providers); l > 0 {
+			label.WriteString(`\n` + PrefixNodeLabelSmall + providers[0].QName())
+			if l > 1 {
+				fmt.Fprintf(&label, "+%d", l-1)
+			}
 		}
 	}
 
@@ -126,9 +176,13 @@ func (l *StandardLayouter) label(e catalog.Entity) string {
 }
 
 func (l *StandardLayouter) Node(e catalog.Entity) dot.NodeLayout {
+	return l.NodeContext(e, nil)
+}
+
+func (l *StandardLayouter) NodeContext(e, contextEntity catalog.Entity) dot.NodeLayout {
 
 	return dot.NodeLayout{
-		Label:     l.label(e),
+		Label:     l.label(e, contextEntity),
 		FillColor: l.fillColor(e),
 		Shape:     l.shape(e),
 	}

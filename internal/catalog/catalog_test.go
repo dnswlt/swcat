@@ -4,6 +4,9 @@ import (
 	"testing"
 )
 
+// Interface assertion: a System should be a system part
+var _ SystemPart = (*System)(nil)
+
 func TestMetadata_GetQName(t *testing.T) {
 	tests := []struct {
 		name     string

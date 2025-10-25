@@ -339,6 +339,7 @@ func (dw *Writer) StartCluster(label string) {
 	fmt.Fprintf(dw.w, "subgraph \"cluster_%s\" {\n", clusterID)
 	fmt.Fprintf(dw.w, "id=\"%s\"\n", clusterID)
 	fmt.Fprintf(dw.w, "label=\"%s\"\n", label)
+	fmt.Fprintf(dw.w, "fontsize=\"11\"\n")
 	fmt.Fprintf(dw.w, "style=filled\n")
 	fmt.Fprintf(dw.w, "fillcolor=\"#f3f4f6\"\n")
 }
