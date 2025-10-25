@@ -1,10 +1,14 @@
 package repo
 
 import (
+	"cmp"
 	"fmt"
 	"log"
+	"net/url"
+	"regexp"
 	"slices"
 	"strings"
+	"text/template"
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/query"
@@ -440,7 +444,7 @@ func (r *Repository) Validate() error {
 			if val, ok := a.GetAttr(catalog.VersionAttrKey); ok {
 				// Check that referenced API version exists
 				if !slices.ContainsFunc(ap.Spec.Versions, func(v *catalog.APISpecVersion) bool {
-					return v.Name == val
+					return v.Version.RawVersion == val
 				}) {
 					return fmt.Errorf("provided API %q for component %s does not exist in version %q", a, qn, val)
 				}
@@ -454,7 +458,7 @@ func (r *Repository) Validate() error {
 			if val, ok := a.GetAttr(catalog.VersionAttrKey); ok {
 				// Check that referenced API version exists
 				if !slices.ContainsFunc(ap.Spec.Versions, func(v *catalog.APISpecVersion) bool {
-					return v.Name == val
+					return v.Version.RawVersion == val
 				}) {
 					return fmt.Errorf("consumed API %q for component %s does not exist in version %q", a, qn, val)
 				}
@@ -499,7 +503,7 @@ func (r *Repository) Validate() error {
 			return fmt.Errorf("owner %q for API %s is undefined", s.Owner, qn)
 		}
 		for _, v := range s.Versions {
-			if v.Name == "" {
+			if v.Version.RawVersion == "" {
 				return fmt.Errorf("version name is empty for API %s", qn)
 			}
 		}
@@ -588,7 +592,10 @@ func (r *Repository) Validate() error {
 	// Validation succeeded: postprocess entities.
 	r.populateRelationships()
 	r.sortReferences()
-	r.addGeneratedLinks()
+
+	if err := r.addGeneratedLinks(); err != nil {
+		return fmt.Errorf("error generating annotation-based links: %w", err)
+	}
 
 	return nil
 }
@@ -689,37 +696,131 @@ func (r *Repository) sortReferences() {
 
 }
 
-func (r *Repository) addGeneratedLinks() {
-	defaultRepoPrefix := strings.TrimSuffix(r.config.RepositoryURLPrefix, "/")
+// isValidAbsoluteURL checks if a string is a valid, absolute URL
+// with a scheme (like "http" or "https") and a host.
+func isValidAbsoluteURL(s string) bool {
+	u, err := url.ParseRequestURI(s)
+	if err != nil {
+		return false
+	}
+	return u.Scheme != "" && u.Host != ""
+}
 
+// linkTemplates
+type linkTemplates struct {
+	url        *template.Template
+	title      *template.Template
+	hasVersion bool // Indicates whether a {{ Version[.*] }} annotation is present in url or title.
+}
+
+// prepareLinkTemplates compiles all url and title templates found in the config.
+func (r *Repository) prepareLinkTemplates() (map[string]linkTemplates, error) {
+	tmpls := map[string]linkTemplates{}
+	versionPlaceholderRE := regexp.MustCompile(`\{\{\s*\.Version\b`)
+
+	for annot, abl := range r.config.AnnotationBasedLinks {
+		if abl == nil {
+			return nil, fmt.Errorf("annotation-based label for %q is nil", annot)
+		}
+		if strings.TrimSpace(abl.URL) == "" {
+			return nil, fmt.Errorf("annotation-based label for %q has an empty URL", annot)
+		}
+		urlTmpl, err := template.New("url").Parse(abl.URL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid URL template for annotation %q: %v", annot, err)
+		}
+		urlTmpl.Option("missingkey=error")
+		titleTmpl, err := template.New("title").Parse(abl.Title)
+		if err != nil {
+			return nil, fmt.Errorf("invalid title template for annotation %q: %v", annot, err)
+		}
+		titleTmpl.Option("missingkey=error")
+		// If either template references .Version, make this a per-version template.
+		hasVersion := versionPlaceholderRE.MatchString(abl.URL + " " + abl.Title)
+		tmpls[annot] = linkTemplates{url: urlTmpl, title: titleTmpl, hasVersion: hasVersion}
+	}
+
+	return tmpls, nil
+}
+
+func (r *Repository) addGeneratedLinks() error {
+	tmpls, err := r.prepareLinkTemplates()
+	if err != nil {
+		return err
+	}
+
+	// Process entities
 	for _, e := range r.allEntities {
-		m := e.GetMetadata()
+		meta := e.GetMetadata()
 		// Check that no generated links already exist (that would be a programming error)
-		if slices.ContainsFunc(m.Links, func(l *catalog.Link) bool {
+		if slices.ContainsFunc(meta.Links, func(l *catalog.Link) bool {
 			return l.IsGenerated
 		}) {
 			panic(fmt.Sprintf("addGeneratedLinks called on entity %s that already has generated links", e.GetRef()))
 		}
 		// Generate new links
 		var links []*catalog.Link
-		if r, ok := m.Annotations[catalog.AnnotRepository]; ok && r != "" {
-			var baseUrl string
-			if r == "default" {
-				baseUrl = defaultRepoPrefix
-			} else {
-				baseUrl = strings.TrimSuffix(r, "/")
+		for annot, t := range tmpls {
+			if value, ok := meta.Annotations[annot]; ok && value != "" {
+				makeLink := func(version *catalog.Version) (*catalog.Link, error) {
+					data := map[string]any{
+						"Annotation": map[string]string{
+							"Key":   annot,
+							"Value": value,
+						},
+						"Metadata": meta,
+					}
+					if version != nil {
+						data["Version"] = version
+					}
+					var urlSb strings.Builder
+					if err := t.url.Execute(&urlSb, data); err != nil {
+						return nil, fmt.Errorf("failed to execute URL template for annotation %v in entity %v: %v", annot, e.GetRef(), err)
+					}
+					url := urlSb.String()
+					if !isValidAbsoluteURL(url) {
+						return nil, fmt.Errorf("invalid url for annotation %v in entity %v: %q", annot, e.GetRef(), url)
+					}
+					var titleSb strings.Builder
+					if err := t.title.Execute(&titleSb, data); err != nil {
+						return nil, fmt.Errorf("failed to execute title template for annotation %v in entity %v: %v", annot, e.GetRef(), err)
+					}
+					return &catalog.Link{
+						Title:       titleSb.String(),
+						URL:         url,
+						Type:        r.config.AnnotationBasedLinks[annot].Type,
+						Icon:        r.config.AnnotationBasedLinks[annot].Icon,
+						IsGenerated: true,
+					}, nil
+				}
+				// For versioned APIs and templates referencing a version, generate links for each version.
+				if ap, ok := e.(*catalog.API); ok && t.hasVersion && len(ap.Spec.Versions) > 0 {
+					for _, ver := range ap.Spec.Versions {
+						link, err := makeLink(&ver.Version)
+						if err != nil {
+							return err
+						}
+						links = append(links, link)
+					}
+				} else {
+					// No {{ .Version }} placeholder or no versions, generate a single link.
+					link, err := makeLink(nil)
+					if err != nil {
+						return err
+					}
+					links = append(links, link)
+				}
 			}
-			link := &catalog.Link{
-				Title:       "Source",
-				URL:         baseUrl + "/" + m.Name,
-				Type:        "repository",
-				Icon:        "code",
-				IsGenerated: true,
-			}
-			links = append(links, link)
 		}
-		m.Links = append(m.Links, links...)
+		meta.Links = append(meta.Links, links...)
+		slices.SortFunc(meta.Links, func(a, b *catalog.Link) int {
+			if c := cmp.Compare(a.Title, b.Title); c != 0 {
+				return c
+			}
+			return cmp.Compare(a.URL, b.URL)
+		})
 	}
+	return nil
 }
 
 // LoadRepositoryFromPath reads entities from the given catalog paths

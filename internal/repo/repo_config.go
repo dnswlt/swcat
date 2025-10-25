@@ -45,10 +45,27 @@ type CatalogValidationRules struct {
 	API       *APIValidationRules       `yaml:"api"`
 }
 
+type AnnotationBasedLink struct {
+	// The URL to which the annotation-based link should point.
+	// May use {{ .Annotation.Value }} template placeholders.
+	// [required]
+	URL string `yaml:"url,omitempty"`
+	// A user friendly display name for the link.
+	// May use {{ .Annotation.Value }} template placeholders.
+	// [optional]
+	Title string `yaml:"title,omitempty"`
+	// A key representing a visual icon to be displayed in the UI.
+	// [optional]
+	Icon string `yaml:"icon,omitempty"`
+	// An optional value to categorize links into specific groups.
+	// [optional]
+	Type string `yaml:"type,omitempty"`
+}
+
 // Config holds repository-specific application configuration.
 type Config struct {
-	RepositoryURLPrefix string                  `yaml:"repositoryURLPrefix"`
-	Validation          *CatalogValidationRules `yaml:"validation"`
+	AnnotationBasedLinks map[string]*AnnotationBasedLink `yaml:"annotationBasedLinks"`
+	Validation           *CatalogValidationRules         `yaml:"validation"`
 }
 
 func (r *CatalogValidationRules) Accept(e catalog.Entity) error {

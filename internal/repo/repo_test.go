@@ -277,3 +277,215 @@ func TestRepository_Finders(t *testing.T) {
 		testFinder(t, finder, tests)
 	})
 }
+
+func TestPrepareLinkTemplates(t *testing.T) {
+	tests := []struct {
+		name    string
+		link    *AnnotationBasedLink
+		wantErr bool
+	}{
+		{
+			name: "no annotations",
+			link: &AnnotationBasedLink{
+				URL:   "foo",
+				Title: "bar",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid template",
+			link: &AnnotationBasedLink{
+				URL: "https://example.com/{{ .Metadata.Name }}/{{ .Annotation.Value }}",
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty url",
+			link: &AnnotationBasedLink{
+				URL:   "",
+				Title: "Yankee",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid template",
+			link: &AnnotationBasedLink{
+				URL: "https://example.com/{{ .Metadata.Name",
+			},
+			wantErr: true,
+		},
+		{
+			name: "unknown function",
+			link: &AnnotationBasedLink{
+				URL:   "https://example.com/{{ .Metadata.Name }}",
+				Title: "Super {{ .Metadata.Name | tocamelcase }}",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := NewRepository()
+			repo.config.AnnotationBasedLinks = map[string]*AnnotationBasedLink{
+				"test": tt.link,
+			}
+			tmpls, err := repo.prepareLinkTemplates()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("prepareLinkTemplates() error: %v, wantErr: %t", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if l := len(tmpls); l != 1 {
+				t.Errorf("Wrong number of templates: want 1, got %d", l)
+			}
+			tmpl, ok := tmpls["test"]
+			if !ok {
+				t.Fatal("Expected template with key 'test' was not prepared")
+			}
+			if tmpl.url == nil {
+				t.Errorf("url template is nil")
+			}
+			if tmpl.title == nil {
+				t.Errorf("title template is nil")
+			}
+		})
+	}
+}
+
+func TestAddGeneratedLinks_Component(t *testing.T) {
+	repo := NewRepositoryWithConfig(Config{
+		AnnotationBasedLinks: map[string]*AnnotationBasedLink{
+			"example.com/foobar": {
+				URL:   "https://example.com/{{ .Annotation.Value }}",
+				Title: "FooBar for {{ .Metadata.Name }}",
+				Type:  "dashboard",
+				Icon:  "dashboard-icon",
+			},
+		},
+	})
+	c := &catalog.Component{
+		Metadata: &catalog.Metadata{
+			Name: "my-component",
+			Annotations: map[string]string{
+				"example.com/foobar": "abc-123",
+			},
+		},
+	}
+	repo.AddEntity(c)
+
+	if err := repo.addGeneratedLinks(); err != nil {
+		t.Fatalf("addGeneratedLinks() error = %v", err)
+	}
+
+	if len(c.Metadata.Links) != 1 {
+		t.Fatalf("len(links) = %d, want 1", len(c.Metadata.Links))
+	}
+	link := c.Metadata.Links[0]
+	if !link.IsGenerated {
+		t.Error("link.IsGenerated = false, want true")
+	}
+	if link.URL != "https://example.com/abc-123" {
+		t.Errorf("link.URL = %q, want %q", link.URL, "https://example.com/abc-123")
+	}
+	if link.Title != "FooBar for my-component" {
+		t.Errorf("link.Title = %q, want %q", link.Title, "FooBar for my-component")
+	}
+	if link.Type != "dashboard" {
+		t.Errorf("link.Type = %q, want %q", link.Type, "dashboard")
+	}
+	if link.Icon != "dashboard-icon" {
+		t.Errorf("link.Icon = %q, want %q", link.Icon, "dashboard")
+	}
+
+}
+func TestAddGeneratedLinks_VersionedAPI(t *testing.T) {
+
+	repo := NewRepositoryWithConfig(Config{
+		AnnotationBasedLinks: map[string]*AnnotationBasedLink{
+			"example.com/docs": {
+				URL:   "https://example.com/docs/{{ .Annotation.Value }}/{{ .Version.RawVersion }}",
+				Title: "Docs for {{ .Metadata.Name }} ({{ .Version.RawVersion }})",
+			},
+		},
+	})
+	api := &catalog.API{
+		Metadata: &catalog.Metadata{
+			Name: "my-api",
+			Annotations: map[string]string{
+				"example.com/docs": "my-api-docs",
+			},
+		},
+		Spec: &catalog.APISpec{
+			Versions: []*catalog.APISpecVersion{
+				{Version: catalog.Version{RawVersion: "v1"}},
+				{Version: catalog.Version{RawVersion: "v2.1"}},
+			},
+		},
+	}
+	repo.AddEntity(api)
+
+	if err := repo.addGeneratedLinks(); err != nil {
+		t.Fatalf("addGeneratedLinks() error = %v", err)
+	}
+
+	if len(api.Metadata.Links) != 2 {
+		t.Fatalf("len(links) = %d, want 2", len(api.Metadata.Links))
+	}
+
+	// Links are sorted by title
+	link1 := api.Metadata.Links[0]
+	if link1.URL != "https://example.com/docs/my-api-docs/v1" {
+		t.Errorf("link1.URL = %q, want %q", link1.URL, "https://example.com/docs/my-api-docs/v1")
+	}
+	if link1.Title != "Docs for my-api (v1)" {
+		t.Errorf("link1.Title = %q, want %q", link1.Title, "Docs for my-api (v1)")
+	}
+
+	link2 := api.Metadata.Links[1]
+	if link2.URL != "https://example.com/docs/my-api-docs/v2.1" {
+		t.Errorf("link2.URL = %q, want %q", link2.URL, "https://example.com/docs/my-api-docs/v2.1")
+	}
+	if link2.Title != "Docs for my-api (v2.1)" {
+		t.Errorf("link2.Title = %q, want %q", link2.Title, "Docs for my-api (v2.1)")
+	}
+
+}
+func TestAddGeneratedLinks_MixedEntities(t *testing.T) {
+
+	repo := NewRepositoryWithConfig(Config{
+		AnnotationBasedLinks: map[string]*AnnotationBasedLink{
+			"example.com/foobar": {
+				URL:   "https://example.com/{{ .Annotation.Value }}",
+				Title: "FooBar for {{ .Metadata.Name }}",
+			},
+		},
+	})
+	c1 := &catalog.Component{
+		Metadata: &catalog.Metadata{
+			Name: "component-with-annotation",
+			Annotations: map[string]string{
+				"example.com/foobar": "abc-123",
+			},
+		},
+	}
+	c2 := &catalog.Component{
+		Metadata: &catalog.Metadata{
+			Name: "component-without-annotation",
+		},
+	}
+	repo.AddEntity(c1)
+	repo.AddEntity(c2)
+
+	if err := repo.addGeneratedLinks(); err != nil {
+		t.Fatalf("addGeneratedLinks() error = %v", err)
+	}
+
+	if len(c1.Metadata.Links) != 1 {
+		t.Errorf("len(c1.links) = %d, want 1", len(c1.Metadata.Links))
+	}
+	if len(c2.Metadata.Links) != 0 {
+		t.Errorf("len(c2.links) = %d, want 0", len(c2.Metadata.Links))
+	}
+}

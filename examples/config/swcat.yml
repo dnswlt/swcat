@@ -20,7 +20,14 @@ svg:
   # and unless an explicit label is present.
   showVersionAsLabel: false
 catalog:
-  repositoryURLPrefix: https://github.com/dnswlt/swcat
+  # Create links for entities with certain annotations.
+  annotationBasedLinks:
+    hexz.me/repo:
+      url: https://example.com/projects/{{ .Annotation.Value }}/repos/{{ .Metadata.Name }}
+      title: Source code
+    hexz.me/asyncapi:
+      url: https://example.com/repos/apis/{{ .Annotation.Value }}_{{ .Version.Major }}
+      title: API Schema ({{ .Version }})
   validation:
     api:
       type:

@@ -64,11 +64,19 @@ kind: API
 metadata:
   name: digital-wallet-process
   description: Processes a digital wallet payment.
+  annotations:
+    hexz.me/repo: flights
+    hexz.me/asyncapi: jelly
 spec:
   type: https/json
   lifecycle: production
   owner: payments-owner
   system: digital-wallet-payments
+  versions:
+    - version: v1
+      lifecycle: production
+    - version: v2alpha
+      lifecycle: preview
 ---
 apiVersion: swcat/v1
 kind: Component

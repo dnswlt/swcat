@@ -148,6 +148,8 @@ kind: Component
 metadata:
   name: flights-search-backend
   description: The backend for searching flights.
+  annotations:
+    hexz.me/repo: flights
 spec:
   type: service
   lifecycle: production
@@ -170,6 +172,8 @@ metadata:
   labels:
     flights/language: java
     flights/k8s-workload: Deployment
+  annotations:
+    hexz.me/repo: flights
 spec:
   type: service
   lifecycle: production
@@ -211,6 +215,8 @@ metadata:
   description: Provides popular flight routes.
   labels:
     flights/k8s-workload: StatefulSet
+  annotations:
+    hexz.me/repo: flights
 spec:
   type: service
   lifecycle: production

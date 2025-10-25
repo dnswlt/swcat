@@ -222,10 +222,22 @@ type Resource struct {
 	*SourceInfo `yaml:"-"`
 }
 
+// Version holds a structured version, parsed from a single string.
+// Any string is a valid version. If it does not match the typical
+// version patterns v1.2.3 (with "v", 2 and 3 optional), only the RawVersion is non-zero.
+// Versions may have an arbitrary suffix, e.g. v1alpha ("alpha" is the suffix)
+type Version struct {
+	RawVersion string
+	Major      int
+	Minor      int
+	Patch      int
+	Suffix     string // Optional suffix following the last version number.
+}
+
 type APISpecVersion struct {
 	// The name of the API version, e.g. "v1" or "1.2.3".
 	// [required]
-	Name string `yaml:"name,omitempty"`
+	Version Version `yaml:"version,omitempty"`
 	// The lifecycle state of the API in this particular version.
 	// [optional]
 	Lifecycle string `yaml:"lifecycle,omitempty"`
@@ -358,6 +370,11 @@ func newRef(kind string, meta *Metadata) *Ref {
 		Name:      meta.Name,
 	}
 }
+
+func (v *Version) String() string {
+	return v.RawVersion
+}
+
 func (c *Component) GetKind() string        { return c.Kind }
 func (c *Component) GetMetadata() *Metadata { return c.Metadata }
 func (c *Component) GetRef() *Ref           { return newRef("component", c.Metadata) }

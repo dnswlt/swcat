@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -217,4 +218,55 @@ func (lr *LabelRef) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	return fmt.Errorf("cannot unmarshal %s into LabelRef", value.Tag)
+}
+
+var (
+	// Regex to deconstruct v1.2.3, 1.2.3, 1.2., 1, version strings.
+	// Groups:
+	// 1: Major (\d+)
+	// 2: Minor (\d+) - optional
+	// 3: Patch (\d+) - optional
+	// 4: Suffix (.*) - optional
+	versionRegex = regexp.MustCompile(`^(?:v)?(\d+)(?:\.(\d+))?(?:\.(\d+))?(.*)?$`)
+)
+
+// UnmarshalYAML implements the gopkg.in/yaml.v3.Unmarshaler interface.
+func (v *Version) UnmarshalYAML(node *yaml.Node) error {
+	// Must be a plain string.
+	if node.Kind != yaml.ScalarNode {
+		return fmt.Errorf("version field must be a plain string, but got %v node", node.Tag)
+	}
+
+	// The whole input is the "raw" version.
+	v.RawVersion = node.Value
+
+	// Try to parse the string.
+	matches := versionRegex.FindStringSubmatch(node.Value)
+	if matches == nil {
+		// Input didn't match a known version format.
+		// Leave the other fields as their zero value and return success.
+		return nil
+	}
+
+	// We have a match. Populate the struct.
+	//    matches[0] is the full string (e.g., "v1.2.3-funky")
+	//    matches[1] is Major (e.g., "1")
+	//    matches[2] is Minor (e.g., "2" or "")
+	//    matches[3] is Patch (e.g., "3" or "")
+	//    matches[4] is Suffix (e.g., "-funky" or "")
+	parseInt := func(s string) int {
+		if s == "" {
+			return 0
+		}
+		// We can ignore the error because the regex `(\d+)` guarantees
+		// it's a valid non-negative integer.
+		i, _ := strconv.Atoi(s)
+		return i
+	}
+	v.Major = parseInt(matches[1])
+	v.Minor = parseInt(matches[2])
+	v.Patch = parseInt(matches[3])
+	v.Suffix = matches[4] // Suffix is captured with its separator
+
+	return nil
 }

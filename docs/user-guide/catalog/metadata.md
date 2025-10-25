@@ -40,11 +40,6 @@ The valid `metadata` fields are the following:
     There are a few well-known annotations that can be used to control the display
     of entities in the UI:
 
-    * `swcat/repo` - A URL prefix that is used to generate a Link entry for the entity
-        pointing to a (Git or other) SCM repository for the node. The name of the
-        entity will be appended to the prefix to form the link's href.
-        Use `swcat/repo: default` to refer to the repository prefix defined in the `swcat.yml`
-        configuration file as `repositoryURLPrefix`.
     * `swcat/stereotype` - A `<<stereotype>>` label that should be shown for the node
         in SVG diagrams.
     * `swcat/fillcolor` - An SVG color name or 6-digit hex color code

@@ -34,9 +34,8 @@ const (
 
 // Well-known annotation and label names with defined interpretations.
 const (
-	AnnotRepository = "swcat/repo"
-	AnnotSterotype  = "swcat/stereotype"
-	AnnotFillColor  = "swcat/fillcolor"
+	AnnotSterotype = "swcat/stereotype"
+	AnnotFillColor = "swcat/fillcolor"
 )
 
 type Ref struct {
@@ -49,6 +48,15 @@ type LabelRef struct {
 	Ref   *Ref
 	Label string
 	Attrs map[string]string
+}
+
+// Version represents <major>.<minor>.<patch> versions with optional suffixes.
+type Version struct {
+	RawVersion string // The unparsed full version string, e.g. "v1.2.3"
+	Major      int
+	Minor      int
+	Patch      int
+	Suffix     string // An arbitrary suffix following the last version number, e.g. "alpha"
 }
 
 // Entity is the interface implemented by all entity kinds (Component, System, etc.).
@@ -281,9 +289,9 @@ type apiInvRel struct {
 }
 
 type APISpecVersion struct {
-	// The name of the API version, e.g. "v1" or "1.2.3".
+	// A version of the API, e.g. "v1" or "1.2.3".
 	// [required]
-	Name string `yaml:"name,omitempty"`
+	Version Version `yaml:"name,omitempty"`
 	// The lifecycle state of the API in this particular version.
 	// [optional]
 	Lifecycle string `yaml:"lifecycle,omitempty"`
@@ -472,6 +480,10 @@ func (r *LabelRef) Compare(s *LabelRef) int {
 // CompareEntityByRef compares two entities lexicographically by (namespace, name).
 func CompareEntityByRef(a, b Entity) int {
 	return a.GetRef().Compare(b.GetRef())
+}
+
+func (v *Version) String() string {
+	return v.RawVersion
 }
 
 func (c *Component) GetKind() Kind              { return KindComponent }

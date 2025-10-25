@@ -182,6 +182,26 @@ func NewResourceFromAPI(r *api.Resource) (*Resource, error) {
 	}, nil
 }
 
+func NewAPISpecVersionFromAPI(v *api.APISpecVersion) (*APISpecVersion, error) {
+	ver := &v.Version
+	if ver.RawVersion == "" {
+		return nil, fmt.Errorf("empty version")
+	}
+	if ver.Major < 0 || ver.Minor < 0 || ver.Patch < 0 {
+		return nil, fmt.Errorf("negative version: %s", ver)
+	}
+	return &APISpecVersion{
+		Version: Version{
+			RawVersion: ver.RawVersion,
+			Major:      ver.Major,
+			Minor:      ver.Minor,
+			Patch:      ver.Patch,
+			Suffix:     ver.Suffix,
+		},
+		Lifecycle: v.Lifecycle,
+	}, nil
+}
+
 func NewAPISpecFromAPI(a *api.APISpec) (*APISpec, error) {
 	if a == nil {
 		return nil, fmt.Errorf("APISpec is nil")
@@ -203,10 +223,11 @@ func NewAPISpecFromAPI(a *api.APISpec) (*APISpec, error) {
 		Versions:   make([]*APISpecVersion, len(a.Versions)),
 	}
 	for i, v := range a.Versions {
-		spec.Versions[i] = &APISpecVersion{
-			Name:      v.Name,
-			Lifecycle: v.Lifecycle,
+		ver, err := NewAPISpecVersionFromAPI(v)
+		if err != nil {
+			return nil, err
 		}
+		spec.Versions[i] = ver
 	}
 	return spec, nil
 }
