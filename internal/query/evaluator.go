@@ -37,7 +37,7 @@ func fulltextAccessor(e catalog.Entity) ([]string, bool) {
 	values := collectLeafValues(node)
 	// Collect metadata label and annotation keys as well.
 	m := e.GetMetadata()
-	if e == nil {
+	if m == nil {
 		return values, true
 	}
 	for k := range m.Labels {
@@ -89,12 +89,17 @@ var attributeAccessors = map[string]attributeAccessor{
 	"description": func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Description}, true },
 	"tag":         func(e catalog.Entity) ([]string, bool) { return e.GetMetadata().Tags, true },
 	"label": func(e catalog.Entity) ([]string, bool) {
-		if e.GetMetadata().Labels == nil {
-			return nil, true
-		}
 		// For labels, we match against either key or value
 		var results []string
 		for k, v := range e.GetMetadata().Labels {
+			results = append(results, k, v)
+		}
+		return results, true
+	},
+	"annotation": func(e catalog.Entity) ([]string, bool) {
+		// For annotations, we match against either key or value
+		var results []string
+		for k, v := range e.GetMetadata().Annotations {
 			results = append(results, k, v)
 		}
 		return results, true
@@ -230,36 +235,40 @@ func (ev *Evaluator) matchesOperator(entityValue, operator, queryValue string) (
 // CollectLeafValues walks a YAML node tree and returns all scalar "values"
 // (i.e., leaf nodes). Mapping keys are ignored; only mapping values are traversed.
 // Aliases are followed (cycle-safe). Null scalars are skipped.
+// As a special case, the top-level "apiVersion" field is also skipped.
 func collectLeafValues(root *yaml.Node) []string {
 	out := make([]string, 0, 16)
-	visited := make(map[*yaml.Node]struct{})
+	visited := make(map[*yaml.Node]bool)
 
-	var walk func(*yaml.Node)
-	walk = func(n *yaml.Node) {
+	var walk func(*yaml.Node, int)
+	walk = func(n *yaml.Node, depth int) {
 		if n == nil {
 			return
 		}
-		if _, seen := visited[n]; seen {
+		if visited[n] {
 			return
 		}
-		visited[n] = struct{}{}
+		visited[n] = true
 
 		switch n.Kind {
 		case yaml.DocumentNode:
 			for _, c := range n.Content {
-				walk(c)
+				walk(c, depth+1)
 			}
 		case yaml.MappingNode:
 			// Content is [k0, v0, k1, v1, ...]; collect only values.
 			for i := 0; i+1 < len(n.Content); i += 2 {
-				walk(n.Content[i+1])
+				if depth < 2 && n.Content[i].Value == "apiVersion" {
+					continue // Skip top-level "apiVersion"
+				}
+				walk(n.Content[i+1], depth+1)
 			}
 		case yaml.SequenceNode:
 			for _, c := range n.Content {
-				walk(c)
+				walk(c, depth+1)
 			}
 		case yaml.AliasNode:
-			walk(n.Alias)
+			walk(n.Alias, depth+1)
 		case yaml.ScalarNode:
 			// Skip nulls; include other scalar types as their string value.
 			if n.Tag != "!!null" {
@@ -268,6 +277,6 @@ func collectLeafValues(root *yaml.Node) []string {
 		}
 	}
 
-	walk(root)
+	walk(root, 0)
 	return out
 }
