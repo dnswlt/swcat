@@ -239,7 +239,7 @@ type APISpecVersion struct {
 	// [required]
 	Version Version `yaml:"version,omitempty"`
 	// The lifecycle state of the API in this particular version.
-	// [optional]
+	// [required]
 	Lifecycle string `yaml:"lifecycle,omitempty"`
 }
 

@@ -502,9 +502,21 @@ func (r *Repository) Validate() error {
 		if g := r.Group(s.Owner); g == nil {
 			return fmt.Errorf("owner %q for API %s is undefined", s.Owner, qn)
 		}
-		for _, v := range s.Versions {
-			if v.Version.RawVersion == "" {
-				return fmt.Errorf("version name is empty for API %s", qn)
+		if len(s.Versions) > 0 {
+			matchesAPILifecycle := false
+			for _, v := range s.Versions {
+				if v.Version.RawVersion == "" {
+					return fmt.Errorf("version name is empty for API %s", qn)
+				}
+				if v.Lifecycle == "" {
+					return fmt.Errorf("version lifecycle is empty for API %s", qn)
+				}
+				if v.Lifecycle == ap.Spec.Lifecycle {
+					matchesAPILifecycle = true
+				}
+			}
+			if !matchesAPILifecycle {
+				return fmt.Errorf("none of the version lifecycles matches the API's own lifecycle for API %s", qn)
 			}
 		}
 		// Allow an empty Definition.

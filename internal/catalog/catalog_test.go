@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -276,5 +277,20 @@ func TestCompareEntityByName(t *testing.T) {
 				t.Errorf("CompareEntityByRef() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestPrintVersion(t *testing.T) {
+	// Ensure that Version structs are printed properly in templates.
+	v := Version{
+		RawVersion: "v1.2",
+		Major:      1,
+		Minor:      2,
+	}
+	if got := v.String(); got != v.RawVersion {
+		t.Fatalf("Unexpected version string: got %q, want %q", got, v.RawVersion)
+	}
+	if got := fmt.Sprint(v); got != v.RawVersion {
+		t.Fatalf("Unexpected version Sprint: got %q, want %q", got, v.RawVersion)
 	}
 }

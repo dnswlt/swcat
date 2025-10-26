@@ -50,7 +50,15 @@
                 </div>
                 <div>
                     <h3 class="font-semibold">Lifecycle</h3>
+                    {{ if .Spec.Versions }}
+                    <ul class="list-disc list-inside">
+                        {{ range .Spec.Versions }}
+                        <li>{{ .Version }} · <span class="text-gray-500">{{ .Lifecycle }}</span></li>
+                        {{ end }}
+                    </ul>
+                    {{ else }}
                     <p>{{ .Spec.Lifecycle }}</p>
+                    {{ end }}
                 </div>
             </div>
         </div>

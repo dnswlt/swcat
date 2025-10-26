@@ -93,6 +93,11 @@ spec:
   lifecycle: production
   owner: flights-owner
   system: flights-tickets
+  versions:
+    - version: v1.3
+      lifecycle: deprecated
+    - version: v2
+      lifecycle: production
 ---
 apiVersion: swcat/v1
 kind: API

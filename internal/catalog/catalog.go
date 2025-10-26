@@ -293,7 +293,7 @@ type APISpecVersion struct {
 	// [required]
 	Version Version `yaml:"name,omitempty"`
 	// The lifecycle state of the API in this particular version.
-	// [optional]
+	// [required]
 	Lifecycle string `yaml:"lifecycle,omitempty"`
 }
 
@@ -482,7 +482,7 @@ func CompareEntityByRef(a, b Entity) int {
 	return a.GetRef().Compare(b.GetRef())
 }
 
-func (v *Version) String() string {
+func (v Version) String() string {
 	return v.RawVersion
 }
 
