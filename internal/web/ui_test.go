@@ -130,7 +130,11 @@ func TestFormatLabels(t *testing.T) {
 				return
 			}
 
-			if diff := cmp.Diff(c.want, got); diff != "" {
+			gotDisplay := make([]string, len(got))
+			for i, chip := range got {
+				gotDisplay[i] = chip.DisplayString()
+			}
+			if diff := cmp.Diff(c.want, gotDisplay); diff != "" {
 				t.Fatalf("formatLabels() mismatch (-want +got):\n%s", diff)
 			}
 		})

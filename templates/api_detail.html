@@ -33,20 +33,7 @@
                 </div>
             </div>
 
-            {{ if or .Metadata.Tags .Metadata.Labels }}
-            <div class="flex flex-wrap items-center gap-2">
-                {{ range formatTags .Metadata.Tags }}
-                <span title="tag"
-                    class="inline-block bg-gray-200 rounded-full px-2 py-1 text-xs font-semibold text-gray-700">{{ .
-                    }}</span>
-                {{ end }}
-                {{ range formatLabels .Metadata }}
-                <span title="label"
-                    class="inline-block bg-blue-200 rounded-full px-2 py-1 text-xs font-semibold text-blue-700">{{ .
-                    }}</span>
-                {{ end }}
-            </div>
-            {{ end }}
+            {{ template "tags_labels.html" . }}
 
             {{ template "metadata_description.html" . }}
 

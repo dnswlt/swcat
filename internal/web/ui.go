@@ -2,11 +2,11 @@ package web
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"html/template"
 	"net/url"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
@@ -81,12 +81,41 @@ func toURL(s any) (string, error) {
 	return path + "/" + url.PathEscape(entityRef.QName()), nil
 }
 
+type FormattedChip struct {
+	DisplayKey string // short form of the label key, e.g. "foo" for "example.com/foo".
+	Key        string // original label key, empty for tags
+	Value      string // original label value or the tag value.
+	Type       string // "label" or "tag"
+}
+
+func (c *FormattedChip) DisplayString() string {
+	if c.DisplayKey == "" {
+		return c.Value
+	}
+	return c.DisplayKey + ": " + c.Value
+}
+
+func compareFormattedChip(a, b FormattedChip) int {
+	if c := cmp.Compare(a.Type, b.Type); c != 0 {
+		return c
+	}
+	if c := cmp.Compare(a.DisplayKey, b.DisplayKey); c != 0 {
+		return c
+	}
+	return cmp.Compare(a.Value, b.Value)
+}
+
 // formatTags returns the given tags in sorted order.
-func formatTags(tags []string) []string {
-	out := make([]string, len(tags))
-	copy(out, tags)
-	slices.Sort(out)
-	return out
+func formatTags(tags []string) []FormattedChip {
+	result := make([]FormattedChip, len(tags))
+	for i, tag := range tags {
+		result[i] = FormattedChip{
+			Value: tag,
+			Type:  "tag",
+		}
+	}
+	slices.SortFunc(result, compareFormattedChip)
+	return result
 }
 
 // formatLabels formats all labels of the given metadata.
@@ -94,7 +123,7 @@ func formatTags(tags []string) []string {
 // will be formatted in their simple form ("some-label") for readability,
 // *unless* the simple label is ambiguous. In that case, the qualified
 // key is used.
-func formatLabels(meta *catalog.Metadata) []string {
+func formatLabels(meta *catalog.Metadata) []FormattedChip {
 	if meta == nil || len(meta.Labels) == 0 {
 		return nil
 	}
@@ -109,33 +138,23 @@ func formatLabels(meta *catalog.Metadata) []string {
 		counts[unqualify(k)]++
 	}
 
-	type pair struct {
-		showKey string
-		val     string
-	}
-	pairs := make([]pair, 0, len(meta.Labels))
+	result := make([]FormattedChip, 0, len(meta.Labels))
 	for k, v := range meta.Labels {
 		s := unqualify(k)
 		show := s
 		if counts[s] > 1 {
 			show = k // keep fully-qualified to disambiguate
 		}
-		pairs = append(pairs, pair{showKey: show, val: v})
+		result = append(result, FormattedChip{
+			DisplayKey: show,
+			Key:        k,
+			Value:      v,
+			Type:       "label",
+		})
 	}
+	slices.SortFunc(result, compareFormattedChip)
 
-	sort.Slice(pairs, func(i, j int) bool {
-		if pairs[i].showKey != pairs[j].showKey {
-			return pairs[i].showKey < pairs[j].showKey
-		}
-		return pairs[i].val < pairs[j].val
-	})
-
-	out := make([]string, len(pairs))
-	for i, p := range pairs {
-		out[i] = fmt.Sprintf("%s: %s", p.showKey, p.val)
-	}
-	return out
-
+	return result
 }
 
 //
