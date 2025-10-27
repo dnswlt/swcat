@@ -40,6 +40,7 @@ The `svg` section allows you to customize the appearance of the generated SVG di
     * `labels`: Maps label keys and values to specific colors.
     * `types`: Maps entity types to specific colors.
 * `showAPIProvider`: If true, includes the API provider (component) in the labels of API entities.
+* `showParentSystem`: If true, includes the parent system in the labels of component, resource, and API entities.
 * `showVersionAsLabel`: If true, shows the API version in consumed/provided API references if no explicit label is present.
 
 ## Example Configuration
@@ -61,6 +62,8 @@ svg:
       external: '#ffbf79'
   # Include the API provider (component) in labels of API entities.
   showAPIProvider: true
+  # Include the parent system in labels of component, resource, and API entities.
+  showParentSystem: true
   # Show the API version in consumedApis/providedApis references, if specified
   # and unless an explicit label is present.
   showVersionAsLabel: false

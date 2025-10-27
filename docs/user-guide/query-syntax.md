@@ -27,7 +27,7 @@ This will find all entities with "gateway" in their title.
 
 The following attributes are available for filtering:
 
-* `*`: Full-text search across all fields.
+* `*`: Full-text search across all fields (`*:'some thing'`, `*:foo`).
 * `meta`: Search in all metadata fields (name, namespace, title, description, labels, annotations, tags, links).
 * `name`: The name of the entity.
 * `namespace`: The namespace of the entity.
@@ -35,6 +35,7 @@ The following attributes are available for filtering:
 * `description`: The description of the entity.
 * `tag`: A tag associated with the entity.
 * `label`: A label associated with the entity (searches both key and value).
+* `annotation`: An annotation associated with the entity (searches both key and value).
 * `owner`: The owner of the entity.
 * `system`: The system that the entity is a part of (for components, apis, resources).
 * `type`: The type of the entity (e.g., for components, apis, groups).
