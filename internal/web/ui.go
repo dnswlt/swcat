@@ -81,6 +81,33 @@ func toURL(s any) (string, error) {
 	return path + "/" + url.PathEscape(entityRef.QName()), nil
 }
 
+// entitySummary returns e's title and description concatenated.
+// The text is truncated at 157 characters and an ellipse (...)
+// is appended if the text's total length exceeds 160 characters.
+func entitySummary(e catalog.Entity) string {
+	if e == nil {
+		return ""
+	}
+	m := e.GetMetadata()
+	if m == nil {
+		return ""
+	}
+	var elems []string
+	if m.Title != "" {
+		elems = append(elems, m.Title)
+	}
+	if m.Description != "" {
+		elems = append(elems, m.Description)
+	}
+	summary := strings.Join(elems, " • ")
+
+	rs := []rune(summary)
+	if len(rs) > 160 {
+		return string(rs[:157]) + "..."
+	}
+	return summary
+}
+
 type FormattedChip struct {
 	DisplayKey string // short form of the label key, e.g. "foo" for "example.com/foo".
 	Key        string // original label key, empty for tags

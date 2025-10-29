@@ -1,0 +1,21 @@
+{{- define "entities_rows.html" -}}
+{{- if .Entities }}
+{{- range .Entities }}
+<tr class="border-t">
+    <td class="px-4 py-2">{{ .GetKind }}</td>
+    <td class="px-4 py-2">
+        <a href="{{ .GetRef | toURL }}" class="text-blue-600 hover:underline">
+            {{ .GetQName }}
+        </a>
+    </td>
+    <td class="px-4 py-2">{{ . | entitySummary }}</td>
+</tr>
+{{- end }}
+{{- else }}
+<tr>
+    <td colspan="3" class="px-4 py-2 text-center text-gray-500">
+        No entities found
+    </td>
+</tr>
+{{- end }}
+{{- end }}

@@ -320,6 +320,10 @@ func (r *Repository) FindGroups(q string) []*catalog.Group {
 	return findEntities(q, r.groups)
 }
 
+func (r *Repository) FindEntities(q string) []catalog.Entity {
+	return findEntities(q, r.allEntities)
+}
+
 func (r *Repository) validateMetadata(m *catalog.Metadata) error {
 	if m == nil {
 		return fmt.Errorf("metadata is null")

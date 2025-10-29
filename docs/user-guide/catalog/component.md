@@ -17,6 +17,10 @@ The `spec` of a `Component` entity has the following fields:
 Example:
 
 ```yaml
+apiVersion: swcat/v1
+kind: Component
+metadata:
+    name: my-component
 spec:
   type: service
   lifecycle: production

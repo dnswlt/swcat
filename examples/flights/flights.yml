@@ -270,6 +270,7 @@ apiVersion: swcat/v1
 kind: Component
 metadata:
   name: internal-payment-handler
+  title: Internal Payment Handler
   description: >
     Handles internal payments and sends payment data to Vendor Alpha. This is a special case for Vendor Alpha, which lets us handle the payment.
 

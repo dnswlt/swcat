@@ -117,12 +117,13 @@ func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 func (s *Server) reloadTemplates() error {
 	tmpl := template.New("root")
 	tmpl = tmpl.Funcs(map[string]any{
-		"toURL":        toURL,
-		"toEntityURL":  toEntityURL,
-		"markdown":     markdown,
-		"formatTags":   formatTags,
-		"formatLabels": formatLabels,
-		"isCloneable":  isCloneable,
+		"toURL":         toURL,
+		"toEntityURL":   toEntityURL,
+		"markdown":      markdown,
+		"formatTags":    formatTags,
+		"formatLabels":  formatLabels,
+		"isCloneable":   isCloneable,
+		"entitySummary": entitySummary,
 	})
 	var err error
 	if s.opts.BaseDir == "" {
@@ -438,6 +439,21 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 	s.serveHTMLPage(w, r, "group_detail.html", params)
 }
 
+func (s *Server) serveEntities(w http.ResponseWriter, r *http.Request) {
+	params := map[string]any{}
+	q := r.URL.Query()
+	entities := s.repo.FindEntities(q.Get("q"))
+	params["Entities"] = entities
+
+	if r.Header.Get("HX-Request") == "true" {
+		// htmx request: only render rows
+		s.serveHTMLPage(w, r, "entities_rows.html", params)
+		return
+	}
+	// full page
+	s.serveHTMLPage(w, r, "entities.html", params)
+}
+
 func (s *Server) serveEntityYAML(w http.ResponseWriter, r *http.Request, entityRef string, templateFile string) {
 	ref, err := catalog.ParseRef(entityRef)
 	if err != nil {
@@ -698,6 +714,7 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		NavItem("/ui/resources", "Resources"),
 		NavItem("/ui/apis", "APIs"),
 		NavItem("/ui/groups", "Groups"),
+		NavItem("/ui/entities", "Search"),
 	).SetActive(r.URL.Path).SetParams(r.URL.Query())
 
 	templateParams := map[string]any{
@@ -767,6 +784,9 @@ func (s *Server) routes() *http.ServeMux {
 		s.serveGroup(w, r, groupID)
 	})
 
+	mux.HandleFunc("GET /ui/entities", func(w http.ResponseWriter, r *http.Request) {
+		s.serveEntities(w, r)
+	})
 	mux.HandleFunc("GET /ui/entities/{entityRef}/edit", func(w http.ResponseWriter, r *http.Request) {
 		entityRef := r.PathValue("entityRef")
 		s.serveEntityEdit(w, r, entityRef)

@@ -103,6 +103,7 @@ func TestListPages_RenderLinksForAllKinds(t *testing.T) {
 		{"apis", "/ui/apis", "/ui/apis/test-api"},
 		{"domains", "/ui/domains", "/ui/domains/test-domain"},
 		{"groups", "/ui/groups", "/ui/groups/test-group"},
+		{"entities", "/ui/entities", "/ui/systems/test-system"},
 	}
 
 	for _, tc := range cases {

@@ -12,6 +12,10 @@ The `spec` of a `Domain` entity has the following fields:
 Example:
 
 ```yaml
+apiVersion: swcat/v1
+kind: Domain
+metadata:
+    name: my-domain
 spec:
   owner: default/my-team
   subdomainOf: domain:default/parent-domain

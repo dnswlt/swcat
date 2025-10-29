@@ -12,6 +12,10 @@ The `spec` of a `System` entity has the following fields:
 Example:
 
 ```yaml
+apiVersion: swcat/v1
+kind: System
+metadata:
+    name: my-system
 spec:
   owner: my-team
   domain: my-domain

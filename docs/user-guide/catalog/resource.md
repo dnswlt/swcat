@@ -12,6 +12,10 @@ The `spec` of a `Resource` entity has the following fields:
 Example:
 
 ```yaml
+apiVersion: swcat/v1
+kind: Resource
+metadata:
+    name: my-resource
 spec:
   type: database
   owner: my-team

@@ -14,6 +14,10 @@ The `spec` of an `API` entity has the following fields:
 Example:
 
 ```yaml
+apiVersion: swcat/v1
+kind: API
+metadata:
+    name: my-api
 spec:
   type: openapi
   lifecycle: production

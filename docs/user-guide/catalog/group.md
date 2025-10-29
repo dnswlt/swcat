@@ -17,6 +17,10 @@ The `spec` of a `Group` entity has the following fields:
 Example:
 
 ```yaml
+apiVersion: swcat/v1
+kind: Group
+metadata:
+    name: my-team
 spec:
   type: team
   profile:
