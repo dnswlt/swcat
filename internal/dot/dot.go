@@ -202,6 +202,7 @@ func NewWithConfig(config WriterConfig) *Writer {
 
 func (dw *Writer) Start() {
 	dw.w.WriteString("digraph {\n")
+	dw.w.WriteString("charset=\"UTF-8\"\n")
 	dw.w.WriteString("rankdir=\"LR\"\n")
 	dw.w.WriteString("fontname=\"sans-serif\"\n")
 	dw.w.WriteString("splines=\"spline\"\n")
@@ -256,14 +257,12 @@ func escLabel(label string) string {
 			b.WriteString(`\n`)
 		case '\r':
 			// ignore CRs
-		case '\t':
-			b.WriteRune(' ')
 		default:
 			r := rs[i]
-			// allow only printable Latin-1; normalize NBSP to space
-			if r == '\u00A0' {
+			// allow only printable Latin-1; normalize spaces
+			if unicode.IsSpace(r) {
 				b.WriteRune(' ')
-			} else if r <= unicode.MaxLatin1 && unicode.IsPrint(r) {
+			} else if unicode.IsPrint(r) {
 				b.WriteRune(r)
 			} else {
 				// Replace non-printable ASCII by ?

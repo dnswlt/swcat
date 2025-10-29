@@ -27,8 +27,8 @@ func TestEscLabel(t *testing.T) {
 		{"a\tb", "a b"},
 		// NBSP normalized to space
 		{"a\u00A0b", "a b"},
-		// Simple non-ASCII example replaced with '?'
-		{"emoji 😀", "emoji ?"},
+		// Simple non-ASCII example
+		{"emoji 😀", "emoji 😀"},
 	}
 
 	for _, tc := range tcs {
@@ -78,6 +78,7 @@ func TestWriter_Golden_Simple(t *testing.T) {
 
 	wantDOT := strings.TrimSpace(`
 digraph {
+charset="UTF-8"
 rankdir="LR"
 fontname="sans-serif"
 splines="spline"
