@@ -5,9 +5,11 @@
 The `spec` of a `Resource` entity has the following fields:
 
 * `type` - *required* - The type of resource (e.g., "database", "messaging-broker").
-* `owner` - *required* - An entity reference to the owner of the resource (e.g., `group:my-team`).
-* `system` - *required* - An entity reference to the system that the resource belongs to.
-* `dependsOn` - *optional* - A list of other entities that this resource depends on.
+* `owner` - *required* - An [entity reference](./entity-references.md) to the owner of the resource (e.g., `group:my-team`).
+* `system` - *required* - An [entity reference](./entity-references.md) to the system that the resource belongs to.
+* `dependsOn` - *optional* - A list of [entity references](./entity-references.md)
+    to other components or resources that this component depends on.
+    MUST include the kind specifier, e.g. `resource:my-database`.
 
 Example:
 

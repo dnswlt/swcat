@@ -5,8 +5,7 @@
 
 The `spec` of a `Domain` entity has the following fields:
 
-* `owner` - *required* - An entity reference to the owner of the domain (e.g., `group:my-team`).
-* `subdomainOf` - *optional* - An entity reference to another domain of which this domain is a part.
+* `owner` - *required* - An [entity reference](./entity-references.md) to the owner of the domain (e.g., `group:my-team`).
 * `type` - *optional* - The type of domain.
 
 Example:

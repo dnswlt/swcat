@@ -19,7 +19,8 @@ with minor adjustments to required and optional fields and entity references:
 * **System**: A collection of Components, Resources, and APIs that together deliver a cohesive *application*.
 * **Component**: A deployable and runnable software artifact such as an API gateway or a backend service.
 * **Resource**: Represents infrastructure such as messaging brokers, caches, or databases.
-* **API**: A communication interface provided by one or more components and consumed by others (e.g., gRPC, http/REST, Pub/Sub topics, web services, or FTP).
+* **API**: A communication interface provided by one or more components and
+    consumed by others (e.g., gRPC, http/REST, Pub/Sub topics, web services, or FTP).
 * **Group**: An organizational entity (team or business unit) used to model ownership and contact information.
 
 For more details on each entity kind, see the following pages:
@@ -31,7 +32,7 @@ For more details on each entity kind, see the following pages:
 * [API](./api.md)
 * [Group](./group.md)
 
-### Source code references
+## Source code references
 
 The fields of each entity kind are also documented in
 [internal/api/api.go](https://github.com/dnswlt/swcat/blob/main/internal/api/api.go).
