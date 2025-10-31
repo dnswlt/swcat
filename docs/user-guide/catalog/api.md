@@ -10,6 +10,9 @@ The `spec` of an `API` entity has the following fields:
 * `owner` - *required* - An [entity reference](./entity-references.md) to the owner of the API (e.g., `group:my-team`).
 * `system` - *required* - An [entity reference](./entity-references.md) to the system that the API belongs to.
 * `versions` - *optional* - A list of versions in which this API currently exists.
+    * `version` - *required* - The version name, e.g. `v1` or  `1.0.0`.
+    * `lifecycle` - *required* - The lifecycle state of the API in this particular version.
+        The lifecycle of at least one version must match the lifecycle of the API. 
 
 Example:
 
@@ -23,4 +26,9 @@ spec:
   lifecycle: production
   owner: my-team
   system: my-system
+  versions:
+    - version: v1
+      lifecycle: deprecated
+    - version: v2.1
+      lifecycle: production
 ```

@@ -15,12 +15,15 @@ Examples:
 - api:ns/some-api  # Kind, namespace, and name
 ```
 
-For relationships like `consumesApis`, `providesApis`, and `dependsOn`, you can use a more expressive "labelled" entity reference, which includes an optional version, and a label:
+For relationships like `consumesApis`, `providesApis`, and `dependsOn`,
+you can use a more expressive "labelled" entity reference, which includes
+an optional version, and a label:
 
 `[<kind>:][<namespace>/]<name> [@<version>] ["<label>"]`
 
-* The `[@<version>]` part is a shorthand for the `version` attribute (see below). It can be used to refer
-    to specific versions of an API.
+* The `[@<version>]` part is a shorthand for the `version` attribute (see below).
+    It can be used to refer to specific versions of an API (which must be present
+    in the API's `spec.versions`).
 * The `["<label>"]` part describes the relationship and is displayed in SVG diagrams.
 
 Here are some examples of this shorthand notation:
