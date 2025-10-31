@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -203,7 +204,16 @@ func (lr *LabelRef) UnmarshalYAML(value *yaml.Node) error {
 			Label string            `yaml:"label"`
 			Attrs map[string]string `yaml:"attrs"`
 		}
-		if err := value.Decode(&aux); err != nil {
+		// Bit clumsy: to decode this strictly, we have to parse the value again:
+		// yaml.Node only has a .Decode() method, but no way to enforce strictness
+		var buf bytes.Buffer
+		enc := yaml.NewEncoder(&buf)
+		if err := enc.Encode(value); err != nil {
+			return fmt.Errorf("failed to re-encode node: %v", err)
+		}
+		strictDec := yaml.NewDecoder(&buf)
+		strictDec.KnownFields(true)
+		if err := strictDec.Decode(&aux); err != nil {
 			return err
 		}
 
@@ -214,6 +224,7 @@ func (lr *LabelRef) UnmarshalYAML(value *yaml.Node) error {
 
 		lr.Ref = ref
 		lr.Label = aux.Label
+		lr.Attrs = aux.Attrs
 		return nil
 	}
 

@@ -274,6 +274,23 @@ ref:
 			},
 		},
 		{
+			name: "Record Style with Attrs",
+			yaml: `
+ref:
+  ref: api-gateway
+  label: Main API Gateway
+  attrs:
+    foo: bar
+`,
+			want: LabelRef{
+				Ref:   &Ref{Name: "api-gateway"},
+				Label: "Main API Gateway",
+				Attrs: map[string]string{
+					"foo": "bar",
+				},
+			},
+		},
+		{
 			name: "Record Style without Namespace",
 			yaml: `
 ref:
@@ -309,6 +326,15 @@ ref:
 `,
 			wantErr: true,
 		},
+		{
+			name: "Record Style with invalid field should fail",
+			yaml: `
+ref:
+  ref: component:default/api
+  labelxxx: API Label
+`,
+			wantErr: true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -321,7 +347,7 @@ ref:
 				t.Fatalf("UnmarshalYAML() error = %v, wantErr %v", err, tc.wantErr)
 			}
 			if !tc.wantErr && wrapper.Ref.String() != tc.want.String() {
-				t.Errorf("UnmarshalYAML() got = %v, want %v", wrapper.Ref, tc.want)
+				t.Errorf("UnmarshalYAML() got = %v, want %v", wrapper.Ref.String(), tc.want.String())
 			}
 		})
 	}
