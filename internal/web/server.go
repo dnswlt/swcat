@@ -135,10 +135,13 @@ func (s *Server) reloadTemplates() error {
 }
 
 func (s *Server) serveComponents(w http.ResponseWriter, r *http.Request) {
-	params := map[string]any{}
 	q := r.URL.Query()
-	components := s.repo.FindComponents(q.Get("q"))
-	params["Components"] = components
+	query := q.Get("q")
+	components := s.repo.FindComponents(query)
+	params := map[string]any{
+		"Components": components,
+		"Query":      query,
+	}
 
 	if r.Header.Get("HX-Request") == "true" {
 		// htmx request: only render rows
@@ -150,10 +153,13 @@ func (s *Server) serveComponents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveSystems(w http.ResponseWriter, r *http.Request) {
-	params := map[string]any{}
 	q := r.URL.Query()
-	systems := s.repo.FindSystems(q.Get("q"))
-	params["Systems"] = systems
+	query := q.Get("q")
+	systems := s.repo.FindSystems(query)
+	params := map[string]any{
+		"Systems": systems,
+		"Query":   query,
+	}
 
 	if r.Header.Get("HX-Request") == "true" {
 		// htmx request: only render rows
@@ -262,10 +268,13 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 }
 
 func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
-	params := map[string]any{}
 	q := r.URL.Query()
-	apis := s.repo.FindAPIs(q.Get("q"))
-	params["APIs"] = apis
+	query := q.Get("q")
+	apis := s.repo.FindAPIs(query)
+	params := map[string]any{
+		"APIs":  apis,
+		"Query": query,
+	}
 
 	if r.Header.Get("HX-Request") == "true" {
 		// htmx request: only render rows
@@ -311,10 +320,13 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 }
 
 func (s *Server) serveResources(w http.ResponseWriter, r *http.Request) {
-	params := map[string]any{}
 	q := r.URL.Query()
-	resources := s.repo.FindResources(q.Get("q"))
-	params["Resources"] = resources
+	query := q.Get("q")
+	resources := s.repo.FindResources(query)
+	params := map[string]any{
+		"Resources": resources,
+		"Query":     query,
+	}
 
 	if r.Header.Get("HX-Request") == "true" {
 		// htmx request: only render rows
@@ -360,10 +372,13 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 }
 
 func (s *Server) serveDomains(w http.ResponseWriter, r *http.Request) {
-	params := map[string]any{}
 	q := r.URL.Query()
-	domains := s.repo.FindDomains(q.Get("q"))
-	params["Domains"] = domains
+	query := q.Get("q")
+	domains := s.repo.FindDomains(query)
+	params := map[string]any{
+		"Domains": domains,
+		"Query":   query,
+	}
 
 	if r.Header.Get("HX-Request") == "true" {
 		// htmx request: only render rows
@@ -409,10 +424,13 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 }
 
 func (s *Server) serveGroups(w http.ResponseWriter, r *http.Request) {
-	params := map[string]any{}
 	q := r.URL.Query()
-	groups := s.repo.FindGroups(q.Get("q"))
-	params["Groups"] = groups
+	query := q.Get("q")
+	groups := s.repo.FindGroups(query)
+	params := map[string]any{
+		"Groups": groups,
+		"Query":  query,
+	}
 
 	if r.Header.Get("HX-Request") == "true" {
 		// htmx request: only render rows
@@ -440,10 +458,13 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 }
 
 func (s *Server) serveEntities(w http.ResponseWriter, r *http.Request) {
-	params := map[string]any{}
 	q := r.URL.Query()
-	entities := s.repo.FindEntities(q.Get("q"))
-	params["Entities"] = entities
+	query := q.Get("q")
+	entities := s.repo.FindEntities(query)
+	params := map[string]any{
+		"Entities": entities,
+		"Query":    query,
+	}
 
 	if r.Header.Get("HX-Request") == "true" {
 		// htmx request: only render rows
