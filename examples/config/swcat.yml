@@ -18,7 +18,7 @@ svg:
   showParentSystem: true
   # Show the API version in consumedApis/providedApis references, if specified
   # and unless an explicit label is present.
-  showVersionAsLabel: false
+  showVersionAsLabel: true
 catalog:
   # Create links for entities with certain annotations.
   annotationBasedLinks:

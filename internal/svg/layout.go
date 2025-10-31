@@ -2,6 +2,7 @@ package svg
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
@@ -194,16 +195,44 @@ func (l *StandardLayouter) Edge(src, dst catalog.Entity, style dot.EdgeStyle) do
 	}
 }
 
+// EdgeLabel generates a dot.EdgeLayout with an edge label.
+// The label is built from the ref's label and attributes:
+//
+// The full format is
+// <version> · <label>
+//
+//	<key1>: <value1>
+//	...
 func (l *StandardLayouter) EdgeLabel(src, dst catalog.Entity, ref *catalog.LabelRef, style dot.EdgeStyle) dot.EdgeLayout {
-	label := ref.Label
-	if label == "" && l.config.ShowVersionAsLabel {
-		// No explicit label. Show version reference, if present.
-		if version, ok := ref.GetAttr(catalog.VersionAttrKey); ok {
-			label = version
+	var label strings.Builder
+	// Version
+	if version, ok := ref.GetAttr(catalog.VersionAttrKey); ok && l.config.ShowVersionAsLabel {
+		label.WriteString(version)
+	}
+	// Label
+	if ref.Label != "" {
+		if label.Len() > 0 {
+			label.WriteString(" · ")
 		}
+		label.WriteString(ref.Label)
+	}
+	// Attrs, sorted alphabetically
+	keys := make([]string, 0, len(ref.Attrs))
+	for k := range ref.Attrs {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		if k == catalog.VersionAttrKey {
+			continue // version has already been added
+		}
+		if label.Len() > 0 {
+			label.WriteString("\\n")
+		}
+		label.WriteString(fmt.Sprintf("%s: %s", k, ref.Attrs[k]))
 	}
 	return dot.EdgeLayout{
-		Label: label,
+		Label: label.String(),
 		Style: style,
 	}
 }

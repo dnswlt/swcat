@@ -146,7 +146,11 @@ spec:
   providesApis:
     - flights-cache-api
   dependsOn:
-    - resource:flights-inmem-cache "read"
+    - ref: resource:flights-inmem-cache
+      label: LRU
+      attrs:
+        read: Flights
+        write: CHR
 ---
 apiVersion: swcat/v1
 kind: Component
