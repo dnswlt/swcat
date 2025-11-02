@@ -89,18 +89,18 @@ var attributeAccessors = map[string]attributeAccessor{
 	"description": func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Description}, true },
 	"tag":         func(e catalog.Entity) ([]string, bool) { return e.GetMetadata().Tags, true },
 	"label": func(e catalog.Entity) ([]string, bool) {
-		// For labels, we match against either key or value
+		// For labels, we match against "key=value"
 		var results []string
 		for k, v := range e.GetMetadata().Labels {
-			results = append(results, k, v)
+			results = append(results, fmt.Sprintf("%s=%s", k, v))
 		}
 		return results, true
 	},
 	"annotation": func(e catalog.Entity) ([]string, bool) {
-		// For annotations, we match against either key or value
+		// For annotations, we match against "key=value"
 		var results []string
 		for k, v := range e.GetMetadata().Annotations {
-			results = append(results, k, v)
+			results = append(results, fmt.Sprintf("%s=%s", k, v))
 		}
 		return results, true
 	},
@@ -135,6 +135,36 @@ var attributeAccessors = map[string]attributeAccessor{
 				return nil, false
 			}
 			return []string{v.Spec.Lifecycle}, true
+		default:
+			return nil, false
+		}
+	},
+	"consumesapis": func(e catalog.Entity) ([]string, bool) {
+		switch v := e.(type) {
+		case *catalog.Component:
+			if v.Spec == nil {
+				return nil, false
+			}
+			var results []string
+			for _, a := range v.Spec.ConsumesAPIs {
+				results = append(results, a.QName())
+			}
+			return results, true
+		default:
+			return nil, false
+		}
+	},
+	"providesapis": func(e catalog.Entity) ([]string, bool) {
+		switch v := e.(type) {
+		case *catalog.Component:
+			if v.Spec == nil {
+				return nil, false
+			}
+			var results []string
+			for _, a := range v.Spec.ProvidesAPIs {
+				results = append(results, a.QName())
+			}
+			return results, true
 		default:
 			return nil, false
 		}

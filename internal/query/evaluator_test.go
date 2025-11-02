@@ -7,6 +7,11 @@ import (
 )
 
 func TestEvaluator_Matches(t *testing.T) {
+	api1 := &catalog.API{
+		Metadata: &catalog.Metadata{
+			Name: "my-api",
+		},
+	}
 	sys1 := &catalog.System{
 		Metadata: &catalog.Metadata{
 			Name:      "my-system",
@@ -34,6 +39,9 @@ func TestEvaluator_Matches(t *testing.T) {
 			Lifecycle: "experimental",
 			Owner:     &catalog.Ref{Name: "team-a"},
 			System:    sys1.GetRef(),
+			ProvidesAPIs: []*catalog.LabelRef{
+				{Ref: api1.GetRef()},
+			},
 		},
 	}
 
@@ -198,6 +206,20 @@ func TestEvaluator_Matches(t *testing.T) {
 			query:     "lifecycle:production",
 			entity:    sys1,
 			wantMatch: false,
+			wantErr:   false,
+		},
+		{
+			name:      "component consumesApis",
+			query:     "consumesApis:my-api",
+			entity:    comp1,
+			wantMatch: false,
+			wantErr:   false,
+		},
+		{
+			name:      "component consumesApis",
+			query:     "providesApis:my-api",
+			entity:    comp1,
+			wantMatch: true,
 			wantErr:   false,
 		},
 

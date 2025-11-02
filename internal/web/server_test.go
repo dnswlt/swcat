@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -279,6 +280,109 @@ func TestGroupDetail_OK_NoSVG(t *testing.T) {
 	}
 }
 
+func TestServeEntitiesJSON_OK(t *testing.T) {
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	h := s.Handler()
+
+	req := httptest.NewRequest(http.MethodGet, "/catalog/entities", nil)
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if ct := rr.Header().Get("Content-Type"); ct != "application/json; charset=UTF-8" {
+		t.Fatalf("Content-Type = %q, want %q", ct, "application/json; charset=UTF-8")
+	}
+
+	var response map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to unmarshal JSON response: %v", err)
+	}
+
+	entities, ok := response["entities"].([]any)
+	if !ok {
+		t.Fatalf("response does not contain 'entities' array")
+	}
+	if len(entities) == 0 {
+		t.Fatalf("expected at least one entity, got 0")
+	}
+
+	// Check for a known entity
+	foundComponent := false
+	for _, entity := range entities {
+		eMap, ok := entity.(map[string]any)
+		if !ok {
+			continue
+		}
+		metadata, ok := eMap["metadata"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if name, ok := metadata["name"].(string); ok && name == "test-component" {
+			foundComponent = true
+			break
+		}
+	}
+	if !foundComponent {
+		t.Fatalf("expected to find 'test-component' in the response")
+	}
+}
+
+func TestServeEntitiesJSON_WithQuery(t *testing.T) {
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	h := s.Handler()
+
+	req := httptest.NewRequest(http.MethodGet, "/catalog/entities?q=kind:component", nil)
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if ct := rr.Header().Get("Content-Type"); ct != "application/json; charset=UTF-8" {
+		t.Fatalf("Content-Type = %q, want %q", ct, "application/json; charset=UTF-8")
+	}
+
+	var response map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to unmarshal JSON response: %v", err)
+	}
+
+	entities, ok := response["entities"].([]any)
+	if !ok {
+		t.Fatalf("response does not contain 'entities' array")
+	}
+	if len(entities) == 0 {
+		t.Fatalf("expected at least one entity, got 0")
+	}
+
+	// Check that only components are returned
+	for _, entity := range entities {
+		eMap, ok := entity.(map[string]any)
+		if !ok {
+			t.Fatalf("entity is not a map")
+		}
+		kind, ok := eMap["kind"].(string)
+		if !ok {
+			t.Fatalf("entity does not have a 'kind' field")
+		}
+		if kind != "Component" {
+			t.Fatalf("expected only entities of kind 'Component', got %q", kind)
+		}
+	}
+}
+
 func TestCreateEntity_OK(t *testing.T) {
 	// Create a temporary copy of the catalog file
 	tmpfile, err := os.CreateTemp("", "catalog-*.yml")
@@ -307,7 +411,7 @@ func TestCreateEntity_OK(t *testing.T) {
 	h := s.Handler()
 
 	newEntityYAML := `
-apiVersion: swcat.io/v1
+apiVersion: swcat/v1
 kind: Component
 metadata:
   name: new-component
@@ -363,7 +467,7 @@ func TestCreateEntity_ReadOnly(t *testing.T) {
 	h := s.Handler()
 
 	newEntityYAML := `
-apiVersion: swcat.io/v1
+apiVersion: swcat/v1
 kind: Component
 metadata:
   name: new-component
@@ -417,7 +521,7 @@ func TestCreateEntity_MissingSystem(t *testing.T) {
 	h := s.Handler()
 
 	newEntityYAML := `
-apiVersion: swcat.io/v1
+apiVersion: swcat/v1
 kind: Component
 metadata:
   name: new-component
@@ -476,7 +580,7 @@ func TestUpdateEntity_OK(t *testing.T) {
 	h := s.Handler()
 
 	updatedEntityYAML := `
-apiVersion: swcat.io/v1
+apiVersion: swcat/v1
 kind: Component
 metadata:
   name: test-component
@@ -536,7 +640,7 @@ func TestUpdateEntity_ReadOnly(t *testing.T) {
 	h := s.Handler()
 
 	updatedEntityYAML := `
-apiVersion: swcat.io/v1
+apiVersion: swcat/v1
 kind: Component
 metadata:
   name: test-component
@@ -571,7 +675,7 @@ func TestUpdateEntity_NotFound(t *testing.T) {
 	h := s.Handler()
 
 	updatedEntityYAML := `
-apiVersion: swcat.io/v1
+apiVersion: swcat/v1
 kind: Component
 metadata:
   name: not-found-component
@@ -625,7 +729,7 @@ func TestUpdateEntity_IDChange(t *testing.T) {
 	h := s.Handler()
 
 	updatedEntityYAML := `
-apiVersion: swcat.io/v1
+apiVersion: swcat/v1
 kind: Component
 metadata:
   name: new-name-for-component

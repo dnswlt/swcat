@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -758,6 +759,37 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 	w.Write(output.Bytes())
 }
 
+func (s *Server) serveEntitiesJSON(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	query := q.Get("q")
+	entities := s.repo.FindEntities(query)
+
+	result := make([]map[string]any, 0, len(entities))
+	for _, e := range entities {
+		if e.GetSourceInfo() == nil || e.GetSourceInfo().Node == nil {
+			continue
+		}
+		var data map[string]any
+		if err := e.GetSourceInfo().Node.Decode(&data); err != nil {
+			log.Printf("Failed to decode yaml.Node to map: %v", err)
+			http.Error(w, "JSON marshalling error", http.StatusInternalServerError)
+			return
+		}
+		result = append(result, data)
+	}
+
+	output, err := json.Marshal(map[string]any{
+		"entities": result,
+	})
+	if err != nil {
+		log.Printf("Failed to encode map as JSON: %v", err)
+		http.Error(w, "JSON marshalling error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.Write(output)
+}
+
 func (s *Server) routes() *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -830,6 +862,11 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("POST /ui/entities/{entityRef}/delete", func(w http.ResponseWriter, r *http.Request) {
 		entityRef := r.PathValue("entityRef")
 		s.deleteEntity(w, r, entityRef)
+	})
+
+	// JSON API to query entities.
+	mux.HandleFunc("GET /catalog/entities", func(w http.ResponseWriter, r *http.Request) {
+		s.serveEntitiesJSON(w, r)
 	})
 
 	// Health check. Useful for cloud deployments.

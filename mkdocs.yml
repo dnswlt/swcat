@@ -33,6 +33,7 @@ nav:
       - 'Group': 'user-guide/catalog/group.md'
     - 'Configuration': 'user-guide/configuration.md'
     - 'Query syntax': 'user-guide/query-syntax.md'
+    - 'JSON API': 'user-guide/json-api.md'
 
 # Extensions (optional but recommended for a better experience)
 markdown_extensions:

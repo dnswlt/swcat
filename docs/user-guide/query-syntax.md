@@ -34,12 +34,14 @@ The following attributes are available for filtering:
 * `title`: The title of the entity.
 * `description`: The description of the entity.
 * `tag`: A tag associated with the entity.
-* `label`: A label associated with the entity (searches both key and value).
-* `annotation`: An annotation associated with the entity (searches both key and value).
+* `label`: A label associated with the entity (searches in `key=value`).
+* `annotation`: An annotation associated with the entity (searches in `key=value`).
 * `owner`: The owner of the entity.
 * `system`: The system that the entity is a part of (for components, apis, resources).
 * `type`: The type of the entity (e.g., for components, apis, groups).
 * `lifecycle`: The lifecycle state of the entity (e.g., for components and apis).
+* `consumesApis`: An API listed in the `consumesApis` spec of a component.
+* `providesApis`: An API listed in the `providesApis` spec of a component.
 
 ## Operators
 
