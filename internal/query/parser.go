@@ -79,6 +79,7 @@ const (
 	tokenRParen // ")"
 	tokenColon  // ":"
 	tokenTilde  // "~"
+	tokenEqual  // "="
 )
 
 var tokenNames = map[tokenType]string{
@@ -93,6 +94,7 @@ var tokenNames = map[tokenType]string{
 	tokenRParen:     "RPAREN",
 	tokenColon:      "COLON",
 	tokenTilde:      "TILDE",
+	tokenEqual:      "EQUAL",
 }
 
 func (t tokenType) String() string {
@@ -141,6 +143,8 @@ func (l *lexer) nextToken() token {
 		tok = token{typ: tokenColon, lit: ":"}
 	case '~':
 		tok = token{typ: tokenTilde, lit: "~"}
+	case '=':
+		tok = token{typ: tokenEqual, lit: "="}
 	case '!':
 		tok = token{typ: tokenNot, lit: "!"}
 	case '\'', '"':
@@ -183,7 +187,7 @@ func (l *lexer) readIdentifier() string {
 }
 
 func (l *lexer) isIdentifierChar(ch rune) bool {
-	return ch != 0 && !unicode.IsSpace(ch) && !strings.ContainsRune("()!:'\"~", ch)
+	return ch != 0 && !unicode.IsSpace(ch) && !strings.ContainsRune("()!:'\"~=", ch)
 }
 
 func (l *lexer) readString(quote rune) string {
@@ -317,7 +321,7 @@ func (p *Parser) isTermStart(ttype tokenType) bool {
 }
 
 func (p *Parser) parseIdentifierOrAttributeTerm() Expression {
-	if p.peekToken.typ == tokenColon || p.peekToken.typ == tokenTilde {
+	if p.peekToken.typ == tokenColon || p.peekToken.typ == tokenTilde || p.peekToken.typ == tokenEqual {
 		// It's an AttributeTerm
 		attrTerm := &AttributeTerm{Attribute: p.curToken.lit}
 		p.nextToken() // consume identifier, current is now operator

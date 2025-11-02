@@ -12,6 +12,21 @@ func TestParse(t *testing.T) {
 		expected string
 	}{
 		{
+			name:     "single attribute term with equal",
+			input:    "name=foo",
+			expected: "name=foo",
+		},
+		{
+			name:     "single attribute term with equal and quoted value",
+			input:    "name='foo bar'",
+			expected: "name='foo bar'",
+		},
+		{
+			name:     "combined with equal and other operators",
+			input:    "kind=Component AND name='my component' OR tag:production",
+			expected: "((kind=Component AND name='my component') OR tag:production)",
+		},
+		{
 			name:     "single simple term",
 			input:    "bana",
 			expected: "bana",

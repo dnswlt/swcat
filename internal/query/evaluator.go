@@ -245,6 +245,8 @@ func (ev *Evaluator) matchesOperator(entityValue, operator, queryValue string) (
 	switch operator {
 	case ":":
 		return strings.Contains(strings.ToLower(entityValue), strings.ToLower(queryValue)), nil
+	case "=":
+		return strings.EqualFold(entityValue, queryValue), nil
 	case "~":
 		re, found := ev.regexCache[queryValue]
 		if !found {

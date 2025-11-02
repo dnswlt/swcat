@@ -48,7 +48,14 @@ The following attributes are available for filtering:
 The following operators are supported for attribute searches:
 
 * `:` (contains): Checks if the attribute value contains the given search term (case-insensitive).
+* `=` (equals): Checks if the attribute value exactly matches the given search term (case-insensitive).
 * `~` (regex): Matches the attribute value against a regular expression.
+
+Example with equals:
+
+```
+name=my-component
+```
 
 Example with regex:
 

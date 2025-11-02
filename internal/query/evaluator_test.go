@@ -74,6 +74,42 @@ func TestEvaluator_Matches(t *testing.T) {
 			wantMatch: false,
 			wantErr:   false,
 		},
+		// Equality Matching (Operator '=')
+		{
+			name:      "exact match name",
+			query:     "name=my-system",
+			entity:    sys1,
+			wantMatch: true,
+			wantErr:   false,
+		},
+		{
+			name:      "exact match name case-insensitive",
+			query:     "name=My-System",
+			entity:    sys1,
+			wantMatch: true,
+			wantErr:   false,
+		},
+		{
+			name:      "exact match name no match",
+			query:     "name=my-system-nope",
+			entity:    sys1,
+			wantMatch: false,
+			wantErr:   false,
+		},
+		{
+			name:      "exact match owner",
+			query:     "owner=team-b",
+			entity:    sys1,
+			wantMatch: true,
+			wantErr:   false,
+		},
+		{
+			name:      "exact match lifecycle no match",
+			query:     "lifecycle=production",
+			entity:    comp1,
+			wantMatch: false,
+			wantErr:   false,
+		},
 
 		// Attribute Matching (Operator ':')
 		{
