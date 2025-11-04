@@ -20,10 +20,16 @@ var classPrefixMap = map[string]string{
 	PrefixNodeLabelEm:    "node-label-em",
 }
 
-// PostprocessClassPrefixes reads SVG data from a byte slice, injects class attributes into <text>
-// elements based on special prefixes, and returns the transformed SVG as a new byte slice.
+// PostprocessSVG transforms the SVG output by graphviz in the following ways:
+//
+//   - it injects class attributes into <text> elements that have special prefixes
+//     (PrefixNodeLabelSmall etc.) - this is a hack to enable different styles
+//     on different lines of a node's multi-line label.
+//   - it filters out all <title> elements, which render as tooltips in browsers,
+//     unconditionally.
+//
 // It returns an error if any part of the XML processing fails.
-func PostprocessClassPrefixes(svg []byte) ([]byte, error) {
+func PostprocessSVG(svg []byte) ([]byte, error) {
 	in := bytes.NewReader(svg)
 	var out bytes.Buffer
 
@@ -42,6 +48,24 @@ func PostprocessClassPrefixes(svg []byte) ([]byte, error) {
 
 		switch se := token.(type) {
 		case xml.StartElement:
+			// Filter out <title> elements, which browsers render as native tooltips.
+			if se.Name.Local == "title" {
+				// Skip tokens until we find the corresponding </title> end element.
+				for {
+					nextToken, err := decoder.Token()
+					if err == io.EOF {
+						break // Should not happen in a valid XML
+					}
+					if err != nil {
+						return nil, err
+					}
+					if ee, ok := nextToken.(xml.EndElement); ok && ee.Name.Local == "title" {
+						break // Found the closing tag
+					}
+				}
+				continue // Continue to the next token after the loop
+			}
+
 			// Check if the element is a <text> tag
 			if se.Name.Local == "text" {
 				// We found a <text> element. Now, we peek at the next token

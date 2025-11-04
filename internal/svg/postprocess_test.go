@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestPostprocessClassPrefixes(t *testing.T) {
+func TestPostprocessSVG(t *testing.T) {
 	testCases := []struct {
 		name    string
 		input   []byte
@@ -68,17 +68,23 @@ func TestPostprocessClassPrefixes(t *testing.T) {
 		{
 			name:    "self-closing text tag",
 			input:   []byte(`<svg><text/></svg>`),
-			want:    []byte("<svg><text></text></svg>"),
+			want:    []byte(`<svg><text></text></svg>`),
+			wantErr: false,
+		},
+		{
+			name:    "filters out title elements",
+			input:   []byte(`<svg><title>a title</title><g><text>some text</text></g></svg>`),
+			want:    []byte(`<svg><g><text>some text</text></g></svg>`),
 			wantErr: false,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := PostprocessClassPrefixes(tc.input)
+			got, err := PostprocessSVG(tc.input)
 
 			if (err != nil) != tc.wantErr {
-				t.Errorf("PostprocessClassPrefixes() error = %v, wantErr %v", err, tc.wantErr)
+				t.Errorf("PostprocessSVG() error = %v, wantErr %v", err, tc.wantErr)
 				return
 			}
 
@@ -89,7 +95,7 @@ func TestPostprocessClassPrefixes(t *testing.T) {
 			// Using TrimSpace on the byte slices provides a more robust comparison
 			// that isn't sensitive to minor whitespace differences from the encoder.
 			if !bytes.Equal(bytes.TrimSpace(got), bytes.TrimSpace(tc.want)) {
-				t.Errorf("PostprocessClassPrefixes() =%swant =%s", string(got), string(tc.want))
+				t.Errorf("PostprocessSVG() =%swant =%s", string(got), string(tc.want))
 			}
 		})
 	}

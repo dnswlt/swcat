@@ -195,45 +195,57 @@ func (l *StandardLayouter) Edge(src, dst catalog.Entity, style dot.EdgeStyle) do
 	}
 }
 
+// tooltipAttrs builds the list of tooltip attributes that should be displayed.
+// It also returns the list of attr keys (all except "version"), sorted alphabetically.
+func (l *StandardLayouter) tooltipAttrs(src, dst catalog.Entity, ref *catalog.LabelRef) (otherKeys []string, tooltipAttrs []dot.TooltipAttr) {
+	otherKeys = make([]string, 0, len(ref.Attrs))
+	for k := range ref.Attrs {
+		if k == catalog.VersionAttrKey {
+			continue
+		}
+		otherKeys = append(otherKeys, k)
+	}
+	slices.Sort(otherKeys)
+	tooltipAttrs = []dot.TooltipAttr{
+		{Key: "", Value: src.GetQName() + " → " + dst.GetQName()},
+	}
+	if ref.Label != "" {
+		tooltipAttrs = append(tooltipAttrs, dot.TooltipAttr{Key: "label", Value: ref.Label})
+	}
+	if val, ok := ref.Attrs[catalog.VersionAttrKey]; ok {
+		tooltipAttrs = append(tooltipAttrs, dot.TooltipAttr{
+			Key: "version", Value: val,
+		})
+	}
+	for _, k := range otherKeys {
+		tooltipAttrs = append(tooltipAttrs, dot.TooltipAttr{
+			Key: k, Value: ref.Attrs[k],
+		})
+	}
+	return otherKeys, tooltipAttrs
+}
+
 // EdgeLabel generates a dot.EdgeLayout with an edge label.
-// The label is built from the ref's label and attributes:
-//
-// The full format is
-// <version> · <label>
-//
-//	<key1>: <value1>
-//	...
+// The label and tooltip are built from the ref's label and attributes.
 func (l *StandardLayouter) EdgeLabel(src, dst catalog.Entity, ref *catalog.LabelRef, style dot.EdgeStyle) dot.EdgeLayout {
-	var label strings.Builder
+	var labelParts []string
 	// Version
 	if version, ok := ref.GetAttr(catalog.VersionAttrKey); ok && l.config.ShowVersionAsLabel {
-		label.WriteString(version)
+		labelParts = append(labelParts, version)
 	}
 	// Label
 	if ref.Label != "" {
-		if label.Len() > 0 {
-			label.WriteString(" · ")
-		}
-		label.WriteString(ref.Label)
+		labelParts = append(labelParts, ref.Label)
 	}
-	// Attrs, sorted alphabetically
-	keys := make([]string, 0, len(ref.Attrs))
-	for k := range ref.Attrs {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	for _, k := range keys {
-		if k == catalog.VersionAttrKey {
-			continue // version has already been added
-		}
-		if label.Len() > 0 {
-			label.WriteString("\\n")
-		}
-		label.WriteString(fmt.Sprintf("%s: %s", k, ref.Attrs[k]))
+	// Attrs keys
+	otherKeys, tooltipAttrs := l.tooltipAttrs(src, dst, ref)
+	if len(otherKeys) > 0 {
+		labelParts = append(labelParts, strings.Join(otherKeys, "/"))
 	}
 	return dot.EdgeLayout{
-		Label: label.String(),
-		Style: style,
+		Label:        joinWrap(labelParts, " · ", 20),
+		Style:        style,
+		TooltipAttrs: tooltipAttrs,
 	}
 }
 

@@ -1,6 +1,42 @@
 import './style.css'; // Make sure Tailwind CSS gets included by vite.
 
 let svgMeta = {};
+let tooltip = null;
+
+function createTooltip() {
+    tooltip = document.createElement('div');
+    tooltip.id = 'rich-tooltip';
+    document.body.appendChild(tooltip);
+}
+
+function showTooltip(edgeId, event) {
+    if (!svgMeta.edges) return;
+    const edgeInfo = svgMeta.edges[edgeId];
+    if (!edgeInfo || !edgeInfo.tooltipAttrs) return;
+
+    let content = '';
+
+    edgeInfo.tooltipAttrs.forEach(attr => {
+        if (attr.Key) {
+            content += `<p><strong>${attr.Key}:</strong> ${attr.Value}</p>`;
+        } else {
+            content += `<p>${attr.Value}</p>`;
+        }
+    });
+
+    tooltip.innerHTML = content;
+    tooltip.style.display = 'block';
+    updateTooltipPosition(event);
+}
+
+function hideTooltip() {
+    tooltip.style.display = 'none';
+}
+
+function updateTooltipPosition(event) {
+    tooltip.style.left = (event.pageX + 15) + 'px';
+    tooltip.style.top = (event.pageY + 15) + 'px';
+}
 
 function loadSVGMetadata() {
     const metaElem = document.getElementById("relationships-svg-meta");
@@ -102,10 +138,34 @@ function addSVGListener() {
         }
 
     });
+
+    svg.addEventListener('mouseover', (event) => {
+        const label = event.target.closest('g.edge text');
+        if (label) {
+            const edgeGroup = label.closest('g.edge');
+            if (edgeGroup && edgeGroup.id) {
+                showTooltip(edgeGroup.id, event);
+            }
+        }
+    });
+
+    svg.addEventListener('mouseout', (event) => {
+        const label = event.target.closest('g.edge text');
+        if (label) {
+            hideTooltip();
+        }
+    });
+
+    svg.addEventListener('mousemove', (event) => {
+        if (tooltip.style.display === 'block') {
+            updateTooltipPosition(event);
+        }
+    });
 }
 
 async function initPage(pageId) {
     if (['domain', 'system', 'component', 'resource', 'api', 'group'].includes(pageId)) {
+        createTooltip();
         loadSVGMetadata();
         addSVGListener();
     }

@@ -575,7 +575,7 @@ func runDot(ctx context.Context, runner dot.Runner, ds *dot.DotSource) (*Result,
 	if err != nil {
 		return nil, fmt.Errorf("running dot failed: %w", err)
 	}
-	svg, err = PostprocessClassPrefixes(svg)
+	svg, err = PostprocessSVG(svg)
 	if err != nil {
 		return nil, fmt.Errorf("postprocessing failed: %w", err)
 	}

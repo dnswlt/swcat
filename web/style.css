@@ -5,6 +5,26 @@
 
 @layer utilities {
 
+    /* --- Rich Tooltip --- */
+    #rich-tooltip {
+        position: absolute;
+        display: none;
+        padding: 12px;
+        background-color: #333;
+        color: white;
+        border: 1px solid #555;
+        border-radius: 4px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        z-index: 1000;
+        max-width: 300px;
+        pointer-events: none;
+    }
+
+    #rich-tooltip p {
+        margin: 0;
+        font-size: 0.9em;
+    }
+
     /* --- Graphviz Styling --- */
     .clickable-node:hover {
         cursor: pointer;

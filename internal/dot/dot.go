@@ -16,9 +16,10 @@ type NodeInfo struct {
 	Label string `json:"label"`
 }
 type EdgeInfo struct {
-	From  string `json:"from"`  // From entity reference (e.g. api:ns1/super-api).
-	To    string `json:"to"`    // To entity reference.
-	Label string `json:"label"` // Optional edge label.
+	From         string        `json:"from"`                   // From entity reference (e.g. api:ns1/super-api).
+	To           string        `json:"to"`                     // To entity reference.
+	Label        string        `json:"label"`                  // Optional edge label.
+	TooltipAttrs []TooltipAttr `json:"tooltipAttrs,omitempty"` // Optional key/value pairs to be displayed in tooltips.
 }
 type ClusterInfo struct {
 	Label string `json:"label"`
@@ -157,9 +158,15 @@ const (
 	ESSystemLink
 )
 
+type TooltipAttr struct {
+	Key   string
+	Value string
+}
+
 type EdgeLayout struct {
-	Label string
-	Style EdgeStyle
+	Label        string
+	Style        EdgeStyle
+	TooltipAttrs []TooltipAttr
 }
 
 type Edge struct {
@@ -211,7 +218,10 @@ func (dw *Writer) Start() {
 	// via CSS (see style.css).
 	dw.w.WriteString("class=\"graphviz-svg\"\n")
 	dw.w.WriteString("node[shape=\"box\",fontname=\"sans-serif\",fontsize=\"11\",style=\"filled\"]\n")
-	dw.w.WriteString(fmt.Sprintf("edge[fontname=\"sans-serif\",fontsize=\"11\",minlen=\"%d\"]\n", dw.config.EdgeMinLen))
+	// We would like to add tooltip="" here to prevent tooltips on edges (given that we render rich tooltips).
+	// https://forum.graphviz.org/t/svg-without-tooltips/425/3 indicates that this does not work
+	// (and indeed it didn't). So we remove the <title> element in postprocessing instead.
+	fmt.Fprintf(dw.w, "edge[fontname=\"sans-serif\",fontsize=\"11\",minlen=\"%d\"]\n", dw.config.EdgeMinLen)
 }
 
 func (dw *Writer) End() {
@@ -281,9 +291,10 @@ func (dw *Writer) AddEdge(edge Edge) {
 	edgeID := fmt.Sprintf("svg-edge-%d", len(dw.edgeInfo))
 	attrs["id"] = edgeID
 	dw.edgeInfo[edgeID] = &EdgeInfo{
-		From:  edge.From,
-		To:    edge.To,
-		Label: edge.Layout.Label,
+		From:         edge.From,
+		To:           edge.To,
+		Label:        edge.Layout.Label,
+		TooltipAttrs: edge.Layout.TooltipAttrs,
 	}
 
 	if edge.Layout.Label != "" {
