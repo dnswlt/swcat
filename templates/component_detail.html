@@ -13,6 +13,8 @@
         <h1 class="text-2xl font-semibold text-center">Component details </h1>
 
         {{ $readOnly := .ReadOnly }}
+        {{ $customContent := .CustomContent }}
+        
         {{ with .Component }}
         <div class="space-y-3">
             <div class="flex justify-between items-start">
@@ -54,6 +56,8 @@
         </div>
 
         {{ template "metadata_links.html" . }}
+
+        {{ template "custom_content.html" $customContent }}
 
         {{ if or .Spec.ProvidesAPIs .Spec.ConsumesAPIs }}
         <div class="border rounded-xl">

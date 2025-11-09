@@ -231,6 +231,8 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
+	s.setCustomContent(system, params)
+
 	s.serveHTMLPage(w, r, "system_detail.html", params)
 }
 
@@ -264,6 +266,7 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
+	s.setCustomContent(component, params)
 
 	s.serveHTMLPage(w, r, "component_detail.html", params)
 }
@@ -284,6 +287,15 @@ func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
 	}
 	// full page
 	s.serveHTMLPage(w, r, "apis.html", params)
+}
+
+func (s *Server) setCustomContent(e catalog.Entity, params map[string]any) {
+	customContent, err := customContentFromAnnotations(e.GetMetadata(), s.opts.Config.UI.AnnotationBasedContent)
+	if err != nil {
+		log.Printf("Invalid custom content for %q: %v", e.GetQName(), err)
+		return
+	}
+	params["CustomContent"] = customContent
 }
 
 func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) {
@@ -317,6 +329,7 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
 
+	s.setCustomContent(ap, params)
 	s.serveHTMLPage(w, r, "api_detail.html", params)
 }
 
@@ -368,6 +381,7 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
+	s.setCustomContent(resource, params)
 
 	s.serveHTMLPage(w, r, "resource_detail.html", params)
 }
@@ -420,6 +434,7 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
+	s.setCustomContent(domain, params)
 
 	s.serveHTMLPage(w, r, "domain_detail.html", params)
 }
@@ -455,6 +470,8 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 		return
 	}
 	params["Group"] = group
+	s.setCustomContent(group, params)
+
 	s.serveHTMLPage(w, r, "group_detail.html", params)
 }
 

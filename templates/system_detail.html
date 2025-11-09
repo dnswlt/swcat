@@ -13,6 +13,8 @@
         <h1 class="text-2xl font-semibold text-center">System details </h1>
 
         {{ $readOnly := .ReadOnly }}
+        {{ $customContent := .CustomContent }}
+
         {{ with .System }}
         <div class="space-y-3">
             <div class="flex justify-between items-start">
@@ -51,6 +53,8 @@
         </div>
 
         {{ template "metadata_links.html" . }}
+
+        {{ template "custom_content.html" $customContent }}
 
         <div class="grid grid-cols-3 gap-4">
             {{ if .GetComponents }}

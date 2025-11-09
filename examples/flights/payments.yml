@@ -42,6 +42,14 @@ kind: API
 metadata:
   name: credit-card-check
   description: Checks if a credit card is valid.
+  annotations:
+    solace.com/topics: |
+      [
+        "foo/bar/baz",
+        "yoodle/doodle/bang",
+        "s/a/d",
+        "foo/bar/bongle"
+      ]
 spec:
   type: https/json
   lifecycle: production

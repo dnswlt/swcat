@@ -204,7 +204,11 @@ spec:
   consumesApis:
     - flights-search-api
     - flights-purchase-api
-    - sso-api
+    - ref: sso-api
+      attrs:
+        rpc: SignIn
+        sub: Expired
+        pub: Heartbeat
     - analytics-events-api
 ---
 apiVersion: swcat/v1

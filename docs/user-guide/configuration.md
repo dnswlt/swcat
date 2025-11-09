@@ -43,10 +43,36 @@ The `svg` section allows you to customize the appearance of the generated SVG di
 * `showParentSystem`: If true, includes the parent system in the labels of component, resource, and API entities.
 * `showVersionAsLabel`: If true, shows the API version in consumed/provided API references if no explicit label is present.
 
+## UI Configuration
+
+The `ui` section allows for customizing the user interface.
+
+* `annotationBasedContent`: Defines custom sections on entity detail pages based on annotations. This provides a powerful way to display entity-specific information directly from your catalog data.
+
+    The configuration is a map where each key is an annotation (e.g., `my-org.com/my-data`). The value specifies how the annotation's content should be rendered:
+
+    * `heading`: The title for the custom content card.
+
+    * `style`: The rendering style for the annotation's value.
+
+        * `text`: Renders the value as plain text.
+
+        * `list`: Renders a JSON array of strings as a bulleted list.
+
+        * `json`: Renders a JSON object or array in a formatted code block.
+
 ## Example Configuration
 
 ```yaml
 # Example configuration file.
+ui:
+  # Define custom sections in entity detail pages based on annotations.
+  annotationBasedContent:
+    # Show solace topics, annotated as a JSON list in the solace.com/topics annotation,
+    # as a card on the API detail page:
+    solace.com/topics:
+      heading: Solace Topics
+      style: list  # Possible values: text|list|json
 svg:
   # Show the (programming) language label as a <<stereotype>> on nodes.
   stereotypeLabels:

@@ -168,10 +168,18 @@ async function initPage(pageId) {
         createTooltip();
         loadSVGMetadata();
         addSVGListener();
+
+        const jsonViewers = document.querySelectorAll('.json-viewer');
+        if (jsonViewers.length > 0) {
+            const { initJsonViewer } = await import('./editor.js');
+            jsonViewers.forEach(viewer => {
+                initJsonViewer(viewer.id);
+            });
+        }
     }
     if (['entity-edit', 'entity-clone'].includes(pageId)) {
-        const { initEditor } = await import('./editor.js');
-        initEditor();
+        const { initYamlEditor } = await import('./editor.js');
+        initYamlEditor();
     }
 }
 

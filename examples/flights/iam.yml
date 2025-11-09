@@ -49,7 +49,10 @@ spec:
   owner: iam-owner
   system: iam-system
   providesApis:
-    - sso-api
+    - ref: sso-api
+      attrs:
+        pub: Expired
+        rpc: SignIn
 ---
 apiVersion: swcat/v1
 kind: API

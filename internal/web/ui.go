@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/config"
 	"github.com/yuin/goldmark"
 )
 
@@ -288,4 +290,61 @@ func setQueryParam(u *url.URL, key, value string) *url.URL {
 	q.Set(key, value)
 	u2.RawQuery = q.Encode()
 	return &u2
+}
+
+// CustomContent represents content that is displayed in the detail view
+// and is specified in an entity annotation.
+type CustomContent struct {
+	Heading string
+	Text    string   // Text to be presented as-is.
+	Items   []string // Items to be rendered as an <ul> list.
+	Code    string   // Preformatted code (typically JSON)
+}
+
+func customContentFromAnnotations(meta *catalog.Metadata, configMap map[string]config.AnnotationBasedContent) ([]*CustomContent, error) {
+	if len(meta.Annotations) == 0 || len(configMap) == 0 {
+		return nil, nil
+	}
+	var result []*CustomContent
+	for k, abc := range configMap {
+		anno, ok := meta.Annotations[k]
+		if !ok {
+			continue
+		}
+		cc, err := newCustomContent(abc.Heading, anno, abc.Style)
+		if err != nil {
+			return nil, fmt.Errorf("invalid custom content: %v", err)
+		}
+		result = append(result, cc)
+	}
+	return result, nil
+}
+
+func newCustomContent(heading, content, style string) (*CustomContent, error) {
+	cc := &CustomContent{
+		Heading: heading,
+	}
+	switch style {
+	case "text", "":
+		cc.Text = content
+	case "list":
+		var items []string
+		if err := json.Unmarshal([]byte(content), &items); err != nil {
+			return nil, fmt.Errorf("not a valid list of strings: %v", err)
+		}
+		cc.Items = items
+	case "json":
+		var raw any
+		if err := json.Unmarshal([]byte(content), &raw); err != nil {
+			return nil, fmt.Errorf("not a valid JSON object: %v", err)
+		}
+		indentedJSON, err := json.MarshalIndent(raw, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("failed to indent JSON: %v", err)
+		}
+		cc.Code = string(indentedJSON)
+	default:
+		return nil, fmt.Errorf("invalid custom content style (must be text|list|json): %s", style)
+	}
+	return cc, nil
 }
