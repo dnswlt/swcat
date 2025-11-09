@@ -856,3 +856,127 @@ func TestDeleteEntity_NotFound(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusNotFound)
 	}
 }
+
+func TestUpdateAnnotationValue_OK(t *testing.T) {
+	// Create a temporary copy of the catalog file
+	tmpfile, err := os.CreateTemp("", "catalog-*.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	src, err := os.Open("../../testdata/catalog.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+
+	_, err = io.Copy(tmpfile, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpfile.Close()
+
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{tmpfile.Name()})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	h := s.Handler()
+
+	entityRef := "component:default/test-component"
+	annotationKey := "swcat.io/test-annotation"
+	newValue := "new-value"
+
+	req := httptest.NewRequest(http.MethodPost, "/catalog/entities/"+url.PathEscape(entityRef)+"/annotations/"+url.PathEscape(annotationKey), strings.NewReader(newValue))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	// Check if the entity was actually updated in the repo
+	ref, _ := catalog.ParseRef(entityRef)
+	entity := s.repo.Entity(ref)
+	if entity == nil {
+		t.Fatalf("entity not found in the repository")
+	}
+	if val, ok := entity.GetMetadata().Annotations[annotationKey]; !ok || val != newValue {
+		t.Fatalf("annotation was not updated in the repository, got %q", val)
+	}
+
+	// Check if the file was updated
+	updatedContent, err := os.ReadFile(tmpfile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedInFile := "swcat.io/test-annotation: new-value"
+	if !strings.Contains(string(updatedContent), expectedInFile) {
+		t.Fatalf("updated annotation was not written to the catalog file")
+	}
+}
+
+func TestUpdateAnnotationValue_ReadOnly(t *testing.T) {
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	s.opts.ReadOnly = true // Set read-only mode
+	h := s.Handler()
+
+	entityRef := "component:default/test-component"
+	annotationKey := "swcat.io/test-annotation"
+	newValue := "new-value"
+
+	req := httptest.NewRequest(http.MethodPost, "/catalog/entities/"+url.PathEscape(entityRef)+"/annotations/"+url.PathEscape(annotationKey), strings.NewReader(newValue))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusPreconditionFailed {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusPreconditionFailed)
+	}
+}
+
+func TestUpdateAnnotationValue_NotFound(t *testing.T) {
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	h := s.Handler()
+
+	entityRef := "component:default/not-found-component"
+	annotationKey := "swcat.io/test-annotation"
+	newValue := "new-value"
+
+	req := httptest.NewRequest(http.MethodPost, "/catalog/entities/"+url.PathEscape(entityRef)+"/annotations/"+url.PathEscape(annotationKey), strings.NewReader(newValue))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusNotFound)
+	}
+}
+
+func TestUpdateAnnotationValue_InvalidAnnotation(t *testing.T) {
+	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+	s := newTestServer(t, repo)
+	h := s.Handler()
+
+	entityRef := "component:default/test-component"
+	annotationKey := "invalid key with spaces"
+	newValue := "new-value"
+
+	req := httptest.NewRequest(http.MethodPost, "/catalog/entities/"+url.PathEscape(entityRef)+"/annotations/"+url.PathEscape(annotationKey), strings.NewReader(newValue))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}

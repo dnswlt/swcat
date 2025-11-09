@@ -131,7 +131,7 @@ func writeTempFile(t *testing.T, name, content string) string {
 	return tmpfile
 }
 
-func TestReadEntityFromString(t *testing.T) {
+func TestNewEntityFromString(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		content := `
 apiVersion: swcat/v1alpha1
@@ -143,9 +143,9 @@ spec:
   owner: my-group
   lifecycle: experimental
 `
-		entity, err := ReadEntityFromString(content)
+		entity, err := NewEntityFromString(content)
 		if err != nil {
-			t.Fatalf("ReadEntityFromString() error = %v, wantErr %v", err, false)
+			t.Fatalf("NewEntityFromString() error = %v, wantErr %v", err, false)
 		}
 		if entity == nil {
 			t.Fatal("entity is nil")
@@ -174,9 +174,9 @@ spec:
   lifecycle: experimental
   foo: bar
 `
-		_, err := ReadEntityFromString(content)
+		_, err := NewEntityFromString(content)
 		if err == nil {
-			t.Errorf("ReadEntityFromString() error = %v, wantErr %v", err, true)
+			t.Errorf("NewEntityFromString() error = %v, wantErr %v", err, true)
 		}
 	})
 }

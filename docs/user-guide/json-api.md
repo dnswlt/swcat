@@ -1,16 +1,15 @@
 # JSON API for Entities
 
-The `/catalog/entities` endpoint provides a JSON API to query entities
-stored in the catalog. This endpoint allows you to retrieve entities
-programmatically, making it suitable for integrations and custom tooling.
+The `/catalog/entities` endpoint provides a JSON API to query and
+manipulate entities stored in the catalog.
 
-## Usage
+## Querying entities
 
 To query entities, send a `GET` request to `/catalog/entities`.
 You can filter the results using the `q` query parameter, which accepts the same
 [query syntax](../user-guide/query-syntax.md) as the UI search.
 
-### Example
+### Query example
 
 To retrieve all components, you can use the following request:
 
@@ -50,3 +49,24 @@ where each element is an entity matching your query.
 
 For more details on the query syntax, refer to the
 [Search query syntax](../user-guide/query-syntax.md) page.
+
+## Updating annotations
+
+You can update an entity's annotations using a `POST` request to
+`/catalog/entities/{entityRef}/annotations/{annotationKey}`.
+The new annotation value should be provided in the request body as plain text.
+
+- `entityRef`: The full entity reference (e.g., `component:default/my-component`).
+- `annotationKey`: The key of the annotation to update (e.g., `swcat.io/my-annotation`).
+
+**Note:** This operation is not available when the server is running in read-only mode.
+Only valid annotation keys and values are accepted.
+
+### Update example
+
+To update the `swcat.io/status` annotation for `component:my-component` to `deployed`:
+
+```bash
+curl -X POST 'http://localhost:9191/catalog/entities/component%3Amy-component/annotations/swcat.io%2Fstatus' \
+  --data 'deployed'
+```

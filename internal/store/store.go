@@ -181,19 +181,29 @@ func ReadEntities(path string) ([]api.Entity, error) {
 	return entities, nil
 }
 
-func ReadEntityFromString(content string) (api.Entity, error) {
-	var node yaml.Node
-	dec := yaml.NewDecoder(strings.NewReader(content))
-	err := dec.Decode(&node)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode YAML node: %w", err)
+func CopyNode(node *yaml.Node) (*yaml.Node, error) {
+	if node == nil {
+		return nil, nil
 	}
+	data, err := yaml.Marshal(node)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode node: %v", err)
+	}
+	var copiedNode yaml.Node
+	err = yaml.Unmarshal(data, &copiedNode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode node: %v", err)
+	}
+	return &copiedNode, nil
+}
+
+func NewEntityFromNode(node *yaml.Node, strict bool) (api.Entity, error) {
 
 	if len(node.Content) == 0 {
 		return nil, errors.New("empty yaml document")
 	}
 
-	kind, err := findKindInNode(&node)
+	kind, err := findKindInNode(node)
 	if err != nil {
 		return nil, fmt.Errorf("error in document: %w", err)
 	}
@@ -204,24 +214,40 @@ func ReadEntityFromString(content string) (api.Entity, error) {
 	}
 	entity := factory()
 
-	// See comments in ReadEntities about why this dance is necessary.
-	var buf bytes.Buffer
-	enc := yaml.NewEncoder(&buf)
-	if err := enc.Encode(&node); err != nil {
-		return nil, fmt.Errorf("failed to re-encode node: %v", err)
+	if strict {
+		// See comments in ReadEntities about why this dance is necessary.
+		var buf bytes.Buffer
+		enc := yaml.NewEncoder(&buf)
+		if err := enc.Encode(node); err != nil {
+			return nil, fmt.Errorf("failed to re-encode node: %v", err)
+		}
+		// Decode into the final typed struct
+		strictDec := yaml.NewDecoder(&buf)
+		strictDec.KnownFields(true)
+		if err := strictDec.Decode(entity); err != nil {
+			return nil, fmt.Errorf("failed to decode node into struct: %v", err)
+		}
+	} else {
+		// Non-strict: decode directly into entity
+		if err := node.Decode(entity); err != nil {
+			return nil, fmt.Errorf("failed to decode node into struct: %v", err)
+		}
 	}
-	// Decode into the final typed struct
-	strictDec := yaml.NewDecoder(&buf)
-	strictDec.KnownFields(true)
-	if err := strictDec.Decode(entity); err != nil {
-		return nil, fmt.Errorf("failed to decode node into struct: %v", err)
-	}
-
 	entity.SetSourceInfo(&api.SourceInfo{
-		Node: &node,
+		Node: node,
 	})
 
 	return entity, nil
+}
+
+func NewEntityFromString(content string) (api.Entity, error) {
+	var node yaml.Node
+	dec := yaml.NewDecoder(strings.NewReader(content))
+	err := dec.Decode(&node)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode YAML node: %w", err)
+	}
+	return NewEntityFromNode(&node, true)
 }
 
 // findKindInNode is a helper to extract the 'kind' value from a yaml.Node
@@ -243,6 +269,73 @@ func findKindInNode(doc *yaml.Node) (string, error) {
 		}
 	}
 	return "", errors.New("no 'kind' field found")
+}
+
+// SetAnnotationInNode finds the metadata.annotations map in the given YAML document node
+// and sets the given key to the given value. If the key already exists, its value is
+// updated. If the metadata or annotations maps do not exist, they are created.
+func SetAnnotationInNode(doc *yaml.Node, key, value string) error {
+	if doc == nil || doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 || doc.Content[0].Kind != yaml.MappingNode {
+		return errors.New("expected a YAML document with a top-level map")
+	}
+	rootMap := doc.Content[0]
+
+	// 1. Find or create 'metadata'
+	var metadataNode *yaml.Node
+	for i := 0; i < len(rootMap.Content); i += 2 {
+		if rootMap.Content[i].Value == "metadata" {
+			metadataNode = rootMap.Content[i+1]
+			break
+		}
+	}
+	if metadataNode == nil {
+		// Not found, create it
+		metadataKeyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: "metadata"}
+		metadataNode = &yaml.Node{Kind: yaml.MappingNode}
+		rootMap.Content = append(rootMap.Content, metadataKeyNode, metadataNode)
+	}
+	if metadataNode.Kind != yaml.MappingNode {
+		return errors.New("'metadata' field is not a map")
+	}
+
+	// 2. Find or create 'annotations'
+	var annotationsNode *yaml.Node
+	for i := 0; i < len(metadataNode.Content); i += 2 {
+		if metadataNode.Content[i].Value == "annotations" {
+			annotationsNode = metadataNode.Content[i+1]
+			break
+		}
+	}
+	if annotationsNode == nil {
+		// Not found, create it
+		annotationsKeyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: "annotations"}
+		annotationsNode = &yaml.Node{Kind: yaml.MappingNode}
+		metadataNode.Content = append(metadataNode.Content, annotationsKeyNode, annotationsNode)
+	}
+	if annotationsNode.Kind != yaml.MappingNode {
+		return errors.New("'annotations' field is not a map")
+	}
+
+	// 3. Find and update or create the annotation key
+	var found bool
+	for i := 0; i < len(annotationsNode.Content); i += 2 {
+		if annotationsNode.Content[i].Value == key {
+			// Found it, update the value
+			annotationsNode.Content[i+1].Value = value
+			annotationsNode.Content[i+1].Tag = "!!str" // Ensure it's a string
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		// Not found, append it
+		keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}
+		valueNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
+		annotationsNode.Content = append(annotationsNode.Content, keyNode, valueNode)
+	}
+
+	return nil
 }
 
 // collectYMLFilesInDir walks root recursively up to maxDepth levels below root

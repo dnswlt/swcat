@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -574,7 +575,7 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newYAML := r.FormValue("yaml")
-	newAPIEntity, err := store.ReadEntityFromString(newYAML)
+	newAPIEntity, err := store.NewEntityFromString(newYAML)
 	if err != nil {
 		s.renderErrorSnippet(w, fmt.Sprintf("Failed to parse new YAML: %v", err))
 		return
@@ -695,7 +696,7 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	}
 
 	newYAML := r.FormValue("yaml")
-	newAPIEntity, err := store.ReadEntityFromString(newYAML)
+	newAPIEntity, err := store.NewEntityFromString(newYAML)
 	if err != nil {
 		s.renderErrorSnippet(w, fmt.Sprintf("Failed to parse new YAML: %v", err))
 		return
@@ -741,6 +742,86 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 
 	w.Header().Set("HX-Redirect", redirectURL)
 	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, entityRefStr string, annotationKey string) {
+	if s.opts.ReadOnly {
+		http.Error(w, "Cannot update entities in read-only mode", http.StatusPreconditionFailed)
+		return
+	}
+
+	// Read the new value from the request body.
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+		return
+	}
+	newValue := string(body)
+
+	// Only proceed if this is a valid annotation
+	if !catalog.IsValidAnnotation(annotationKey, newValue) {
+		http.Error(w, "Invalid annotation key/value", http.StatusBadRequest)
+		return
+	}
+
+	// Parse the entity reference string
+	ref, err := catalog.ParseRef(entityRefStr)
+	if err != nil {
+		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
+		return
+	}
+
+	// Look up the entity in the repository
+	originalEntity := s.repo.Entity(ref)
+	if originalEntity == nil {
+		http.Error(w, "Entity not found", http.StatusNotFound)
+		return
+	}
+
+	// Copy and modify the source YAML node
+	sourceNode, err := store.CopyNode(originalEntity.GetSourceInfo().Node)
+	if sourceNode == nil || err != nil {
+		http.Error(w, "Entity could not be copied for modification", http.StatusInternalServerError)
+		return
+	}
+	if err := store.SetAnnotationInNode(sourceNode, annotationKey, newValue); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to set annotation in YAML node: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	newAPIEntity, err := store.NewEntityFromNode(sourceNode, false)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create api.Entity from source node: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Create a new catalog.Entity for repo update
+	newEntity, err := catalog.NewEntityFromAPI(newAPIEntity)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid entity after modification: %v", err), http.StatusInternalServerError)
+		return
+	}
+	// Copy over path information for re-editing later.
+	path := originalEntity.GetSourceInfo().Path
+	newEntity.GetSourceInfo().Path = path
+
+	// Update the repo
+	if err := s.repo.InsertOrUpdateEntity(newEntity); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to update entity in repo: %v", err), http.StatusInternalServerError)
+		return
+	}
+	// Invalidate the SVG cache
+	s.clearSVGCache()
+
+	// Update the YAML file.
+	if err := store.InsertOrReplaceEntity(path, newAPIEntity); err != nil {
+		http.Error(w, "Failed to update store", http.StatusInternalServerError)
+		log.Printf("Error updating store: %v", err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintln(w, "OK")
 }
 
 func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateFile string, params map[string]any) {
@@ -884,6 +965,11 @@ func (s *Server) routes() *http.ServeMux {
 	// JSON API to query entities.
 	mux.HandleFunc("GET /catalog/entities", func(w http.ResponseWriter, r *http.Request) {
 		s.serveEntitiesJSON(w, r)
+	})
+	mux.HandleFunc("POST /catalog/entities/{entityRef}/annotations/{annotationKey}", func(w http.ResponseWriter, r *http.Request) {
+		entityRef := r.PathValue("entityRef")
+		annotationKey := r.PathValue("annotationKey")
+		s.updateAnnotationValue(w, r, entityRef, annotationKey)
 	})
 
 	// Health check. Useful for cloud deployments.
