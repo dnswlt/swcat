@@ -19,12 +19,12 @@ apiVersion: swcat/v1
 kind: Group
 metadata:
     name: my-team
+    namespace: teams
 spec:
   type: team
   profile:
     displayName: My Team
     email: my-team@example.com
-  parent: parent-group
   members:
     - John Doe
 ```

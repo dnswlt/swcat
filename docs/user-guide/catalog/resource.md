@@ -18,8 +18,14 @@ apiVersion: swcat/v1
 kind: Resource
 metadata:
     name: my-resource
+    title: My Resource
+    description: |
+        My Resource is a relational database (postgres) used to store items.
+    # See metadata.md for other fields like labels, annotations, etc.
 spec:
   type: database
-  owner: my-team
+  owner: teams/my-team
   system: my-system
+  dependsOn:
+    - resource:aws/my-s3-bucket
 ```

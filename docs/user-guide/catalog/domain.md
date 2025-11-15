@@ -15,7 +15,10 @@ apiVersion: swcat/v1
 kind: Domain
 metadata:
     name: my-domain
+    title: My Domain
+    description: |
+        My Domain groups together all applications of team `my-team`.
+    # See metadata.md for other fields like labels, annotations, etc.
 spec:
-  owner: default/my-team
-  subdomainOf: domain:default/parent-domain
+  owner: teams/my-team
 ```

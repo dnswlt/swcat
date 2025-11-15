@@ -16,7 +16,11 @@ apiVersion: swcat/v1
 kind: System
 metadata:
     name: my-system
+    title: My System
+    description: |
+        My System is the application to render and manage wonderful things.
+    # See metadata.md for other fields like labels, annotations, etc.
 spec:
-  owner: my-team
+  owner: teams/my-team
   domain: my-domain
 ```

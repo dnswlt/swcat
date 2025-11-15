@@ -21,10 +21,15 @@ apiVersion: swcat/v1
 kind: API
 metadata:
     name: my-api
+    title: My API
+    description: |
+        My API contains methods to create, read, update, and delete
+        items from the My System store.
+    # See metadata.md for other fields like labels, annotations, etc.
 spec:
   type: openapi
   lifecycle: production
-  owner: my-team
+  owner: teams/my-team
   system: my-system
   versions:
     - version: v1

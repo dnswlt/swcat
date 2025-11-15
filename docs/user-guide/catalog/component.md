@@ -25,10 +25,14 @@ apiVersion: swcat/v1
 kind: Component
 metadata:
     name: my-component
+    title: My Component
+    description: |
+        My Component is a small service that implements the My API.
+    # See metadata.md for other fields like labels, annotations, etc.
 spec:
   type: service
   lifecycle: production
-  owner: my-team
+  owner: teams/my-team
   system: my-system
   providesApis:
     - my-api
