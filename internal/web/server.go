@@ -41,6 +41,7 @@ type Server struct {
 	svgCache    map[string]*svg.Result
 	svgCacheMut sync.Mutex
 	dotRunner   dot.Runner
+	started     time.Time
 }
 
 func NewServer(opts ServerOptions, repo *repo.Repository) (*Server, error) {
@@ -49,6 +50,7 @@ func NewServer(opts ServerOptions, repo *repo.Repository) (*Server, error) {
 		repo:      repo,
 		svgCache:  make(map[string]*svg.Result),
 		dotRunner: dot.NewRunner(opts.DotPath),
+		started:   time.Now(),
 	}
 	if err := s.reloadTemplates(); err != nil {
 		return nil, err
@@ -925,9 +927,10 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 	).SetActive(r.URL.Path).SetParams(r.URL.Query())
 
 	templateParams := map[string]any{
-		"Now":      time.Now().Format("2006-01-02 15:04:05"),
-		"NavBar":   nav,
-		"ReadOnly": s.opts.ReadOnly,
+		"Now":             time.Now().Format("2006-01-02 15:04:05"),
+		"NavBar":          nav,
+		"ReadOnly":        s.opts.ReadOnly,
+		"CacheBustingKey": s.started.Format("20060102150405"),
 	}
 	// Copy template params
 	for k, v := range params {

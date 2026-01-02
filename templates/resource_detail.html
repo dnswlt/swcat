@@ -2,7 +2,7 @@
 <html lang="en">
 
 <head>
-    {{ template "head.html" }}
+    {{ template "head.html" . }}
 </head>
 
 <body class="min-h-screen bg-gray-50 p-4" data-page="resource">
@@ -108,7 +108,7 @@
 
     </main>
 
-    <script type="module" src="/static/dist/main.js"></script>
+    <script type="module" src="/static/dist/main.js?{{.CacheBustingKey}}"></script>
 
 </body>
 
