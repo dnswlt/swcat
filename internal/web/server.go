@@ -1009,7 +1009,15 @@ func (s *Server) serveEntitiesJSON(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) reloadCatalog(w http.ResponseWriter, r *http.Request) {
-	log.Println("Reloading catalog (not implemented yet)")
+	started := time.Now()
+	if err := s.repo.Reload(); err != nil {
+		log.Printf("Failed to reload catalog: %v", err)
+		s.renderErrorSnippet(w, fmt.Sprintf("Failed to reload catalog: %v", err))
+		return
+	}
+	log.Printf("Catalog reloaded in %d ms.", time.Since(started).Milliseconds())
+	// Invalidate the SVG cache
+	s.clearSVGCache()
 
 	// Force HTMX to refresh the page
 	w.Header().Set("HX-Refresh", "true")

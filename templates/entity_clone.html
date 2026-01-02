@@ -35,6 +35,8 @@
         </form>
     </main>
 
+    {{ template "footer.html" . }}
+
     <script type="module" src="/static/dist/main.js?{{.CacheBustingKey}}"></script>
 
 </body>

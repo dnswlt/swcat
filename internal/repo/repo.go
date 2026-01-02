@@ -33,6 +33,10 @@ type Repository struct {
 
 	// Repository configuration
 	config Config
+
+	// Files from which this repository was initialized.
+	// Used for reloading the catalog after out-of-band changes.
+	catalogFiles []string
 }
 
 func NewRepositoryWithConfig(config Config) *Repository {
@@ -54,6 +58,51 @@ func NewRepository() *Repository {
 
 func (r *Repository) Size() int {
 	return len(r.allEntities)
+}
+
+func (r *Repository) initializeFromFiles(catalogFiles []string) error {
+	if r.Size() != 0 {
+		return fmt.Errorf("initializeFromFiles called on a non-empty repo (size: %d)", r.Size())
+	}
+	for _, catalogPath := range catalogFiles {
+		log.Printf("Reading catalog file %s", catalogPath)
+		entities, err := store.ReadEntities(catalogPath)
+		if err != nil {
+			return fmt.Errorf("failed to read entities from %s: %v", catalogPath, err)
+		}
+		for _, e := range entities {
+			entity, err := catalog.NewEntityFromAPI(e)
+			if err != nil {
+				return fmt.Errorf("failed to convert api entity %s:%s/%s (source: %s:%d) to catalog entity: %v",
+					e.GetKind(), e.GetMetadata().Namespace, e.GetMetadata().Namespace,
+					e.GetSourceInfo().Path, e.GetSourceInfo().Line, err)
+			}
+			if err := r.AddEntity(entity); err != nil {
+				return fmt.Errorf("failed to add entity %q to the repo: %v", entity.GetRef(), err)
+			}
+		}
+	}
+	if err := r.Validate(); err != nil {
+		return fmt.Errorf("repository validation failed: %v", err)
+	}
+
+	r.catalogFiles = catalogFiles
+	return nil
+}
+
+// Reload reloads the repository from the catalog files this repo was initialized from.
+// The repository r remains unchanged if any errors occur.
+func (r *Repository) Reload() error {
+	if len(r.catalogFiles) == 0 {
+		return fmt.Errorf("cannot reload repository: no catalog files")
+	}
+	r2 := NewRepositoryWithConfig(r.config)
+	err := r2.initializeFromFiles(r.catalogFiles)
+	if err != nil {
+		return fmt.Errorf("reloading repository failed: %v", err)
+	}
+	*r = *r2
+	return nil
 }
 
 func (r *Repository) setEntity(e catalog.Entity) error {
@@ -962,29 +1011,9 @@ func (r *Repository) addGeneratedLinks() error {
 // Elements in catalogPaths must be .yml file paths.
 func LoadRepositoryFromPaths(config Config, catalogPaths []string) (*Repository, error) {
 	repo := NewRepositoryWithConfig(config)
-
-	for _, catalogPath := range catalogPaths {
-		log.Printf("Reading catalog file %s", catalogPath)
-		entities, err := store.ReadEntities(catalogPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read entities from %s: %v", catalogPath, err)
-		}
-		for _, e := range entities {
-			entity, err := catalog.NewEntityFromAPI(e)
-			if err != nil {
-				return nil, fmt.Errorf("failed to convert api entity %s:%s/%s (source: %s:%d) to catalog entity: %v",
-					e.GetKind(), e.GetMetadata().Namespace, e.GetMetadata().Namespace,
-					e.GetSourceInfo().Path, e.GetSourceInfo().Line, err)
-			}
-			if err := repo.AddEntity(entity); err != nil {
-				return nil, fmt.Errorf("failed to add entity %q to the repo: %v", entity.GetRef(), err)
-			}
-		}
+	err := repo.initializeFromFiles(catalogPaths)
+	if err != nil {
+		return nil, err
 	}
-	if err := repo.Validate(); err != nil {
-		return nil, fmt.Errorf("repository validation failed: %v", err)
-	}
-
 	return repo, nil
-
 }
