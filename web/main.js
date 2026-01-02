@@ -1,6 +1,8 @@
 import './style.css'; // Make sure Tailwind CSS gets included by vite.
 
+// Metadata parsed from the JSON sidecar returned together with the SVG graph.
 let svgMeta = {};
+// <div> element used to display a tooltip when hovering over SVG elements.
 let tooltip = null;
 
 function createTooltip() {
@@ -38,6 +40,8 @@ function updateTooltipPosition(event) {
     tooltip.style.top = (event.pageY + 15) + 'px';
 }
 
+// Fetches the #relationships-svg-meta <script> element, parses its content as JSON,
+// and stores the result in the svgMeta global variable.
 function loadSVGMetadata() {
     const metaElem = document.getElementById("relationships-svg-meta");
     if (!metaElem) {
@@ -53,6 +57,9 @@ function loadSVGMetadata() {
     }
 }
 
+// Handles clicks on SVG edges.
+// Finds the source and target of the given edge in svgMeta and adds
+// their IDs as c= query parameters to the URL.
 function onClickEdge(edge) {
     if (!svgMeta || !svgMeta.edges) {
         console.error("Metadata missing 'edges' object.");
@@ -71,7 +78,7 @@ function onClickEdge(edge) {
         return;
     }
 
-    // Build a new URL with two context params (?context=from&context=to).
+    // Build a new URL with two context params (?c=from&c=to).
     const url = new URL(window.location.href);
     url.searchParams.append("c", from);
     url.searchParams.append("c", to);
@@ -79,6 +86,8 @@ function onClickEdge(edge) {
     window.location.assign(url);
 }
 
+// Handles clicks on SVG nodes.
+// TODO: Store the URLs in svgMeta - this avoids hard-coding URL paths here in JS.
 function onClickNode(node) {
     const id = node.id;
     if (!id) return;
@@ -120,6 +129,8 @@ function onClickNode(node) {
     window.location.href = path + encodeURIComponent(name);
 }
 
+// Adds all relevant listeners to the top-level SVG element
+// (clicking, hovering).
 function addSVGListener() {
     const svg = document.querySelector("#relationships-svg");
     if (!svg) return;
@@ -163,12 +174,14 @@ function addSVGListener() {
     });
 }
 
+// Runs all initialization functions relevant for the given page identified by pageId.
 async function initPage(pageId) {
     if (['domain', 'system', 'component', 'resource', 'api', 'group'].includes(pageId)) {
         createTooltip();
         loadSVGMetadata();
         addSVGListener();
 
+        // JSON viewer to render JSON annotations.
         const jsonViewers = document.querySelectorAll('.json-viewer');
         if (jsonViewers.length > 0) {
             const { initJsonViewer } = await import('./editor.js');
@@ -177,6 +190,7 @@ async function initPage(pageId) {
             });
         }
     }
+    // YAML editor
     if (['entity-edit', 'entity-clone'].includes(pageId)) {
         const { initYamlEditor } = await import('./editor.js');
         initYamlEditor();

@@ -804,7 +804,6 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 	// Copy over path information for re-editing later.
 	path := originalEntity.GetSourceInfo().Path
 	newEntity.GetSourceInfo().Path = path
-
 	// Update the repo
 	if err := s.repo.InsertOrUpdateEntity(newEntity); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to update entity in repo: %v", err), http.StatusInternalServerError)
@@ -822,6 +821,94 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w, "OK")
+}
+
+// Extracts the entity ref from a Referer header.
+// Example: extracts "component:availability-aggregator" from
+// http://localhost:9191/ui/entities/component:availability-aggregator/edit
+func entityRefFromReferer(referer string) (*catalog.Ref, error) {
+	// 1. Parse the URL to ensure we are safely handling schemes, hosts, and query params.
+	u, err := url.Parse(referer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URL: %v", err)
+	}
+
+	pathSegments := strings.Split(u.EscapedPath(), "/")
+
+	// 3. Iterate through segments to find the ref after "entities".
+	var refStr string
+	for i, seg := range pathSegments {
+		if seg == "entities" {
+			// Ensure there is actually a segment following "entities"
+			if i+1 < len(pathSegments) {
+				var err error
+				refStr, err = url.PathUnescape(pathSegments[i+1])
+				if err != nil {
+					return nil, fmt.Errorf("failed to unescape entity ref from path: %v", err)
+				}
+			}
+		}
+	}
+	if refStr == "" {
+		return nil, fmt.Errorf("no entity ref found in path")
+	}
+	return catalog.ParseRef(refStr)
+}
+
+func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
+	field := r.URL.Query().Get("field")
+	if strings.TrimSpace(field) == "" {
+		http.Error(w, "Missing or empty field= query parameter", http.StatusBadRequest)
+		return
+	}
+	// Determine entity ref from Referer header.
+	referer := r.Header.Get("Referer")
+	ref, err := entityRefFromReferer(referer)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Could not retrieve entity ref from Referer: %s: %v", referer, err), http.StatusBadRequest)
+		return
+	}
+	// Get completions for requested field.
+	fieldType := "plain"
+	var completions []string
+	switch field {
+	case "metadata.annotations":
+		fieldType = "key"
+		completions = s.repo.AnnotationKeys(ref.Kind)
+	case "metadata.labels":
+		fieldType = "key"
+		completions = s.repo.LabelKeys(ref.Kind)
+	case "spec.consumesApis", "spec.providesApis":
+		fieldType = "item"
+		apis := s.repo.FindAPIs("")
+		completions = make([]string, len(apis))
+		for i, a := range apis {
+			completions[i] = a.GetRef().QName()
+		}
+	case "spec.dependsOn":
+		fieldType = "item"
+		entities := s.repo.FindEntities("kind:component OR kind:resource")
+		completions = make([]string, len(entities))
+		for i, a := range entities {
+			// Use fully qualified refs including the kind for dependsOn.
+			completions[i] = a.GetRef().String()
+		}
+	}
+	slices.Sort(completions)
+
+	// Send completion list back in response.
+	res, err := json.Marshal(map[string]any{
+		"fieldType":   fieldType,
+		"completions": completions,
+	})
+	if err != nil {
+		log.Printf("Failed to encode completions as JSON: %v", err)
+		http.Error(w, "JSON marshalling error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.Write(res)
 }
 
 func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateFile string, params map[string]any) {
@@ -970,6 +1057,9 @@ func (s *Server) routes() *http.ServeMux {
 		entityRef := r.PathValue("entityRef")
 		annotationKey := r.PathValue("annotationKey")
 		s.updateAnnotationValue(w, r, entityRef, annotationKey)
+	})
+	mux.HandleFunc("GET /catalog/autocomplete", func(w http.ResponseWriter, r *http.Request) {
+		s.serveAutocomplete(w, r)
 	})
 
 	// Health check. Useful for cloud deployments.

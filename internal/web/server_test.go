@@ -980,3 +980,67 @@ func TestUpdateAnnotationValue_InvalidAnnotation(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusBadRequest)
 	}
 }
+
+func TestExtractEntityRef(t *testing.T) {
+	tests := []struct {
+		name    string
+		url     string
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "Standard with edit suffix",
+			url:  "http://localhost/ui/entities/component:my-service/edit",
+			want: "component:my-service",
+		},
+		{
+			name: "Encoded slash in ref (namespace/name)",
+			url:  "http://localhost/ui/entities/component:my-ns%2Fmy-service/edit",
+			want: "component:my-ns/my-service",
+		},
+		{
+			name: "No suffix",
+			url:  "http://localhost/ui/entities/component:simple-ref",
+			want: "component:simple-ref",
+		},
+		{
+			name: "Trailing slash only",
+			url:  "http://localhost/ui/entities/component:plain-ref/",
+			want: "component:plain-ref",
+		},
+		{
+			name: "With query parameters",
+			url:  "http://localhost/ui/entities/component:param-ref/edit?foo=bar&baz=qux",
+			want: "component:param-ref",
+		},
+		{
+			name:    "Missing entity ref",
+			url:     "http://localhost/ui/entities/",
+			want:    "",
+			wantErr: true, // Assuming your function returns error or empty on failure
+		},
+		{
+			name:    "No entities segment",
+			url:     "http://localhost/ui/dashboard",
+			want:    "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := entityRefFromReferer(tt.url)
+
+			// Check error expectations
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ExtractEntityRef() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			// Check value expectations
+			if err == nil && got.String() != tt.want {
+				t.Errorf("ExtractEntityRef() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

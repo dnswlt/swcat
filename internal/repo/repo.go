@@ -324,6 +324,70 @@ func (r *Repository) FindEntities(q string) []catalog.Entity {
 	return findEntities(q, r.allEntities)
 }
 
+func labelKeys[T catalog.Entity](items map[string]T) []string {
+	keySet := map[string]bool{}
+	for _, item := range items {
+		for k := range item.GetMetadata().Labels {
+			keySet[k] = true
+		}
+	}
+	keys := make([]string, 0, len(keySet))
+	for k := range keySet {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+func annnotationKeys[T catalog.Entity](items map[string]T) []string {
+	keySet := map[string]bool{}
+	for _, item := range items {
+		for k := range item.GetMetadata().Annotations {
+			keySet[k] = true
+		}
+	}
+	keys := make([]string, 0, len(keySet))
+	for k := range keySet {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+func (r *Repository) AnnotationKeys(kind catalog.Kind) []string {
+	switch kind {
+	case catalog.KindDomain:
+		return annnotationKeys(r.domains)
+	case catalog.KindSystem:
+		return annnotationKeys(r.systems)
+	case catalog.KindComponent:
+		return annnotationKeys(r.components)
+	case catalog.KindResource:
+		return annnotationKeys(r.resources)
+	case catalog.KindAPI:
+		return annnotationKeys(r.apis)
+	case catalog.KindGroup:
+		return annnotationKeys(r.groups)
+	}
+	return nil
+}
+
+func (r *Repository) LabelKeys(kind catalog.Kind) []string {
+	switch kind {
+	case catalog.KindDomain:
+		return labelKeys(r.domains)
+	case catalog.KindSystem:
+		return labelKeys(r.systems)
+	case catalog.KindComponent:
+		return labelKeys(r.components)
+	case catalog.KindResource:
+		return labelKeys(r.resources)
+	case catalog.KindAPI:
+		return labelKeys(r.apis)
+	case catalog.KindGroup:
+		return labelKeys(r.groups)
+	}
+	return nil
+}
+
 func (r *Repository) validateMetadata(m *catalog.Metadata) error {
 	if m == nil {
 		return fmt.Errorf("metadata is null")
