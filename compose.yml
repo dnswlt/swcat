@@ -1,6 +1,9 @@
 services:
   swcat:
-    build: .
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-dev}
     ports:
       - "9191:8080" # host:container
     volumes:

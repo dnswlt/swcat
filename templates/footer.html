@@ -1,0 +1,13 @@
+<footer class="bg-white shadow mt-4 max-w-screen-lg mx-auto rounded-xl">
+    <div class="px-4 py-3 flex justify-between items-center text-sm text-gray-500">
+        <div>
+            swcat {{ .Version }}
+        </div>
+        <!-- Server will return a HX-Refresh header on success, which triggers a page reload -->
+        <button hx-post="/catalog/reload" 
+                hx-swap="none"
+                class="hover:text-blue-600 transition-colors cursor-pointer font-medium">
+            Reload
+        </button>
+    </div>
+</footer>

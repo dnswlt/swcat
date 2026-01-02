@@ -80,6 +80,12 @@ func filterOutFile(files []string, fileToRemove string) []string {
 	return result
 }
 
+var (
+	// Version is the application version.
+	// It is set at build time via -ldflags "-X main.Version=...".
+	Version = "dev"
+)
+
 func main() {
 
 	serverAddrFlag := flag.String("addr", "localhost:8080", "Address to listen on")
@@ -141,6 +147,7 @@ func main() {
 				DotPath:  dotPath,
 				ReadOnly: *readOnly,
 				Config:   bundle,
+				Version:  Version,
 			},
 			repo,
 		)

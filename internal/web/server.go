@@ -32,6 +32,7 @@ type ServerOptions struct {
 	DotPath  string        // E.g., "dot" (with dot on the PATH)
 	ReadOnly bool          // If true, no Edit/Clone/Delete operations will be supported.
 	Config   config.Bundle // Config parameters
+	Version  string        // App version
 }
 
 type Server struct {
@@ -45,6 +46,9 @@ type Server struct {
 }
 
 func NewServer(opts ServerOptions, repo *repo.Repository) (*Server, error) {
+	if opts.Version == "" {
+		opts.Version = "dev"
+	}
 	s := &Server{
 		opts:      opts,
 		repo:      repo,
@@ -956,6 +960,7 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		"NavBar":          nav,
 		"ReadOnly":        s.opts.ReadOnly,
 		"CacheBustingKey": s.started.Format("20060102150405"),
+		"Version":         s.opts.Version,
 	}
 	// Copy template params
 	for k, v := range params {
@@ -1001,6 +1006,14 @@ func (s *Server) serveEntitiesJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.Write(output)
+}
+
+func (s *Server) reloadCatalog(w http.ResponseWriter, r *http.Request) {
+	log.Println("Reloading catalog (not implemented yet)")
+
+	// Force HTMX to refresh the page
+	w.Header().Set("HX-Refresh", "true")
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) routes() *http.ServeMux {
@@ -1089,6 +1102,7 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("GET /catalog/autocomplete", func(w http.ResponseWriter, r *http.Request) {
 		s.serveAutocomplete(w, r)
 	})
+	mux.HandleFunc("POST /catalog/reload", s.reloadCatalog)
 
 	// Health check. Useful for cloud deployments.
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

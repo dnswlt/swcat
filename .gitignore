@@ -2,9 +2,10 @@ catalogs/
 /web/node_modules/
 /static/dist/
 /static/.vite/
-swcat
-swcat.exe
+/swcat
+/swcat.exe
 .vscode
 .venv/
 .markdownlint.json
 .env
+/sync_*.sh

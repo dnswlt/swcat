@@ -15,7 +15,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 ENV CGO_ENABLED=0
-RUN go build -o /out/swcat ./cmd/swcat
+ARG VERSION=dev
+RUN go build -ldflags "-X main.Version=${VERSION}" -o /out/swcat ./cmd/swcat
 
 # --- Stage 3: runtime image ---
 FROM alpine:3.21
