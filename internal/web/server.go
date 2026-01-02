@@ -895,6 +895,31 @@ func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 			// Use fully qualified refs including the kind for dependsOn.
 			completions[i] = a.GetRef().String()
 		}
+	case "spec.owner":
+		fieldType = "value"
+		groups := s.repo.FindGroups("")
+		completions = make([]string, len(groups))
+		for i, g := range groups {
+			completions[i] = g.GetRef().QName()
+		}
+	case "spec.system":
+		fieldType = "value"
+		systems := s.repo.FindSystems("")
+		completions = make([]string, len(systems))
+		for i, s := range systems {
+			completions[i] = s.GetRef().QName()
+		}
+	case "spec.lifecycle", "spec.type":
+		fieldType = "value"
+		_, fieldName, _ := strings.Cut(field, ".")
+		var err error
+		completions, err = s.repo.SpecFieldValues(ref.Kind, fieldName)
+		if err != nil {
+			http.Error(w,
+				fmt.Sprintf("Cannot get values for kind %v and field %s: %v", ref.Kind, field, err),
+				http.StatusBadRequest)
+			return
+		}
 	}
 	slices.Sort(completions)
 

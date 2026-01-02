@@ -489,3 +489,80 @@ func TestAddGeneratedLinks_MixedEntities(t *testing.T) {
 		t.Errorf("len(c2.links) = %d, want 0", len(c2.Metadata.Links))
 	}
 }
+
+func TestRepository_SpecFieldValues(t *testing.T) {
+	repo := NewRepository()
+
+	entities := []catalog.Entity{
+		&catalog.Component{
+			Metadata: &catalog.Metadata{Name: "c1"},
+			Spec:     &catalog.ComponentSpec{Type: "service", Lifecycle: "production"},
+		},
+		&catalog.Component{
+			Metadata: &catalog.Metadata{Name: "c2"},
+			Spec:     &catalog.ComponentSpec{Type: "service", Lifecycle: "experimental"},
+		},
+		&catalog.Component{
+			Metadata: &catalog.Metadata{Name: "c3"},
+			Spec:     &catalog.ComponentSpec{Type: "library", Lifecycle: "production"},
+		},
+		&catalog.API{
+			Metadata: &catalog.Metadata{Name: "a1"},
+			Spec:     &catalog.APISpec{Type: "openapi", Lifecycle: "deprecated"},
+		},
+		&catalog.Resource{
+			Metadata: &catalog.Metadata{Name: "r1"},
+			Spec:     &catalog.ResourceSpec{Type: "database"},
+		},
+		&catalog.System{
+			Metadata: &catalog.Metadata{Name: "s1"},
+			Spec:     &catalog.SystemSpec{Type: "legacy"},
+		},
+		&catalog.Domain{
+			Metadata: &catalog.Metadata{Name: "d1"},
+			Spec:     &catalog.DomainSpec{Type: "business"},
+		},
+		&catalog.Group{
+			Metadata: &catalog.Metadata{Name: "g1"},
+			Spec:     &catalog.GroupSpec{Type: "team"},
+		},
+	}
+
+	for _, e := range entities {
+		repo.AddEntity(e)
+	}
+
+	tests := []struct {
+		kind      catalog.Kind
+		field     string
+		want      []string
+		wantError bool
+	}{
+		{catalog.KindComponent, "type", []string{"library", "service"}, false},
+		{catalog.KindComponent, "lifecycle", []string{"experimental", "production"}, false},
+		{catalog.KindAPI, "type", []string{"openapi"}, false},
+		{catalog.KindAPI, "lifecycle", []string{"deprecated"}, false},
+		{catalog.KindResource, "type", []string{"database"}, false},
+		{catalog.KindSystem, "type", []string{"legacy"}, false},
+		{catalog.KindDomain, "type", []string{"business"}, false},
+		{catalog.KindGroup, "type", []string{"team"}, false},
+		{catalog.KindResource, "lifecycle", nil, true},
+		{catalog.KindComponent, "invalid", nil, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%s/%s", tt.kind, tt.field), func(t *testing.T) {
+			got, err := repo.SpecFieldValues(tt.kind, tt.field)
+			if (err != nil) != tt.wantError {
+				t.Fatalf("SpecFieldValues() error = %v, wantError %v", err, tt.wantError)
+			}
+			if tt.wantError {
+				return
+			}
+			slices.Sort(got)
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("SpecFieldValues() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

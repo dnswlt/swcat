@@ -388,6 +388,60 @@ func (r *Repository) LabelKeys(kind catalog.Kind) []string {
 	return nil
 }
 
+func collectSpecValues[T any](items map[string]T, extractor func(T) string) []string {
+	valueSet := map[string]bool{}
+	for _, item := range items {
+		if v := extractor(item); v != "" {
+			valueSet[v] = true
+		}
+	}
+	values := make([]string, 0, len(valueSet))
+	for v := range valueSet {
+		values = append(values, v)
+	}
+	return values
+}
+
+func (r *Repository) SpecFieldValues(kind catalog.Kind, field string) ([]string, error) {
+	switch kind {
+	case catalog.KindComponent:
+		switch field {
+		case "type":
+			return collectSpecValues(r.components, func(x *catalog.Component) string { return x.Spec.Type }), nil
+		case "lifecycle":
+			return collectSpecValues(r.components, func(x *catalog.Component) string { return x.Spec.Lifecycle }), nil
+		}
+	case catalog.KindAPI:
+		switch field {
+		case "type":
+			return collectSpecValues(r.apis, func(x *catalog.API) string { return x.Spec.Type }), nil
+		case "lifecycle":
+			return collectSpecValues(r.apis, func(x *catalog.API) string { return x.Spec.Lifecycle }), nil
+		}
+	case catalog.KindResource:
+		switch field {
+		case "type":
+			return collectSpecValues(r.resources, func(x *catalog.Resource) string { return x.Spec.Type }), nil
+		}
+	case catalog.KindSystem:
+		switch field {
+		case "type":
+			return collectSpecValues(r.systems, func(x *catalog.System) string { return x.Spec.Type }), nil
+		}
+	case catalog.KindDomain:
+		switch field {
+		case "type":
+			return collectSpecValues(r.domains, func(x *catalog.Domain) string { return x.Spec.Type }), nil
+		}
+	case catalog.KindGroup:
+		switch field {
+		case "type":
+			return collectSpecValues(r.groups, func(x *catalog.Group) string { return x.Spec.Type }), nil
+		}
+	}
+	return nil, fmt.Errorf("field %q not supported for kind %q", field, kind)
+}
+
 func (r *Repository) validateMetadata(m *catalog.Metadata) error {
 	if m == nil {
 		return fmt.Errorf("metadata is null")

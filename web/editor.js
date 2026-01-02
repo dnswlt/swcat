@@ -23,17 +23,31 @@ const yamlCompleter = async (context) => {
     const textBeforeCursor = currentLine.text.slice(0, pos - currentLine.from);
 
     // Guard: Only complete the first word (to avoid confusing popups when adding @v1 or "labels").
-    if (/[\w:].* .*/.test(textBeforeCursor)) {
+    // But allow it if there's a colon followed by a space (value completion).
+    const isValueCompletion = /: +[^ ]*$/.test(textBeforeCursor);
+    if (!isValueCompletion && /[\w:].* .*/.test(textBeforeCursor)) {
         return null;
     }
 
     // Get the generic YAML path (e.g., ["metadata", "annotations"])
-    const path = getYamlPath(doc, pos);
+    let path = getYamlPath(doc, pos);
+
+    // If the current line itself contains a key, and the cursor is after the colon,
+    // then we are completing the value of that key.
+    const currentKey = getKeyName(currentLine.text);
+    if (currentKey && textBeforeCursor.includes(currentKey + ":")) {
+        path.push(currentKey);
+    }
+
     const field = path.join(".");
 
     if (![
         "metadata.annotations",
         "metadata.labels",
+        "spec.lifecycle",
+        "spec.owner",
+        "spec.system",
+        "spec.type",
         "spec.consumesApis",
         "spec.providesApis",
         "spec.dependsOn"].includes(field)) {
