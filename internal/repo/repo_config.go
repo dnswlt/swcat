@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"gopkg.in/yaml.v3"
@@ -73,42 +74,65 @@ func (r *CatalogValidationRules) Accept(e catalog.Entity) error {
 	case *catalog.Domain:
 		if r.Domain != nil {
 			if !r.Domain.Type.Accept(v.GetType()) {
-				return fmt.Errorf("invalid type: %s", v.GetType())
+				return fmt.Errorf("invalid type %q (allowed: %s)", v.GetType(), r.Domain.Type.Describe())
 			}
 		}
 	case *catalog.System:
 		if r.System != nil {
 			if !r.System.Type.Accept(v.GetType()) {
-				return fmt.Errorf("invalid type: %s", v.GetType())
+				return fmt.Errorf("invalid type %q (allowed: %s)", v.GetType(), r.System.Type.Describe())
 			}
 		}
 	case *catalog.Component:
 		if r.Component != nil {
 			if !r.Component.Type.Accept(v.GetType()) {
-				return fmt.Errorf("invalid type: %s", v.GetType())
+				return fmt.Errorf("invalid type %q (allowed: %s)", v.GetType(), r.Component.Type.Describe())
 			}
 			if !r.Component.Lifecycle.Accept(v.GetLifecycle()) {
-				return fmt.Errorf("invalid lifecycle: %s", v.GetLifecycle())
+				return fmt.Errorf("invalid lifecycle %q (allowed: %s)", v.GetLifecycle(), r.Component.Lifecycle.Describe())
 			}
 		}
 	case *catalog.Resource:
 		if r.Resource != nil {
 			if !r.Resource.Type.Accept(v.GetType()) {
-				return fmt.Errorf("invalid type: %s", v.GetType())
+				return fmt.Errorf("invalid type %q (allowed: %s)", v.GetType(), r.Resource.Type.Describe())
 			}
 		}
 	case *catalog.API:
 		if r.API != nil {
 			if !r.API.Type.Accept(v.GetType()) {
-				return fmt.Errorf("invalid type: %s", v.GetType())
+				return fmt.Errorf("invalid type %q (allowed: %s)", v.GetType(), r.API.Type.Describe())
 			}
 			if !r.API.Lifecycle.Accept(v.GetLifecycle()) {
-				return fmt.Errorf("invalid lifecycle: %s", v.GetLifecycle())
+				return fmt.Errorf("invalid lifecycle %q (allowed: %s)", v.GetLifecycle(), r.API.Lifecycle.Describe())
 			}
 		}
 	}
 	// If no specific rules failed, the entity is considered valid.
 	return nil
+}
+
+// Describe returns a human-readable description of the allowed values.
+func (r *ValueRule) Describe() string {
+	if r == nil {
+		return "any value"
+	}
+	if len(r.Values) > 0 {
+		// e.g. "one of [service, library]"
+		return fmt.Sprintf("one of [%s]", strings.Join(r.Values, ", "))
+	}
+	if len(r.Matches) > 0 {
+		// e.g. "matching patterns [^[a-z]+$, ^[0-9]+$]"
+		patterns := make([]string, len(r.Matches))
+		for i, re := range r.Matches {
+			patterns[i] = (*regexp.Regexp)(re).String()
+		}
+		if len(patterns) == 1 {
+			return fmt.Sprintf("matching pattern %s", patterns[0])
+		}
+		return fmt.Sprintf("matching any of patterns [%s]", strings.Join(patterns, ", "))
+	}
+	return "any value"
 }
 
 // Accept checks if a given value is valid according to the rule.
