@@ -60,6 +60,14 @@ func (r *Repository) Size() int {
 	return len(r.allEntities)
 }
 
+// cloneEmpty returns a clone of r whose maps are all empty.
+// Non-data fields of r are copied (such as the config and catalog files).
+func (r *Repository) cloneEmpty() *Repository {
+	r2 := NewRepositoryWithConfig(r.config)
+	r2.catalogFiles = r.catalogFiles
+	return r2
+}
+
 func (r *Repository) initializeFromFiles(catalogFiles []string) error {
 	if r.Size() != 0 {
 		return fmt.Errorf("initializeFromFiles called on a non-empty repo (size: %d)", r.Size())
@@ -91,18 +99,17 @@ func (r *Repository) initializeFromFiles(catalogFiles []string) error {
 }
 
 // Reload reloads the repository from the catalog files this repo was initialized from.
-// The repository r remains unchanged if any errors occur.
-func (r *Repository) Reload() error {
+// The repository r remains unchanged.
+func (r *Repository) Reload() (*Repository, error) {
 	if len(r.catalogFiles) == 0 {
-		return fmt.Errorf("cannot reload repository: no catalog files")
+		return nil, fmt.Errorf("cannot reload repository: no catalog files")
 	}
-	r2 := NewRepositoryWithConfig(r.config)
+	r2 := r.cloneEmpty()
 	err := r2.initializeFromFiles(r.catalogFiles)
 	if err != nil {
-		return fmt.Errorf("reloading repository failed: %v", err)
+		return nil, fmt.Errorf("reloading repository failed: %v", err)
 	}
-	*r = *r2
-	return nil
+	return r2, nil
 }
 
 func (r *Repository) setEntity(e catalog.Entity) error {
@@ -138,11 +145,11 @@ func (r *Repository) Exists(e catalog.Entity) bool {
 // InsertOrUpdateEntity inserts e into the repository or updates an existing version of e.
 //
 // This method uses a fairly heavyweight, but effective approach:
-// Rebuild the repository from scratch (as a copy), validate, copy the maps back.
+// Rebuild the repository from scratch (as a copy), and validate.
 // It avoids having to deal with complex deletions and additions of relationships
-// and their inverses. If the operation fails, the repository will be in an unchanged state.
-func (r *Repository) InsertOrUpdateEntity(e catalog.Entity) error {
-	r2 := NewRepositoryWithConfig(r.config)
+// and their inverses. The repository r remains unchanged in any case.
+func (r *Repository) InsertOrUpdateEntity(e catalog.Entity) (*Repository, error) {
+	r2 := r.cloneEmpty()
 	ref := e.GetRef()
 	found := false
 	for _, n := range r.allEntities {
@@ -155,31 +162,28 @@ func (r *Repository) InsertOrUpdateEntity(e catalog.Entity) error {
 		}
 
 		if err := r2.AddEntity(toAdd); err != nil {
-			return fmt.Errorf("failed to rebuild repository: %v", err)
+			return nil, fmt.Errorf("failed to rebuild repository: %v", err)
 		}
 	}
 	if !found {
 		// e not found in repository => insert
 		if err := r2.AddEntity(e); err != nil {
-			return fmt.Errorf("failed to insert new entity: %v", err)
+			return nil, fmt.Errorf("failed to insert new entity: %v", err)
 		}
 	}
 
 	if err := r2.Validate(); err != nil {
-		return fmt.Errorf("repository validation failed: %v", err)
+		return nil, fmt.Errorf("repository validation failed: %v", err)
 	}
 
-	// Copy over all data from the updated repo to the current one.
-	*r = *r2
-
-	return nil
+	return r2, nil
 }
 
 // DeleteEntity removes the given entity from the repository.
 // Deletions are only allowed if the given entity does not have remaining
 // ingoing dependencies (i.e. references from other entities) of any kind.
 // See InsertOrUpdateEntity for the procedure.
-func (r *Repository) DeleteEntity(ref *catalog.Ref) error {
+func (r *Repository) DeleteEntity(ref *catalog.Ref) (*Repository, error) {
 	refList := func(refs []*catalog.LabelRef) []string {
 		result := make([]string, len(refs))
 		for i, ref := range refs {
@@ -191,46 +195,44 @@ func (r *Repository) DeleteEntity(ref *catalog.Ref) error {
 	// Validate that there are no inbound dependencies left.
 	e := r.Entity(ref)
 	if e == nil {
-		return fmt.Errorf("entity %q does not exist", ref)
+		return nil, fmt.Errorf("entity %q does not exist", ref)
 	}
 	switch entity := e.(type) {
 	case *catalog.Component:
 		if len(entity.GetDependents()) != 0 {
-			return fmt.Errorf("remaining ingoing dependencies: %v", refList(entity.GetDependents()))
+			return nil, fmt.Errorf("remaining ingoing dependencies: %v", refList(entity.GetDependents()))
 		}
 	case *catalog.Resource:
 		if len(entity.GetDependents()) != 0 {
-			return fmt.Errorf("remaining ingoing dependencies: %v", refList(entity.GetDependents()))
+			return nil, fmt.Errorf("remaining ingoing dependencies: %v", refList(entity.GetDependents()))
 		}
 	case *catalog.API:
 		if len(entity.GetProviders()) != 0 {
-			return fmt.Errorf("remaining API providers: %v", refList(entity.GetProviders()))
+			return nil, fmt.Errorf("remaining API providers: %v", refList(entity.GetProviders()))
 		}
 		if len(entity.GetConsumers()) != 0 {
-			return fmt.Errorf("remaining API providers: %v", refList(entity.GetConsumers()))
+			return nil, fmt.Errorf("remaining API providers: %v", refList(entity.GetConsumers()))
 		}
 	default:
-		return fmt.Errorf("deleting entities of type %T is currently not supported", e)
+		return nil, fmt.Errorf("deleting entities of type %T is currently not supported", e)
 	}
 
 	// Rebuild repo without entity
-	r2 := NewRepositoryWithConfig(r.config)
+	r2 := r.cloneEmpty()
 	for _, n := range r.allEntities {
 		if n.GetRef().Equal(ref) {
 			continue // Skip the entity to be deleted
 		}
 		toAdd := n.Reset()
 		if err := r2.AddEntity(toAdd); err != nil {
-			return fmt.Errorf("failed to rebuild repository: %v", err)
+			return nil, fmt.Errorf("failed to rebuild repository: %v", err)
 		}
 	}
 	if err := r2.Validate(); err != nil {
-		return fmt.Errorf("repository validation failed: %v", err)
+		return nil, fmt.Errorf("repository validation failed: %v", err)
 	}
 
-	// Copy over all data from the updated repo to the current one.
-	*r = *r2
-	return nil
+	return r2, nil
 }
 
 // AddEntity adds an entity to the repository *during construction*.

@@ -443,7 +443,7 @@ spec:
 
 	// Check if the entity was actually created in the repo
 	ref, _ := catalog.ParseRef("component:default/new-component")
-	if s.repo.Entity(ref) == nil {
+	if s.State().repo.Entity(ref) == nil {
 		t.Fatalf("entity was not created in the repository")
 	}
 
@@ -612,7 +612,7 @@ spec:
 
 	// Check if the entity was actually updated in the repo
 	ref, _ := catalog.ParseRef("component:default/test-component")
-	entity := s.repo.Entity(ref)
+	entity := s.State().repo.Entity(ref)
 	if entity == nil {
 		t.Fatalf("entity not found in the repository")
 	}
@@ -804,7 +804,7 @@ func TestDeleteEntity_OK(t *testing.T) {
 
 	// Check if the entity was actually deleted from the repo
 	ref, _ := catalog.ParseRef("component:default/test-component")
-	if s.repo.Entity(ref) != nil {
+	if s.State().repo.Entity(ref) != nil {
 		t.Fatalf("entity was not deleted from the repository")
 	}
 
@@ -898,7 +898,7 @@ func TestUpdateAnnotationValue_OK(t *testing.T) {
 
 	// Check if the entity was actually updated in the repo
 	ref, _ := catalog.ParseRef(entityRef)
-	entity := s.repo.Entity(ref)
+	entity := s.State().repo.Entity(ref)
 	if entity == nil {
 		t.Fatalf("entity not found in the repository")
 	}

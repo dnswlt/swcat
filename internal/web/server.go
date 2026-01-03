@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dnswlt/swcat"
@@ -35,14 +36,31 @@ type ServerOptions struct {
 	Version  string        // App version
 }
 
+// ServerState contains the state of the server:
+// - Repository
+// - SVG cache
+// While the ServerState is not immutable due to the SVG cache,
+// it contains all state that is swapped atomically on any updates
+// to the repository (reloads, entity updates, etc.).
+type ServerState struct {
+	repo     *repo.Repository
+	svgCache sync.Map // mutated during requests, hence sync'ed.
+}
+
 type Server struct {
-	opts        ServerOptions
-	template    *template.Template
-	repo        *repo.Repository
-	svgCache    map[string]*svg.Result
-	svgCacheMut sync.Mutex
-	dotRunner   dot.Runner
-	started     time.Time
+	opts     ServerOptions
+	template *template.Template
+	// Mutex to be acquired by write requests that update more than
+	// just the state (e.g. write to disk).
+	writeMu sync.Mutex
+	// Atomic pointer to this server's state.
+	// We use the Snapshot Isolation pattern for atomic state updates.
+	// Request processing code obtains the whole state pointer, works on it,
+	// and calls SetState to update the state atomically, if needed.
+	state     atomic.Pointer[ServerState]
+	dotRunner dot.Runner
+	// Server startup time. Used for cache busting JS/CSS resources.
+	started time.Time
 }
 
 func NewServer(opts ServerOptions, repo *repo.Repository) (*Server, error) {
@@ -51,15 +69,35 @@ func NewServer(opts ServerOptions, repo *repo.Repository) (*Server, error) {
 	}
 	s := &Server{
 		opts:      opts,
-		repo:      repo,
-		svgCache:  make(map[string]*svg.Result),
 		dotRunner: dot.NewRunner(opts.DotPath),
 		started:   time.Now(),
 	}
+	s.SetState(&ServerState{repo: repo})
+
 	if err := s.reloadTemplates(); err != nil {
 		return nil, err
 	}
 	return s, nil
+}
+
+func (s *Server) State() *ServerState {
+	return s.state.Load()
+}
+
+func (s *Server) SetState(state *ServerState) {
+	s.state.Store(state)
+}
+
+func (s *ServerState) lookupSVG(cacheKey string) (*svg.Result, bool) {
+	item, ok := s.svgCache.Load(cacheKey)
+	if !ok {
+		return nil, false
+	}
+	return item.(*svg.Result), true
+}
+
+func (s *ServerState) storeSVG(cacheKey string, svg *svg.Result) {
+	s.svgCache.Store(cacheKey, svg)
 }
 
 type loggingResponseWriter struct {
@@ -79,25 +117,12 @@ func (lrw *loggingResponseWriter) Write(b []byte) (int, error) {
 	return lrw.ResponseWriter.Write(b)
 }
 
-func (s *Server) lookupSVG(cacheKey string) (*svg.Result, bool) {
-	s.svgCacheMut.Lock()
-	defer s.svgCacheMut.Unlock()
-	svg, ok := s.svgCache[cacheKey]
-	return svg, ok
-}
-func (s *Server) storeSVG(cacheKey string, svg *svg.Result) {
-	s.svgCacheMut.Lock()
-	defer s.svgCacheMut.Unlock()
-	s.svgCache[cacheKey] = svg
-}
-func (s *Server) clearSVGCache() {
-	s.svgCacheMut.Lock()
-	defer s.svgCacheMut.Unlock()
-	s.svgCache = make(map[string]*svg.Result)
-}
-func (s *Server) svgRenderer() *svg.Renderer {
+// svgRenderer returns a new Renderer that uses this server's SVG config
+// and dotRunner. The repository has to be passed in; this is typically
+// going to be the s.State() obtained at the beginning of request processing.
+func (s *Server) svgRenderer(r *repo.Repository) *svg.Renderer {
 	layouter := svg.NewStandardLayouter(s.opts.Config.SVG)
-	return svg.NewRenderer(s.repo, s.dotRunner, layouter)
+	return svg.NewRenderer(r, s.dotRunner, layouter)
 }
 
 // withRequestLogging wraps a handler and logs each request if in debug mode.
@@ -145,7 +170,7 @@ func (s *Server) reloadTemplates() error {
 func (s *Server) serveComponents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	components := s.repo.FindComponents(query)
+	components := s.State().repo.FindComponents(query)
 	params := map[string]any{
 		"Components": components,
 		"Query":      query,
@@ -163,7 +188,7 @@ func (s *Server) serveComponents(w http.ResponseWriter, r *http.Request) {
 func (s *Server) serveSystems(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	systems := s.repo.FindSystems(query)
+	systems := s.State().repo.FindSystems(query)
 	params := map[string]any{
 		"Systems": systems,
 		"Query":   query,
@@ -185,7 +210,8 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		return
 	}
 	params := map[string]any{}
-	system := s.repo.System(systemRef)
+	state := s.State()
+	system := state.repo.System(systemRef)
 	if system == nil {
 		http.Error(w, "Invalid system", http.StatusNotFound)
 		return
@@ -200,7 +226,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		if err != nil {
 			continue // Ignore invalid refs
 		}
-		if c := s.repo.System(ref); c != nil {
+		if c := state.repo.System(ref); c != nil {
 			contextSystems = append(contextSystems, c)
 		}
 	}
@@ -211,22 +237,23 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	slices.Sort(cacheKeyIDs)
 	internalView := r.URL.Query().Get("view") == "internal"
 	cacheKey := fmt.Sprintf("%s?%s%t", system.GetRef(), strings.Join(cacheKeyIDs, ","), internalView)
-	svgResult, ok := s.lookupSVG(cacheKey)
+	svgResult, ok := state.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
+		renderer := s.svgRenderer(state.repo)
 		if internalView {
-			svgResult, err = s.svgRenderer().SystemInternalGraph(ctx, system)
+			svgResult, err = renderer.SystemInternalGraph(ctx, system)
 		} else {
-			svgResult, err = s.svgRenderer().SystemExternalGraph(ctx, system, contextSystems)
+			svgResult, err = renderer.SystemExternalGraph(ctx, system, contextSystems)
 		}
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		s.storeSVG(cacheKey, svgResult)
+		state.storeSVG(cacheKey, svgResult)
 	}
 	params["SVGTabs"] = []struct {
 		Active bool
@@ -250,7 +277,8 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		return
 	}
 	params := map[string]any{}
-	component := s.repo.Component(componentRef)
+	state := s.State()
+	component := state.repo.Component(componentRef)
 	if component == nil {
 		http.Error(w, "Invalid component", http.StatusNotFound)
 		return
@@ -258,18 +286,18 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 	params["Component"] = component
 
 	cacheKey := component.GetRef().String()
-	svgResult, ok := s.lookupSVG(cacheKey)
+	svgResult, ok := state.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svgResult, err = s.svgRenderer().ComponentGraph(ctx, component)
+		svgResult, err = s.svgRenderer(state.repo).ComponentGraph(ctx, component)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		s.storeSVG(cacheKey, svgResult)
+		state.storeSVG(cacheKey, svgResult)
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
@@ -281,7 +309,8 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	apis := s.repo.FindAPIs(query)
+	state := s.State()
+	apis := state.repo.FindAPIs(query)
 	params := map[string]any{
 		"APIs":  apis,
 		"Query": query,
@@ -312,7 +341,8 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 		return
 	}
 	params := map[string]any{}
-	ap := s.repo.API(apiRef)
+	state := s.State()
+	ap := state.repo.API(apiRef)
 	if ap == nil {
 		http.Error(w, "Invalid API", http.StatusNotFound)
 		return
@@ -320,18 +350,18 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 	params["API"] = ap
 
 	cacheKey := ap.GetRef().String()
-	svgResult, ok := s.lookupSVG(cacheKey)
+	svgResult, ok := state.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svgResult, err = s.svgRenderer().APIGraph(ctx, ap)
+		svgResult, err = s.svgRenderer(state.repo).APIGraph(ctx, ap)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		s.storeSVG(cacheKey, svgResult)
+		state.storeSVG(cacheKey, svgResult)
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
@@ -343,7 +373,8 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 func (s *Server) serveResources(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	resources := s.repo.FindResources(query)
+	state := s.State()
+	resources := state.repo.FindResources(query)
 	params := map[string]any{
 		"Resources": resources,
 		"Query":     query,
@@ -364,8 +395,9 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 		http.Error(w, "Invalid resourceID", http.StatusBadRequest)
 		return
 	}
+	state := s.State()
 	params := map[string]any{}
-	resource := s.repo.Resource(resourceRef)
+	resource := state.repo.Resource(resourceRef)
 	if resource == nil {
 		http.Error(w, "Invalid resource", http.StatusNotFound)
 		return
@@ -373,18 +405,18 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 	params["Resource"] = resource
 
 	cacheKey := resource.GetRef().String()
-	svgResult, ok := s.lookupSVG(cacheKey)
+	svgResult, ok := state.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svgResult, err = s.svgRenderer().ResourceGraph(ctx, resource)
+		svgResult, err = s.svgRenderer(state.repo).ResourceGraph(ctx, resource)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		s.storeSVG(cacheKey, svgResult)
+		state.storeSVG(cacheKey, svgResult)
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
@@ -396,7 +428,8 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 func (s *Server) serveDomains(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	domains := s.repo.FindDomains(query)
+	state := s.State()
+	domains := state.repo.FindDomains(query)
 	params := map[string]any{
 		"Domains": domains,
 		"Query":   query,
@@ -418,7 +451,8 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 		return
 	}
 	params := map[string]any{}
-	domain := s.repo.Domain(domainRef)
+	state := s.State()
+	domain := state.repo.Domain(domainRef)
 	if domain == nil {
 		http.Error(w, "Invalid domain", http.StatusNotFound)
 		return
@@ -426,18 +460,18 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 	params["Domain"] = domain
 
 	cacheKey := domain.GetRef().String()
-	svgResult, ok := s.lookupSVG(cacheKey)
+	svgResult, ok := state.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svgResult, err = s.svgRenderer().DomainGraph(ctx, domain)
+		svgResult, err = s.svgRenderer(state.repo).DomainGraph(ctx, domain)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		s.storeSVG(cacheKey, svgResult)
+		state.storeSVG(cacheKey, svgResult)
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
@@ -449,7 +483,8 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 func (s *Server) serveGroups(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	groups := s.repo.FindGroups(query)
+	state := s.State()
+	groups := state.repo.FindGroups(query)
 	params := map[string]any{
 		"Groups": groups,
 		"Query":  query,
@@ -471,7 +506,8 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 		return
 	}
 	params := map[string]any{}
-	group := s.repo.Group(groupRef)
+	state := s.State()
+	group := state.repo.Group(groupRef)
 	if group == nil {
 		http.Error(w, "Invalid group", http.StatusNotFound)
 		return
@@ -485,7 +521,8 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 func (s *Server) serveEntities(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	entities := s.repo.FindEntities(query)
+	state := s.State()
+	entities := state.repo.FindEntities(query)
 	params := map[string]any{
 		"Entities": entities,
 		"Query":    query,
@@ -507,7 +544,8 @@ func (s *Server) serveEntityYAML(w http.ResponseWriter, r *http.Request, entityR
 		return
 	}
 	params := map[string]any{}
-	entity := s.repo.Entity(ref)
+	state := s.State()
+	entity := state.repo.Entity(ref)
 	if entity == nil {
 		http.Error(w, "Invalid entity", http.StatusNotFound)
 		return
@@ -563,6 +601,9 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
 		return
@@ -574,7 +615,8 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
 		return
 	}
-	clonedEntity := s.repo.Entity(clonedRef)
+	state := s.State()
+	clonedEntity := state.repo.Entity(clonedRef)
 	if clonedEntity == nil {
 		http.Error(w, "Invalid entity", http.StatusNotFound)
 		return
@@ -596,23 +638,26 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.repo.Exists(newEntity) {
+	if state.repo.Exists(newEntity) {
 		s.renderErrorSnippet(w, fmt.Sprintf("Entity %s already exists", newEntity.GetRef()))
 		return
 	}
 
-	if err := s.repo.InsertOrUpdateEntity(newEntity); err != nil {
+	newRepo, err := state.repo.InsertOrUpdateEntity(newEntity)
+	if err != nil {
 		s.renderErrorSnippet(w, fmt.Sprintf("Failed to insert entity into repo: %v", err))
 		return
 	}
-	// Invalidate the SVG cache
-	s.clearSVGCache()
 
 	// Update the YAML file.
 	if err := store.InsertOrReplaceEntity(path, newAPIEntity); err != nil {
 		http.Error(w, "Failed to update store", http.StatusInternalServerError)
 		log.Printf("Error updating store: %v", err)
+		return
 	}
+
+	// Update server's in-memory state
+	s.SetState(&ServerState{repo: newRepo})
 
 	redirectURL, err := toURL(newEntity.GetRef())
 	if err != nil {
@@ -634,32 +679,38 @@ func (s *Server) deleteEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		return
 	}
 
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	ref, err := catalog.ParseRef(entityRef)
 	if err != nil {
 		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
 		return
 	}
 
-	entity := s.repo.Entity(ref)
+	state := s.State()
+	entity := state.repo.Entity(ref)
 	if entity == nil {
 		http.Error(w, "Invalid entity", http.StatusNotFound)
 		return
 	}
 
 	// Update the repo
-	if err := s.repo.DeleteEntity(entity.GetRef()); err != nil {
+	newRepo, err := state.repo.DeleteEntity(entity.GetRef())
+	if err != nil {
 		s.renderErrorSnippet(w, fmt.Sprintf("Failed to delete entity from repo: %v", err))
 		return
 	}
-	// Invalidate the SVG cache
-	s.clearSVGCache()
 
 	// Update the YAML file.
 	apiRef := catalog.APIRef(ref)
 	if err := store.DeleteEntity(entity.GetSourceInfo().Path, apiRef); err != nil {
 		http.Error(w, "Failed to update store", http.StatusInternalServerError)
 		log.Printf("Error updating store: %v", err)
+		return
 	}
+
+	s.SetState(&ServerState{repo: newRepo})
 
 	// Redirect to parent system, if it exists. Else redirect to list view.
 	redirectURL := urlPrefix(entity.GetRef())
@@ -684,6 +735,10 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		http.Error(w, "Cannot update entities in read-only mode", http.StatusPreconditionFailed)
 		return
 	}
+
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
 		return
@@ -695,7 +750,8 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		return
 	}
 
-	originalEntity := s.repo.Entity(ref)
+	state := s.State()
+	originalEntity := state.repo.Entity(ref)
 	if originalEntity == nil {
 		http.Error(w, "Invalid entity", http.StatusNotFound)
 		return
@@ -723,12 +779,11 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	}
 
 	// Update the repo
-	if err := s.repo.InsertOrUpdateEntity(newEntity); err != nil {
+	newRepo, err := state.repo.InsertOrUpdateEntity(newEntity)
+	if err != nil {
 		s.renderErrorSnippet(w, fmt.Sprintf("Failed to update entity in repo: %v", err))
 		return
 	}
-	// Invalidate the SVG cache
-	s.clearSVGCache()
 
 	// Copy over path information for re-editing later.
 	path := originalEntity.GetSourceInfo().Path
@@ -738,7 +793,11 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	if err := store.InsertOrReplaceEntity(path, newAPIEntity); err != nil {
 		http.Error(w, "Failed to update store", http.StatusInternalServerError)
 		log.Printf("Error updating store: %v", err)
+		return
 	}
+
+	// Update server's in-memory state.
+	s.SetState(&ServerState{repo: newRepo})
 
 	redirectURL, err := toURL(ref)
 	if err != nil {
@@ -755,6 +814,9 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 		http.Error(w, "Cannot update entities in read-only mode", http.StatusPreconditionFailed)
 		return
 	}
+
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 
 	// Read the new value from the request body.
 	body, err := io.ReadAll(r.Body)
@@ -778,7 +840,8 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 	}
 
 	// Look up the entity in the repository
-	originalEntity := s.repo.Entity(ref)
+	state := s.State()
+	originalEntity := state.repo.Entity(ref)
 	if originalEntity == nil {
 		http.Error(w, "Entity not found", http.StatusNotFound)
 		return
@@ -811,12 +874,11 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 	path := originalEntity.GetSourceInfo().Path
 	newEntity.GetSourceInfo().Path = path
 	// Update the repo
-	if err := s.repo.InsertOrUpdateEntity(newEntity); err != nil {
+	newRepo, err := state.repo.InsertOrUpdateEntity(newEntity)
+	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to update entity in repo: %v", err), http.StatusInternalServerError)
 		return
 	}
-	// Invalidate the SVG cache
-	s.clearSVGCache()
 
 	// Update the YAML file.
 	if err := store.InsertOrReplaceEntity(path, newAPIEntity); err != nil {
@@ -824,6 +886,9 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 		log.Printf("Error updating store: %v", err)
 		return
 	}
+
+	// Update server's in-memory state.
+	s.SetState(&ServerState{repo: newRepo})
 
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w, "OK")
@@ -874,26 +939,27 @@ func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Could not retrieve entity ref from Referer: %s: %v", referer, err), http.StatusBadRequest)
 		return
 	}
+	state := s.State()
 	// Get completions for requested field.
 	fieldType := "plain"
 	var completions []string
 	switch field {
 	case "metadata.annotations":
 		fieldType = "key"
-		completions = s.repo.AnnotationKeys(ref.Kind)
+		completions = state.repo.AnnotationKeys(ref.Kind)
 	case "metadata.labels":
 		fieldType = "key"
-		completions = s.repo.LabelKeys(ref.Kind)
+		completions = state.repo.LabelKeys(ref.Kind)
 	case "spec.consumesApis", "spec.providesApis":
 		fieldType = "item"
-		apis := s.repo.FindAPIs("")
+		apis := state.repo.FindAPIs("")
 		completions = make([]string, len(apis))
 		for i, a := range apis {
 			completions[i] = a.GetRef().QName()
 		}
 	case "spec.dependsOn":
 		fieldType = "item"
-		entities := s.repo.FindEntities("kind:component OR kind:resource")
+		entities := state.repo.FindEntities("kind:component OR kind:resource")
 		completions = make([]string, len(entities))
 		for i, a := range entities {
 			// Use fully qualified refs including the kind for dependsOn.
@@ -901,14 +967,14 @@ func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 		}
 	case "spec.owner":
 		fieldType = "value"
-		groups := s.repo.FindGroups("")
+		groups := state.repo.FindGroups("")
 		completions = make([]string, len(groups))
 		for i, g := range groups {
 			completions[i] = g.GetRef().QName()
 		}
 	case "spec.system":
 		fieldType = "value"
-		systems := s.repo.FindSystems("")
+		systems := state.repo.FindSystems("")
 		completions = make([]string, len(systems))
 		for i, s := range systems {
 			completions[i] = s.GetRef().QName()
@@ -917,7 +983,7 @@ func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 		fieldType = "value"
 		_, fieldName, _ := strings.Cut(field, ".")
 		var err error
-		completions, err = s.repo.SpecFieldValues(ref.Kind, fieldName)
+		completions, err = state.repo.SpecFieldValues(ref.Kind, fieldName)
 		if err != nil {
 			http.Error(w,
 				fmt.Sprintf("Cannot get values for kind %v and field %s: %v", ref.Kind, field, err),
@@ -980,7 +1046,8 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 func (s *Server) serveEntitiesJSON(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	entities := s.repo.FindEntities(query)
+	state := s.State()
+	entities := state.repo.FindEntities(query)
 
 	result := make([]map[string]any, 0, len(entities))
 	for _, e := range entities {
@@ -1009,15 +1076,19 @@ func (s *Server) serveEntitiesJSON(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) reloadCatalog(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	started := time.Now()
-	if err := s.repo.Reload(); err != nil {
+	state := s.State()
+	newRepo, err := state.repo.Reload()
+	if err != nil {
 		log.Printf("Failed to reload catalog: %v", err)
 		s.renderErrorSnippet(w, fmt.Sprintf("Failed to reload catalog: %v", err))
 		return
 	}
 	log.Printf("Catalog reloaded in %d ms.", time.Since(started).Milliseconds())
-	// Invalidate the SVG cache
-	s.clearSVGCache()
+	s.SetState(&ServerState{repo: newRepo})
 
 	// Force HTMX to refresh the page
 	w.Header().Set("HX-Refresh", "true")
