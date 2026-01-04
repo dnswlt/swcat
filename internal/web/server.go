@@ -203,6 +203,43 @@ func (s *Server) serveSystems(w http.ResponseWriter, r *http.Request) {
 	s.serveHTMLPage(w, r, "systems.html", params)
 }
 
+type svgRoutes struct {
+	// Maps each fully qualified entity reference to its /ui URL.
+	Entities map[string]string `json:"entities"`
+}
+
+// svgMetadata is the struct that is rendered as JSON for SVG metadata
+// in HTML responses (embedded in a <script> tag).
+type svgMetadata struct {
+	*dot.SVGGraphMetadata
+	Routes svgRoutes `json:"routes"`
+}
+
+// Builds the JSON SVG metadata object. This includes both the given SVGGraphMetadata
+// as well as "routes", i.e. the /ui URLs for all entities contained in the graph.
+func (s *Server) svgMetadataJSON(r *http.Request, svgMeta *dot.SVGGraphMetadata) (template.JS, error) {
+	ctx := r.Context()
+	entities := make(map[string]string)
+	for ref := range svgMeta.Nodes {
+		u, err := toURLWithContext(ctx, ref)
+		if err != nil {
+			return "", fmt.Errorf("could not create URL for %s: %v", ref, err)
+		}
+		entities[ref] = u
+	}
+	meta := svgMetadata{
+		SVGGraphMetadata: svgMeta,
+		Routes: svgRoutes{
+			Entities: entities,
+		},
+	}
+	json, err := json.Marshal(meta)
+	if err != nil {
+		return "", fmt.Errorf("cannot marshal svgMetadata: %v", err)
+	}
+	return template.JS(json), nil
+}
+
 func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID string) {
 	systemRef, err := catalog.ParseRefAs(catalog.KindSystem, systemID)
 	if err != nil {
@@ -264,7 +301,12 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		{Active: internalView, Name: "Internal", Href: setQueryParam(r.URL, "view", "internal").RequestURI()},
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
-	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
+	params["SVGMetadataJSON"], err = s.svgMetadataJSON(r, svgResult.Metadata)
+	if err != nil {
+		http.Error(w, "Failed to create metadata JSON", http.StatusInternalServerError)
+		log.Printf("Failed to create metadata JSON: %v", err)
+		return
+	}
 	s.setCustomContent(system, params)
 
 	s.serveHTMLPage(w, r, "system_detail.html", params)
@@ -300,7 +342,12 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		state.storeSVG(cacheKey, svgResult)
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
-	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
+	params["SVGMetadataJSON"], err = s.svgMetadataJSON(r, svgResult.Metadata)
+	if err != nil {
+		http.Error(w, "Failed to create metadata JSON", http.StatusInternalServerError)
+		log.Printf("Failed to create metadata JSON: %v", err)
+		return
+	}
 	s.setCustomContent(component, params)
 
 	s.serveHTMLPage(w, r, "component_detail.html", params)
@@ -364,7 +411,12 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 		state.storeSVG(cacheKey, svgResult)
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
-	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
+	params["SVGMetadataJSON"], err = s.svgMetadataJSON(r, svgResult.Metadata)
+	if err != nil {
+		http.Error(w, "Failed to create metadata JSON", http.StatusInternalServerError)
+		log.Printf("Failed to create metadata JSON: %v", err)
+		return
+	}
 
 	s.setCustomContent(ap, params)
 	s.serveHTMLPage(w, r, "api_detail.html", params)
@@ -419,7 +471,12 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 		state.storeSVG(cacheKey, svgResult)
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
-	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
+	params["SVGMetadataJSON"], err = s.svgMetadataJSON(r, svgResult.Metadata)
+	if err != nil {
+		http.Error(w, "Failed to create metadata JSON", http.StatusInternalServerError)
+		log.Printf("Failed to create metadata JSON: %v", err)
+		return
+	}
 	s.setCustomContent(resource, params)
 
 	s.serveHTMLPage(w, r, "resource_detail.html", params)
@@ -474,7 +531,12 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 		state.storeSVG(cacheKey, svgResult)
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
-	params["SVGMetadataJSON"] = template.JS(svgResult.MetadataJSON())
+	params["SVGMetadataJSON"], err = s.svgMetadataJSON(r, svgResult.Metadata)
+	if err != nil {
+		http.Error(w, "Failed to create metadata JSON", http.StatusInternalServerError)
+		log.Printf("Failed to create metadata JSON: %v", err)
+		return
+	}
 	s.setCustomContent(domain, params)
 
 	s.serveHTMLPage(w, r, "domain_detail.html", params)
@@ -1033,7 +1095,21 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		templateParams[k] = v
 	}
 
-	err := s.template.ExecuteTemplate(&output, templateFile, templateParams)
+	// Clone template so we can safely update Funcs on a per-request basis.
+	tmpl, err := s.template.Clone()
+	if err != nil {
+		log.Printf("Failed to clone template: %v", err)
+		http.Error(w, "Template clone error", http.StatusInternalServerError)
+		return
+	}
+	// Overwrite URL-functions with context-aware analogs.
+	tmpl = tmpl.Funcs(map[string]any{
+		"toURL": func(s any) (string, error) {
+			return toURLWithContext(r.Context(), s)
+		},
+	})
+
+	err = tmpl.ExecuteTemplate(&output, templateFile, templateParams)
 	if err != nil {
 		log.Printf("Failed to render template %q: %v", templateFile, err)
 		http.Error(w, "Template rendering error", http.StatusInternalServerError)
@@ -1094,6 +1170,15 @@ func (s *Server) reloadCatalog(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Refresh", "true")
 	w.WriteHeader(http.StatusOK)
 }
+
+// contextKey is the type used to store data in the request context.
+type contextKey string
+
+const (
+	// ctxRef is the context key for the git reference (e.g., branch)
+	// accessed by the current request.
+	ctxRef contextKey = "gitRef"
+)
 
 func (s *Server) routes() *http.ServeMux {
 	mux := http.NewServeMux()

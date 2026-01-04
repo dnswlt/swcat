@@ -3,9 +3,11 @@ package web
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/url"
 	"slices"
 	"strings"
@@ -51,17 +53,17 @@ func toEntityURL(s any) (string, error) {
 // Example: "/ui/components"
 func urlPrefix(ref *catalog.Ref) string {
 	switch ref.Kind {
-	case "component":
+	case catalog.KindComponent:
 		return "/ui/components"
-	case "resource":
+	case catalog.KindResource:
 		return "/ui/resources"
-	case "system":
+	case catalog.KindSystem:
 		return "/ui/systems"
-	case "group":
+	case catalog.KindGroup:
 		return "/ui/groups"
-	case "domain":
+	case catalog.KindDomain:
 		return "/ui/domains"
-	case "api":
+	case catalog.KindAPI:
 		return "/ui/apis"
 	}
 	return ""
@@ -75,6 +77,26 @@ func toURL(s any) (string, error) {
 
 	if entityRef.Kind == "" {
 		return "", fmt.Errorf("entity reference has no kind: set: %v", entityRef)
+	}
+	path := urlPrefix(entityRef)
+	if path == "" {
+		return "", fmt.Errorf("unsupported kind %q in entityURL", entityRef.Kind)
+	}
+	return path + "/" + url.PathEscape(entityRef.QName()), nil
+}
+
+func toURLWithContext(ctx context.Context, s any) (string, error) {
+	entityRef, err := anyToRef(s)
+	if err != nil {
+		return "", err
+	}
+
+	if entityRef.Kind == "" {
+		return "", fmt.Errorf("entity reference has no kind: set: %v", entityRef)
+	}
+	// TODO: Add context-based prefix here.
+	if ref := ctx.Value(ctxRef); ref != nil {
+		log.Fatal("TODO Ref set!")
 	}
 	path := urlPrefix(entityRef)
 	if path == "" {

@@ -2,7 +2,6 @@ package svg
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/dnswlt/swcat/internal/catalog"
@@ -59,15 +58,6 @@ type Result struct {
 	// <?xml> headers etc are stripped.
 	SVG      []byte
 	Metadata *dot.SVGGraphMetadata
-}
-
-func (d *Result) MetadataJSON() []byte {
-	json, err := json.Marshal(d.Metadata)
-	if err != nil {
-		// This is truly an application bug.
-		panic(fmt.Sprintf("Cannot marshal MetadataJSON: %v", err))
-	}
-	return json
 }
 
 type DependencyDir int
