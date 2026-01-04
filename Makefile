@@ -5,7 +5,7 @@ GO ?= go
 VERSION ?= $(shell git describe --tags --always --dirty)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
 
-.PHONY: test test-integration test-race build
+.PHONY: test test-integration test-race build build-web
 
 #
 # Building
@@ -13,6 +13,9 @@ LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
 
 build:
 	$(GO) build $(LDFLAGS) -o swcat ./cmd/swcat
+
+build-web:
+	npm run build --prefix web
 
 run-examples:
 	$(GO) run $(LDFLAGS) ./cmd/swcat -addr localhost:9191 -config examples/config/swcat.yml -base-dir . examples/flights

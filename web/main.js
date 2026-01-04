@@ -86,47 +86,23 @@ function onClickEdge(edge) {
     window.location.assign(url);
 }
 
-// Handles clicks on SVG nodes.
-// TODO: Store the URLs in svgMeta - this avoids hard-coding URL paths here in JS.
+// Handles clicks on SVG nodes by looking up the URL to navigate to in 
+// svgMeta.routes.
 function onClickNode(node) {
     const id = node.id;
     if (!id) return;
 
-    // Expects the node ID to be the fully qualified entity reference.
-    const parts = id.split(":");
-    if (parts.length !== 2) return;
-
-    const kind = parts[0];
-    const name = parts[1];
-
-    if (!kind || !name) return;
-
-    let path = "";
-    switch (kind) {
-        case "component":
-            path = "/ui/components/";
-            break;
-        case "resource":
-            path = "/ui/resources/";
-            break;
-        case "api":
-            path = "/ui/apis/";
-            break;
-        case "system":
-            path = "/ui/systems/";
-            break;
-        case "group":
-            path = "/ui/groups/";
-            break;
-        case "domain":
-            path = "/ui/domains/";
-            break;
-        default:
-            console.log(`Unhandled kind ${kind} in SVG.`);
-            return;
+    if (!svgMeta || !svgMeta.routes) {
+        console.error("Cannot process node click: missing svgMeta.routes");
+        return;
     }
-
-    window.location.href = path + encodeURIComponent(name);
+    
+    const url = svgMeta.routes.entities[id];
+    if (!url) {
+        console.warn("No route defined for entity:", id);
+        return;
+    }
+    window.location.href = url;
 }
 
 // Adds all relevant listeners to the top-level SVG element
