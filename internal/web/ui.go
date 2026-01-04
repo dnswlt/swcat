@@ -79,19 +79,19 @@ func kindPath(kind catalog.Kind) string {
 	panic(fmt.Sprintf("Unhandled kind: %s", kind))
 }
 
-func toListURLWithContext(ctx context.Context, s any) (string, error) {
-	entityRef, err := anyToRef(e)
-	if err != nil {
-		return "", err
-	}
-
-	if entityRef.Kind == "" {
-		return "", fmt.Errorf("entity reference has no kind: set: %v", entityRef)
-	}
+func toEntitiesListURL(ctx context.Context) string {
 	if ref := ctx.Value(ctxRef); ref != nil {
-		return fmt.Sprintf("/ui/ref/%s/-/%s", ref, kindPath(entityRef.Kind)), nil
+		return fmt.Sprintf("/ui/ref/%s/-/entities", ref)
 	}
-	return fmt.Sprintf("/ui/%s", kindPath(entityRef.Kind)), nil
+	return "/ui/entities"
+}
+
+func toListURLWithContext(ctx context.Context, kind catalog.Kind) string {
+	kp := kindPath(kind)
+	if ref := ctx.Value(ctxRef); ref != nil {
+		return fmt.Sprintf("/ui/ref/%s/-/%s", ref, kp)
+	}
+	return fmt.Sprintf("/ui/%s", kp)
 }
 
 func toURLWithContext(ctx context.Context, s any) (string, error) {
