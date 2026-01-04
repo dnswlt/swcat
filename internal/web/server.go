@@ -131,6 +131,8 @@ func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
+		// Capture path as it might get updated by middleware handlers
+		urlPath := r.URL.Path
 		// Wrap ResponseWriter to capture status code
 		lrw := &loggingResponseWriter{ResponseWriter: w}
 
@@ -139,7 +141,7 @@ func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 		duration := time.Since(start)
 		log.Printf("%s %s %d %dms (remote=%s)",
 			r.Method,
-			r.URL.Path,
+			urlPath,
 			lrw.statusCode,
 			duration.Milliseconds(),
 			r.RemoteAddr,
@@ -150,8 +152,10 @@ func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 func (s *Server) reloadTemplates() error {
 	tmpl := template.New("root")
 	tmpl = tmpl.Funcs(map[string]any{
-		"toURL":         toURL,
-		"toEntityURL":   toEntityURL,
+		// These functions get replaced during request processing.
+		"toURL":       undefinedTemplateFunction,
+		"toEntityURL": undefinedTemplateFunction,
+		// "Static" functions
 		"markdown":      markdown,
 		"formatTags":    formatTags,
 		"formatLabels":  formatLabels,
@@ -721,7 +725,7 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 	// Update server's in-memory state
 	s.SetState(&ServerState{repo: newRepo})
 
-	redirectURL, err := toURL(newEntity.GetRef())
+	redirectURL, err := toURLWithContext(r.Context(), newEntity.GetRef())
 	if err != nil {
 		// This must not happen: we must always be able to get a URL for our own entities.
 		panic(fmt.Sprintf("Failed to create entityURL for valid entity reference: %v", err))
@@ -775,14 +779,16 @@ func (s *Server) deleteEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	s.SetState(&ServerState{repo: newRepo})
 
 	// Redirect to parent system, if it exists. Else redirect to list view.
-	redirectURL := urlPrefix(entity.GetRef())
+	var redirectURL string
 	if sp, ok := entity.(catalog.SystemPart); ok {
-		var err error
-		redirectURL, err = toURL(sp.GetSystem())
-		if err != nil {
-			// This must not happen: we must always be able to get a URL for our own entities.
-			panic(fmt.Sprintf("Failed to create entityURL for valid entity reference: %v", err))
-		}
+		redirectURL, err = toURLWithContext(r.Context(), sp.GetSystem())
+	} else {
+		redirectURL, err = toListURLWithContext(r.Context(), entity)
+	}
+	if err != nil {
+		// This must not happen: we must always be able to get a URL for our own entities.
+		http.Error(w, "Failed to create entity URL", http.StatusInternalServerError)
+		panic(fmt.Sprintf("Failed to create entity URL for valid entity reference: %v", err))
 	}
 	w.Header().Set("HX-Redirect", redirectURL)
 	w.WriteHeader(http.StatusOK)
@@ -861,7 +867,7 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	// Update server's in-memory state.
 	s.SetState(&ServerState{repo: newRepo})
 
-	redirectURL, err := toURL(ref)
+	redirectURL, err := toURLWithContext(r.Context(), ref)
 	if err != nil {
 		// This must not happen: we must always be able to get a URL for our own entities.
 		panic(fmt.Sprintf("Failed to create entityURL for valid entity reference: %v", err))
@@ -1107,6 +1113,9 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		"toURL": func(s any) (string, error) {
 			return toURLWithContext(r.Context(), s)
 		},
+		"toEntityURL": func(s any) (string, error) {
+			return toEntityURLWithContext(r.Context(), s)
+		},
 	})
 
 	err = tmpl.ExecuteTemplate(&output, templateFile, templateParams)
@@ -1180,130 +1189,185 @@ const (
 	ctxRef contextKey = "gitRef"
 )
 
-func (s *Server) routes() *http.ServeMux {
+func (s *Server) uiMux() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// Domains / Systems / Components / Resources / APIs pages
-	mux.HandleFunc("GET /ui/domains", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /domains", func(w http.ResponseWriter, r *http.Request) {
 		s.serveDomains(w, r)
 	})
-	mux.HandleFunc("GET /ui/domains/{domainID}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /domains/{domainID...}", func(w http.ResponseWriter, r *http.Request) {
 		domainID := r.PathValue("domainID")
 		s.serveDomain(w, r, domainID)
 	})
-	mux.HandleFunc("GET /ui/systems", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /systems", func(w http.ResponseWriter, r *http.Request) {
 		s.serveSystems(w, r)
 	})
-	mux.HandleFunc("GET /ui/systems/{systemID}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /systems/{systemID...}", func(w http.ResponseWriter, r *http.Request) {
 		systemID := r.PathValue("systemID")
 		s.serveSystem(w, r, systemID)
 	})
-	mux.HandleFunc("GET /ui/components", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /components", func(w http.ResponseWriter, r *http.Request) {
 		s.serveComponents(w, r)
 	})
-	mux.HandleFunc("GET /ui/components/{componentID}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /components/{componentID...}", func(w http.ResponseWriter, r *http.Request) {
 		componentID := r.PathValue("componentID")
 		s.serveComponent(w, r, componentID)
 	})
-	mux.HandleFunc("GET /ui/resources", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /resources", func(w http.ResponseWriter, r *http.Request) {
 		s.serveResources(w, r)
 	})
-	mux.HandleFunc("GET /ui/resources/{resourceID}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /resources/{resourceID...}", func(w http.ResponseWriter, r *http.Request) {
 		resourceID := r.PathValue("resourceID")
 		s.serveResource(w, r, resourceID)
 	})
-	mux.HandleFunc("GET /ui/apis", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /apis", func(w http.ResponseWriter, r *http.Request) {
 		s.serveAPIs(w, r)
 	})
-	mux.HandleFunc("GET /ui/apis/{apiID}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /apis/{apiID...}", func(w http.ResponseWriter, r *http.Request) {
 		apiID := r.PathValue("apiID")
 		s.serveAPI(w, r, apiID)
 	})
-	mux.HandleFunc("GET /ui/groups", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /groups", func(w http.ResponseWriter, r *http.Request) {
 		s.serveGroups(w, r)
 	})
-	mux.HandleFunc("GET /ui/groups/{groupID}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /groups/{groupID...}", func(w http.ResponseWriter, r *http.Request) {
 		groupID := r.PathValue("groupID")
 		s.serveGroup(w, r, groupID)
 	})
 
-	mux.HandleFunc("GET /ui/entities", func(w http.ResponseWriter, r *http.Request) {
+	// Generic entities URLs
+	mux.HandleFunc("GET /entities", func(w http.ResponseWriter, r *http.Request) {
 		s.serveEntities(w, r)
 	})
-	mux.HandleFunc("GET /ui/entities/{entityRef}/edit", func(w http.ResponseWriter, r *http.Request) {
-		entityRef := r.PathValue("entityRef")
-		s.serveEntityEdit(w, r, entityRef)
-	})
-	mux.HandleFunc("POST /ui/entities/{entityRef}/edit", func(w http.ResponseWriter, r *http.Request) {
-		entityRef := r.PathValue("entityRef")
-		s.updateEntity(w, r, entityRef)
-	})
-	mux.HandleFunc("GET /ui/entities/{entityRef}/clone", func(w http.ResponseWriter, r *http.Request) {
-		entityRef := r.PathValue("entityRef")
-		s.serveEntityClone(w, r, entityRef)
-	})
-	mux.HandleFunc("POST /ui/entities", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /entities", func(w http.ResponseWriter, r *http.Request) {
 		s.createEntity(w, r)
 	})
-	mux.HandleFunc("GET /ui/entities/{entityRef}/delete", func(w http.ResponseWriter, r *http.Request) {
-		entityRef := r.PathValue("entityRef")
-		s.serveEntityDelete(w, r, entityRef)
-	})
-	mux.HandleFunc("POST /ui/entities/{entityRef}/delete", func(w http.ResponseWriter, r *http.Request) {
-		entityRef := r.PathValue("entityRef")
-		s.deleteEntity(w, r, entityRef)
-	})
+	mux.Handle("/entities/", http.StripPrefix("/entities/", http.HandlerFunc(s.dispatchEntityRequest)))
 
-	// JSON API to query entities.
-	mux.HandleFunc("GET /catalog/entities", func(w http.ResponseWriter, r *http.Request) {
+	return mux
+}
+
+// dispatchEntityRequest dispatches /entities/<ref>/<method> requests.
+// The reason we don't do this directly via handler patterns is that <ref>
+// may include a slash (e.g., "external/entity"), and path escaping "/" is
+// brittle in the presence of middleware handlers and reverse proxies.
+func (s *Server) dispatchEntityRequest(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+
+	if strings.HasSuffix(path, "/edit") {
+		entityRef := strings.TrimSuffix(path, "/edit")
+		if r.Method == http.MethodPost {
+			s.updateEntity(w, r, entityRef)
+		} else {
+			s.serveEntityEdit(w, r, entityRef)
+		}
+		return
+	}
+
+	if strings.HasSuffix(path, "/clone") {
+		entityRef := strings.TrimSuffix(path, "/clone")
+		s.serveEntityClone(w, r, entityRef)
+		return
+	}
+
+	if strings.HasSuffix(path, "/delete") {
+		entityRef := strings.TrimSuffix(path, "/delete")
+		if r.Method == http.MethodPost {
+			s.deleteEntity(w, r, entityRef)
+		} else {
+			s.serveEntityDelete(w, r, entityRef)
+		}
+		return
+	}
+
+	http.NotFound(w, r)
+}
+
+// handleRefDispatch expects to handle a /ui/ref/<git-ref>/-/<rest> URL path,
+// injects <git-ref> into the request context under the ctxRef key, and
+// delegates to next with the request path updated to /<rest>.
+func (s *Server) handleRefDispatch(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Expect incoming: /ui/ref/feature/my-branch/-/domains/123
+		if !strings.HasPrefix(r.URL.Path, "/ui/ref/") {
+			log.Fatalf("Called handleRefDispatch with wrong prefix: %s", r.URL.Path)
+		}
+
+		rest := strings.TrimPrefix(r.URL.Path, "/ui/ref/")
+
+		// Split at /-/ delimiter that terminates the git branch/tag path segment.
+		ref, targetPath, found := strings.Cut(rest, "/-/")
+		if !found {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Update URL.Path so the child handler considers the targetPath as the root.
+		// Ensure it starts with "/".
+		r.URL.Path = "/" + strings.TrimPrefix(targetPath, "/")
+
+		// Inject Ref into Context and dispath to child handler.
+		ctx := context.WithValue(r.Context(), ctxRef, ref)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (s *Server) routes() *http.ServeMux {
+	root := http.NewServeMux()
+
+	// UI part: everything under /ui
+	uiMux := s.uiMux()
+	root.Handle("/ui/", http.StripPrefix("/ui", uiMux))
+	root.Handle("/ui/ref/", s.handleRefDispatch(uiMux))
+
+	// JSON API to query/modify entities.
+	root.HandleFunc("GET /catalog/entities", func(w http.ResponseWriter, r *http.Request) {
 		s.serveEntitiesJSON(w, r)
 	})
-	mux.HandleFunc("POST /catalog/entities/{entityRef}/annotations/{annotationKey}", func(w http.ResponseWriter, r *http.Request) {
+	root.HandleFunc("POST /catalog/entities/{entityRef}/annotations/{annotationKey}", func(w http.ResponseWriter, r *http.Request) {
 		entityRef := r.PathValue("entityRef")
 		annotationKey := r.PathValue("annotationKey")
 		s.updateAnnotationValue(w, r, entityRef, annotationKey)
 	})
-	mux.HandleFunc("GET /catalog/autocomplete", func(w http.ResponseWriter, r *http.Request) {
+	root.HandleFunc("GET /catalog/autocomplete", func(w http.ResponseWriter, r *http.Request) {
 		s.serveAutocomplete(w, r)
 	})
-	mux.HandleFunc("POST /catalog/reload", s.reloadCatalog)
+	root.HandleFunc("POST /catalog/reload", s.reloadCatalog)
 
 	// Health check. Useful for cloud deployments.
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	root.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "OK")
 	})
 
 	// Static resources (JavaScript, CSS, etc.)
 	if s.opts.BaseDir == "" {
-		mux.Handle("GET /static/", http.FileServer(http.FS(swcat.Files)))
+		root.Handle("GET /static/", http.FileServer(http.FS(swcat.Files)))
 	} else {
 		staticFS := http.Dir(path.Join(s.opts.BaseDir, "static"))
-		mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(staticFS)))
+		root.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(staticFS)))
 	}
 
 	// Default route (all other paths): redirect to the UI home page
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	root.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "", http.StatusBadRequest)
 			return
 		}
 		if r.Header.Get("Hx-Request") != "" {
 			// Do not redirect htmx requests, those should only request valid paths.
-			http.Error(w, "", http.StatusNotFound)
+			http.NotFound(w, r)
 			return
 		}
-		refererURL, err := url.Parse(r.Header.Get("Referer"))
-		if err == nil && refererURL.Host == r.Host {
-			// Request is coming from our own domain: this indicates an internal broken link.
-			http.Error(w, "Broken link", http.StatusNotFound)
-			return
+		if r.URL.Path == "/" || r.URL.Path == "/ui" {
+			// Redirect GET to the UI home page.
+			http.Redirect(w, r, "/ui/components", http.StatusTemporaryRedirect)
 		}
-		// Redirect GET to the UI home page.
-		http.Redirect(w, r, "/ui/components", http.StatusTemporaryRedirect)
+		http.NotFound(w, r)
 	})
 
-	return mux
+	return root
 }
 
 // Serve starts the HTTP server on s.opts.Addr using the wrapped handler.

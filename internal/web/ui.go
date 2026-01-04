@@ -5,9 +5,9 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
-	"log"
 	"net/url"
 	"slices"
 	"strings"
@@ -16,6 +16,14 @@ import (
 	"github.com/dnswlt/swcat/internal/config"
 	"github.com/yuin/goldmark"
 )
+
+var (
+	errFunctionUndefined = errors.New("template function not defined for request")
+)
+
+func undefinedTemplateFunction(s any) (string, error) {
+	return "", errFunctionUndefined
+}
 
 func isCloneable(e catalog.Entity) bool {
 	k := e.GetKind()
@@ -40,37 +48,39 @@ func anyToRef(s any) (*catalog.Ref, error) {
 	return nil, fmt.Errorf("anyToRef: invalid argument type %T", s)
 }
 
-func toEntityURL(s any) (string, error) {
+func toEntityURLWithContext(ctx context.Context, s any) (string, error) {
 	entityRef, err := anyToRef(s)
 	if err != nil {
 		return "", err
 	}
+	if ref := ctx.Value(ctxRef); ref != nil {
+		return fmt.Sprintf("/ui/ref/%s/-/entities/%s", ref, entityRef.String()), nil
+	}
+
 	return "/ui/entities/" + url.PathEscape(entityRef.String()), nil
 }
 
-// urlPrefix returns the URL prefix for the entity kind of the given ref.
-// The returned value does not end in a trailing slash.
-// Example: "/ui/components"
-func urlPrefix(ref *catalog.Ref) string {
-	switch ref.Kind {
+// kindPath returns the <kind> URL path part for the given entity kind
+func kindPath(kind catalog.Kind) string {
+	switch kind {
 	case catalog.KindComponent:
-		return "/ui/components"
+		return "components"
 	case catalog.KindResource:
-		return "/ui/resources"
+		return "resources"
 	case catalog.KindSystem:
-		return "/ui/systems"
+		return "systems"
 	case catalog.KindGroup:
-		return "/ui/groups"
+		return "groups"
 	case catalog.KindDomain:
-		return "/ui/domains"
+		return "domains"
 	case catalog.KindAPI:
-		return "/ui/apis"
+		return "apis"
 	}
-	return ""
+	panic(fmt.Sprintf("Unhandled kind: %s", kind))
 }
 
-func toURL(s any) (string, error) {
-	entityRef, err := anyToRef(s)
+func toListURLWithContext(ctx context.Context, s any) (string, error) {
+	entityRef, err := anyToRef(e)
 	if err != nil {
 		return "", err
 	}
@@ -78,11 +88,10 @@ func toURL(s any) (string, error) {
 	if entityRef.Kind == "" {
 		return "", fmt.Errorf("entity reference has no kind: set: %v", entityRef)
 	}
-	path := urlPrefix(entityRef)
-	if path == "" {
-		return "", fmt.Errorf("unsupported kind %q in entityURL", entityRef.Kind)
+	if ref := ctx.Value(ctxRef); ref != nil {
+		return fmt.Sprintf("/ui/ref/%s/-/%s", ref, kindPath(entityRef.Kind)), nil
 	}
-	return path + "/" + url.PathEscape(entityRef.QName()), nil
+	return fmt.Sprintf("/ui/%s", kindPath(entityRef.Kind)), nil
 }
 
 func toURLWithContext(ctx context.Context, s any) (string, error) {
@@ -94,15 +103,13 @@ func toURLWithContext(ctx context.Context, s any) (string, error) {
 	if entityRef.Kind == "" {
 		return "", fmt.Errorf("entity reference has no kind: set: %v", entityRef)
 	}
-	// TODO: Add context-based prefix here.
+	var pathPrefix string
 	if ref := ctx.Value(ctxRef); ref != nil {
-		log.Fatal("TODO Ref set!")
+		pathPrefix = fmt.Sprintf("/ui/ref/%s/-/%s", ref, kindPath(entityRef.Kind))
+	} else {
+		pathPrefix = fmt.Sprintf("/ui/%s", kindPath(entityRef.Kind))
 	}
-	path := urlPrefix(entityRef)
-	if path == "" {
-		return "", fmt.Errorf("unsupported kind %q in entityURL", entityRef.Kind)
-	}
-	return path + "/" + url.PathEscape(entityRef.QName()), nil
+	return pathPrefix + "/" + url.PathEscape(entityRef.QName()), nil
 }
 
 // entitySummary returns e's title and description concatenated.
