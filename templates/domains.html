@@ -12,16 +12,7 @@
         <h1 class="text-2xl font-semibold text-center">Domains</h1>
 
         <!-- Search -->
-        <form role="search" action="/ui/domains" method="get" hx-get="/ui/domains" hx-target="#domains-body"
-            hx-swap="innerHTML" hx-indicator="#spinner" hx-push-url="true"
-            hx-trigger="input from:#q delay:300ms, submit" class="flex items-center gap-2">
-            <input id="q" name="q" type="search" value="{{ .Query }}" placeholder="Filter domains"
-                class="flex-1 px-3 py-2 border rounded-md" autocomplete="off" hx-trigger="input changed delay:300ms">
-            <a href="https://dnswlt.github.io/swcat/user-guide/query-syntax/" target="_blank" title="Search Help"
-                class="w-7 h-7 bg-gray-200 text-gray-600 flex items-center justify-center rounded-full hover:bg-gray-300 shrink-0 text-lg">?</a>
-            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md">Search</button>
-            <span id="spinner" class="htmx-indicator text-gray-500 text-sm hidden">Loading...</span>
-        </form>
+        {{ template "search_bar.html" . }}
 
         <!-- Table -->
         <div class="overflow-x-auto">
@@ -33,7 +24,7 @@
                         <th class="px-4 py-2 text-left">Owner</th>
                     </tr>
                 </thead>
-                <tbody id="domains-body">
+                <tbody id="{{ .EntitiesLabel }}-tbody">
                     {{ template "domains_rows.html" . }}
                 </tbody>
             </table>

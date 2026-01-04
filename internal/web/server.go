@@ -176,8 +176,10 @@ func (s *Server) serveComponents(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	components := s.State().repo.FindComponents(query)
 	params := map[string]any{
-		"Components": components,
-		"Query":      query,
+		"Components":    components,
+		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindComponent),
+		"EntitiesLabel": "components",
+		"Query":         query,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
@@ -194,8 +196,10 @@ func (s *Server) serveSystems(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	systems := s.State().repo.FindSystems(query)
 	params := map[string]any{
-		"Systems": systems,
-		"Query":   query,
+		"Systems":       systems,
+		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindSystem),
+		"EntitiesLabel": "systems",
+		"Query":         query,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
@@ -363,8 +367,10 @@ func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
 	state := s.State()
 	apis := state.repo.FindAPIs(query)
 	params := map[string]any{
-		"APIs":  apis,
-		"Query": query,
+		"APIs":          apis,
+		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindAPI),
+		"EntitiesLabel": "apis",
+		"Query":         query,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
@@ -432,8 +438,10 @@ func (s *Server) serveResources(w http.ResponseWriter, r *http.Request) {
 	state := s.State()
 	resources := state.repo.FindResources(query)
 	params := map[string]any{
-		"Resources": resources,
-		"Query":     query,
+		"Resources":     resources,
+		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindResource),
+		"EntitiesLabel": "resources",
+		"Query":         query,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
@@ -492,8 +500,10 @@ func (s *Server) serveDomains(w http.ResponseWriter, r *http.Request) {
 	state := s.State()
 	domains := state.repo.FindDomains(query)
 	params := map[string]any{
-		"Domains": domains,
-		"Query":   query,
+		"Domains":       domains,
+		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindDomain),
+		"EntitiesLabel": "domains",
+		"Query":         query,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
@@ -552,8 +562,10 @@ func (s *Server) serveGroups(w http.ResponseWriter, r *http.Request) {
 	state := s.State()
 	groups := state.repo.FindGroups(query)
 	params := map[string]any{
-		"Groups": groups,
-		"Query":  query,
+		"Groups":        groups,
+		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindGroup),
+		"EntitiesLabel": "groups",
+		"Query":         query,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
@@ -590,8 +602,10 @@ func (s *Server) serveEntities(w http.ResponseWriter, r *http.Request) {
 	state := s.State()
 	entities := state.repo.FindEntities(query)
 	params := map[string]any{
-		"Entities": entities,
-		"Query":    query,
+		"Entities":      entities,
+		"SearchPath":    toEntitiesListURL(r.Context()),
+		"EntitiesLabel": "entities",
+		"Query":         query,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
@@ -783,7 +797,7 @@ func (s *Server) deleteEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	if sp, ok := entity.(catalog.SystemPart); ok {
 		redirectURL, err = toURLWithContext(r.Context(), sp.GetSystem())
 	} else {
-		redirectURL, err = toListURLWithContext(r.Context(), entity)
+		redirectURL = toListURLWithContext(r.Context(), entity.GetKind())
 	}
 	if err != nil {
 		// This must not happen: we must always be able to get a URL for our own entities.
@@ -1080,13 +1094,13 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 	var output bytes.Buffer
 
 	nav := NewNavBar(
-		NavItem("/ui/domains", "Domains"),
-		NavItem("/ui/systems", "Systems"),
-		NavItem("/ui/components", "Components"),
-		NavItem("/ui/resources", "Resources"),
-		NavItem("/ui/apis", "APIs"),
-		NavItem("/ui/groups", "Groups"),
-		NavItem("/ui/entities", "Search"),
+		NavItem(toListURLWithContext(r.Context(), catalog.KindDomain), "Domains"),
+		NavItem(toListURLWithContext(r.Context(), catalog.KindSystem), "Systems"),
+		NavItem(toListURLWithContext(r.Context(), catalog.KindComponent), "Components"),
+		NavItem(toListURLWithContext(r.Context(), catalog.KindResource), "Resources"),
+		NavItem(toListURLWithContext(r.Context(), catalog.KindAPI), "APIs"),
+		NavItem(toListURLWithContext(r.Context(), catalog.KindGroup), "Groups"),
+		NavItem(toEntitiesListURL(r.Context()), "Search"),
 	).SetActive(r.URL.Path).SetParams(r.URL.Query())
 
 	templateParams := map[string]any{
