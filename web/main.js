@@ -152,7 +152,7 @@ function addSVGListener() {
 
 // Runs all initialization functions relevant for the given page identified by pageId.
 async function initPage(pageId) {
-    if (['domain', 'system', 'component', 'resource', 'api', 'group'].includes(pageId)) {
+    if (['domain', 'system', 'component', 'resource', 'api'].includes(pageId)) {
         createTooltip();
         loadSVGMetadata();
         addSVGListener();
