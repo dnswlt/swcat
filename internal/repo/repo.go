@@ -34,9 +34,9 @@ type Repository struct {
 	// Repository configuration
 	config Config
 
-	// Files from which this repository was initialized.
+	// The store from which this repository was initialized.
 	// Used for reloading the catalog after out-of-band changes.
-	catalogFiles []string
+	store store.Store
 }
 
 func NewRepositoryWithConfig(config Config) *Repository {
@@ -60,21 +60,29 @@ func (r *Repository) Size() int {
 	return len(r.allEntities)
 }
 
+func (r *Repository) Store() store.Store {
+	return r.store
+}
+
 // cloneEmpty returns a clone of r whose maps are all empty.
-// Non-data fields of r are copied (such as the config and catalog files).
+// Non-data fields of r are copied (such as the config and store reference).
 func (r *Repository) cloneEmpty() *Repository {
 	r2 := NewRepositoryWithConfig(r.config)
-	r2.catalogFiles = r.catalogFiles
+	r2.store = r.store
 	return r2
 }
 
-func (r *Repository) initializeFromFiles(catalogFiles []string) error {
+func (r *Repository) initializeFromStore(st store.Store) error {
 	if r.Size() != 0 {
-		return fmt.Errorf("initializeFromFiles called on a non-empty repo (size: %d)", r.Size())
+		return fmt.Errorf("initializeFromStore called on a non-empty repo (size: %d)", r.Size())
 	}
-	for _, catalogPath := range catalogFiles {
+	catalogPaths, err := st.CatalogFiles()
+	if err != nil {
+		return fmt.Errorf("initializeFromStore: cannot retrieve catalog files :%v", err)
+	}
+	for _, catalogPath := range catalogPaths {
 		log.Printf("Reading catalog file %s", catalogPath)
-		entities, err := store.ReadEntities(catalogPath)
+		entities, err := store.ReadEntities(st, catalogPath)
 		if err != nil {
 			return fmt.Errorf("failed to read entities from %s: %v", catalogPath, err)
 		}
@@ -94,18 +102,18 @@ func (r *Repository) initializeFromFiles(catalogFiles []string) error {
 		return fmt.Errorf("repository validation failed: %v", err)
 	}
 
-	r.catalogFiles = catalogFiles
+	r.store = st
 	return nil
 }
 
 // Reload reloads the repository from the catalog files this repo was initialized from.
 // The repository r remains unchanged.
 func (r *Repository) Reload() (*Repository, error) {
-	if len(r.catalogFiles) == 0 {
+	if r.store == nil {
 		return nil, fmt.Errorf("cannot reload repository: no catalog files")
 	}
 	r2 := r.cloneEmpty()
-	err := r2.initializeFromFiles(r.catalogFiles)
+	err := r2.initializeFromStore(r.store)
 	if err != nil {
 		return nil, fmt.Errorf("reloading repository failed: %v", err)
 	}
@@ -1008,12 +1016,12 @@ func (r *Repository) addGeneratedLinks() error {
 	return nil
 }
 
-// LoadRepositoryFromPath reads entities from the given catalog paths
+// LoadRepositoryFromStore reads entities from the given catalog paths
 // and returns a validated repository.
 // Elements in catalogPaths must be .yml file paths.
-func LoadRepositoryFromPaths(config Config, catalogPaths []string) (*Repository, error) {
+func LoadRepositoryFromStore(config Config, st store.Store) (*Repository, error) {
 	repo := NewRepositoryWithConfig(config)
-	err := repo.initializeFromFiles(catalogPaths)
+	err := repo.initializeFromStore(st)
 	if err != nil {
 		return nil, err
 	}

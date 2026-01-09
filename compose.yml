@@ -7,5 +7,27 @@ services:
     ports:
       - "9191:8080" # host:container
     volumes:
-      - ${CATALOG_DIR:-./examples/flights}:/catalog:rw
+      - ${CATALOG_DIR:-./examples/flights}:/data:rw
     user: "${UID}:${GID}" # Ensure files written on the host env have proper ownership.
+    environment:
+      - SWCAT_ADDR=${SWCAT_ADDR:-0.0.0.0:8080}
+      - SWCAT_CATALOG_DIR=${SWCAT_CATALOG_DIR:-/data/catalog}
+      - SWCAT_BASE_DIR=${SWCAT_BASE_DIR:-/app}
+      - SWCAT_CONFIG=${SWCAT_CONFIG:-/data/swcat.yml}
+
+  swcat-remote:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-dev}
+    ports:
+      - "9191:8080" # host:container
+    environment:
+      - SWCAT_ADDR=${SWCAT_ADDR:-0.0.0.0:8080}
+      - SWCAT_GIT_URL=${SWCAT_GIT_URL:?err_git_url_required}
+      - SWCAT_GIT_REF=${SWCAT_GIT_REF:-}
+      - SWCAT_GIT_USER=${SWCAT_GIT_USER:-}
+      - SWCAT_GIT_PASSWORD=${SWCAT_GIT_PASSWORD:-}
+      - SWCAT_CATALOG_DIR=${SWCAT_CATALOG_DIR:-catalog}
+      - SWCAT_BASE_DIR=${SWCAT_BASE_DIR:-/app}
+      - SWCAT_CONFIG=${SWCAT_CONFIG:-swcat.yml}

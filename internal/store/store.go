@@ -8,16 +8,92 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/api"
+	"github.com/dnswlt/swcat/internal/gitclient"
 	"gopkg.in/yaml.v3"
 )
 
 const (
 	YAMLIndent = 2
 )
+
+// Store is a minimal abstraction to read catalog files.
+// The idea is to support both reading from a read-only in-memory Git repo branch
+// as well as from disk.
+type Store interface {
+	// Lists all catalog (*.yml) files in the store.
+	CatalogFiles() ([]string, error)
+	// Reads the contents of path from the store.
+	// path should be a relative path (e.g., "catalog/domain.yml").
+	ReadFile(path string) ([]byte, error)
+}
+
+// diskStore is an implementation of Store that reads files from the local file system.
+type diskStore struct {
+	catalogRoot string // Root path of the catalog
+}
+
+func NewDiskStore(catalogRoot string) *diskStore {
+	return &diskStore{
+		catalogRoot: catalogRoot,
+	}
+}
+
+func (d *diskStore) CatalogFiles() ([]string, error) {
+	return collectYMLFilesInDir(d.catalogRoot)
+}
+func (d *diskStore) ReadFile(path string) ([]byte, error) {
+	return os.ReadFile(path)
+}
+
+// gitStore is an implementation of Store that reads from a remote Git repository.
+type gitStore struct {
+	catalogLoader *gitclient.CatalogLoader
+	catalogRoot   string
+	currentRef    string
+}
+
+func NewGitStore(catalogLoader *gitclient.CatalogLoader, catalogRoot string, currentRef string) *gitStore {
+	return &gitStore{
+		catalogLoader: catalogLoader,
+		catalogRoot:   catalogRoot,
+		currentRef:    currentRef,
+	}
+}
+
+func (g *gitStore) WithCurrentRef(ref string) (*gitStore, error) {
+	refs, err := g.catalogLoader.ListReferences()
+	if err != nil {
+		return nil, fmt.Errorf("cannot list references: %v", err)
+	}
+	if !slices.Contains(refs, ref) {
+		return nil, fmt.Errorf("ref %q not found", ref)
+	}
+	g.currentRef = ref
+	return NewGitStore(g.catalogLoader, g.catalogRoot, ref), nil
+}
+
+func (g *gitStore) CatalogFiles() ([]string, error) {
+	files, err := g.catalogLoader.ListFilesRecursive(g.currentRef, g.catalogRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list files: %v", err)
+	}
+	var ymlFiles []string
+	for _, f := range files {
+		if strings.HasSuffix(strings.ToLower(f), ".yml") {
+			ymlFiles = append(ymlFiles, filepath.Join(g.catalogRoot, f))
+		}
+	}
+	return ymlFiles, nil
+}
+
+func (g *gitStore) ReadFile(path string) ([]byte, error) {
+	return g.catalogLoader.ReadFile(g.currentRef, path)
+}
 
 var (
 	kindFactories = map[string]func() api.Entity{
@@ -30,8 +106,12 @@ var (
 	}
 )
 
-func DeleteEntity(path string, ref *api.Ref) error {
-	entities, err := ReadEntities(path)
+func DeleteEntity(st Store, path string, ref *api.Ref) error {
+	// Only disk-based repos can currently be modified.
+	if _, ok := st.(*diskStore); !ok {
+		return fmt.Errorf("cannot update catalog in store of type %T", st)
+	}
+	entities, err := ReadEntities(st, path)
 	if err != nil {
 		return fmt.Errorf("failed to read entity file %s: %v", path, err)
 	}
@@ -51,15 +131,19 @@ func DeleteEntity(path string, ref *api.Ref) error {
 		return fmt.Errorf("failed to delete entity %s from file %s", ref, path)
 	}
 
-	if err := WriteEntities(path, remaining); err != nil {
+	if err := writeEntities(path, remaining); err != nil {
 		return fmt.Errorf("failed to write updated entity file %s: %v", path, err)
 	}
 
 	return nil
 }
 
-func InsertOrReplaceEntity(path string, entity api.Entity) error {
-	entities, err := ReadEntities(path)
+func InsertOrReplaceEntity(st Store, path string, entity api.Entity) error {
+	// Only disk-based repos can currently be modified.
+	if _, ok := st.(*diskStore); !ok {
+		return fmt.Errorf("cannot update catalog in store of type %T", st)
+	}
+	entities, err := ReadEntities(st, path)
 	if err != nil {
 		return fmt.Errorf("failed to read entity file %s: %v", path, err)
 	}
@@ -80,16 +164,16 @@ func InsertOrReplaceEntity(path string, entity api.Entity) error {
 		entities = append(entities, entity)
 	}
 
-	if err := WriteEntities(path, entities); err != nil {
+	if err := writeEntities(path, entities); err != nil {
 		return fmt.Errorf("failed to write updated entity file %s: %v", path, err)
 	}
 
 	return nil
 }
 
-// WriteEntities safely writes a slice of entities to a given path.
+// writeEntities safely writes a slice of entities to a given path.
 // It writes to a temporary file first and then atomically moves it to the final destination.
-func WriteEntities(path string, entities []api.Entity) error {
+func writeEntities(path string, entities []api.Entity) error {
 	// 1. Create a temporary file in the same directory as the target path.
 	dir := filepath.Dir(path)
 	tmpFile, err := os.CreateTemp(dir, "swcat-*.tmp")
@@ -115,14 +199,13 @@ func WriteEntities(path string, entities []api.Entity) error {
 	return os.Rename(tmpFile.Name(), path)
 }
 
-func ReadEntities(path string) ([]api.Entity, error) {
-	f, err := os.Open(path)
+func ReadEntities(st Store, path string) ([]api.Entity, error) {
+	bs, err := st.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
 
-	dec := yaml.NewDecoder(f)
+	dec := yaml.NewDecoder(bytes.NewReader(bs))
 	dec.KnownFields(true) // We want to be strict and error out on any unknown field
 
 	var entities []api.Entity
@@ -340,8 +423,8 @@ func SetAnnotationInNode(doc *yaml.Node, key, value string) error {
 
 // collectYMLFilesInDir walks root recursively up to maxDepth levels below root
 // (root itself is depth 0) and returns all *.yml files it finds.
-// It does NOT follow symlinks. It skips directories deeper than maxDepth.
-func collectYMLFilesInDir(root string, maxDepth int) ([]string, error) {
+// It does NOT follow symlinks.
+func collectYMLFilesInDir(root string) ([]string, error) {
 	root = filepath.Clean(root)
 	var out []string
 
@@ -351,18 +434,6 @@ func collectYMLFilesInDir(root string, maxDepth int) ([]string, error) {
 		}
 
 		if d.IsDir() {
-			// Compute depth relative to root (root=0, its children=1, etc.)
-			if path == root {
-				return nil
-			}
-			rel, err := filepath.Rel(root, path)
-			if err != nil {
-				return err
-			}
-			depth := strings.Count(rel, string(os.PathSeparator)) + 1
-			if depth > maxDepth {
-				return fs.SkipDir
-			}
 			return nil
 		}
 
@@ -378,27 +449,4 @@ func collectYMLFilesInDir(root string, maxDepth int) ([]string, error) {
 
 	sort.Strings(out) // deterministic order
 	return out, nil
-}
-
-func CollectYMLFiles(args []string, maxDepth int) ([]string, error) {
-	var allFiles []string
-	for _, arg := range args {
-		info, err := os.Stat(arg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to stat %s: %v", arg, err)
-		}
-
-		if info.IsDir() {
-			// Collect files recursively, up to maxDepth levels deep
-			files, err := collectYMLFilesInDir(arg, maxDepth)
-			if err != nil {
-				return nil, fmt.Errorf("failed to walk dir %s: %v", arg, err)
-			}
-			allFiles = append(allFiles, files...)
-		} else {
-			allFiles = append(allFiles, arg)
-		}
-	}
-	return allFiles, nil
-
 }

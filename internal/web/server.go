@@ -730,7 +730,7 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the YAML file.
-	if err := store.InsertOrReplaceEntity(path, newAPIEntity); err != nil {
+	if err := store.InsertOrReplaceEntity(newRepo.Store(), path, newAPIEntity); err != nil {
 		http.Error(w, "Failed to update store", http.StatusInternalServerError)
 		log.Printf("Error updating store: %v", err)
 		return
@@ -784,7 +784,7 @@ func (s *Server) deleteEntity(w http.ResponseWriter, r *http.Request, entityRef 
 
 	// Update the YAML file.
 	apiRef := catalog.APIRef(ref)
-	if err := store.DeleteEntity(entity.GetSourceInfo().Path, apiRef); err != nil {
+	if err := store.DeleteEntity(newRepo.Store(), entity.GetSourceInfo().Path, apiRef); err != nil {
 		http.Error(w, "Failed to update store", http.StatusInternalServerError)
 		log.Printf("Error updating store: %v", err)
 		return
@@ -872,7 +872,7 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	newEntity.GetSourceInfo().Path = path
 
 	// Update the YAML file.
-	if err := store.InsertOrReplaceEntity(path, newAPIEntity); err != nil {
+	if err := store.InsertOrReplaceEntity(newRepo.Store(), path, newAPIEntity); err != nil {
 		http.Error(w, "Failed to update store", http.StatusInternalServerError)
 		log.Printf("Error updating store: %v", err)
 		return
@@ -963,7 +963,7 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 	}
 
 	// Update the YAML file.
-	if err := store.InsertOrReplaceEntity(path, newAPIEntity); err != nil {
+	if err := store.InsertOrReplaceEntity(newRepo.Store(), path, newAPIEntity); err != nil {
 		http.Error(w, "Failed to update store", http.StatusInternalServerError)
 		log.Printf("Error updating store: %v", err)
 		return
@@ -1336,6 +1336,7 @@ func (s *Server) routes() *http.ServeMux {
 	root.Handle("/ui/ref/", s.handleRefDispatch(uiMux))
 
 	// JSON API to query/modify entities.
+	// For now, only works on "plain" URLs, not /ref/<git-branch ones.
 	root.HandleFunc("GET /catalog/entities", func(w http.ResponseWriter, r *http.Request) {
 		s.serveEntitiesJSON(w, r)
 	})

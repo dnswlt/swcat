@@ -7,6 +7,7 @@ require github.com/google/go-cmp v0.7.0
 require (
 	github.com/go-git/go-git/v5 v5.16.4
 	github.com/yuin/goldmark v1.7.13
+    github.com/peterbourgon/ff/v3 v3.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

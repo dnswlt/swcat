@@ -53,6 +53,28 @@ func NewCatalogLoader(url string, auth *Auth) (*CatalogLoader, error) {
 	return &CatalogLoader{repo: repo}, nil
 }
 
+func (c *CatalogLoader) DefaultBranch() (string, error) {
+	refs, err := c.repo.References()
+	if err != nil {
+		return "", err
+	}
+	var headName string
+	err = refs.ForEach(func(ref *plumbing.Reference) error {
+		name := ref.Name()
+		if name == plumbing.HEAD {
+			headName = ref.Target().Short()
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if headName == "" {
+		return "", fmt.Errorf("could not identify HEAD branch")
+	}
+	return headName, nil
+}
+
 func (c *CatalogLoader) ListReferences() ([]string, error) {
 	refMap := make(map[string]bool)
 
@@ -100,7 +122,7 @@ func (c *CatalogLoader) resolveRevision(revision string) (*plumbing.Hash, error)
 		}
 	}
 
-	return nil, fmt.Errorf("revision not found: %w", err)
+	return nil, fmt.Errorf("revision %q not found: %w", revision, err)
 }
 
 func (c *CatalogLoader) ReadFile(revision, filePath string) ([]byte, error) {
