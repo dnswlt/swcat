@@ -1,8 +1,8 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -14,27 +14,15 @@ import (
 	"time"
 
 	"github.com/dnswlt/swcat/internal/config"
+	"github.com/dnswlt/swcat/internal/gitclient"
 	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/web"
+	"github.com/peterbourgon/ff/v3"
 	"gopkg.in/yaml.v3"
 )
 
-func formatFiles(files []string) error {
-	for _, f := range files {
-		log.Printf("Reading input file %s", f)
-		es, err := store.ReadEntities(f)
-		if err != nil {
-			return fmt.Errorf("failed to read %s: %v", f, err)
-		}
-		if err := store.WriteEntities(f, es); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func lookupDotPath() string {
+func lookupDotPath() (string, error) {
 	path, err := exec.LookPath("dot")
 	if err != nil && runtime.GOOS == "windows" {
 		if pf := os.Getenv("ProgramFiles"); pf != "" {
@@ -52,7 +40,7 @@ func lookupDotPath() string {
 	}
 
 	if err != nil {
-		log.Fatalf("dot was not found in your PATH. Please install Graphviz and add it to the PATH.")
+		return "", fmt.Errorf("dot was not found in your PATH. Please install Graphviz and add it to the PATH: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -65,19 +53,7 @@ func lookupDotPath() string {
 	}
 
 	log.Printf("Found dot program at %s (%s)", path, strings.TrimSpace(string(output)))
-	return path
-}
-
-func filterOutFile(files []string, fileToRemove string) []string {
-	rem := filepath.Clean(fileToRemove)
-	result := make([]string, 0, len(files))
-	for _, f := range files {
-		if filepath.Clean(f) == rem {
-			continue
-		}
-		result = append(result, f)
-	}
-	return result
+	return path, nil
 }
 
 var (
@@ -86,66 +62,114 @@ var (
 	Version = "dev"
 )
 
+func gitClientAuthFromEnv() *gitclient.Auth {
+	user := os.Getenv("SWCAT_GIT_USER")
+	if user == "" {
+		return nil
+	}
+	pass := os.Getenv("SWCAT_GIT_PASSWORD")
+	return &gitclient.Auth{
+		Username: user,
+		Password: pass,
+	}
+}
+
+// Options contains program options that can be set via command-line flags or environment variables.
+type Options struct {
+	Addr       string
+	CatalogDir string
+	GitURL     string
+	GitRef     string
+	Config     string
+	BaseDir    string
+	ReadOnly   bool
+}
+
 func main() {
 
-	serverAddrFlag := flag.String("addr", "localhost:8080", "Address to listen on")
-	formatFlag := flag.Bool("format", false, "Format input files and exit.")
-	baseDir := flag.String("base-dir", "", "Base directory for resource files. If empty, uses embedded resources.")
-	configYaml := flag.String("config", "", "Path to the configuration YAML file")
-	maxDepth := flag.Int("max-depth", 3, "Maximum recursion depth when scanning directories for .yml files")
-	readOnly := flag.Bool("read-only", false, "Start server in read-only mode (no entity editing).")
-	flag.Parse()
+	var opts Options
+	fs := flag.NewFlagSet("swcat", flag.ContinueOnError)
+	fs.StringVar(&opts.Addr, "addr", "localhost:8080", "Address to listen on")
+	fs.StringVar(&opts.CatalogDir, "catalog-dir", "", "Path to the catalog directory containing YAML files")
+	fs.StringVar(&opts.GitURL, "git-url", "", "URL of the git repository containing the catalog")
+	fs.StringVar(&opts.GitRef, "git-ref", "", "Git ref (branch or tag) to use initially")
+	fs.StringVar(&opts.Config, "config", "", "Path to the configuration YAML file")
+	fs.StringVar(&opts.BaseDir, "base-dir", "", "Base directory for resource files. If empty, uses embedded resources.")
+	fs.BoolVar(&opts.ReadOnly, "read-only", false, "Start server in read-only mode (no entity editing).")
+
+	err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("SWCAT"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Flag error: %v\n", err)
+		os.Exit(1)
+	}
+	if len(fs.Args()) > 0 {
+		fmt.Fprintf(os.Stderr, "Unexpected positional arguments: %v\n", fs.Args())
+		os.Exit(1)
+	}
+	log.Printf("Using config from flags/env vars: %+v", opts)
 
 	// Check if dot (graphviz) is in the PATH, else try Windows default install path.
-	dotPath := lookupDotPath()
-
-	files, err := store.CollectYMLFiles(flag.Args(), *maxDepth)
+	dotPath, err := lookupDotPath()
 	if err != nil {
-		log.Fatalf("Failed to collect YAML files: %v", err)
+		log.Fatalf("dot was not found in your PATH. Please install Graphviz and add it to the PATH.")
 	}
-	// For the common case (e.g. in Docker) where the config YAML is among the scanned .yml files,
-	// filter it out from the list of entity YAML files.
-	files = filterOutFile(files, *configYaml)
 
-	if *formatFlag {
-		err := formatFiles(files)
+	var st store.Store
+	if opts.GitURL != "" {
+		auth := gitClientAuthFromEnv()
+		log.Printf("Retrieving catalog from git URL %s", opts.GitURL)
+		loader, err := gitclient.NewCatalogLoader(opts.GitURL, auth)
 		if err != nil {
-			log.Fatalf("Failed to format files: %v", err)
+			log.Fatalf("Failed to retrieve git repo: %v", err)
 		}
-		return
+		ref := opts.GitRef
+		if ref == "" {
+			ref, err = loader.DefaultBranch()
+			if err != nil {
+				log.Fatalf("No git-ref specified and no default branch found: %v", err)
+			}
+			log.Printf("Using default git branch %q", ref)
+		}
+		st = store.NewGitStore(loader, opts.CatalogDir, ref)
+		if !opts.ReadOnly {
+			opts.ReadOnly = true // Enforce read-only mode when using a remote git repo as the store.
+			log.Printf("Activated read-only mode for git-based storage")
+		}
+	} else if opts.CatalogDir != "" {
+		log.Printf("Loading catalog from disk at %s", opts.CatalogDir)
+		st = store.NewDiskStore(opts.CatalogDir)
+	} else {
+		log.Fatalf("Neither -catalog-dir nor -git-url specified")
 	}
 
 	var bundle config.Bundle
-	if *configYaml != "" {
-		log.Printf("Reading configuration from %s", *configYaml)
-		f, err := os.Open(*configYaml)
-		if errors.Is(err, os.ErrNotExist) {
-			log.Printf("Specified configuration file %s does not exist", *configYaml)
-		} else if err != nil {
-			log.Fatalf("Could not open configuration YAML: %v", err)
-		} else {
-			dec := yaml.NewDecoder(f)
-			dec.KnownFields(true)
-			if err := dec.Decode(&bundle); err != nil {
-				log.Fatalf("Invalid configuration YAML: %v", err)
-			}
+	if opts.Config != "" {
+		log.Printf("Reading configuration from %s", opts.Config)
+		bs, err := st.ReadFile(opts.Config)
+		if err != nil {
+			log.Fatalf("Could not read configuration YAML: %v", err)
+		}
+		dec := yaml.NewDecoder(bytes.NewReader(bs))
+		dec.KnownFields(true)
+		if err := dec.Decode(&bundle); err != nil {
+			log.Fatalf("Invalid configuration YAML: %v", err)
 		}
 	}
 
-	repo, err := repo.LoadRepositoryFromPaths(bundle.Catalog, files)
+	repo, err := repo.LoadRepositoryFromStore(bundle.Catalog, st)
 	if err != nil {
 		log.Fatalf("Failed to load repository: %v", err)
 	}
 
-	log.Printf("Read %d entities from %d files", repo.Size(), len(files))
+	log.Printf("Read %d entities from catalog", repo.Size())
 
-	if *serverAddrFlag != "" {
+	if opts.Addr != "" {
 		server, err := web.NewServer(
 			web.ServerOptions{
-				Addr:     *serverAddrFlag,
-				BaseDir:  *baseDir,
+				Addr:     opts.Addr,
+				BaseDir:  opts.BaseDir,
 				DotPath:  dotPath,
-				ReadOnly: *readOnly,
+				ReadOnly: opts.ReadOnly,
 				Config:   bundle,
 				Version:  Version,
 			},

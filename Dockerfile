@@ -36,8 +36,8 @@ COPY templates /app/templates
 COPY --from=webbuilder /app/static/dist /app/static/dist
 
 # runtime mount for catalog input
-VOLUME ["/catalog"]
+VOLUME ["/data"]
 
 EXPOSE 8080
 
-CMD ["/app/swcat", "-addr", "0.0.0.0:8080", "-base-dir", "/app", "-config", "/catalog/swcat.yml", "/catalog"]
+CMD ["/app/swcat"]

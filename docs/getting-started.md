@@ -13,12 +13,12 @@
 Unpack `swcat-<version>.zip` to any folder you like and run:
 
 ```bash
-swcat.exe -addr localhost:9191 -config examples/config/swcat.yml examples/flights
+swcat.exe -addr localhost:9191 -config examples/flights/swcat.yml -catalog-dir examples/flights/catalog
 ```
 
 Point your browser at <http://localhost:9191> and explore the example catalog.
 
-Adjust the `-config` path and path to the catalog files (`examples/flights`) to any
+Adjust the `-config` path and `-catalog-dir` path to the catalog files to any
 software catalog you want to view or edit.
 
 ## Getting started (Docker)
@@ -98,7 +98,7 @@ cd ..
 Now run the server, using the example catalog files:
 
 ```bash
-go run ./cmd/swcat -addr localhost:9191 -config examples/config/swcat.yml examples/flights
+go run ./cmd/swcat -addr localhost:9191 -config examples/flights/swcat.yml -catalog-dir examples/flights/catalog
 ```
 
 Point your browser at <http://localhost:9191> and explore the example catalog.

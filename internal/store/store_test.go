@@ -27,10 +27,10 @@ metadata:
 spec:
   type: team
 `
-		tmpfile := writeTempFile(t, "entities.yaml", content)
+		st, tmpfile := writeTempFile(t, "entities.yaml", content)
 		defer os.Remove(tmpfile)
 
-		entities, err := ReadEntities(tmpfile)
+		entities, err := ReadEntities(st, tmpfile)
 		if err != nil {
 			t.Fatalf("ReadEntities() error = %v, wantErr %v", err, false)
 		}
@@ -56,10 +56,10 @@ spec:
 	})
 
 	t.Run("empty file", func(t *testing.T) {
-		tmpfile := writeTempFile(t, "empty.yaml", "")
+		st, tmpfile := writeTempFile(t, "empty.yaml", "")
 		defer os.Remove(tmpfile)
 
-		entities, err := ReadEntities(tmpfile)
+		entities, err := ReadEntities(st, tmpfile)
 		if err != nil {
 			t.Fatalf("ReadEntities() error = %v, wantErr %v", err, false)
 		}
@@ -74,10 +74,10 @@ apiVersion: swcat/v1alpha1
 metadata:
   name: no-kind
 `
-		tmpfile := writeTempFile(t, "no-kind.yaml", content)
+		st, tmpfile := writeTempFile(t, "no-kind.yaml", content)
 		defer os.Remove(tmpfile)
 
-		_, err := ReadEntities(tmpfile)
+		_, err := ReadEntities(st, tmpfile)
 		if err == nil {
 			t.Errorf("ReadEntities() error = %v, wantErr %v", err, true)
 		}
@@ -90,17 +90,17 @@ kind: InvalidKind
 metadata:
   name: invalid-kind
 `
-		tmpfile := writeTempFile(t, "invalid-kind.yaml", content)
+		st, tmpfile := writeTempFile(t, "invalid-kind.yaml", content)
 		defer os.Remove(tmpfile)
 
-		_, err := ReadEntities(tmpfile)
+		_, err := ReadEntities(st, tmpfile)
 		if err == nil {
 			t.Errorf("ReadEntities() error = %v, wantErr %v", err, true)
 		}
 	})
 
 	t.Run("non-existent file", func(t *testing.T) {
-		_, err := ReadEntities("non-existent-file.yaml")
+		_, err := ReadEntities(NewDiskStore("."), "non-existent-file.yaml")
 		if err == nil {
 			t.Errorf("ReadEntities() error = %v, wantErr %v", err, true)
 		}
@@ -110,17 +110,17 @@ metadata:
 		content := `
 invalid: yaml: here
 `
-		tmpfile := writeTempFile(t, "invalid.yaml", content)
+		st, tmpfile := writeTempFile(t, "invalid.yaml", content)
 		defer os.Remove(tmpfile)
 
-		_, err := ReadEntities(tmpfile)
+		_, err := ReadEntities(st, tmpfile)
 		if err == nil {
 			t.Errorf("ReadEntities() error = %v, wantErr %v", err, true)
 		}
 	})
 }
 
-func writeTempFile(t *testing.T, name, content string) string {
+func writeTempFile(t *testing.T, name, content string) (Store, string) {
 	t.Helper()
 	dir := t.TempDir()
 	tmpfile := filepath.Join(dir, name)
@@ -128,7 +128,7 @@ func writeTempFile(t *testing.T, name, content string) string {
 	if err != nil {
 		t.Fatalf("Failed to write temp file: %v", err)
 	}
-	return tmpfile
+	return NewDiskStore(dir), tmpfile
 }
 
 func TestNewEntityFromString(t *testing.T) {

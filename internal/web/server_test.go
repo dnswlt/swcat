@@ -14,6 +14,7 @@ import (
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/repo"
+	"github.com/dnswlt/swcat/internal/store"
 )
 
 // fakeRunner is a fake implementation of dot.Runner.
@@ -86,7 +87,7 @@ func TestRoot_Redirect(t *testing.T) {
 }
 
 func TestListPages_RenderLinksForAllKinds(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -131,7 +132,8 @@ func TestListPages_RenderLinksForAllKinds(t *testing.T) {
 }
 
 func TestComponentDetail_TriggersDotAndCaches(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
+
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -180,7 +182,8 @@ func TestComponentDetail_TriggersDotAndCaches(t *testing.T) {
 }
 
 func TestDetailPages_RenderSVGAndName(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
+
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -255,7 +258,8 @@ func TestDetail_NotFound_AllKinds(t *testing.T) {
 	}
 }
 func TestGroupDetail_OK_NoSVG(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
+
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -281,7 +285,8 @@ func TestGroupDetail_OK_NoSVG(t *testing.T) {
 }
 
 func TestServeEntitiesJSON_OK(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
+
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -335,7 +340,8 @@ func TestServeEntitiesJSON_OK(t *testing.T) {
 }
 
 func TestServeEntitiesJSON_WithQuery(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
+
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -383,15 +389,15 @@ func TestServeEntitiesJSON_WithQuery(t *testing.T) {
 	}
 }
 
-func TestCreateEntity_OK(t *testing.T) {
-	// Create a temporary copy of the catalog file
-	tmpfile, err := os.CreateTemp("", "catalog-*.yml")
+func testCopyCatalog(t *testing.T) (store.Store, string) {
+	t.Helper()
+	dir := t.TempDir()
+	tmpfile, err := os.CreateTemp(dir, "catalog-*.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpfile.Name())
 
-	src, err := os.Open("../../testdata/catalog.yml")
+	src, err := os.Open("../../testdata/catalog/catalog.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -403,7 +409,13 @@ func TestCreateEntity_OK(t *testing.T) {
 	}
 	tmpfile.Close()
 
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{tmpfile.Name()})
+	return store.NewDiskStore(dir), tmpfile.Name()
+}
+
+func TestCreateEntity_OK(t *testing.T) {
+	// Create a temporary copy of the catalog file
+	st, tmpfile := testCopyCatalog(t)
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, st)
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -448,7 +460,7 @@ spec:
 	}
 
 	// Check if the file was updated
-	updatedContent, err := os.ReadFile(tmpfile.Name())
+	updatedContent, err := os.ReadFile(tmpfile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -458,7 +470,8 @@ spec:
 }
 
 func TestCreateEntity_ReadOnly(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
+
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -495,25 +508,8 @@ spec:
 
 func TestCreateEntity_MissingSystem(t *testing.T) {
 	// Create a temporary copy of the catalog file
-	tmpfile, err := os.CreateTemp("", "catalog-*.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-
-	src, err := os.Open("../../testdata/catalog.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer src.Close()
-
-	_, err = io.Copy(tmpfile, src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tmpfile.Close()
-
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{tmpfile.Name()})
+	st, _ := testCopyCatalog(t)
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, st)
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -554,25 +550,8 @@ spec:
 
 func TestUpdateEntity_OK(t *testing.T) {
 	// Create a temporary copy of the catalog file
-	tmpfile, err := os.CreateTemp("", "catalog-*.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-
-	src, err := os.Open("../../testdata/catalog.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer src.Close()
-
-	_, err = io.Copy(tmpfile, src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tmpfile.Close()
-
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{tmpfile.Name()})
+	st, tmpfile := testCopyCatalog(t)
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, st)
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -621,7 +600,7 @@ spec:
 	}
 
 	// Check if the file was updated
-	updatedContent, err := os.ReadFile(tmpfile.Name())
+	updatedContent, err := os.ReadFile(tmpfile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -631,7 +610,8 @@ spec:
 }
 
 func TestUpdateEntity_ReadOnly(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
+
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -667,7 +647,8 @@ spec:
 }
 
 func TestUpdateEntity_NotFound(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
+
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -703,25 +684,8 @@ spec:
 
 func TestUpdateEntity_IDChange(t *testing.T) {
 	// Create a temporary copy of the catalog file
-	tmpfile, err := os.CreateTemp("", "catalog-*.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-
-	src, err := os.Open("../../testdata/catalog.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer src.Close()
-
-	_, err = io.Copy(tmpfile, src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tmpfile.Close()
-
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{tmpfile.Name()})
+	st, _ := testCopyCatalog(t)
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, st)
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -762,25 +726,8 @@ spec:
 
 func TestDeleteEntity_OK(t *testing.T) {
 	// Create a temporary copy of the catalog file
-	tmpfile, err := os.CreateTemp("", "catalog-*.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-
-	src, err := os.Open("../../testdata/catalog.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer src.Close()
-
-	_, err = io.Copy(tmpfile, src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tmpfile.Close()
-
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{tmpfile.Name()})
+	st, tmpfile := testCopyCatalog(t)
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, st)
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -809,7 +756,7 @@ func TestDeleteEntity_OK(t *testing.T) {
 	}
 
 	// Check if the file was updated
-	updatedContent, err := os.ReadFile(tmpfile.Name())
+	updatedContent, err := os.ReadFile(tmpfile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -819,7 +766,8 @@ func TestDeleteEntity_OK(t *testing.T) {
 }
 
 func TestDeleteEntity_ReadOnly(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
+
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -839,7 +787,8 @@ func TestDeleteEntity_ReadOnly(t *testing.T) {
 }
 
 func TestDeleteEntity_NotFound(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
+
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -859,25 +808,9 @@ func TestDeleteEntity_NotFound(t *testing.T) {
 
 func TestUpdateAnnotationValue_OK(t *testing.T) {
 	// Create a temporary copy of the catalog file
-	tmpfile, err := os.CreateTemp("", "catalog-*.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
+	st, tmpfile := testCopyCatalog(t)
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, st)
 
-	src, err := os.Open("../../testdata/catalog.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer src.Close()
-
-	_, err = io.Copy(tmpfile, src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tmpfile.Close()
-
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{tmpfile.Name()})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -907,7 +840,7 @@ func TestUpdateAnnotationValue_OK(t *testing.T) {
 	}
 
 	// Check if the file was updated
-	updatedContent, err := os.ReadFile(tmpfile.Name())
+	updatedContent, err := os.ReadFile(tmpfile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -918,7 +851,8 @@ func TestUpdateAnnotationValue_OK(t *testing.T) {
 }
 
 func TestUpdateAnnotationValue_ReadOnly(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
+
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -940,7 +874,8 @@ func TestUpdateAnnotationValue_ReadOnly(t *testing.T) {
 }
 
 func TestUpdateAnnotationValue_NotFound(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
+
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -961,7 +896,8 @@ func TestUpdateAnnotationValue_NotFound(t *testing.T) {
 }
 
 func TestUpdateAnnotationValue_InvalidAnnotation(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromPaths(repo.Config{}, []string{"../../testdata/catalog.yml"})
+	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
+
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}

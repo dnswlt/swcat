@@ -18,7 +18,7 @@ build-web:
 	npm run build --prefix web
 
 run-examples:
-	$(GO) run $(LDFLAGS) ./cmd/swcat -addr localhost:9191 -config examples/config/swcat.yml -base-dir . examples/flights
+	$(GO) run $(LDFLAGS) ./cmd/swcat -addr localhost:9191 -config examples/flights/swcat.yml -base-dir . -catalog-dir examples/flights/catalog
 
 #
 # Testing
@@ -43,10 +43,10 @@ DC := $(DOCKER) compose -f compose.yml
 .PHONY: build start stop
 
 docker-build:
-	VERSION=$(VERSION) $(DC) build
+	VERSION=$(VERSION) $(DC) build swcat
 
 docker-up:
-	VERSION=$(VERSION) $(DC) up
+	VERSION=$(VERSION) $(DC) up swcat
 
 docker-stop:
-	$(DC) stop
+	$(DC) stop swcat
