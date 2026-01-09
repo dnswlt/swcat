@@ -118,7 +118,7 @@ func main() {
 	if opts.GitURL != "" {
 		auth := gitClientAuthFromEnv()
 		log.Printf("Retrieving catalog from git URL %s", opts.GitURL)
-		loader, err := gitclient.NewCatalogLoader(opts.GitURL, auth)
+		loader, err := gitclient.New(opts.GitURL, auth)
 		if err != nil {
 			log.Fatalf("Failed to retrieve git repo: %v", err)
 		}

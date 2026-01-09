@@ -37,7 +37,7 @@ func main() {
 		}
 	}
 
-	loader, err := gitclient.NewCatalogLoader(url, auth)
+	loader, err := gitclient.New(url, auth)
 	if err != nil {
 		log.Fatalf("Failed to create loader for %q: %v", url, err)
 	}
