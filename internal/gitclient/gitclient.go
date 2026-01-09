@@ -20,12 +20,12 @@ type Auth struct {
 	Password string // or Token
 }
 
-// Loader holds the repository in memory
-type CatalogLoader struct {
+// Client holds the repository in memory
+type Client struct {
 	repo *git.Repository
 }
 
-func NewCatalogLoader(url string, auth *Auth) (*CatalogLoader, error) {
+func New(url string, auth *Auth) (*Client, error) {
 	// In-memory storage
 	storer := memory.NewStorage()
 
@@ -47,13 +47,13 @@ func NewCatalogLoader(url string, auth *Auth) (*CatalogLoader, error) {
 	// We don't need a filesystem abstraction because we won't write files.
 	repo, err := git.Clone(storer, nil, cloneOpts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create CatalogLoader: %w", err)
+		return nil, fmt.Errorf("failed to create Client: %w", err)
 	}
 
-	return &CatalogLoader{repo: repo}, nil
+	return &Client{repo: repo}, nil
 }
 
-func (c *CatalogLoader) DefaultBranch() (string, error) {
+func (c *Client) DefaultBranch() (string, error) {
 	refs, err := c.repo.References()
 	if err != nil {
 		return "", err
@@ -75,7 +75,7 @@ func (c *CatalogLoader) DefaultBranch() (string, error) {
 	return headName, nil
 }
 
-func (c *CatalogLoader) ListReferences() ([]string, error) {
+func (c *Client) ListReferences() ([]string, error) {
 	refMap := make(map[string]bool)
 
 	// List all references (branches, tags, remotes)
@@ -109,7 +109,7 @@ func (c *CatalogLoader) ListReferences() ([]string, error) {
 	return references, nil
 }
 
-func (c *CatalogLoader) resolveRevision(revision string) (*plumbing.Hash, error) {
+func (c *Client) resolveRevision(revision string) (*plumbing.Hash, error) {
 	hash, err := c.repo.ResolveRevision(plumbing.Revision(revision))
 	if err == nil {
 		return hash, nil
@@ -125,7 +125,7 @@ func (c *CatalogLoader) resolveRevision(revision string) (*plumbing.Hash, error)
 	return nil, fmt.Errorf("revision %q not found: %w", revision, err)
 }
 
-func (c *CatalogLoader) ReadFile(revision, filePath string) ([]byte, error) {
+func (c *Client) ReadFile(revision, filePath string) ([]byte, error) {
 	// 1. Resolve the revision (tag/branch name) to a SHA-1 hash
 	hash, err := c.resolveRevision(revision)
 	if err != nil {
@@ -160,7 +160,7 @@ func (c *CatalogLoader) ReadFile(revision, filePath string) ([]byte, error) {
 	return io.ReadAll(reader)
 }
 
-func (c *CatalogLoader) ListFilesRecursive(revision, dirPath string) ([]string, error) {
+func (c *Client) ListFilesRecursive(revision, dirPath string) ([]string, error) {
 	// Resolve Revision to a Commit Hash
 	hash, err := c.resolveRevision(revision)
 	if err != nil {

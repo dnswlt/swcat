@@ -52,21 +52,21 @@ func (d *diskStore) ReadFile(path string) ([]byte, error) {
 
 // gitStore is an implementation of Store that reads from a remote Git repository.
 type gitStore struct {
-	catalogLoader *gitclient.CatalogLoader
-	catalogRoot   string
-	currentRef    string
+	client      *gitclient.Client
+	catalogRoot string
+	currentRef  string
 }
 
-func NewGitStore(catalogLoader *gitclient.CatalogLoader, catalogRoot string, currentRef string) *gitStore {
+func NewGitStore(client *gitclient.Client, catalogRoot string, currentRef string) *gitStore {
 	return &gitStore{
-		catalogLoader: catalogLoader,
-		catalogRoot:   catalogRoot,
-		currentRef:    currentRef,
+		client:      client,
+		catalogRoot: catalogRoot,
+		currentRef:  currentRef,
 	}
 }
 
 func (g *gitStore) WithCurrentRef(ref string) (*gitStore, error) {
-	refs, err := g.catalogLoader.ListReferences()
+	refs, err := g.client.ListReferences()
 	if err != nil {
 		return nil, fmt.Errorf("cannot list references: %v", err)
 	}
@@ -74,11 +74,11 @@ func (g *gitStore) WithCurrentRef(ref string) (*gitStore, error) {
 		return nil, fmt.Errorf("ref %q not found", ref)
 	}
 	g.currentRef = ref
-	return NewGitStore(g.catalogLoader, g.catalogRoot, ref), nil
+	return NewGitStore(g.client, g.catalogRoot, ref), nil
 }
 
 func (g *gitStore) CatalogFiles() ([]string, error) {
-	files, err := g.catalogLoader.ListFilesRecursive(g.currentRef, g.catalogRoot)
+	files, err := g.client.ListFilesRecursive(g.currentRef, g.catalogRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list files: %v", err)
 	}
@@ -92,7 +92,7 @@ func (g *gitStore) CatalogFiles() ([]string, error) {
 }
 
 func (g *gitStore) ReadFile(path string) ([]byte, error) {
-	return g.catalogLoader.ReadFile(g.currentRef, path)
+	return g.client.ReadFile(g.currentRef, path)
 }
 
 var (

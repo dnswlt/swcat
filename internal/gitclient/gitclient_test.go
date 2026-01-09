@@ -119,13 +119,13 @@ func createTestRepo(t *testing.T) string {
 	return dir
 }
 
-func TestCatalogLoader(t *testing.T) {
+func TestClient(t *testing.T) {
 	repoPath := createTestRepo(t)
 
 	// Initialize the Loader pointing to the local temp repo
-	loader, err := NewCatalogLoader(repoPath, nil)
+	loader, err := New(repoPath, nil)
 	if err != nil {
-		t.Fatalf("NewCatalogLoader failed: %v", err)
+		t.Fatalf("New failed: %v", err)
 	}
 
 	t.Run("ListReferences", func(t *testing.T) {
