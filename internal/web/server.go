@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/dnswlt/swcat"
+	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/dot"
@@ -743,7 +744,7 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newYAML := r.FormValue("yaml")
-	newAPIEntity, err := store.NewEntityFromString(newYAML)
+	newAPIEntity, err := api.NewEntityFromString(newYAML)
 	if err != nil {
 		s.renderErrorSnippet(w, fmt.Sprintf("Failed to parse new YAML: %v", err))
 		return
@@ -896,7 +897,7 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	}
 
 	newYAML := r.FormValue("yaml")
-	newAPIEntity, err := store.NewEntityFromString(newYAML)
+	newAPIEntity, err := api.NewEntityFromString(newYAML)
 	if err != nil {
 		s.renderErrorSnippet(w, fmt.Sprintf("Failed to parse new YAML: %v", err))
 		return
@@ -992,18 +993,9 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 		return
 	}
 
-	// Copy and modify the source YAML node
-	sourceNode, err := store.CopyNode(originalEntity.GetSourceInfo().Node)
-	if sourceNode == nil || err != nil {
-		http.Error(w, "Entity could not be copied for modification", http.StatusInternalServerError)
-		return
-	}
-	if err := store.SetAnnotationInNode(sourceNode, annotationKey, newValue); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to set annotation in YAML node: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	newAPIEntity, err := store.NewEntityFromNode(sourceNode, false)
+	// Create new API entity with updated annotation
+	originalNode := originalEntity.GetSourceInfo().Node
+	newAPIEntity, err := api.NewEntityFromNodeWithAnnotation(originalNode, annotationKey, newValue)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create api.Entity from source node: %v", err), http.StatusInternalServerError)
 		return
