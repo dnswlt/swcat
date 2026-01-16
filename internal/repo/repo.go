@@ -33,10 +33,11 @@ type Repository struct {
 
 	// Repository configuration
 	config Config
+}
 
-	// The store from which this repository was initialized.
-	// Used for reloading the catalog after out-of-band changes.
-	store store.Store
+// cloneEmpty returns a copy of r with all maps empty, but config etc. preserved.
+func (r *Repository) cloneEmpty() *Repository {
+	return NewRepositoryWithConfig(r.config)
 }
 
 func NewRepositoryWithConfig(config Config) *Repository {
@@ -58,66 +59,6 @@ func NewRepository() *Repository {
 
 func (r *Repository) Size() int {
 	return len(r.allEntities)
-}
-
-func (r *Repository) Store() store.Store {
-	return r.store
-}
-
-// cloneEmpty returns a clone of r whose maps are all empty.
-// Non-data fields of r are copied (such as the config and store reference).
-func (r *Repository) cloneEmpty() *Repository {
-	r2 := NewRepositoryWithConfig(r.config)
-	r2.store = r.store
-	return r2
-}
-
-func (r *Repository) initializeFromStore(st store.Store) error {
-	if r.Size() != 0 {
-		return fmt.Errorf("initializeFromStore called on a non-empty repo (size: %d)", r.Size())
-	}
-	catalogPaths, err := st.CatalogFiles()
-	if err != nil {
-		return fmt.Errorf("initializeFromStore: cannot retrieve catalog files :%v", err)
-	}
-	for _, catalogPath := range catalogPaths {
-		log.Printf("Reading catalog file %s", catalogPath)
-		entities, err := store.ReadEntities(st, catalogPath)
-		if err != nil {
-			return fmt.Errorf("failed to read entities from %s: %v", catalogPath, err)
-		}
-		for _, e := range entities {
-			entity, err := catalog.NewEntityFromAPI(e)
-			if err != nil {
-				return fmt.Errorf("failed to convert api entity %s:%s/%s (source: %s:%d) to catalog entity: %v",
-					e.GetKind(), e.GetMetadata().Namespace, e.GetMetadata().Namespace,
-					e.GetSourceInfo().Path, e.GetSourceInfo().Line, err)
-			}
-			if err := r.AddEntity(entity); err != nil {
-				return fmt.Errorf("failed to add entity %q to the repo: %v", entity.GetRef(), err)
-			}
-		}
-	}
-	if err := r.Validate(); err != nil {
-		return fmt.Errorf("repository validation failed: %v", err)
-	}
-
-	r.store = st
-	return nil
-}
-
-// Reload reloads the repository from the catalog files this repo was initialized from.
-// The repository r remains unchanged.
-func (r *Repository) Reload() (*Repository, error) {
-	if r.store == nil {
-		return nil, fmt.Errorf("cannot reload repository: no catalog files")
-	}
-	r2 := r.cloneEmpty()
-	err := r2.initializeFromStore(r.store)
-	if err != nil {
-		return nil, fmt.Errorf("reloading repository failed: %v", err)
-	}
-	return r2, nil
 }
 
 func (r *Repository) setEntity(e catalog.Entity) error {
@@ -1016,14 +957,47 @@ func (r *Repository) addGeneratedLinks() error {
 	return nil
 }
 
-// LoadRepositoryFromStore reads entities from the given catalog paths
+// Load reads entities from the given catalog paths
 // and returns a validated repository.
 // Elements in catalogPaths must be .yml file paths.
-func LoadRepositoryFromStore(config Config, st store.Store) (*Repository, error) {
+func Load(st store.Store, config Config, catalogDir string) (*Repository, error) {
 	repo := NewRepositoryWithConfig(config)
-	err := repo.initializeFromStore(st)
+	err := repo.initialize(st, catalogDir)
 	if err != nil {
 		return nil, err
 	}
 	return repo, nil
+}
+
+func (r *Repository) initialize(st store.Store, catalogDir string) error {
+	if r.Size() != 0 {
+		return fmt.Errorf("initialize called on a non-empty repo (size: %d)", r.Size())
+	}
+	catalogPaths, err := store.CatalogFiles(st, catalogDir)
+	if err != nil {
+		return fmt.Errorf("initialize: cannot retrieve catalog files :%v", err)
+	}
+	for _, catalogPath := range catalogPaths {
+		log.Printf("Reading catalog file %s", catalogPath)
+		entities, err := store.ReadEntities(st, catalogPath)
+		if err != nil {
+			return fmt.Errorf("failed to read entities from %s: %v", catalogPath, err)
+		}
+		for _, e := range entities {
+			entity, err := catalog.NewEntityFromAPI(e)
+			if err != nil {
+				return fmt.Errorf("failed to convert api entity %s:%s/%s (source: %s:%d) to catalog entity: %v",
+					e.GetKind(), e.GetMetadata().Namespace, e.GetMetadata().Namespace,
+					e.GetSourceInfo().Path, e.GetSourceInfo().Line, err)
+			}
+			if err := r.AddEntity(entity); err != nil {
+				return fmt.Errorf("failed to add entity %q to the repo: %v", entity.GetRef(), err)
+			}
+		}
+	}
+	if err := r.Validate(); err != nil {
+		return fmt.Errorf("repository validation failed: %v", err)
+	}
+
+	return nil
 }

@@ -30,7 +30,7 @@ spec:
 		st, tmpfile := writeTempFile(t, "entities.yaml", content)
 		defer os.Remove(tmpfile)
 
-		entities, err := ReadEntities(st, tmpfile)
+		entities, err := ReadEntities(st, filepath.Base(tmpfile))
 		if err != nil {
 			t.Fatalf("ReadEntities() error = %v, wantErr %v", err, false)
 		}
@@ -59,7 +59,7 @@ spec:
 		st, tmpfile := writeTempFile(t, "empty.yaml", "")
 		defer os.Remove(tmpfile)
 
-		entities, err := ReadEntities(st, tmpfile)
+		entities, err := ReadEntities(st, filepath.Base(tmpfile))
 		if err != nil {
 			t.Fatalf("ReadEntities() error = %v, wantErr %v", err, false)
 		}
@@ -77,7 +77,7 @@ metadata:
 		st, tmpfile := writeTempFile(t, "no-kind.yaml", content)
 		defer os.Remove(tmpfile)
 
-		_, err := ReadEntities(st, tmpfile)
+		_, err := ReadEntities(st, filepath.Base(tmpfile))
 		if err == nil {
 			t.Errorf("ReadEntities() error = %v, wantErr %v", err, true)
 		}
@@ -93,7 +93,7 @@ metadata:
 		st, tmpfile := writeTempFile(t, "invalid-kind.yaml", content)
 		defer os.Remove(tmpfile)
 
-		_, err := ReadEntities(st, tmpfile)
+		_, err := ReadEntities(st, filepath.Base(tmpfile))
 		if err == nil {
 			t.Errorf("ReadEntities() error = %v, wantErr %v", err, true)
 		}
@@ -113,7 +113,7 @@ invalid: yaml: here
 		st, tmpfile := writeTempFile(t, "invalid.yaml", content)
 		defer os.Remove(tmpfile)
 
-		_, err := ReadEntities(st, tmpfile)
+		_, err := ReadEntities(st, filepath.Base(tmpfile))
 		if err == nil {
 			t.Errorf("ReadEntities() error = %v, wantErr %v", err, true)
 		}

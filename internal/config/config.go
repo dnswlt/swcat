@@ -1,8 +1,13 @@
 package config
 
 import (
+	"bytes"
+	"fmt"
+
 	"github.com/dnswlt/swcat/internal/repo"
+	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/svg"
+	"gopkg.in/yaml.v3"
 )
 
 // AnnotationBasedContent specifies how annotation-based content should be rendered in the UI.
@@ -24,4 +29,18 @@ type Bundle struct {
 	SVG     svg.Config  `yaml:"svg"`
 	Catalog repo.Config `yaml:"catalog"`
 	UI      UIConfig    `yaml:"ui"`
+}
+
+func Load(st store.Store, configPath string) (*Bundle, error) {
+	bs, err := st.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not read config %q: %v", configPath, err)
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(bs))
+	dec.KnownFields(true)
+	var bundle Bundle
+	if err := dec.Decode(&bundle); err != nil {
+		return nil, fmt.Errorf("invalid configuration YAML in %q: %v", configPath, err)
+	}
+	return &bundle, nil
 }
