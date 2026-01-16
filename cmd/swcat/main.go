@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -13,13 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/gitclient"
-	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/web"
 	"github.com/peterbourgon/ff/v3"
-	"gopkg.in/yaml.v3"
 )
 
 func lookupDotPath() (string, error) {
@@ -78,9 +74,10 @@ func gitClientAuthFromEnv() *gitclient.Auth {
 type Options struct {
 	Addr       string
 	CatalogDir string
+	RootDir    string
 	GitURL     string
 	GitRef     string
-	Config     string
+	ConfigFile string
 	BaseDir    string
 	ReadOnly   bool
 }
@@ -90,11 +87,12 @@ func main() {
 	var opts Options
 	fs := flag.NewFlagSet("swcat", flag.ContinueOnError)
 	fs.StringVar(&opts.Addr, "addr", "localhost:8080", "Address to listen on")
-	fs.StringVar(&opts.CatalogDir, "catalog-dir", "", "Path to the catalog directory containing YAML files")
-	fs.StringVar(&opts.GitURL, "git-url", "", "URL of the git repository containing the catalog")
+	fs.StringVar(&opts.RootDir, "root-dir", ".", "Root directory of the local data store")
+	fs.StringVar(&opts.CatalogDir, "catalog-dir", "catalog", "Path to the catalog directory containing YAML files (relative to git root or local -root-dir)")
+	fs.StringVar(&opts.ConfigFile, "config", "swcat.yml", "Path to the configuration YAML file (relative to git root or local -root-dir)")
+	fs.StringVar(&opts.GitURL, "git-url", "", "URL of the git repository to use as the data store")
 	fs.StringVar(&opts.GitRef, "git-ref", "", "Git ref (branch or tag) to use initially")
-	fs.StringVar(&opts.Config, "config", "", "Path to the configuration YAML file")
-	fs.StringVar(&opts.BaseDir, "base-dir", "", "Base directory for resource files. If empty, uses embedded resources.")
+	fs.StringVar(&opts.BaseDir, "base-dir", "", "Base directory for resource files. If empty, uses embedded resources (recommended for production).")
 	fs.BoolVar(&opts.ReadOnly, "read-only", false, "Start server in read-only mode (no entity editing).")
 
 	err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("SWCAT"))
@@ -114,7 +112,7 @@ func main() {
 		log.Fatalf("dot was not found in your PATH. Please install Graphviz and add it to the PATH.")
 	}
 
-	var st store.Store
+	var st store.Source
 	if opts.GitURL != "" {
 		auth := gitClientAuthFromEnv()
 		log.Printf("Retrieving catalog from git URL %s", opts.GitURL)
@@ -128,57 +126,44 @@ func main() {
 			if err != nil {
 				log.Fatalf("No git-ref specified and no default branch found: %v", err)
 			}
-			log.Printf("Using default git branch %q", ref)
 		}
-		st = store.NewGitStore(loader, opts.CatalogDir, ref)
+		log.Printf("Using default git branch %q", ref)
+		st = store.NewGitSource(loader, ref)
 		if !opts.ReadOnly {
 			opts.ReadOnly = true // Enforce read-only mode when using a remote git repo as the store.
 			log.Printf("Activated read-only mode for git-based storage")
 		}
-	} else if opts.CatalogDir != "" {
-		log.Printf("Loading catalog from disk at %s", opts.CatalogDir)
-		st = store.NewDiskStore(opts.CatalogDir)
+	} else if opts.RootDir != "" {
+		log.Printf("Using local store at %s", opts.RootDir)
+		st = store.NewDiskStore(opts.RootDir)
 	} else {
-		log.Fatalf("Neither -catalog-dir nor -git-url specified")
+		log.Fatalf("Neither -root-dir nor -git-url specified")
 	}
 
-	var bundle config.Bundle
-	if opts.Config != "" {
-		log.Printf("Reading configuration from %s", opts.Config)
-		bs, err := st.ReadFile(opts.Config)
-		if err != nil {
-			log.Fatalf("Could not read configuration YAML: %v", err)
-		}
-		dec := yaml.NewDecoder(bytes.NewReader(bs))
-		dec.KnownFields(true)
-		if err := dec.Decode(&bundle); err != nil {
-			log.Fatalf("Invalid configuration YAML: %v", err)
-		}
-	}
-
-	repo, err := repo.LoadRepositoryFromStore(bundle.Catalog, st)
+	server, err := web.NewServer(
+		web.ServerOptions{
+			Addr:       opts.Addr,
+			BaseDir:    opts.BaseDir,
+			CatalogDir: opts.CatalogDir,
+			DotPath:    dotPath,
+			ReadOnly:   opts.ReadOnly,
+			ConfigFile: opts.ConfigFile,
+			Version:    Version,
+		},
+		st,
+	)
 	if err != nil {
-		log.Fatalf("Failed to load repository: %v", err)
+		log.Fatalf("Could not create server: %v", err)
 	}
 
-	log.Printf("Read %d entities from catalog", repo.Size())
-
-	if opts.Addr != "" {
-		server, err := web.NewServer(
-			web.ServerOptions{
-				Addr:     opts.Addr,
-				BaseDir:  opts.BaseDir,
-				DotPath:  dotPath,
-				ReadOnly: opts.ReadOnly,
-				Config:   bundle,
-				Version:  Version,
-			},
-			repo,
-		)
-		if err != nil {
-			log.Fatalf("Could not create server: %v", err)
-		}
-		log.Fatal(server.Serve()) // Never returns
+	// Ensure the repo in the default ref can be read.
+	// Otherwise it's pointless to even start the server.
+	size, err := server.ValidateCatalog("")
+	if err != nil {
+		log.Fatalf("Could not load default catalog: %v", err)
 	}
+	log.Printf("Read %d entities from catalog", size)
+
+	log.Fatal(server.Serve()) // Never returns
 
 }

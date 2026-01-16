@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -14,7 +15,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/dnswlt/swcat"
@@ -28,51 +28,44 @@ import (
 )
 
 type ServerOptions struct {
-	Addr     string        // E.g., "localhost:8080"
-	BaseDir  string        // Directory from which resources (templates etc.) are read.
-	DotPath  string        // E.g., "dot" (with dot on the PATH)
-	ReadOnly bool          // If true, no Edit/Clone/Delete operations will be supported.
-	Config   config.Bundle // Config parameters
-	Version  string        // App version
+	Addr       string // E.g., "localhost:8080"
+	BaseDir    string // Directory from which resources (templates etc.) are read.
+	DotPath    string // E.g., "dot" (with dot on the PATH)
+	ReadOnly   bool   // If true, no Edit/Clone/Delete operations will be supported.
+	ConfigFile string // Path to config file
+	CatalogDir string // Path to folder containing catalog files
+	Version    string // App version
 }
 
-// ServerState contains the state of the server:
-// - Repository
-// - SVG cache
-// While the ServerState is not immutable due to the SVG cache,
-// it contains all state that is swapped atomically on any updates
-// to the repository (reloads, entity updates, etc.).
-type ServerState struct {
+// storeData contains all data extracted from a given view of a Store at reference ref.
+type storeData struct {
+	ref      string
 	repo     *repo.Repository
+	config   *config.Bundle
 	svgCache sync.Map // mutated during requests, hence sync'ed.
 }
 
 type Server struct {
 	opts     ServerOptions
 	template *template.Template
-	// Mutex to be acquired by write requests that update more than
-	// just the state (e.g. write to disk).
-	writeMu sync.Mutex
-	// Atomic pointer to this server's state.
-	// We use the Snapshot Isolation pattern for atomic state updates.
-	// Request processing code obtains the whole state pointer, works on it,
-	// and calls SetState to update the state atomically, if needed.
-	state     atomic.Pointer[ServerState]
+	// Mutex to synchronize access to the server's state across concurrent requests.
+	mu           sync.RWMutex
+	storeDataMap map[string]*storeData
+	source       store.Source
+
 	dotRunner dot.Runner
 	// Server startup time. Used for cache busting JS/CSS resources.
 	started time.Time
 }
 
-func NewServer(opts ServerOptions, repo *repo.Repository) (*Server, error) {
-	if opts.Version == "" {
-		opts.Version = "dev"
-	}
+func NewServer(opts ServerOptions, source store.Source) (*Server, error) {
 	s := &Server{
-		opts:      opts,
-		dotRunner: dot.NewRunner(opts.DotPath),
-		started:   time.Now(),
+		opts:         opts,
+		storeDataMap: make(map[string]*storeData),
+		source:       source,
+		dotRunner:    dot.NewRunner(opts.DotPath),
+		started:      time.Now(),
 	}
-	s.SetState(&ServerState{repo: repo})
 
 	if err := s.reloadTemplates(); err != nil {
 		return nil, err
@@ -80,15 +73,15 @@ func NewServer(opts ServerOptions, repo *repo.Repository) (*Server, error) {
 	return s, nil
 }
 
-func (s *Server) State() *ServerState {
-	return s.state.Load()
+func (s *storeData) withRepo(repo *repo.Repository) *storeData {
+	return &storeData{
+		ref:    s.ref,
+		repo:   repo,
+		config: s.config,
+	}
 }
 
-func (s *Server) SetState(state *ServerState) {
-	s.state.Store(state)
-}
-
-func (s *ServerState) lookupSVG(cacheKey string) (*svg.Result, bool) {
+func (s *storeData) lookupSVG(cacheKey string) (*svg.Result, bool) {
 	item, ok := s.svgCache.Load(cacheKey)
 	if !ok {
 		return nil, false
@@ -96,33 +89,50 @@ func (s *ServerState) lookupSVG(cacheKey string) (*svg.Result, bool) {
 	return item.(*svg.Result), true
 }
 
-func (s *ServerState) storeSVG(cacheKey string, svg *svg.Result) {
+func (s *storeData) storeSVG(cacheKey string, svg *svg.Result) {
 	s.svgCache.Store(cacheKey, svg)
 }
 
-type loggingResponseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-func (lrw *loggingResponseWriter) WriteHeader(code int) {
-	lrw.statusCode = code
-	lrw.ResponseWriter.WriteHeader(code)
-}
-
-func (lrw *loggingResponseWriter) Write(b []byte) (int, error) {
-	if lrw.statusCode == 0 { // no explicit status yet => implies 200
-		lrw.WriteHeader(http.StatusOK)
+// loadStoreData retrieves the storeData for ref from the cache, if present,
+// or else loads it from the associated store.
+func (s *Server) loadStoreData(ref string) (*storeData, error) {
+	// Fast path: already cached
+	s.mu.RLock()
+	cached, ok := s.storeDataMap[ref]
+	s.mu.RUnlock()
+	if ok {
+		return cached, nil
 	}
-	return lrw.ResponseWriter.Write(b)
-}
 
-// svgRenderer returns a new Renderer that uses this server's SVG config
-// and dotRunner. The repository has to be passed in; this is typically
-// going to be the s.State() obtained at the beginning of request processing.
-func (s *Server) svgRenderer(r *repo.Repository) *svg.Renderer {
-	layouter := svg.NewStandardLayouter(s.opts.Config.SVG)
-	return svg.NewRenderer(r, s.dotRunner, layouter)
+	// Try to load data from store and add to cache.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	st, err := s.source.Store(ref)
+	if err != nil {
+		return nil, fmt.Errorf("failed to obtain store for ref %q: %w", ref, err)
+	}
+
+	cfg := &config.Bundle{} // Default (empty) config
+	if s.opts.ConfigFile != "" {
+		storeCfg, err := config.Load(st, s.opts.ConfigFile)
+		if err != nil {
+			return nil, err
+		}
+		cfg = storeCfg
+	}
+
+	repo, err := repo.Load(st, cfg.Catalog, s.opts.CatalogDir)
+	if err != nil {
+		return nil, err
+	}
+	data := &storeData{
+		ref:    ref,
+		config: cfg,
+		repo:   repo,
+	}
+	s.storeDataMap[ref] = data
+	return data, nil
 }
 
 // withRequestLogging wraps a handler and logs each request if in debug mode.
@@ -171,10 +181,29 @@ func (s *Server) reloadTemplates() error {
 	return err
 }
 
+// svgRenderer returns a new Renderer that uses this server's SVG config
+// and dotRunner. The repository has to be passed in; this is typically
+// going to be the s.State() obtained at the beginning of request processing.
+func (s *Server) svgRenderer(data *storeData) *svg.Renderer {
+	layouter := svg.NewStandardLayouter(data.config.SVG)
+	return svg.NewRenderer(data.repo, s.dotRunner, layouter)
+}
+
+// storeData retrieves the storeData from the request's context.
+// It panics if no value is found under the expected context key.
+func (s *Server) storeData(r *http.Request) *storeData {
+	sd := r.Context().Value(ctxRefData)
+	if sd == nil {
+		panic(fmt.Sprintf("storeData called on request without %q context value (URL: %s)", ctxRefData, r.RequestURI))
+	}
+	return sd.(*storeData)
+}
+
 func (s *Server) serveComponents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	components := s.State().repo.FindComponents(query)
+	data := s.storeData(r)
+	components := data.repo.FindComponents(query)
 	params := map[string]any{
 		"Components":    components,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindComponent),
@@ -194,7 +223,9 @@ func (s *Server) serveComponents(w http.ResponseWriter, r *http.Request) {
 func (s *Server) serveSystems(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	systems := s.State().repo.FindSystems(query)
+	data := s.storeData(r)
+
+	systems := data.repo.FindSystems(query)
 	params := map[string]any{
 		"Systems":       systems,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindSystem),
@@ -255,8 +286,9 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		return
 	}
 	params := map[string]any{}
-	state := s.State()
-	system := state.repo.System(systemRef)
+	data := s.storeData(r)
+
+	system := data.repo.System(systemRef)
 	if system == nil {
 		http.Error(w, "Invalid system", http.StatusNotFound)
 		return
@@ -271,7 +303,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		if err != nil {
 			continue // Ignore invalid refs
 		}
-		if c := state.repo.System(ref); c != nil {
+		if c := data.repo.System(ref); c != nil {
 			contextSystems = append(contextSystems, c)
 		}
 	}
@@ -282,12 +314,12 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	slices.Sort(cacheKeyIDs)
 	internalView := r.URL.Query().Get("view") == "internal"
 	cacheKey := fmt.Sprintf("%s?%s%t", system.GetRef(), strings.Join(cacheKeyIDs, ","), internalView)
-	svgResult, ok := state.lookupSVG(cacheKey)
+	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		renderer := s.svgRenderer(state.repo)
+		renderer := s.svgRenderer(data)
 		if internalView {
 			svgResult, err = renderer.SystemInternalGraph(ctx, system)
 		} else {
@@ -298,7 +330,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		state.storeSVG(cacheKey, svgResult)
+		data.storeSVG(cacheKey, svgResult)
 	}
 	params["SVGTabs"] = []struct {
 		Active bool
@@ -315,7 +347,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		log.Printf("Failed to create metadata JSON: %v", err)
 		return
 	}
-	s.setCustomContent(system, params)
+	s.setCustomContent(system, &data.config.UI, params)
 
 	s.serveHTMLPage(w, r, "system_detail.html", params)
 }
@@ -327,8 +359,9 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		return
 	}
 	params := map[string]any{}
-	state := s.State()
-	component := state.repo.Component(componentRef)
+	data := s.storeData(r)
+
+	component := data.repo.Component(componentRef)
 	if component == nil {
 		http.Error(w, "Invalid component", http.StatusNotFound)
 		return
@@ -336,18 +369,18 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 	params["Component"] = component
 
 	cacheKey := component.GetRef().String()
-	svgResult, ok := state.lookupSVG(cacheKey)
+	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svgResult, err = s.svgRenderer(state.repo).ComponentGraph(ctx, component)
+		svgResult, err = s.svgRenderer(data).ComponentGraph(ctx, component)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		state.storeSVG(cacheKey, svgResult)
+		data.storeSVG(cacheKey, svgResult)
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"], err = s.svgMetadataJSON(r, svgResult.Metadata)
@@ -356,7 +389,7 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		log.Printf("Failed to create metadata JSON: %v", err)
 		return
 	}
-	s.setCustomContent(component, params)
+	s.setCustomContent(component, &data.config.UI, params)
 
 	s.serveHTMLPage(w, r, "component_detail.html", params)
 }
@@ -364,8 +397,9 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	state := s.State()
-	apis := state.repo.FindAPIs(query)
+	data := s.storeData(r)
+
+	apis := data.repo.FindAPIs(query)
 	params := map[string]any{
 		"APIs":          apis,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindAPI),
@@ -382,8 +416,8 @@ func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
 	s.serveHTMLPage(w, r, "apis.html", params)
 }
 
-func (s *Server) setCustomContent(e catalog.Entity, params map[string]any) {
-	customContent, err := customContentFromAnnotations(e.GetMetadata(), s.opts.Config.UI.AnnotationBasedContent)
+func (s *Server) setCustomContent(e catalog.Entity, cfg *config.UIConfig, params map[string]any) {
+	customContent, err := customContentFromAnnotations(e.GetMetadata(), cfg.AnnotationBasedContent)
 	if err != nil {
 		log.Printf("Invalid custom content for %q: %v", e.GetQName(), err)
 		return
@@ -398,8 +432,9 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 		return
 	}
 	params := map[string]any{}
-	state := s.State()
-	ap := state.repo.API(apiRef)
+	data := s.storeData(r)
+
+	ap := data.repo.API(apiRef)
 	if ap == nil {
 		http.Error(w, "Invalid API", http.StatusNotFound)
 		return
@@ -407,18 +442,18 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 	params["API"] = ap
 
 	cacheKey := ap.GetRef().String()
-	svgResult, ok := state.lookupSVG(cacheKey)
+	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svgResult, err = s.svgRenderer(state.repo).APIGraph(ctx, ap)
+		svgResult, err = s.svgRenderer(data).APIGraph(ctx, ap)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		state.storeSVG(cacheKey, svgResult)
+		data.storeSVG(cacheKey, svgResult)
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"], err = s.svgMetadataJSON(r, svgResult.Metadata)
@@ -428,15 +463,16 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 		return
 	}
 
-	s.setCustomContent(ap, params)
+	s.setCustomContent(ap, &data.config.UI, params)
 	s.serveHTMLPage(w, r, "api_detail.html", params)
 }
 
 func (s *Server) serveResources(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	state := s.State()
-	resources := state.repo.FindResources(query)
+	data := s.storeData(r)
+
+	resources := data.repo.FindResources(query)
 	params := map[string]any{
 		"Resources":     resources,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindResource),
@@ -459,9 +495,10 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 		http.Error(w, "Invalid resourceID", http.StatusBadRequest)
 		return
 	}
-	state := s.State()
+	data := s.storeData(r)
+
 	params := map[string]any{}
-	resource := state.repo.Resource(resourceRef)
+	resource := data.repo.Resource(resourceRef)
 	if resource == nil {
 		http.Error(w, "Invalid resource", http.StatusNotFound)
 		return
@@ -469,18 +506,18 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 	params["Resource"] = resource
 
 	cacheKey := resource.GetRef().String()
-	svgResult, ok := state.lookupSVG(cacheKey)
+	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svgResult, err = s.svgRenderer(state.repo).ResourceGraph(ctx, resource)
+		svgResult, err = s.svgRenderer(data).ResourceGraph(ctx, resource)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		state.storeSVG(cacheKey, svgResult)
+		data.storeSVG(cacheKey, svgResult)
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"], err = s.svgMetadataJSON(r, svgResult.Metadata)
@@ -489,7 +526,7 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 		log.Printf("Failed to create metadata JSON: %v", err)
 		return
 	}
-	s.setCustomContent(resource, params)
+	s.setCustomContent(resource, &data.config.UI, params)
 
 	s.serveHTMLPage(w, r, "resource_detail.html", params)
 }
@@ -497,8 +534,9 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 func (s *Server) serveDomains(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	state := s.State()
-	domains := state.repo.FindDomains(query)
+	data := s.storeData(r)
+
+	domains := data.repo.FindDomains(query)
 	params := map[string]any{
 		"Domains":       domains,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindDomain),
@@ -522,8 +560,9 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 		return
 	}
 	params := map[string]any{}
-	state := s.State()
-	domain := state.repo.Domain(domainRef)
+	data := s.storeData(r)
+
+	domain := data.repo.Domain(domainRef)
 	if domain == nil {
 		http.Error(w, "Invalid domain", http.StatusNotFound)
 		return
@@ -531,18 +570,18 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 	params["Domain"] = domain
 
 	cacheKey := domain.GetRef().String()
-	svgResult, ok := state.lookupSVG(cacheKey)
+	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		svgResult, err = s.svgRenderer(state.repo).DomainGraph(ctx, domain)
+		svgResult, err = s.svgRenderer(data).DomainGraph(ctx, domain)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
-		state.storeSVG(cacheKey, svgResult)
+		data.storeSVG(cacheKey, svgResult)
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"], err = s.svgMetadataJSON(r, svgResult.Metadata)
@@ -551,7 +590,7 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 		log.Printf("Failed to create metadata JSON: %v", err)
 		return
 	}
-	s.setCustomContent(domain, params)
+	s.setCustomContent(domain, &data.config.UI, params)
 
 	s.serveHTMLPage(w, r, "domain_detail.html", params)
 }
@@ -559,8 +598,9 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 func (s *Server) serveGroups(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	state := s.State()
-	groups := state.repo.FindGroups(query)
+	data := s.storeData(r)
+
+	groups := data.repo.FindGroups(query)
 	params := map[string]any{
 		"Groups":        groups,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindGroup),
@@ -584,14 +624,15 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 		return
 	}
 	params := map[string]any{}
-	state := s.State()
-	group := state.repo.Group(groupRef)
+	data := s.storeData(r)
+
+	group := data.repo.Group(groupRef)
 	if group == nil {
 		http.Error(w, "Invalid group", http.StatusNotFound)
 		return
 	}
 	params["Group"] = group
-	s.setCustomContent(group, params)
+	s.setCustomContent(group, &data.config.UI, params)
 
 	s.serveHTMLPage(w, r, "group_detail.html", params)
 }
@@ -599,8 +640,9 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 func (s *Server) serveEntities(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	state := s.State()
-	entities := state.repo.FindEntities(query)
+	data := s.storeData(r)
+
+	entities := data.repo.FindEntities(query)
 	params := map[string]any{
 		"Entities":      entities,
 		"SearchPath":    toEntitiesListURL(r.Context()),
@@ -624,8 +666,9 @@ func (s *Server) serveEntityYAML(w http.ResponseWriter, r *http.Request, entityR
 		return
 	}
 	params := map[string]any{}
-	state := s.State()
-	entity := state.repo.Entity(ref)
+	data := s.storeData(r)
+
+	entity := data.repo.Entity(ref)
 	if entity == nil {
 		http.Error(w, "Invalid entity", http.StatusNotFound)
 		return
@@ -681,9 +724,6 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
-
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
 		return
@@ -695,8 +735,8 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
 		return
 	}
-	state := s.State()
-	clonedEntity := state.repo.Entity(clonedRef)
+	data := s.storeData(r)
+	clonedEntity := data.repo.Entity(clonedRef)
 	if clonedEntity == nil {
 		http.Error(w, "Invalid entity", http.StatusNotFound)
 		return
@@ -718,26 +758,37 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if state.repo.Exists(newEntity) {
+	if data.repo.Exists(newEntity) {
 		s.renderErrorSnippet(w, fmt.Sprintf("Entity %s already exists", newEntity.GetRef()))
 		return
 	}
 
-	newRepo, err := state.repo.InsertOrUpdateEntity(newEntity)
+	newRepo, err := data.repo.InsertOrUpdateEntity(newEntity)
 	if err != nil {
 		s.renderErrorSnippet(w, fmt.Sprintf("Failed to insert entity into repo: %v", err))
 		return
 	}
 
+	// Acquire write lock
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Update repository in server's cache
+	s.storeDataMap[data.ref] = data.withRepo(newRepo)
+
 	// Update the YAML file.
-	if err := store.InsertOrReplaceEntity(newRepo.Store(), path, newAPIEntity); err != nil {
+	st, err := s.source.Store(data.ref)
+	if err != nil {
+		http.Error(w, "Failed to obtain store", http.StatusInternalServerError)
+		log.Printf("Failed to obtain store for ref %q: %v", data.ref, err)
+		return
+	}
+	err = store.InsertOrReplaceEntity(st, path, newAPIEntity)
+	if err != nil {
 		http.Error(w, "Failed to update store", http.StatusInternalServerError)
 		log.Printf("Error updating store: %v", err)
 		return
 	}
-
-	// Update server's in-memory state
-	s.SetState(&ServerState{repo: newRepo})
 
 	redirectURL, err := toURLWithContext(r.Context(), newEntity.GetRef())
 	if err != nil {
@@ -759,38 +810,46 @@ func (s *Server) deleteEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		return
 	}
 
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
-
 	ref, err := catalog.ParseRef(entityRef)
 	if err != nil {
 		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
 		return
 	}
 
-	state := s.State()
-	entity := state.repo.Entity(ref)
+	data := s.storeData(r)
+	entity := data.repo.Entity(ref)
 	if entity == nil {
 		http.Error(w, "Invalid entity", http.StatusNotFound)
 		return
 	}
 
 	// Update the repo
-	newRepo, err := state.repo.DeleteEntity(entity.GetRef())
+	newRepo, err := data.repo.DeleteEntity(entity.GetRef())
 	if err != nil {
 		s.renderErrorSnippet(w, fmt.Sprintf("Failed to delete entity from repo: %v", err))
 		return
 	}
 
+	// Acquire write lock
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Update repository in server's cache
+	s.storeDataMap[data.ref] = data.withRepo(newRepo)
+
 	// Update the YAML file.
-	apiRef := catalog.APIRef(ref)
-	if err := store.DeleteEntity(newRepo.Store(), entity.GetSourceInfo().Path, apiRef); err != nil {
+	st, err := s.source.Store(data.ref)
+	if err != nil {
+		http.Error(w, "Failed to obtain store", http.StatusInternalServerError)
+		log.Printf("Failed to obtain store for ref %q: %v", data.ref, err)
+		return
+	}
+	err = store.DeleteEntity(st, entity.GetSourceInfo().Path, catalog.APIRef(ref))
+	if err != nil {
 		http.Error(w, "Failed to update store", http.StatusInternalServerError)
 		log.Printf("Error updating store: %v", err)
 		return
 	}
-
-	s.SetState(&ServerState{repo: newRepo})
 
 	// Redirect to parent system, if it exists. Else redirect to list view.
 	var redirectURL string
@@ -818,9 +877,6 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		return
 	}
 
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
-
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
 		return
@@ -832,8 +888,8 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		return
 	}
 
-	state := s.State()
-	originalEntity := state.repo.Entity(ref)
+	data := s.storeData(r)
+	originalEntity := data.repo.Entity(ref)
 	if originalEntity == nil {
 		http.Error(w, "Invalid entity", http.StatusNotFound)
 		return
@@ -860,26 +916,36 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		return
 	}
 
+	// Acquire write lock
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	// Update the repo
-	newRepo, err := state.repo.InsertOrUpdateEntity(newEntity)
+	newRepo, err := data.repo.InsertOrUpdateEntity(newEntity)
 	if err != nil {
 		s.renderErrorSnippet(w, fmt.Sprintf("Failed to update entity in repo: %v", err))
 		return
 	}
-
 	// Copy over path information for re-editing later.
 	path := originalEntity.GetSourceInfo().Path
 	newEntity.GetSourceInfo().Path = path
 
+	// Update repository in server's cache
+	s.storeDataMap[data.ref] = data.withRepo(newRepo)
+
 	// Update the YAML file.
-	if err := store.InsertOrReplaceEntity(newRepo.Store(), path, newAPIEntity); err != nil {
+	st, err := s.source.Store(data.ref)
+	if err != nil {
+		http.Error(w, "Failed to obtain store", http.StatusInternalServerError)
+		log.Printf("Failed to obtain store for ref %q: %v", data.ref, err)
+		return
+	}
+	err = store.InsertOrReplaceEntity(st, path, newAPIEntity)
+	if err != nil {
 		http.Error(w, "Failed to update store", http.StatusInternalServerError)
 		log.Printf("Error updating store: %v", err)
 		return
 	}
-
-	// Update server's in-memory state.
-	s.SetState(&ServerState{repo: newRepo})
 
 	redirectURL, err := toURLWithContext(r.Context(), ref)
 	if err != nil {
@@ -896,9 +962,6 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 		http.Error(w, "Cannot update entities in read-only mode", http.StatusPreconditionFailed)
 		return
 	}
-
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
 
 	// Read the new value from the request body.
 	body, err := io.ReadAll(r.Body)
@@ -922,8 +985,8 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 	}
 
 	// Look up the entity in the repository
-	state := s.State()
-	originalEntity := state.repo.Entity(ref)
+	data := s.storeData(r)
+	originalEntity := data.repo.Entity(ref)
 	if originalEntity == nil {
 		http.Error(w, "Entity not found", http.StatusNotFound)
 		return
@@ -955,22 +1018,34 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 	// Copy over path information for re-editing later.
 	path := originalEntity.GetSourceInfo().Path
 	newEntity.GetSourceInfo().Path = path
+
 	// Update the repo
-	newRepo, err := state.repo.InsertOrUpdateEntity(newEntity)
+	newRepo, err := data.repo.InsertOrUpdateEntity(newEntity)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to update entity in repo: %v", err), http.StatusInternalServerError)
 		return
 	}
 
+	// Acquire write lock
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Update repository in server's cache
+	s.storeDataMap[data.ref] = data.withRepo(newRepo)
+
 	// Update the YAML file.
-	if err := store.InsertOrReplaceEntity(newRepo.Store(), path, newAPIEntity); err != nil {
+	st, err := s.source.Store(data.ref)
+	if err != nil {
+		http.Error(w, "Failed to obtain store", http.StatusInternalServerError)
+		log.Printf("Failed to obtain store for ref %q: %v", data.ref, err)
+		return
+	}
+	err = store.InsertOrReplaceEntity(st, path, newAPIEntity)
+	if err != nil {
 		http.Error(w, "Failed to update store", http.StatusInternalServerError)
 		log.Printf("Error updating store: %v", err)
 		return
 	}
-
-	// Update server's in-memory state.
-	s.SetState(&ServerState{repo: newRepo})
 
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w, "OK")
@@ -1021,27 +1096,27 @@ func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Could not retrieve entity ref from Referer: %s: %v", referer, err), http.StatusBadRequest)
 		return
 	}
-	state := s.State()
+	data := s.storeData(r)
 	// Get completions for requested field.
 	fieldType := "plain"
 	var completions []string
 	switch field {
 	case "metadata.annotations":
 		fieldType = "key"
-		completions = state.repo.AnnotationKeys(ref.Kind)
+		completions = data.repo.AnnotationKeys(ref.Kind)
 	case "metadata.labels":
 		fieldType = "key"
-		completions = state.repo.LabelKeys(ref.Kind)
+		completions = data.repo.LabelKeys(ref.Kind)
 	case "spec.consumesApis", "spec.providesApis":
 		fieldType = "item"
-		apis := state.repo.FindAPIs("")
+		apis := data.repo.FindAPIs("")
 		completions = make([]string, len(apis))
 		for i, a := range apis {
 			completions[i] = a.GetRef().QName()
 		}
 	case "spec.dependsOn":
 		fieldType = "item"
-		entities := state.repo.FindEntities("kind:component OR kind:resource")
+		entities := data.repo.FindEntities("kind:component OR kind:resource")
 		completions = make([]string, len(entities))
 		for i, a := range entities {
 			// Use fully qualified refs including the kind for dependsOn.
@@ -1049,14 +1124,14 @@ func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 		}
 	case "spec.owner":
 		fieldType = "value"
-		groups := state.repo.FindGroups("")
+		groups := data.repo.FindGroups("")
 		completions = make([]string, len(groups))
 		for i, g := range groups {
 			completions[i] = g.GetRef().QName()
 		}
 	case "spec.system":
 		fieldType = "value"
-		systems := state.repo.FindSystems("")
+		systems := data.repo.FindSystems("")
 		completions = make([]string, len(systems))
 		for i, s := range systems {
 			completions[i] = s.GetRef().QName()
@@ -1065,7 +1140,7 @@ func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 		fieldType = "value"
 		_, fieldName, _ := strings.Cut(field, ".")
 		var err error
-		completions, err = state.repo.SpecFieldValues(ref.Kind, fieldName)
+		completions, err = data.repo.SpecFieldValues(ref.Kind, fieldName)
 		if err != nil {
 			http.Error(w,
 				fmt.Sprintf("Cannot get values for kind %v and field %s: %v", ref.Kind, field, err),
@@ -1145,8 +1220,8 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 func (s *Server) serveEntitiesJSON(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	state := s.State()
-	entities := state.repo.FindEntities(query)
+	data := s.storeData(r)
+	entities := data.repo.FindEntities(query)
 
 	result := make([]map[string]any, 0, len(entities))
 	for _, e := range entities {
@@ -1175,23 +1250,33 @@ func (s *Server) serveEntitiesJSON(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) reloadCatalog(w http.ResponseWriter, r *http.Request) {
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
+	// Acquire write lock
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	started := time.Now()
-	state := s.State()
-	newRepo, err := state.repo.Reload()
+	err := s.source.Refresh()
 	if err != nil {
-		log.Printf("Failed to reload catalog: %v", err)
-		s.renderErrorSnippet(w, fmt.Sprintf("Failed to reload catalog: %v", err))
+		log.Printf("Failed to refresh store: %v", err)
+		s.renderErrorSnippet(w, fmt.Sprintf("Failed to refresh: %v", err))
 		return
 	}
-	log.Printf("Catalog reloaded in %d ms.", time.Since(started).Milliseconds())
-	s.SetState(&ServerState{repo: newRepo})
+	log.Printf("Store refreshed in %d ms.", time.Since(started).Milliseconds())
+
+	// Clear repo cache
+	s.storeDataMap = make(map[string]*storeData)
 
 	// Force HTMX to refresh the page
 	w.Header().Set("HX-Refresh", "true")
 	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) ValidateCatalog(ref string) (size int, err error) {
+	rd, err := s.loadStoreData(ref)
+	if err != nil {
+		return 0, fmt.Errorf("validation failed for %q: %v", ref, err)
+	}
+	return rd.repo.Size(), nil
 }
 
 // contextKey is the type used to store data in the request context.
@@ -1200,7 +1285,10 @@ type contextKey string
 const (
 	// ctxRef is the context key for the git reference (e.g., branch)
 	// accessed by the current request.
-	ctxRef contextKey = "gitRef"
+	ctxRef contextKey = "ref"
+	// ctxRefData is the context key for the reference data (repo, config, etc.)
+	// accessed by the current request.
+	ctxRefData contextKey = "refData"
 )
 
 func (s *Server) uiMux() *http.ServeMux {
@@ -1312,6 +1400,7 @@ func (s *Server) handleRefDispatch(next http.Handler) http.Handler {
 
 		// Split at /-/ delimiter that terminates the git branch/tag path segment.
 		ref, targetPath, found := strings.Cut(rest, "/-/")
+
 		if !found {
 			http.NotFound(w, r)
 			return
@@ -1321,8 +1410,34 @@ func (s *Server) handleRefDispatch(next http.Handler) http.Handler {
 		// Ensure it starts with "/".
 		r.URL.Path = "/" + strings.TrimPrefix(targetPath, "/")
 
-		// Inject Ref into Context and dispath to child handler.
+		// Inject ref into Context and dispatch to child handler.
 		ctx := context.WithValue(r.Context(), ctxRef, ref)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// handleRefDataDispatch injects the relevant information for ref into the request context
+// and delegates to the given next handler.
+func (s *Server) handleRefDataDispatch(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ref := ""
+		// See if reference has been stored in the context, else use default
+		if v := r.Context().Value(ctxRef); v != nil {
+			ref = v.(string)
+		}
+		// Retrieve data for ref.
+		rd, err := s.loadStoreData(ref)
+		if errors.Is(err, store.ErrNoSuchRef) {
+			http.NotFound(w, r)
+			return
+		} else if err != nil {
+			log.Printf("Failed to get store for ref %q: %v", ref, err)
+			http.Error(w, "Failed to get store", http.StatusInternalServerError)
+			return
+		}
+
+		// Inject refData into Context and dispatch to child handler.
+		ctx := context.WithValue(r.Context(), ctxRefData, rd)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -1332,22 +1447,21 @@ func (s *Server) routes() *http.ServeMux {
 
 	// UI part: everything under /ui
 	uiMux := s.uiMux()
-	root.Handle("/ui/", http.StripPrefix("/ui", uiMux))
-	root.Handle("/ui/ref/", s.handleRefDispatch(uiMux))
+	root.Handle("/ui/", http.StripPrefix("/ui", s.handleRefDataDispatch(uiMux)))
+	root.Handle("/ui/ref/", s.handleRefDispatch(s.handleRefDataDispatch(uiMux)))
 
 	// JSON API to query/modify entities.
 	// For now, only works on "plain" URLs, not /ref/<git-branch ones.
-	root.HandleFunc("GET /catalog/entities", func(w http.ResponseWriter, r *http.Request) {
-		s.serveEntitiesJSON(w, r)
-	})
-	root.HandleFunc("POST /catalog/entities/{entityRef}/annotations/{annotationKey}", func(w http.ResponseWriter, r *http.Request) {
-		entityRef := r.PathValue("entityRef")
-		annotationKey := r.PathValue("annotationKey")
-		s.updateAnnotationValue(w, r, entityRef, annotationKey)
-	})
-	root.HandleFunc("GET /catalog/autocomplete", func(w http.ResponseWriter, r *http.Request) {
-		s.serveAutocomplete(w, r)
-	})
+	root.Handle("GET /catalog/entities", s.handleRefDataDispatch(http.HandlerFunc(s.serveEntitiesJSON)))
+
+	root.Handle("POST /catalog/entities/{entityRef}/annotations/{annotationKey}", s.handleRefDataDispatch(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			entityRef := r.PathValue("entityRef")
+			annotationKey := r.PathValue("annotationKey")
+			s.updateAnnotationValue(w, r, entityRef, annotationKey)
+		})))
+	root.Handle("GET /catalog/autocomplete", s.handleRefDataDispatch(http.HandlerFunc(s.serveAutocomplete)))
+
 	root.HandleFunc("POST /catalog/reload", s.reloadCatalog)
 
 	// Health check. Useful for cloud deployments.

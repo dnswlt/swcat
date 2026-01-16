@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
-	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
 )
 
@@ -30,14 +29,14 @@ func (f *fakeRunner) Run(ctx context.Context, dotSource string) ([]byte, error) 
 
 // newServer creates a Server with real templates (BaseDir = repo root)
 // and a fake dot runner.
-func newTestServer(t *testing.T, repo *repo.Repository) *Server {
+func newTestServer(t *testing.T, st store.Source) *Server {
 	t.Helper()
 
 	s, err := NewServer(ServerOptions{
 		Addr:    "127.0.0.1:0",
 		BaseDir: "../..", // loads templates from <repo-root>/templates
 		DotPath: "dot",
-	}, repo)
+	}, st)
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -51,8 +50,8 @@ func newTestServer(t *testing.T, repo *repo.Repository) *Server {
 // ---- Tests ------------------------------------------------------------------
 
 func TestHealth_OK(t *testing.T) {
-	repo := repo.NewRepository()
-	s := newTestServer(t, repo)
+	st := store.NewDiskStore("../../testdata/catalog")
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -69,8 +68,8 @@ func TestHealth_OK(t *testing.T) {
 }
 
 func TestRoot_Redirect(t *testing.T) {
-	repo := repo.NewRepository()
-	s := newTestServer(t, repo)
+	st := store.NewDiskStore("../../testdata/catalog")
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -87,11 +86,8 @@ func TestRoot_Redirect(t *testing.T) {
 }
 
 func TestListPages_RenderLinksForAllKinds(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	st := store.NewDiskStore("../../testdata/catalog")
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	cases := []struct {
@@ -132,12 +128,9 @@ func TestListPages_RenderLinksForAllKinds(t *testing.T) {
 }
 
 func TestComponentDetail_TriggersDotAndCaches(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
+	st := store.NewDiskStore("../../testdata/catalog")
 
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo) // real templates, fake dot runner
+	s := newTestServer(t, st) // real templates, fake dot runner
 	h := s.Handler()
 
 	// Access the fake runner to inspect call count
@@ -182,12 +175,9 @@ func TestComponentDetail_TriggersDotAndCaches(t *testing.T) {
 }
 
 func TestDetailPages_RenderSVGAndName(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
+	st := store.NewDiskStore("../../testdata/catalog")
 
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	cases := []struct {
@@ -230,8 +220,8 @@ func TestDetailPages_RenderSVGAndName(t *testing.T) {
 }
 
 func TestDetail_NotFound_AllKinds(t *testing.T) {
-	repo := repo.NewRepository()
-	s := newTestServer(t, repo)
+	st := store.NewDiskStore("../../testdata/catalog")
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	fr := s.dotRunner.(*fakeRunner)
@@ -258,12 +248,8 @@ func TestDetail_NotFound_AllKinds(t *testing.T) {
 	}
 }
 func TestGroupDetail_OK_NoSVG(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
-
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo) // real templates
+	st := store.NewDiskStore("../../testdata/catalog")
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	rr := httptest.NewRecorder()
@@ -285,12 +271,8 @@ func TestGroupDetail_OK_NoSVG(t *testing.T) {
 }
 
 func TestServeEntitiesJSON_OK(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
-
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	st := store.NewDiskStore("../../testdata/catalog")
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	req := httptest.NewRequest(http.MethodGet, "/catalog/entities", nil)
@@ -340,12 +322,8 @@ func TestServeEntitiesJSON_OK(t *testing.T) {
 }
 
 func TestServeEntitiesJSON_WithQuery(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
-
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	st := store.NewDiskStore("../../testdata/catalog")
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	req := httptest.NewRequest(http.MethodGet, "/catalog/entities?q=kind:component", nil)
@@ -389,7 +367,7 @@ func TestServeEntitiesJSON_WithQuery(t *testing.T) {
 	}
 }
 
-func testCopyCatalog(t *testing.T) (store.Store, string) {
+func testCopyCatalog(t *testing.T) (store.Source, string) {
 	t.Helper()
 	dir := t.TempDir()
 	tmpfile, err := os.CreateTemp(dir, "catalog-*.yml")
@@ -415,11 +393,7 @@ func testCopyCatalog(t *testing.T) (store.Store, string) {
 func TestCreateEntity_OK(t *testing.T) {
 	// Create a temporary copy of the catalog file
 	st, tmpfile := testCopyCatalog(t)
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, st)
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	newEntityYAML := `
@@ -455,7 +429,11 @@ spec:
 
 	// Check if the entity was actually created in the repo
 	ref, _ := catalog.ParseRef("component:default/new-component")
-	if s.State().repo.Entity(ref) == nil {
+	rd, err := s.loadStoreData("")
+	if err != nil {
+		t.Fatalf("no data for default ref in store?")
+	}
+	if rd.repo.Entity(ref) == nil {
 		t.Fatalf("entity was not created in the repository")
 	}
 
@@ -470,12 +448,8 @@ spec:
 }
 
 func TestCreateEntity_ReadOnly(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
-
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	st := store.NewDiskStore("../../testdata/catalog")
+	s := newTestServer(t, st)
 	s.opts.ReadOnly = true // Set read-only mode
 	h := s.Handler()
 
@@ -509,11 +483,7 @@ spec:
 func TestCreateEntity_MissingSystem(t *testing.T) {
 	// Create a temporary copy of the catalog file
 	st, _ := testCopyCatalog(t)
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, st)
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	newEntityYAML := `
@@ -551,11 +521,7 @@ spec:
 func TestUpdateEntity_OK(t *testing.T) {
 	// Create a temporary copy of the catalog file
 	st, tmpfile := testCopyCatalog(t)
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, st)
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	updatedEntityYAML := `
@@ -591,7 +557,11 @@ spec:
 
 	// Check if the entity was actually updated in the repo
 	ref, _ := catalog.ParseRef("component:default/test-component")
-	entity := s.State().repo.Entity(ref)
+	rd, err := s.loadStoreData("")
+	if err != nil {
+		t.Fatalf("no data for default ref in store?")
+	}
+	entity := rd.repo.Entity(ref)
 	if entity == nil {
 		t.Fatalf("entity not found in the repository")
 	}
@@ -610,12 +580,8 @@ spec:
 }
 
 func TestUpdateEntity_ReadOnly(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
-
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	st := store.NewDiskStore("../../testdata/catalog")
+	s := newTestServer(t, st)
 	s.opts.ReadOnly = true // Set read-only mode
 	h := s.Handler()
 
@@ -647,12 +613,8 @@ spec:
 }
 
 func TestUpdateEntity_NotFound(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
-
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	st := store.NewDiskStore("../../testdata/catalog")
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	updatedEntityYAML := `
@@ -685,11 +647,7 @@ spec:
 func TestUpdateEntity_IDChange(t *testing.T) {
 	// Create a temporary copy of the catalog file
 	st, _ := testCopyCatalog(t)
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, st)
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	updatedEntityYAML := `
@@ -727,11 +685,7 @@ spec:
 func TestDeleteEntity_OK(t *testing.T) {
 	// Create a temporary copy of the catalog file
 	st, tmpfile := testCopyCatalog(t)
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, st)
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	req := httptest.NewRequest(http.MethodPost, "/ui/entities/component:default%2Ftest-component/delete", nil)
@@ -751,7 +705,11 @@ func TestDeleteEntity_OK(t *testing.T) {
 
 	// Check if the entity was actually deleted from the repo
 	ref, _ := catalog.ParseRef("component:default/test-component")
-	if s.State().repo.Entity(ref) != nil {
+	rd, err := s.loadStoreData("")
+	if err != nil {
+		t.Fatalf("no data for default ref in store?")
+	}
+	if rd.repo.Entity(ref) != nil {
 		t.Fatalf("entity was not deleted from the repository")
 	}
 
@@ -766,12 +724,8 @@ func TestDeleteEntity_OK(t *testing.T) {
 }
 
 func TestDeleteEntity_ReadOnly(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
-
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	st := store.NewDiskStore("../../testdata/catalog")
+	s := newTestServer(t, st)
 	s.opts.ReadOnly = true // Set read-only mode
 	h := s.Handler()
 
@@ -787,12 +741,8 @@ func TestDeleteEntity_ReadOnly(t *testing.T) {
 }
 
 func TestDeleteEntity_NotFound(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
-
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	st := store.NewDiskStore("../../testdata/catalog")
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	req := httptest.NewRequest(http.MethodPost, "/ui/entities/component:default%2Fnot-found-component/delete", nil)
@@ -809,12 +759,7 @@ func TestDeleteEntity_NotFound(t *testing.T) {
 func TestUpdateAnnotationValue_OK(t *testing.T) {
 	// Create a temporary copy of the catalog file
 	st, tmpfile := testCopyCatalog(t)
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, st)
-
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	entityRef := "component:default/test-component"
@@ -831,7 +776,11 @@ func TestUpdateAnnotationValue_OK(t *testing.T) {
 
 	// Check if the entity was actually updated in the repo
 	ref, _ := catalog.ParseRef(entityRef)
-	entity := s.State().repo.Entity(ref)
+	rd, err := s.loadStoreData("")
+	if err != nil {
+		t.Fatalf("no data for default ref in store?")
+	}
+	entity := rd.repo.Entity(ref)
 	if entity == nil {
 		t.Fatalf("entity not found in the repository")
 	}
@@ -851,12 +800,8 @@ func TestUpdateAnnotationValue_OK(t *testing.T) {
 }
 
 func TestUpdateAnnotationValue_ReadOnly(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
-
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	st := store.NewDiskStore("../../testdata/catalog")
+	s := newTestServer(t, st)
 	s.opts.ReadOnly = true // Set read-only mode
 	h := s.Handler()
 
@@ -874,12 +819,8 @@ func TestUpdateAnnotationValue_ReadOnly(t *testing.T) {
 }
 
 func TestUpdateAnnotationValue_NotFound(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
-
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	st := store.NewDiskStore("../../testdata/catalog")
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	entityRef := "component:default/not-found-component"
@@ -896,12 +837,8 @@ func TestUpdateAnnotationValue_NotFound(t *testing.T) {
 }
 
 func TestUpdateAnnotationValue_InvalidAnnotation(t *testing.T) {
-	repo, err := repo.LoadRepositoryFromStore(repo.Config{}, store.NewDiskStore("../../testdata/catalog"))
-
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-	s := newTestServer(t, repo)
+	st := store.NewDiskStore("../../testdata/catalog")
+	s := newTestServer(t, st)
 	h := s.Handler()
 
 	entityRef := "component:default/test-component"

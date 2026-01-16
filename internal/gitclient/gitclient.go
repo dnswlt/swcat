@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
@@ -23,6 +24,7 @@ type Auth struct {
 // Client holds the repository in memory
 type Client struct {
 	repo *git.Repository
+	auth *Auth
 }
 
 func New(url string, auth *Auth) (*Client, error) {
@@ -50,7 +52,46 @@ func New(url string, auth *Auth) (*Client, error) {
 		return nil, fmt.Errorf("failed to create Client: %w", err)
 	}
 
-	return &Client{repo: repo}, nil
+	return &Client{repo: repo, auth: auth}, nil
+}
+
+func (c *Client) Update() error {
+	// 1. Configure the Fetch options
+	opts := &git.FetchOptions{
+		RemoteName: "origin",
+		// Download all tags, even those unreachable from the branch heads
+		Tags: git.AllTags,
+		// Force-update all remote branches to match origin
+		// The '+' allows non-fast-forward updates (e.g. if history was rewritten on remote)
+		RefSpecs: []config.RefSpec{
+			"+refs/heads/*:refs/remotes/origin/*",
+		},
+	}
+
+	// 2. Attach Auth if provided
+	if c.auth != nil {
+		opts.Auth = &http.BasicAuth{
+			Username: c.auth.Username,
+			Password: c.auth.Password,
+		}
+	}
+
+	// 3. Execute Fetch
+	// This downloads missing objects into memory.NewStorage() and updates
+	// refs/remotes/origin/* and refs/tags/*
+	err := c.repo.Fetch(opts)
+
+	// 4. Handle the "Already Up To Date" case
+	// go-git treats this as an error, but for an "Update" operation, it is usually a success state.
+	if err == git.NoErrAlreadyUpToDate {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to fetch updates: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Client) DefaultBranch() (string, error) {
