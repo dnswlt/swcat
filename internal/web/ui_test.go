@@ -1,6 +1,7 @@
 package web
 
 import (
+	"net/http/httptest"
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
@@ -136,6 +137,124 @@ func TestFormatLabels(t *testing.T) {
 			}
 			if diff := cmp.Diff(c.want, gotDisplay); diff != "" {
 				t.Fatalf("formatLabels() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestSetQueryParam(t *testing.T) {
+	tests := []struct {
+		name       string
+		requestURI string
+		key        string
+		value      string
+		wantURL    string
+	}{
+		{
+			name:       "add new param",
+			requestURI: "/ui/components",
+			key:        "q",
+			value:      "test",
+			wantURL:    "/ui/components?q=test",
+		},
+		{
+			name:       "modify existing param",
+			requestURI: "/ui/components?q=old&foo=bar",
+			key:        "q",
+			value:      "new",
+			wantURL:    "/ui/components?foo=bar&q=new",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", tt.requestURI, nil)
+			gotURL := setQueryParam(req, tt.key, tt.value)
+
+			if gotURL.RequestURI() != tt.wantURL {
+				t.Errorf("setQueryParam(%q, %q, %q) got %q, want %q", tt.requestURI, tt.key, tt.value, gotURL.RequestURI(), tt.wantURL)
+			}
+		})
+	}
+}
+
+func TestRefOptions(t *testing.T) {
+	type args struct {
+		refs       []string
+		currentRef string
+		requestURI string
+	}
+	tests := []struct {
+		name string
+		args args
+		want []refOption
+	}{
+		{
+			name: "simple path, no existing ref, check selected and URLs",
+			args: args{
+				refs:       []string{"main", "dev"},
+				currentRef: "main",
+				requestURI: "/ui/components",
+			},
+			want: []refOption{
+				{Ref: "main", URL: "/ui/ref/main/-/components", Selected: true},
+				{Ref: "dev", URL: "/ui/ref/dev/-/components", Selected: false},
+			},
+		},
+		{
+			name: "existing ref in path, switch ref, preserve query",
+			args: args{
+				refs:       []string{"main", "feature-x"},
+				currentRef: "feature-x",
+				requestURI: "/ui/ref/main/-/systems?env=prod",
+			},
+			want: []refOption{
+				{Ref: "main", URL: "/ui/ref/main/-/systems?env=prod", Selected: false},
+				{Ref: "feature-x", URL: "/ui/ref/feature-x/-/systems?env=prod", Selected: true},
+			},
+		},
+		{
+			name: "root path with query",
+			args: args{
+				refs:       []string{"main"},
+				currentRef: "main",
+				requestURI: "/ui?search=all",
+			},
+			want: []refOption{
+				{Ref: "main", URL: "/ui/ref/main/-/?search=all", Selected: true},
+			},
+		},
+		{
+			name: "empty refs list",
+			args: args{
+				refs:       []string{},
+				currentRef: "main",
+				requestURI: "/ui/components",
+			},
+			want: []refOption{},
+		},
+		{
+			name: "ref with multiple path segments",
+			args: args{
+				refs:       []string{"bugfix/b199", "main"},
+				currentRef: "bugfix/b199",
+				requestURI: "/ui/ref/main/-/components/my-component",
+			},
+			want: []refOption{
+				{Ref: "bugfix/b199", URL: "/ui/ref/bugfix/b199/-/components/my-component", Selected: true},
+				{Ref: "main", URL: "/ui/ref/main/-/components/my-component", Selected: false},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", tt.args.requestURI, nil)
+
+			got := refOptions(tt.args.refs, tt.args.currentRef, req)
+
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Fatalf("refOptions() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

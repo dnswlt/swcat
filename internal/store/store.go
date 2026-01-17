@@ -118,7 +118,8 @@ func (d *DiskStore) WriteFile(path string, contents []byte) error {
 // GitSource is an implementation of Source that reads from a remote Git repository.
 type GitSource struct {
 	client     *gitclient.Client
-	defaultRef string // ref to use if the empty ref ("") is requested
+	defaultRef string   // ref to use if the empty ref ("") is requested
+	refs       []string // cached list of available references
 }
 
 // gitStore is a "view" over a single revision in a GitSource.
@@ -137,7 +138,12 @@ func NewGitSource(client *gitclient.Client, defaultRef string) *GitSource {
 	}
 }
 
+func (g *GitSource) DefaultRef() string {
+	return g.defaultRef
+}
+
 func (g *GitSource) Refresh() error {
+	g.refs = nil
 	return g.client.Update()
 }
 
@@ -145,7 +151,7 @@ func (g *GitSource) Store(ref string) (Store, error) {
 	if ref == "" {
 		ref = g.defaultRef
 	}
-	refs, err := g.client.ListReferences()
+	refs, err := g.ListReferences()
 	if err != nil {
 		return nil, fmt.Errorf("cannot list references: %v", err)
 	}
@@ -156,6 +162,19 @@ func (g *GitSource) Store(ref string) (Store, error) {
 		client: g.client,
 		ref:    ref,
 	}, nil
+}
+
+func (g *GitSource) ListReferences() ([]string, error) {
+	if g.refs != nil {
+		return g.refs, nil
+	}
+	refs, err := g.client.ListReferences()
+	if err != nil {
+		return nil, err
+	}
+	slices.Sort(refs)
+	g.refs = refs
+	return refs, nil
 }
 
 func (g *gitStore) ListFiles(dir string) ([]string, error) {
