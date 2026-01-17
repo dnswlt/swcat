@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"net/http"
 	"net/url"
 	"slices"
 	"strings"
@@ -110,6 +111,53 @@ func toURLWithContext(ctx context.Context, s any) (string, error) {
 		pathPrefix = fmt.Sprintf("/ui/%s", kindPath(entityRef.Kind))
 	}
 	return pathPrefix + "/" + url.PathEscape(entityRef.QName()), nil
+}
+
+// refOption holds data for rendering <option>s for different git refs.
+type refOption struct {
+	Ref      string // The git reference name
+	URL      string // The URL to navigate to (typically an /absolute/path Request URI)
+	Selected bool   // Whether the option should be marked as selected.
+}
+
+// refOptions generates navigation links to switch the current view to a different reference.
+// It extracts the current page context ("tail") from the raw RequestURI to bypass any middleware
+// modifications, transforming paths like "/ui/catalog" or "/ui/ref/main/-/catalog" into
+// the target format "/ui/ref/<new-ref>/-/<tail>".
+func refOptions(refs []string, currentRef string, r *http.Request) []refOption {
+	// 1. Snapshot the raw request to bypass middleware mutations.
+	// Split off the query immediately.
+	rawPath, rawQuery, _ := strings.Cut(r.RequestURI, "?")
+
+	// 2. Isolate the "tail" (the logical page path, e.g., "components/<id>").
+	// We check for the delimiter "/-/" to see if we are already in a ref view.
+	var tail string
+	if _, after, found := strings.Cut(rawPath, "/-/"); found {
+		tail = after
+	} else {
+		// We are in a top-level view. Safely remove the root anchor.
+		tail = strings.TrimPrefix(rawPath, "/ui")
+		tail = strings.TrimPrefix(tail, "/")
+	}
+
+	// 3. Pre-format the query string for reuse
+	queryString := ""
+	if rawQuery != "" {
+		queryString = "?" + rawQuery
+	}
+
+	// 4. Construct the new URLs
+	result := make([]refOption, 0, len(refs))
+	for _, ref := range refs {
+		result = append(result, refOption{
+			Ref: ref,
+			// Construct: /ui/ref/<ref>/-/<tail>?<query>
+			URL:      fmt.Sprintf("/ui/ref/%s/-/%s%s", ref, tail, queryString),
+			Selected: ref == currentRef,
+		})
+	}
+
+	return result
 }
 
 // entitySummary returns e's title and description concatenated.
@@ -313,12 +361,16 @@ func markdown(input string) (template.HTML, error) {
 	return template.HTML(buf.String()), nil
 }
 
-func setQueryParam(u *url.URL, key, value string) *url.URL {
-	u2 := *u
-	q := u2.Query()
+func setQueryParam(r *http.Request, key, value string) *url.URL {
+	u, err := url.ParseRequestURI(r.RequestURI)
+	if err != nil {
+		// Cannot parse RequestURI. This is a failure mode. Return request URL unchanged.
+		return r.URL
+	}
+	q := u.Query()
 	q.Set(key, value)
-	u2.RawQuery = q.Encode()
-	return &u2
+	u.RawQuery = q.Encode()
+	return u
 }
 
 // CustomContent represents content that is displayed in the detail view

@@ -338,8 +338,8 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		Name   string
 		Href   string
 	}{
-		{Active: !internalView, Name: "External", Href: setQueryParam(r.URL, "view", "external").RequestURI()},
-		{Active: internalView, Name: "Internal", Href: setQueryParam(r.URL, "view", "internal").RequestURI()},
+		{Active: !internalView, Name: "External", Href: setQueryParam(r, "view", "external").RequestURI()},
+		{Active: internalView, Name: "Internal", Href: setQueryParam(r, "view", "internal").RequestURI()},
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"], err = s.svgMetadataJSON(r, svgResult.Metadata)
@@ -1177,7 +1177,20 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		"CacheBustingKey": s.started.Format("20060102150405"),
 		"Version":         s.opts.Version,
 	}
-	// Copy template params
+	// Add Refs if we're running on a Git source.
+	if g, ok := s.source.(*store.GitSource); ok {
+		refs, err := g.ListReferences()
+		if err != nil {
+			log.Printf("Failed to list references: %v", err)
+		} else {
+			currentRef := g.DefaultRef()
+			if v := r.Context().Value(ctxRef); v != nil {
+				currentRef = v.(string)
+			}
+			templateParams["RefOptions"] = refOptions(refs, currentRef, r)
+		}
+	}
+	// Copy over provided params
 	for k, v := range params {
 		templateParams[k] = v
 	}
@@ -1423,8 +1436,11 @@ func (s *Server) handleRefDataDispatch(next http.Handler) http.Handler {
 			http.NotFound(w, r)
 			return
 		} else if err != nil {
-			log.Printf("Failed to get store for ref %q: %v", ref, err)
-			http.Error(w, "Failed to get store", http.StatusInternalServerError)
+			// Show detailed error in response to user as well: most likely, they selected
+			// a branch whose catalog cannot be parsed.
+			msg := fmt.Sprintf("Failed to get store for ref %q: %v", ref, err)
+			log.Println(msg)
+			http.Error(w, msg, http.StatusInternalServerError)
 			return
 		}
 
