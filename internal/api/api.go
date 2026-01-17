@@ -318,6 +318,12 @@ type Group struct {
 }
 
 func (e *Ref) Equal(other *Ref) bool {
+	if e == nil {
+		return other == nil
+	}
+	if other == nil {
+		return false
+	}
 	return e.Kind == other.Kind && e.Namespace == other.Namespace && e.Name == other.Name
 }
 
