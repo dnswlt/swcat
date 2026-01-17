@@ -5,7 +5,7 @@ GO ?= go
 VERSION ?= $(shell git describe --tags --always --dirty)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
 
-.PHONY: test test-integration test-race build build-web
+.PHONY: test test-integration test-race build build-web run-examples run-examples-git
 
 #
 # Building
@@ -17,11 +17,24 @@ build:
 build-web:
 	npm run build --prefix web
 
-run-examples:
-	$(GO) run $(LDFLAGS) ./cmd/swcat -addr localhost:9191 -root-dir . -config examples/flights/swcat.yml -base-dir . -catalog-dir examples/flights/catalog
+#
+# Running
+#
 
+# Run swcat using the ./examples/flights catalog.
+run-examples:
+	$(GO) run $(LDFLAGS) ./cmd/swcat \
+		-addr localhost:9191 \
+		-root-dir ./examples/flights
+
+# Run swcat using the remote git repo's ./examples/flights catalog.
 run-examples-git:
-	$(GO) run $(LDFLAGS) ./cmd/swcat -addr localhost:9191 -git-url . -git-ref feature/gitclient -config examples/flights/swcat.yml -catalog-dir examples/flights/catalog
+	$(GO) run $(LDFLAGS) ./cmd/swcat \
+		-addr localhost:9191 \
+		-git-url https://github.com/dnswlt/swcat.git \
+		-git-ref feature/gitclient \
+		-config examples/flights/swcat.yml \
+		-catalog-dir examples/flights/catalog
 
 #
 # Testing
@@ -29,9 +42,6 @@ run-examples-git:
 
 test:
 	$(GO) test ./...
-
-test-race:
-	$(GO) test -race ./...
 
 # Build and run integration tests, no caching.
 test-integration:
