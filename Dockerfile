@@ -14,6 +14,8 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+# Make web resources available for embedding in the Go binary
+COPY --from=webbuilder /app/static/dist ./static/dist
 ENV CGO_ENABLED=0
 ARG VERSION=dev
 RUN go build -ldflags "-X main.Version=${VERSION}" -o /out/swcat ./cmd/swcat

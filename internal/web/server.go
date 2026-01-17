@@ -136,7 +136,7 @@ func (s *Server) loadStoreData(ref string) (*storeData, error) {
 	return data, nil
 }
 
-// withRequestLogging wraps a handler and logs each request if in debug mode.
+// withRequestLogging wraps a handler and logs each request.
 // Logs include method, path, remote address, and duration.
 func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

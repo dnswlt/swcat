@@ -1,25 +1,9 @@
 # Getting started
 
-## Getting started (Windows)
+This page describes how to get started on a local machine using a local
+software catalog. See the [user manual](./user-guide/remote-catalog.md) for
+how to connect to a remote catalog.
 
-### Prequisites
-
-* Install [Graphviz](https://graphviz.org/download/).
-* Download the latest binary release version `swcat-<version>.zip` from the
-   [GitHub releases page](https://github.com/dnswlt/swcat/releases).
-
-### Run swcat
-
-Unpack `swcat-<version>.zip` to any folder you like and run:
-
-```bash
-swcat.exe -addr localhost:9191 -config examples/flights/swcat.yml -catalog-dir examples/flights/catalog
-```
-
-Point your browser at <http://localhost:9191> and explore the example catalog.
-
-Adjust the `-config` path and `-catalog-dir` path to the catalog files to any
-software catalog you want to view or edit.
 
 ## Getting started (Docker)
 
@@ -59,12 +43,20 @@ make docker-stop
 * The catalog is mounted in read-write (rw) mode at `/catalog` inside the container.
 
 If you want to work with your own catalog, pass its location (folder) in the
-`CATALOG_DIR` environment variable. Your (optional) configuration file must be located
-at `$CATALOG_DIR/swcat.yml`.
+`CATALOG_DIR` environment variable. Your configuration file and catalog files
+must be located in this directory:
 
 ```bash
-CATALOG_DIR=/abs/path/to/your/catalog make docker-up
+# For convenience, add CATALOG_DIR to your .env file, so you don't have to specify
+# it on the CLI.
+echo CATALOG_DIR=/abs/path/to/your/catalog >> .env
+# Run the server
+make docker-up
 ```
+
+If the defaults (config file is `swcat.yml`,
+catalog directory is `catalog/`) do not apply, see [compose.yml](https://github.com/dnswlt/swcat/blob/main/compose.yml)
+for the environment variables to set.
 
 !!! tip
     `swcat` refuses to start if there are catalog validation errors.
@@ -98,7 +90,28 @@ cd ..
 Now run the server, using the example catalog files:
 
 ```bash
-go run ./cmd/swcat -addr localhost:9191 -config examples/flights/swcat.yml -catalog-dir examples/flights/catalog
+go run ./cmd/swcat -addr localhost:9191 -root-dir ./examples/flights
 ```
 
 Point your browser at <http://localhost:9191> and explore the example catalog.
+
+## Getting started (Windows)
+
+### Prequisites (Windows)
+
+* Install [Graphviz](https://graphviz.org/download/).
+* Download the latest binary release version `swcat-<version>.zip` from the
+   [GitHub releases page](https://github.com/dnswlt/swcat/releases).
+
+### Run swcat.exe
+
+Unpack `swcat-<version>.zip` to any folder you like and run:
+
+```bash
+swcat.exe -addr localhost:9191 -config examples/flights/swcat.yml -catalog-dir examples/flights/catalog
+```
+
+Point your browser at <http://localhost:9191> and explore the example catalog.
+
+Adjust the `-config` path and `-catalog-dir` path to the catalog files to any
+software catalog you want to view or edit.
