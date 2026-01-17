@@ -1,5 +1,9 @@
 # Example configuration file.
 ui:
+  # A custom link pointing e.g. to custom instructions for your catalog.
+  helpLink:
+    title: Help
+    url: https://dnswlt.github.io/swcat/
   # Define custom sections in entity detail pages based on annotations.
   annotationBasedContent:
     # Show solace topics, annotated as a JSON list in the solace.com/topics annotation,

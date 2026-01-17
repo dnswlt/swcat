@@ -1195,6 +1195,13 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		templateParams[k] = v
 	}
 
+	// Add HelpLink from config if available
+	if v := r.Context().Value(ctxRefData); v != nil {
+		if sd, ok := v.(*storeData); ok && sd.config != nil {
+			templateParams["HelpLink"] = sd.config.UI.HelpLink
+		}
+	}
+
 	// Clone template so we can safely update Funcs on a per-request basis.
 	tmpl, err := s.template.Clone()
 	if err != nil {

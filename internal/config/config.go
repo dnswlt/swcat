@@ -16,11 +16,19 @@ type AnnotationBasedContent struct {
 	Style   string // The style in which to render the content. One of "text", "list", "json".
 }
 
+// HelpLink is a custom link shown in the footer.
+type HelpLink struct {
+	Title string `yaml:"title"`
+	URL   string `yaml:"url"`
+}
+
 // UIConfig has configuration that only affects the UI.
 // We cannot put it into the web package as that would generate
 // a cyclic dependency.
 type UIConfig struct {
 	AnnotationBasedContent map[string]AnnotationBasedContent `yaml:"annotationBasedContent"`
+	// An optional custom help link shown at the bottom of the UI.
+	HelpLink *HelpLink `yaml:"helpLink"`
 }
 
 // Bundle is the umbrella struct for the serialized application configuration YAML.

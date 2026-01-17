@@ -1,8 +1,14 @@
 <footer class="bg-white shadow mt-4 max-w-screen-lg mx-auto rounded-xl">
     <div id="footer-error-container" class="px-4"></div>
     <div class="px-4 py-3 flex justify-between items-center text-sm text-gray-500">
-        <div>
-            swcat {{ .Version }}
+        <div class="flex items-center space-x-2">
+            <span>swcat {{ .Version }}</span>
+            {{ if .HelpLink }}
+            <span class="text-gray-300">|</span>
+            <a href="{{ .HelpLink.URL }}" target="_blank" class="hover:text-blue-600 transition-colors">
+                {{ .HelpLink.Title }}
+            </a>
+            {{ end }}
         </div>
         <div class="flex items-center space-x-2">
             {{ if .RefOptions }}
