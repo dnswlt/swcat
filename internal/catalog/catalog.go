@@ -205,7 +205,8 @@ type System struct {
 // Component
 
 type componentInvRel struct {
-	dependents []*LabelRef
+	dependents    []*LabelRef
+	subcomponents []*Ref
 }
 
 type ComponentSpec struct {
@@ -498,6 +499,10 @@ func (c *Component) GetDependents() []*LabelRef { return c.Spec.inv.dependents }
 func (c *Component) AddDependent(d *LabelRef) {
 	c.Spec.inv.dependents = append(c.Spec.inv.dependents, d)
 }
+func (c *Component) GetSubcomponents() []*Ref { return c.Spec.inv.subcomponents }
+func (c *Component) AddSubcomponent(sub *Ref) {
+	c.Spec.inv.subcomponents = append(c.Spec.inv.subcomponents, sub)
+}
 func (c *Component) GetSourceInfo() *api.SourceInfo   { return c.sourceInfo }
 func (c *Component) SetSourceInfo(si *api.SourceInfo) { c.sourceInfo = si }
 func (c *Component) Reset() Entity {
@@ -520,6 +525,7 @@ func (c *Component) SortRefs() {
 	slices.SortFunc(c.Spec.ProvidesAPIs, compareLabelRef)
 	slices.SortFunc(c.Spec.DependsOn, compareLabelRef)
 	slices.SortFunc(c.Spec.inv.dependents, compareLabelRef)
+	slices.SortFunc(c.Spec.inv.subcomponents, compareRef)
 }
 
 func (s *System) GetKind() Kind                    { return KindSystem }

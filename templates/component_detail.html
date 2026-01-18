@@ -39,11 +39,17 @@
 
             {{ template "metadata_description.html" . }}
 
-            <div class="grid grid-cols-3 gap-4">
+            <div class="flex flex-wrap gap-x-12 gap-y-4">
                 <div>
                     <h3 class="font-semibold">System</h3>
                     <p><a href="{{ .Spec.System | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.System.QName }}</a></p>
                 </div>
+                {{ if .Spec.SubcomponentOf }}
+                <div>
+                    <h3 class="font-semibold">Subcomponent of</h3>
+                    <p><a href="{{ .Spec.SubcomponentOf | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.SubcomponentOf.QName }}</a></p>
+                </div>
+                {{ end }}
                 <div>
                     <h3 class="font-semibold">Owner</h3>
                     <p><a href="{{ .Spec.Owner | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.Owner.QName }}</a></p>
@@ -94,12 +100,13 @@
         </div>
         {{ end }}
 
-        {{ if or .Spec.DependsOn .GetDependents }}
+        {{ if or .Spec.DependsOn .GetDependents .GetSubcomponents }}
         <div class="border rounded-xl">
             <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Dependencies</h3>
             <div class="grid grid-cols-2 gap-4 p-4">
-                {{ if .GetDependents }}
+                {{ if or .GetDependents .GetSubcomponents }}
                 <div>
+                    {{ if .GetDependents }}
                     <h3 class="font-semibold">Incoming</h3>
                     <ul class="list-disc list-inside">
                         {{ range .GetDependents }}
@@ -109,6 +116,17 @@
                         </li>
                         {{ end }}
                     </ul>
+                    {{ end }}
+                    {{ if .GetSubcomponents }}
+                    <h3 class="font-semibold">Subcomponents</h3>
+                    <ul class="list-disc list-inside">
+                        {{ range .GetSubcomponents }}
+                        <li>
+                            <a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ .QName }}</a>
+                        </li>
+                        {{ end }}
+                    </ul>
+                    {{ end }}
                 </div>
                 {{ end }}
 

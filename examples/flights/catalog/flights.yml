@@ -293,3 +293,17 @@ spec:
     - 'external/vendor-alpha-api "send payment data"'
     - 'user-management-api "fetch user details"'
     - analytics-events-api
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: cache-loader-prewarm
+  description: Subcomponent that prewarms the cache.
+spec:
+  type: job
+  lifecycle: production
+  owner: flights-owner
+  system: flights-cache
+  dependsOn:
+    - resource:flights-inmem-cache "prewarm"
+  subcomponentOf: cache-loader

@@ -707,7 +707,19 @@ func (s *Server) isHX(r *http.Request) bool {
 
 func (s *Server) renderErrorSnippet(w http.ResponseWriter, errorMsg string) {
 	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
-	err := s.template.ExecuteTemplate(w, "error_message.html", map[string]any{
+	// Clone the template before executing it here as well (even though we don't
+	// add any request-scoped Funcs), b/c otherwise we cannot clone it anymore:
+	// We'd get the error
+	//
+	// Failed to clone template: html/template: cannot Clone "root" after it has executed
+	tmpl, err := s.template.Clone()
+	if err != nil {
+		log.Printf("Failed to clone template: %v", err)
+		http.Error(w, "Template clone error", http.StatusInternalServerError)
+		return
+	}
+
+	err = tmpl.ExecuteTemplate(w, "error_message.html", map[string]any{
 		"Error": errorMsg,
 	})
 	if err != nil {

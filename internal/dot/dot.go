@@ -154,6 +154,8 @@ const (
 	ESOwner
 	// Used for arrows from a System to its constituent entities (components, apis, resources).
 	ESContains
+	// Used for arrows from a Component to its subcomponents.
+	ESSubcomponent
 	// Used for edges on the System overview page to link from the system of interest to its neighbors.
 	ESSystemLink
 )
@@ -316,6 +318,9 @@ func (dw *Writer) AddEdge(edge Edge) {
 	case ESContains:
 		attrs["dir"] = "back"
 		attrs["label"] = "part-of"
+	case ESSubcomponent:
+		attrs["dir"] = "back"
+		attrs["label"] = "sub-of"
 	case ESSystemLink:
 		attrs["class"] = "clickable-edge system-link-edge"
 	default:

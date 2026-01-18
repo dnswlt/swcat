@@ -422,6 +422,7 @@ func (r *Renderer) generateComponentDotSource(component *catalog.Component) *dot
 	// "Incoming" dependencies
 	// - Owner
 	// - System
+	// - Parent compnent
 	// - Provided APIs
 	// - Other entities with a DependsOn relationship to this entity
 	owner := r.repo.Group(component.Spec.Owner)
@@ -433,6 +434,13 @@ func (r *Renderer) generateComponentDotSource(component *catalog.Component) *dot
 	if system != nil {
 		dw.AddNode(r.entityNode(system))
 		dw.AddEdge(r.entityEdge(system, component, dot.ESContains))
+	}
+	if component.Spec.SubcomponentOf != nil {
+		parent := r.repo.Component(component.Spec.SubcomponentOf)
+		if parent != nil {
+			dw.AddNode(r.entityNodeContext(parent, component))
+			dw.AddEdge(r.entityEdge(parent, component, dot.ESSubcomponent))
+		}
 	}
 	for _, a := range component.Spec.ProvidesAPIs {
 		ap := r.repo.API(a.Ref)
@@ -449,11 +457,17 @@ func (r *Renderer) generateComponentDotSource(component *catalog.Component) *dot
 
 	// "Outgoing" dependencies
 	// - Consumed APIs
+	// - Subcomponents
 	// - DependsOn relationships of this entity
 	for _, a := range component.Spec.ConsumesAPIs {
 		ap := r.repo.API(a.Ref)
 		dw.AddNode(r.entityNodeContext(ap, component))
 		dw.AddEdge(r.entityEdgeLabel(component, ap, a, dot.ESNormal))
+	}
+	for _, s := range component.GetSubcomponents() {
+		sc := r.repo.Component(s)
+		dw.AddNode(r.entityNodeContext(sc, component))
+		dw.AddEdge(r.entityEdge(component, sc, dot.ESSubcomponent))
 	}
 	for _, d := range component.Spec.DependsOn {
 		e := r.repo.Entity(d.Ref)

@@ -38,7 +38,7 @@
 
             {{ template "metadata_description.html" . }}
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="flex flex-wrap gap-x-12 gap-y-4">
                 <div>
                     <h3 class="font-semibold">Owner</h3>
                     <p><a href="{{ .Spec.Owner | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.Owner.QName }}</a></p>

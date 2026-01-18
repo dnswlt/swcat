@@ -38,7 +38,7 @@
 
             {{ template "metadata_description.html" . }}
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="flex flex-wrap gap-x-12 gap-y-4">
                 <div>
                     <h3 class="font-semibold">Domain</h3>
                     <p><a href="{{ .Spec.Domain | toURL }}"

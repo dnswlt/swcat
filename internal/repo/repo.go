@@ -558,6 +558,14 @@ func (r *Repository) Validate() error {
 			return fmt.Errorf("system %q for component %s is undefined", s.System, qn)
 		}
 
+		if s.SubcomponentOf != nil {
+			if s.SubcomponentOf.Kind != catalog.KindComponent {
+				return fmt.Errorf("subcomponentOf %q must be of kind Component for component %q", s.SubcomponentOf, qn)
+			}
+			if parent := r.Component(s.SubcomponentOf); parent == nil {
+				return fmt.Errorf("subcomponentOf %q is undefined for component %q", s.SubcomponentOf, qn)
+			}
+		}
 		for _, a := range s.ProvidesAPIs {
 			ap := r.API(a.Ref)
 			if ap == nil {
@@ -766,7 +774,11 @@ func (r *Repository) populateRelationships() {
 			system := r.System(s)
 			system.AddComponent(ref)
 		}
-
+		// Register in parent component
+		if p := c.Spec.SubcomponentOf; p != nil {
+			parent := r.Component(p)
+			parent.AddSubcomponent(ref)
+		}
 		// Register in "DependsOn" dependencies.
 		for _, d := range c.Spec.DependsOn {
 			registerDependent(ref, d)
