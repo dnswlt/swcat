@@ -10,7 +10,6 @@
     {{template "nav.html" .}}
 
     <main class="w-full max-w-screen-lg mx-auto space-y-6 bg-white shadow rounded-xl p-6">
-        <h1 class="text-2xl font-semibold text-center">Domain details </h1>
 
         {{ $readOnly := .ReadOnly }}
         {{ $customContent := .CustomContent }}
@@ -27,7 +26,7 @@
                 <h2 class="text-xl font-semibold">{{ .GetQName }}</h2>
                 {{ end }}
                 <div class="flex items-center space-x-2">
-                    <span class="text-gray-500">{{ .Spec.Type }}</span>
+                    <span class="text-gray-500">Domain</span>
                     {{ if not $readOnly }}
                     {{ template "entity_toolbar.html" . }}
                     {{ end }}
@@ -47,6 +46,12 @@
                 <div>
                     <h3 class="font-semibold">Subdomain Of</h3>
                     <p><a href="{{ .Spec.SubdomainOf | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.SubdomainOf.QName }}</a></p>
+                </div>
+                {{ end }}
+                {{ if .Spec.Type }}
+                <div>
+                    <h3 class="font-semibold">Type</h3>
+                    <p>{{ .Spec.Type }}</p>
                 </div>
                 {{ end }}
             </div>

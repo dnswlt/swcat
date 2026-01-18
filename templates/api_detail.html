@@ -28,7 +28,7 @@
                 {{ end }}
 
                 <div class="flex items-center space-x-2">
-                    <span class="text-gray-500">{{ .Spec.Type }}</span>
+                    <span class="text-gray-500">API</span>
                     {{ if not $readOnly }}
                     {{ template "entity_toolbar.html" . }}
                     {{ end }}
@@ -61,6 +61,10 @@
                     {{ else }}
                     <p>{{ .Spec.Lifecycle }}</p>
                     {{ end }}
+                </div>
+                <div>
+                    <h3 class="font-semibold">Type</h3>
+                    <p>{{ .Spec.Type }}</p>
                 </div>
             </div>
         </div>

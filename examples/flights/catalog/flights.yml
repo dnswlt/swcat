@@ -5,6 +5,7 @@ metadata:
   description: Everything related to flight search and booking.
 spec:
   owner: flights-owner
+  type: commercial
 ---
 apiVersion: swcat/v1
 kind: Group
