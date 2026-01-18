@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -185,7 +186,8 @@ func (g *gitStore) ListFiles(dir string) ([]string, error) {
 	// Make relative to gitStore root.
 	result := make([]string, len(files))
 	for i, f := range files {
-		result[i] = filepath.Join(dir, f)
+		// Avoid using filepath here, as gitStore needs "/" on any OS.
+		result[i] = path.Join(dir, f)
 	}
 	return result, nil
 }
