@@ -5,7 +5,7 @@ GO ?= go
 VERSION ?= $(shell git describe --tags --always --dirty)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
 
-.PHONY: test test-integration test-race build build-web run-examples run-examples-git
+.PHONY: test test-integration test-race build build-web build-windows release-windows run-examples run-examples-git
 
 #
 # Building
@@ -14,8 +14,14 @@ LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
 build:
 	$(GO) build $(LDFLAGS) -o swcat ./cmd/swcat
 
+build-windows:
+	GOOS=windows GOARCH=amd64 $(GO) build $(LDFLAGS) -o swcat.exe ./cmd/swcat
+
 build-web:
 	npm run build --prefix web
+
+release-windows:
+	./scripts/build-release-windows.sh
 
 #
 # Running
