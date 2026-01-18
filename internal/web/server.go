@@ -1180,7 +1180,7 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		NavItem(toListURLWithContext(r.Context(), catalog.KindAPI), "APIs"),
 		NavItem(toListURLWithContext(r.Context(), catalog.KindGroup), "Groups"),
 		NavItem(toEntitiesListURL(r.Context()), "Search"),
-	).SetActive(r.URL.Path).SetParams(r.URL.Query())
+	).SetActive(r.RequestURI).SetParams(r.URL.Query())
 
 	templateParams := map[string]any{
 		"Now":             time.Now().Format("2006-01-02 15:04:05"),
@@ -1519,6 +1519,7 @@ func (s *Server) routes() *http.ServeMux {
 		if r.URL.Path == "/" || r.URL.Path == "/ui" {
 			// Redirect GET to the UI home page.
 			http.Redirect(w, r, "/ui/components", http.StatusTemporaryRedirect)
+			return
 		}
 		http.NotFound(w, r)
 	})
