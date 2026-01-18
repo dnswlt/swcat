@@ -32,7 +32,7 @@ run-examples-git:
 	$(GO) run $(LDFLAGS) ./cmd/swcat \
 		-addr localhost:9191 \
 		-git-url https://github.com/dnswlt/swcat.git \
-		-git-ref feature/gitclient \
+		-git-ref main \
 		-config examples/flights/swcat.yml \
 		-catalog-dir examples/flights/catalog
 

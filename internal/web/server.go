@@ -1180,7 +1180,7 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		NavItem(toListURLWithContext(r.Context(), catalog.KindAPI), "APIs"),
 		NavItem(toListURLWithContext(r.Context(), catalog.KindGroup), "Groups"),
 		NavItem(toEntitiesListURL(r.Context()), "Search"),
-	).SetActive(r.RequestURI).SetParams(r.URL.Query())
+	).SetActive(r.RequestURI)
 
 	templateParams := map[string]any{
 		"Now":             time.Now().Format("2006-01-02 15:04:05"),

@@ -267,87 +267,44 @@ func formatLabels(meta *catalog.Metadata) []FormattedChip {
 // Navigation bar utilities
 //
 
-type NavBar []*NavBarItem
+type NavBar struct {
+	Items []*NavBarItem
+}
 
 type NavBarItem struct {
-	path        string
-	queryParams map[string]string
-	params      []string
-	Title       string
-	Active      bool
-}
-
-func (n *NavBarItem) URI() string {
-	var u url.URL
-	u.Path = n.path
-	q := make(url.Values)
-	for k, v := range n.queryParams {
-		q.Set(k, v)
-	}
-	u.RawQuery = q.Encode()
-	return u.String()
-}
-
-func (n *NavBarItem) Params(params ...string) *NavBarItem {
-	n.params = params
-	return n
-}
-
-func (n *NavBarItem) ParamsList() string {
-	return strings.Join(n.params, ",")
-}
-
-type NavQueryParam struct {
-	Key   string
-	Value string
+	Path   string
+	Title  string
+	Active bool
 }
 
 func NavItem(path, title string) *NavBarItem {
 	return &NavBarItem{
-		path:        path,
-		Title:       title,
-		queryParams: make(map[string]string),
+		Path:  path,
+		Title: title,
 	}
 }
 
-func NewNavBar(items ...*NavBarItem) NavBar {
-	return items
+func NewNavBar(items ...*NavBarItem) *NavBar {
+	return &NavBar{Items: items}
 }
 
 // SetActive sets the .Active flags of all NavItems of this NavBar.
-// The item whose path is a prefix (or equal to) activePath is set to active.
-func (ns NavBar) SetActive(activePath string) NavBar {
-	segments := strings.Split(activePath, "/")
-	for _, n := range ns {
-		navSegments := strings.Split(n.path, "/")
-		if len(navSegments) > len(segments) {
-			continue
-		}
-		isPrefix := true
-		for i, segment := range navSegments {
-			if segments[i] != segment {
-				isPrefix = false
-				break
-			}
-		}
-		n.Active = isPrefix
+// The item whose path is a prefix (or equal to) requestURI is set to active.
+func (ns *NavBar) SetActive(requestURI string) *NavBar {
+	path, _, _ := strings.Cut(requestURI, "?") // Cut off query params
+	// Clean path to handle double slashes etc.
+	if p, err := url.PathUnescape(path); err == nil {
+		path = p
 	}
-	return ns
-}
+	path = strings.TrimSuffix(path, "/")
 
-func (ns NavBar) SetParam(key, value string) NavBar {
-	for _, n := range ns {
-		if slices.Contains(n.params, key) {
-			n.queryParams[key] = value
-		}
-	}
-	return ns
-}
-
-func (ns NavBar) SetParams(q url.Values) NavBar {
-	for k := range q {
-		if v := q.Get(k); v != "" {
-			ns = ns.SetParam(k, q.Get(k))
+	for _, n := range ns.Items {
+		// Also clean nav path
+		navPath := strings.TrimSuffix(n.Path, "/")
+		if path == navPath || strings.HasPrefix(path, navPath+"/") {
+			n.Active = true
+		} else {
+			n.Active = false
 		}
 	}
 	return ns
