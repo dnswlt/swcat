@@ -1469,6 +1469,14 @@ func (s *Server) handleRefDataDispatch(next http.Handler) http.Handler {
 	})
 }
 
+// A handler that adds the Cache-Control header for aggressive caching.
+func cacheControlHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) routes() *http.ServeMux {
 	root := http.NewServeMux()
 
@@ -1499,7 +1507,7 @@ func (s *Server) routes() *http.ServeMux {
 
 	// Static resources (JavaScript, CSS, etc.)
 	if s.opts.BaseDir == "" {
-		root.Handle("GET /static/", http.FileServer(http.FS(swcat.Files)))
+		root.Handle("GET /static/", cacheControlHandler(http.FileServer(http.FS(swcat.Files))))
 	} else {
 		staticFS := http.Dir(path.Join(s.opts.BaseDir, "static"))
 		root.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(staticFS)))
