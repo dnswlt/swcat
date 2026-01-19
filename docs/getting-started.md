@@ -108,10 +108,10 @@ Point your browser at <http://localhost:9191> and explore the example catalog.
 Unpack `swcat-<version>.zip` to any folder you like and run:
 
 ```bash
-swcat.exe -addr localhost:9191 -config examples/flights/swcat.yml -catalog-dir examples/flights/catalog
+swcat.exe -addr localhost:9191 -root-dir examples/flights
 ```
 
 Point your browser at <http://localhost:9191> and explore the example catalog.
 
-Adjust the `-config` path and `-catalog-dir` path to the catalog files to any
-software catalog you want to view or edit.
+Adjust the `-root-dir` (and potentially `-config` and `-catalog-dir` path)
+to any software catalog you want to view or edit.

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -62,7 +63,7 @@ type dotRunner struct {
 
 func (r *dotRunner) Run(ctx context.Context, dotSource string) ([]byte, error) {
 	// Command: dot -Tsvg
-	log.Printf("Running '%s -Tsvg' to generate the SVG", r.dotPath)
+	started := time.Now()
 	cmd := exec.CommandContext(ctx, r.dotPath, "-Tsvg")
 
 	// Provide the DOT source on stdin and capture stdout/stderr
@@ -81,8 +82,11 @@ func (r *dotRunner) Run(ctx context.Context, dotSource string) ([]byte, error) {
 	output, err := cmd.CombinedOutput() // will wait until process exits
 	if err != nil {
 		// CombinedOutput returns output (stdout+stderr) even on error - include it for debugging.
-		return output, fmt.Errorf("dot failed: %w; output: %s; input: %s", err, output, dotSource)
+		return output, fmt.Errorf("Running %s failed: %w; output: %s; input: %s", r.dotPath, err, output, dotSource)
 	}
+
+	elapsed := time.Since(started).Milliseconds()
+	log.Printf("Generated SVG using '%s -Tsvg' in %d ms", r.dotPath, elapsed)
 
 	// Cut off <?xml ?> header and only return the <svg>
 	if idx := bytes.Index(output, []byte("<svg")); idx > 0 {
