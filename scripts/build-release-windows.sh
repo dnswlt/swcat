@@ -16,7 +16,7 @@ fi
 echo "Building Windows release for version: $VERSION"
 
 RELEASE_DIR="swcat-${VERSION}"
-ZIP_FILE="${RELEASE_DIR}.zip"
+ZIP_FILE="swcat-${VERSION}-windows-amd64.zip"
 
 # Clean up previous artifacts
 rm -rf "$RELEASE_DIR" "$ZIP_FILE"
