@@ -4,6 +4,7 @@ catalogs/
 /static/.vite/
 /swcat
 /swcat.exe
+/swcat-*.zip
 .vscode
 .venv/
 .markdownlint.json
