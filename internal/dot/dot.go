@@ -47,6 +47,7 @@ type DotSource struct {
 // It is mostly used as an abstraction layer for testing.
 type Runner interface {
 	Run(ctx context.Context, dotSource string) ([]byte, error)
+	Close() error
 }
 
 func NewRunner(dotPath string) Runner {
@@ -94,6 +95,11 @@ func (r *dotRunner) Run(ctx context.Context, dotSource string) ([]byte, error) {
 	}
 
 	return output, nil
+}
+
+func (r *dotRunner) Close() error {
+	// Nothing to do for a dotRunner
+	return nil
 }
 
 type NodeLayout struct {

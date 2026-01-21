@@ -29,13 +29,15 @@ import (
 )
 
 type ServerOptions struct {
-	Addr       string // E.g., "localhost:8080"
-	BaseDir    string // Directory from which resources (templates etc.) are read.
-	DotPath    string // E.g., "dot" (with dot on the PATH)
-	ReadOnly   bool   // If true, no Edit/Clone/Delete operations will be supported.
-	ConfigFile string // Path to config file
-	CatalogDir string // Path to folder containing catalog files
-	Version    string // App version
+	Addr            string        // E.g., "localhost:8080"
+	BaseDir         string        // Directory from which resources (templates etc.) are read.
+	DotPath         string        // E.g., "dot" (with dot on the PATH)
+	DotTimeout      time.Duration // Time after which dot executions will be cancelled
+	UseDotStreaming bool          // If true, keeps the dot process running and streams requests to it (Good for corporate Windows machines).
+	ReadOnly        bool          // If true, no Edit/Clone/Delete operations will be supported.
+	ConfigFile      string        // Path to config file
+	CatalogDir      string        // Path to folder containing catalog files
+	Version         string        // App version
 }
 
 // storeData contains all data extracted from a given view of a Store at reference ref.
@@ -60,11 +62,17 @@ type Server struct {
 }
 
 func NewServer(opts ServerOptions, source store.Source) (*Server, error) {
+	var dotRunner dot.Runner
+	if opts.UseDotStreaming {
+		dotRunner = dot.NewStreamingRunner(opts.DotPath)
+	} else {
+		dotRunner = dot.NewRunner(opts.DotPath)
+	}
 	s := &Server{
 		opts:         opts,
 		storeDataMap: make(map[string]*storeData),
 		source:       source,
-		dotRunner:    dot.NewRunner(opts.DotPath),
+		dotRunner:    dotRunner,
 		started:      time.Now(),
 	}
 
@@ -280,6 +288,13 @@ func (s *Server) svgMetadataJSON(r *http.Request, svgMeta *dot.SVGGraphMetadata)
 	return template.JS(json), nil
 }
 
+func (s *Server) withDotTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if s.opts.DotTimeout <= 0 {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, s.opts.DotTimeout)
+}
+
 func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID string) {
 	systemRef, err := catalog.ParseRefAs(catalog.KindSystem, systemID)
 	if err != nil {
@@ -318,7 +333,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
 		var err error
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		ctx, cancel := s.withDotTimeout(r.Context())
 		defer cancel()
 		renderer := s.svgRenderer(data)
 		if internalView {
@@ -373,7 +388,7 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
 		var err error
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		ctx, cancel := s.withDotTimeout(r.Context())
 		defer cancel()
 		svgResult, err = s.svgRenderer(data).ComponentGraph(ctx, component)
 		if err != nil {
@@ -446,7 +461,7 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
 		var err error
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		ctx, cancel := s.withDotTimeout(r.Context())
 		defer cancel()
 		svgResult, err = s.svgRenderer(data).APIGraph(ctx, ap)
 		if err != nil {
@@ -510,7 +525,7 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
 		var err error
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		ctx, cancel := s.withDotTimeout(r.Context())
 		defer cancel()
 		svgResult, err = s.svgRenderer(data).ResourceGraph(ctx, resource)
 		if err != nil {
@@ -574,7 +589,7 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
 		var err error
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		ctx, cancel := s.withDotTimeout(r.Context())
 		defer cancel()
 		svgResult, err = s.svgRenderer(data).DomainGraph(ctx, domain)
 		if err != nil {

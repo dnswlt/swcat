@@ -80,6 +80,7 @@ type Options struct {
 	ConfigFile string
 	BaseDir    string
 	ReadOnly   bool
+	DotTimeout time.Duration
 }
 
 func main() {
@@ -94,6 +95,7 @@ func main() {
 	fs.StringVar(&opts.GitRef, "git-ref", "", "Git ref (branch or tag) to use initially")
 	fs.StringVar(&opts.BaseDir, "base-dir", "", "Base directory for resource files. If empty, uses embedded resources (recommended for production).")
 	fs.BoolVar(&opts.ReadOnly, "read-only", false, "Start server in read-only mode (no entity editing).")
+	fs.DurationVar(&opts.DotTimeout, "dot-timeout", 10*time.Second, "Maximum time to wait before cancelling dot executions")
 
 	err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("SWCAT"))
 	if err != nil {
@@ -142,13 +144,15 @@ func main() {
 
 	server, err := web.NewServer(
 		web.ServerOptions{
-			Addr:       opts.Addr,
-			BaseDir:    opts.BaseDir,
-			CatalogDir: opts.CatalogDir,
-			DotPath:    dotPath,
-			ReadOnly:   opts.ReadOnly,
-			ConfigFile: opts.ConfigFile,
-			Version:    Version,
+			Addr:            opts.Addr,
+			BaseDir:         opts.BaseDir,
+			CatalogDir:      opts.CatalogDir,
+			DotPath:         dotPath,
+			DotTimeout:      opts.DotTimeout,
+			UseDotStreaming: runtime.GOOS == "windows",
+			ReadOnly:        opts.ReadOnly,
+			ConfigFile:      opts.ConfigFile,
+			Version:         Version,
 		},
 		st,
 	)
