@@ -16,6 +16,7 @@ build:
 
 build-windows:
 	GOOS=windows GOARCH=amd64 $(GO) build $(LDFLAGS) -o swcat.exe ./cmd/swcat
+	GOOS=windows GOARCH=amd64 $(GO) build $(LDFLAGS) -o swcat-launcher.exe ./cmd/launcher
 
 build-web:
 	npm run build --prefix web

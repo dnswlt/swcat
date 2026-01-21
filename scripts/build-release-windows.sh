@@ -46,9 +46,9 @@ if ! command -v zip &> /dev/null; then
     exit 1
 fi
 
-zip -r -q "$ZIP_FILE" "$RELEASE_DIR"
+zip -r -q "$ZIP_FILE" "$RELEASE_DIR" swcat-launcher.exe
 
 # Cleanup
-rm -rf "$RELEASE_DIR"
+rm -rf "$RELEASE_DIR" swcat-launcher.exe
 
 echo "Success! Created $ZIP_FILE"
