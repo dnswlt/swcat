@@ -27,6 +27,10 @@ func (f *fakeRunner) Run(ctx context.Context, dotSource string) ([]byte, error) 
 	return []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>`), nil
 }
 
+func (f *fakeRunner) Close() error {
+	return nil
+}
+
 // newServer creates a Server with real templates (BaseDir = repo root)
 // and a fake dot runner.
 func newTestServer(t *testing.T, st store.Source) *Server {

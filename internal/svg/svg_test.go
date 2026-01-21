@@ -20,6 +20,10 @@ func (m *mockRunner) Run(ctx context.Context, dotSource string) ([]byte, error) 
 	return []byte("<svg></svg>"), nil
 }
 
+func (m *mockRunner) Close() error {
+	return nil
+}
+
 func setupRepo(t *testing.T) *repo.Repository {
 	r := repo.NewRepository()
 

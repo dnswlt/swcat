@@ -1,3 +1,8 @@
+//go:build integration
+
+// Integration tests require "dot" to be installed and are skipped by default.
+// Enable by running with
+// go test -tags=integration ./internal/dot
 package dot
 
 import (

@@ -70,6 +70,7 @@ func (r *streamingRunner) ensureProcessStarted() error {
 	}
 	r.stdout = bufio.NewReader(stdoutPipe)
 
+	log.Printf("Starting background dot process (%s)", r.dotPath)
 	if err := r.cmd.Start(); err != nil {
 		return fmt.Errorf("starting dot process: %w", err)
 	}

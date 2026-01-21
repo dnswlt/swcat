@@ -72,15 +72,16 @@ func gitClientAuthFromEnv() *gitclient.Auth {
 
 // Options contains program options that can be set via command-line flags or environment variables.
 type Options struct {
-	Addr       string
-	CatalogDir string
-	RootDir    string
-	GitURL     string
-	GitRef     string
-	ConfigFile string
-	BaseDir    string
-	ReadOnly   bool
-	DotTimeout time.Duration
+	Addr            string
+	CatalogDir      string
+	RootDir         string
+	GitURL          string
+	GitRef          string
+	ConfigFile      string
+	BaseDir         string
+	ReadOnly        bool
+	DotTimeout      time.Duration
+	UseDotStreaming bool
 }
 
 func main() {
@@ -96,6 +97,7 @@ func main() {
 	fs.StringVar(&opts.BaseDir, "base-dir", "", "Base directory for resource files. If empty, uses embedded resources (recommended for production).")
 	fs.BoolVar(&opts.ReadOnly, "read-only", false, "Start server in read-only mode (no entity editing).")
 	fs.DurationVar(&opts.DotTimeout, "dot-timeout", 10*time.Second, "Maximum time to wait before cancelling dot executions")
+	fs.BoolVar(&opts.UseDotStreaming, "dot-streaming", runtime.GOOS == "windows", "Use long-running dot process to render SVG graphs (use only if dot process startup is slow, e.g. on Windows)")
 
 	err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("SWCAT"))
 	if err != nil {
@@ -149,7 +151,7 @@ func main() {
 			CatalogDir:      opts.CatalogDir,
 			DotPath:         dotPath,
 			DotTimeout:      opts.DotTimeout,
-			UseDotStreaming: runtime.GOOS == "windows",
+			UseDotStreaming: opts.UseDotStreaming,
 			ReadOnly:        opts.ReadOnly,
 			ConfigFile:      opts.ConfigFile,
 			Version:         Version,
