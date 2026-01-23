@@ -330,12 +330,18 @@ func setQueryParam(r *http.Request, key, value string) *url.URL {
 	return u
 }
 
+type ccAttr struct {
+	Name  string
+	Value string
+}
+
 // CustomContent represents content that is displayed in the detail view
 // and is specified in an entity annotation.
 type CustomContent struct {
 	Heading string
 	Text    string   // Text to be presented as-is.
 	Items   []string // Items to be rendered as an <ul> list.
+	Attrs   []ccAttr // Items to be rendered as a key-value <table>.
 	Code    string   // Preformatted code (typically JSON)
 }
 
@@ -381,8 +387,24 @@ func newCustomContent(heading, content, style string) (*CustomContent, error) {
 			return nil, fmt.Errorf("failed to indent JSON: %v", err)
 		}
 		cc.Code = string(indentedJSON)
+	case "table":
+		var dict map[string]any
+		if err := json.Unmarshal([]byte(content), &dict); err != nil {
+			return nil, fmt.Errorf("not a valid JSON object: %v", err)
+		}
+		keys := make([]string, 0, len(dict))
+		for k := range dict {
+			keys = append(keys, k)
+		}
+		slices.Sort(keys)
+		for _, k := range keys {
+			cc.Attrs = append(cc.Attrs, ccAttr{
+				Name:  k,
+				Value: fmt.Sprintf("%v", dict[k]),
+			})
+		}
 	default:
-		return nil, fmt.Errorf("invalid custom content style (must be text|list|json): %s", style)
+		return nil, fmt.Errorf("invalid custom content style (must be text|list|json|table): %s", style)
 	}
 	return cc, nil
 }

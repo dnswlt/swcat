@@ -13,7 +13,7 @@ import (
 // AnnotationBasedContent specifies how annotation-based content should be rendered in the UI.
 type AnnotationBasedContent struct {
 	Heading string // The heading under which to display the content.
-	Style   string // The style in which to render the content. One of "text", "list", "json".
+	Style   string // The style in which to render the content. One of "text", "list", "json", "table".
 }
 
 // HelpLink is a custom link shown in the footer.

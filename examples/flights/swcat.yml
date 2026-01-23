@@ -10,7 +10,10 @@ ui:
     # as a card on the API detail page:
     solace.com/topics:
       heading: Solace Topics
-      style: list  # Possible values: text|list|json
+      style: list  # Possible values: text|list|json|table
+    swcat/custom-fields:
+      heading: Deployment Details
+      style: table
 svg:
   # Show the (programming) language label as a <<stereotype>> on nodes.
   stereotypeLabels:

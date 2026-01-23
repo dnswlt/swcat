@@ -61,6 +61,8 @@ The `ui` section allows for customizing the user interface.
 
         * `json`: Renders a JSON object or array in a formatted code block.
 
+        * `table`: Renders a simple JSON object (key-value pairs) as a table.
+
 ## Example Configuration
 
 ```yaml
@@ -72,7 +74,7 @@ ui:
     # as a card on the API detail page:
     solace.com/topics:
       heading: Solace Topics
-      style: list  # Possible values: text|list|json
+      style: list  # Possible values: text|list|json|table
 svg:
   # Show the (programming) language label as a <<stereotype>> on nodes.
   stereotypeLabels:

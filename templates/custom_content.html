@@ -18,6 +18,17 @@
             {{ end }}
         </ul>
     </div>
+    {{ else if $cc.Attrs }}
+    <div class="max-h-32 overflow-y-auto">
+        <table class="w-full text-sm">
+             {{ range $cc.Attrs }}
+             <tr class="border-b last:border-0">
+                 <td class="px-4 py-2 font-medium text-gray-600 bg-gray-50 w-1/3">{{ .Name }}</td>
+                 <td class="px-4 py-2 text-gray-800">{{ .Value }}</td>
+             </tr>
+             {{ end }}
+        </table>
+    </div>
     {{ end }}
 </div>
 {{ end }}

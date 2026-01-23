@@ -61,6 +61,14 @@ kind: API
 metadata:
   name: credit-card-process
   description: Processes a credit card payment.
+  annotations:
+    swcat/custom-fields: |
+      {
+        "Region": "us-east-1",
+        "Replicas": 3,
+        "Auto-scaling": "enabled",
+        "Last Deployment": "2026-01-22"
+      }
 spec:
   type: https/json
   lifecycle: production
