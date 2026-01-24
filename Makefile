@@ -1,6 +1,5 @@
 SHELL := /bin/sh
 
-DOCKER := $(shell command -v docker)
 GO ?= go
 VERSION ?= $(shell git describe --tags --always --dirty)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
@@ -58,9 +57,18 @@ test-integration:
 # Run with Docker compose
 #
 
-DC := $(DOCKER) compose -f compose.yml
+UNAME_S := $(shell uname -s)
+# macOS (Homebrew/Colima): Uses the dashed binary (even in newer versions like 5.0.x)
+ifeq ($(UNAME_S),Darwin)
+    DC_CMD := docker-compose
+# Linux: Use compose via Docker Plugin (the "modern" way)
+else
+    DC_CMD := docker compose
+endif
 
-.PHONY: build start stop
+DC := $(DC_CMD) -f compose.yml
+
+.PHONY: docker-build docker-up docker-stop
 
 docker-build:
 	VERSION=$(VERSION) $(DC) build swcat
