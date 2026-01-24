@@ -280,6 +280,59 @@ func TestCompareEntityByName(t *testing.T) {
 	}
 }
 
+func TestRef_Compare(t *testing.T) {
+	tests := []struct {
+		name string
+		a    *Ref
+		b    *Ref
+		want int
+	}{
+		{
+			name: "equal",
+			a:    &Ref{Kind: KindComponent, Namespace: "ns", Name: "name"},
+			b:    &Ref{Kind: KindComponent, Namespace: "ns", Name: "name"},
+			want: 0,
+		},
+		{
+			name: "default namespace first",
+			a:    &Ref{Kind: KindComponent, Namespace: DefaultNamespace, Name: "z"},
+			b:    &Ref{Kind: KindComponent, Namespace: "a", Name: "a"},
+			want: -1,
+		},
+		{
+			name: "default namespace first (reversed)",
+			a:    &Ref{Kind: KindComponent, Namespace: "a", Name: "a"},
+			b:    &Ref{Kind: KindComponent, Namespace: DefaultNamespace, Name: "z"},
+			want: 1,
+		},
+		{
+			name: "compare by namespace",
+			a:    &Ref{Kind: KindComponent, Namespace: "ns1", Name: "name"},
+			b:    &Ref{Kind: KindComponent, Namespace: "ns2", Name: "name"},
+			want: -1,
+		},
+		{
+			name: "compare by name",
+			a:    &Ref{Kind: KindComponent, Namespace: "ns", Name: "a"},
+			b:    &Ref{Kind: KindComponent, Namespace: "ns", Name: "b"},
+			want: -1,
+		},
+		{
+			name: "compare by kind",
+			a:    &Ref{Kind: KindAPI, Namespace: "ns", Name: "name"},
+			b:    &Ref{Kind: KindComponent, Namespace: "ns", Name: "name"},
+			want: -1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.a.Compare(tt.b); got != tt.want {
+				t.Errorf("Ref.Compare() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestPrintVersion(t *testing.T) {
 	// Ensure that Version structs are printed properly in templates.
 	v := Version{
