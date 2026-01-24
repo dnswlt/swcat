@@ -11,6 +11,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+require github.com/hashicorp/golang-lru/v2 v2.0.7
+
 require (
 	dario.cat/mergo v1.0.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect

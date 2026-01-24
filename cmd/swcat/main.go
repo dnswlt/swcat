@@ -82,6 +82,7 @@ type Options struct {
 	ReadOnly        bool
 	DotTimeout      time.Duration
 	UseDotStreaming bool
+	SVGCacheSize    int
 }
 
 func main() {
@@ -98,6 +99,7 @@ func main() {
 	fs.BoolVar(&opts.ReadOnly, "read-only", false, "Start server in read-only mode (no entity editing).")
 	fs.DurationVar(&opts.DotTimeout, "dot-timeout", 10*time.Second, "Maximum time to wait before cancelling dot executions")
 	fs.BoolVar(&opts.UseDotStreaming, "dot-streaming", runtime.GOOS == "windows", "Use long-running dot process to render SVG graphs (use only if dot process startup is slow, e.g. on Windows)")
+	fs.IntVar(&opts.SVGCacheSize, "svg-cache-size", 1024, "Max. number of SVG graphs to hold in the in-memory LRU cache")
 
 	err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("SWCAT"))
 	if err != nil {
@@ -155,6 +157,7 @@ func main() {
 			ReadOnly:        opts.ReadOnly,
 			ConfigFile:      opts.ConfigFile,
 			Version:         Version,
+			SVGCacheSize:    opts.SVGCacheSize,
 		},
 		st,
 	)

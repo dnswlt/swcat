@@ -87,7 +87,7 @@ func (r *dotRunner) Run(ctx context.Context, dotSource string) ([]byte, error) {
 	}
 
 	elapsed := time.Since(started).Milliseconds()
-	log.Printf("Generated SVG using dot in %d ms", elapsed)
+	log.Printf("Generated SVG (%d bytes) with dot in %d ms", len(output), elapsed)
 
 	// Cut off <?xml ?> header and only return the <svg>
 	if idx := bytes.Index(output, []byte("<svg")); idx > 0 {

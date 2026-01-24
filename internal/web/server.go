@@ -25,6 +25,7 @@ import (
 	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/svg"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,6 +39,7 @@ type ServerOptions struct {
 	ConfigFile      string        // Path to config file
 	CatalogDir      string        // Path to folder containing catalog files
 	Version         string        // App version
+	SVGCacheSize    int           // Size of the LRU cache for rendered SVGs
 }
 
 // storeData contains all data extracted from a given view of a Store at reference ref.
@@ -45,7 +47,7 @@ type storeData struct {
 	ref      string
 	repo     *repo.Repository
 	config   *config.Bundle
-	svgCache sync.Map // mutated during requests, hence sync'ed.
+	svgCache *lru.Cache[string, *svg.Result]
 }
 
 type Server struct {
@@ -62,6 +64,9 @@ type Server struct {
 }
 
 func NewServer(opts ServerOptions, source store.Source) (*Server, error) {
+	if opts.SVGCacheSize <= 0 {
+		opts.SVGCacheSize = 128
+	}
 	var dotRunner dot.Runner
 	if opts.UseDotStreaming {
 		dotRunner = dot.NewStreamingRunner(opts.DotPath)
@@ -82,24 +87,12 @@ func NewServer(opts ServerOptions, source store.Source) (*Server, error) {
 	return s, nil
 }
 
-func (s *storeData) withRepo(repo *repo.Repository) *storeData {
-	return &storeData{
-		ref:    s.ref,
-		repo:   repo,
-		config: s.config,
-	}
-}
-
 func (s *storeData) lookupSVG(cacheKey string) (*svg.Result, bool) {
-	item, ok := s.svgCache.Load(cacheKey)
-	if !ok {
-		return nil, false
-	}
-	return item.(*svg.Result), true
+	return s.svgCache.Get(cacheKey)
 }
 
 func (s *storeData) storeSVG(cacheKey string, svg *svg.Result) {
-	s.svgCache.Store(cacheKey, svg)
+	s.svgCache.Add(cacheKey, svg)
 }
 
 // loadStoreData retrieves the storeData for ref from the cache, if present,
@@ -135,13 +128,39 @@ func (s *Server) loadStoreData(ref string) (*storeData, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	cache, err := lru.New[string, *svg.Result](s.opts.SVGCacheSize)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create SVG cache (size: %d): %v", s.opts.SVGCacheSize, err))
+	}
+
 	data := &storeData{
-		ref:    ref,
-		config: cfg,
-		repo:   repo,
+		ref:      ref,
+		config:   cfg,
+		repo:     repo,
+		svgCache: cache,
 	}
 	s.storeDataMap[ref] = data
 	return data, nil
+}
+
+// updateStoreData updates the data stored for data.ref with a new storeData that holds the given repo.
+// The SVG cache of the new storeData is empty. Other values are copied from the given data.
+//
+// Callers of this method MUST ensure that s.mu is already held.
+func (s *Server) updateStoreData(data *storeData, repo *repo.Repository) {
+	// Create new empty SVG cache
+	cache, err := lru.New[string, *svg.Result](s.opts.SVGCacheSize)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create SVG cache (size: %d): %v", s.opts.SVGCacheSize, err))
+	}
+
+	s.storeDataMap[data.ref] = &storeData{
+		ref:      data.ref,
+		repo:     repo,
+		config:   data.config,
+		svgCache: cache,
+	}
 }
 
 // withRequestLogging wraps a handler and logs each request.
@@ -884,7 +903,7 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 
 	// Update repository in server's cache
-	s.storeDataMap[data.ref] = data.withRepo(newRepo)
+	s.updateStoreData(data, newRepo)
 
 	// Update the YAML file.
 	st, err := s.source.Store(data.ref)
@@ -945,7 +964,7 @@ func (s *Server) deleteEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	defer s.mu.Unlock()
 
 	// Update repository in server's cache
-	s.storeDataMap[data.ref] = data.withRepo(newRepo)
+	s.updateStoreData(data, newRepo)
 
 	// Update the YAML file.
 	st, err := s.source.Store(data.ref)
@@ -1041,7 +1060,7 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	newEntity.GetSourceInfo().Path = path
 
 	// Update repository in server's cache
-	s.storeDataMap[data.ref] = data.withRepo(newRepo)
+	s.updateStoreData(data, newRepo)
 
 	// Update the YAML file.
 	st, err := s.source.Store(data.ref)
@@ -1132,7 +1151,7 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 	defer s.mu.Unlock()
 
 	// Update repository in server's cache
-	s.storeDataMap[data.ref] = data.withRepo(newRepo)
+	s.updateStoreData(data, newRepo)
 
 	// Update the YAML file.
 	st, err := s.source.Store(data.ref)

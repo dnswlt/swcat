@@ -150,14 +150,14 @@ func (r *streamingRunner) Run(ctx context.Context, dotSource string) ([]byte, er
 		}
 
 		outBytes := res.data
+
+		elapsed := time.Since(started).Milliseconds()
+		log.Printf("Generated SVG (%d bytes) using streaming dot in %d ms", len(outBytes), elapsed)
+
 		if idx := bytes.Index(outBytes, []byte("<svg")); idx > 0 {
 			outBytes = outBytes[idx:]
 		}
 
-		elapsed := time.Since(started).Milliseconds()
-		if elapsed > 100 {
-			log.Printf("Generated SVG using streaming dot in %d ms", elapsed)
-		}
 		return outBytes, nil
 
 	case <-ctx.Done():
