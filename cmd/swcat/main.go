@@ -36,7 +36,7 @@ func lookupDotPath() (string, error) {
 	}
 
 	if err != nil {
-		return "", fmt.Errorf("dot was not found in your PATH. Please install Graphviz and add it to the PATH: %v", err)
+		return "", fmt.Errorf("dot was not found in your PATH. Please install Graphviz (https://graphviz.org/) and add it to the PATH: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

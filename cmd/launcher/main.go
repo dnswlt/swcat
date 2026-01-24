@@ -32,6 +32,17 @@ import (
 	"golang.org/x/mod/semver"
 )
 
+const (
+	releasesLatestURL = "https://api.github.com/repos/dnswlt/swcat/releases/latest"
+
+	// MaxSupportedVersion is the maximum version of swcat that this launcher can run.
+	// If a newer version is available on GitHub, the launcher will not download it.
+	// If a newer version is installed locally, the launcher will ignore it.
+	// This protects against breaking changes in the folder structure or binary name
+	// that a future version of swcat might introduce.
+	MaxSupportedVersion = "v0.999.0"
+)
+
 // GithubRelease represents the minimal JSON structure we need
 type GithubRelease struct {
 	TagName string `json:"tag_name"` // e.g., "v1.2.3"
@@ -40,10 +51,6 @@ type GithubRelease struct {
 		BrowserDownloadURL string `json:"browser_download_url"`
 	} `json:"assets"`
 }
-
-const (
-	releasesLatestURL = "https://api.github.com/repos/dnswlt/swcat/releases/latest"
-)
 
 // getLatestRelease queries GitHub and returns the latest tag name and the download URL for the current platform.
 func getLatestRelease() (string, string, error) {
@@ -187,7 +194,7 @@ func performUpdate(downloadURL string) error {
 }
 
 // findNewestLocalVersion scans the current directory for subdirectories matching "swcat-<version>"
-// and returns the highest version found and its directory path.
+// and returns the highest version found (that is <= MaxSupportedVersion) and its directory path.
 // Returns "v0.0.0", "", nil if no versions are found.
 func findNewestLocalVersion() (string, string, error) {
 	entries, err := os.ReadDir(".")
@@ -215,6 +222,11 @@ func findNewestLocalVersion() (string, string, error) {
 		}
 
 		if !semver.IsValid(verPart) {
+			continue
+		}
+
+		// Don't consider versions newer than what we support
+		if semver.Compare(verPart, MaxSupportedVersion) > 0 {
 			continue
 		}
 
@@ -266,21 +278,27 @@ func main() {
 	}
 
 	// 2. Check for update
-	fmt.Printf("Checking for updates (current: %s)...\n", currentVersion)
+	started := time.Now()
+	fmt.Printf("Checking for updates (current: %s)...", currentVersion)
 	latestTag, downloadURL, err := getLatestRelease()
+	fmt.Printf(" Done (%d ms).\n", time.Since(started).Milliseconds())
 
 	if err != nil {
 		// IMPORTANT: Log error but continue. Don't stop the user from working!
 		fmt.Printf("Update check failed (%v). Launching local version...\n", err)
 	} else if semver.Compare(latestTag, currentVersion) == 1 {
-		fmt.Printf("New version %s found! Downloading from %s...\n", latestTag, downloadURL)
-
-		if err := performUpdate(downloadURL); err != nil {
-			fmt.Printf("Update failed: %v. Launching local version...\n", err)
+		// Check against MaxSupportedVersion
+		if semver.Compare(latestTag, MaxSupportedVersion) > 0 {
+			fmt.Printf("New version %s found, but this launcher only supports up to %s. Please update the launcher.\n", latestTag, MaxSupportedVersion)
 		} else {
-			fmt.Println("Update installed successfully.")
-		}
+			fmt.Printf("New version %s found! Downloading from %s...\n", latestTag, downloadURL)
 
+			if err := performUpdate(downloadURL); err != nil {
+				fmt.Printf("Update failed: %v. Launching local version...\n", err)
+			} else {
+				fmt.Println("Update installed successfully.")
+			}
+		}
 	} else {
 		fmt.Printf("Local version %s is up-to-date.\n", currentVersion)
 	}

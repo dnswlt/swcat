@@ -33,7 +33,7 @@ To create and push a tag:
 
 ```bash
 TAG="v0.4.0"
-git tag -a "$TAG" -m "Release version 0.4.0: 
+git tag -a "$TAG" -m "Release version $TAG: 
 
 - Add page to generate custom, ad hoc entity diagrams.
 "

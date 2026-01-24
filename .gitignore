@@ -10,3 +10,5 @@ catalogs/
 .markdownlint.json
 .env
 /sync_*.sh
+/launcher
+/launcher.exe
