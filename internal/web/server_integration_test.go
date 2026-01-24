@@ -97,6 +97,9 @@ func TestIntegration_ServerSmoke(t *testing.T) {
 		{"/ui/apis", []string{"APIs", "flights-search-api"}},
 		{"/ui/resources", []string{"Resources", "routes-database"}},
 		{"/ui/groups", []string{"Groups", "flights-owner"}},
+		{`/ui/graph`, []string{"diagram"}},
+		{`/ui/graph?q=rel%3D%27component%3Aflights-routes%27&e=component%3Aflights-search-backend&e=api%3Aflights-cache-api&e=component%3Aflights-routes`,
+			[]string{"routes-database", "flights-routes", "<svg"}},
 		{"/static/dist/main.js", []string{"function"}},
 		{"/static/dist/main.css", []string{"clickable-node"}},
 	}

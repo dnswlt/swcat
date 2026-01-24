@@ -88,9 +88,20 @@ function onClickEdge(edge) {
 
 // Handles clicks on SVG nodes by looking up the URL to navigate to in 
 // svgMeta.routes.
-function onClickNode(node) {
+function onClickNode(node, shiftKey) {
     const id = node.id;
     if (!id) return;
+
+    if (shiftKey) {
+        if (document.body.dataset.page !== 'graph') {
+            // Shift-click only works on the interactive graph page.
+            return;
+        }
+        const url = new URL(window.location);
+        url.searchParams.set("q", `rel='${id}'`);
+        window.location.href = url;
+        return;
+    }
 
     if (!svgMeta || !svgMeta.routes) {
         console.error("Cannot process node click: missing svgMeta.routes");
@@ -114,7 +125,7 @@ function addSVGListener() {
     svg.addEventListener("click", e => {
         const node = e.target.closest(".clickable-node");
         if (node) {
-            onClickNode(node);
+            onClickNode(node, e.shiftKey);
             return;
         }
 
@@ -152,7 +163,7 @@ function addSVGListener() {
 
 // Runs all initialization functions relevant for the given page identified by pageId.
 async function initPage(pageId) {
-    if (['domain', 'system', 'component', 'resource', 'api'].includes(pageId)) {
+    if (['domain', 'system', 'component', 'resource', 'api', 'graph'].includes(pageId)) {
         createTooltip();
         loadSVGMetadata();
         addSVGListener();
@@ -166,6 +177,11 @@ async function initPage(pageId) {
             });
         }
     }
+    
+    if (pageId === 'graph') {
+        await import('./graph.js');
+    }
+
     // YAML editor
     if (['entity-edit', 'entity-clone'].includes(pageId)) {
         const { initYamlEditor } = await import('./editor.js');

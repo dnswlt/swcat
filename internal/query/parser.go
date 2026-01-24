@@ -30,8 +30,8 @@ type AttributeTerm struct {
 }
 
 func (at *AttributeTerm) String() string {
-	// Add quotes if the value contains spaces or is empty, to ensure it can be re-parsed.
-	if strings.Contains(at.Value, " ") || at.Value == "" {
+	// Add quotes if the value contains spaces, colons, or is empty, to ensure it can be re-parsed.
+	if strings.Contains(at.Value, " ") || strings.Contains(at.Value, ":") || at.Value == "" {
 		return fmt.Sprintf("%s%s'%s'", at.Attribute, at.Operator, at.Value)
 	}
 	return fmt.Sprintf("%s%s%s", at.Attribute, at.Operator, at.Value)

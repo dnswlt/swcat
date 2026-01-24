@@ -188,7 +188,7 @@ type Edge struct {
 }
 
 type WriterConfig struct {
-	EdgeMinLen int
+	EdgeMinLen int // Defines the default edge minlen property.
 }
 
 type Writer struct {

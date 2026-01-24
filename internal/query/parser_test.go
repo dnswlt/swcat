@@ -111,6 +111,11 @@ func TestParse(t *testing.T) {
 			input:    "a AND (b OR (c AND d))",
 			expected: "(a AND (b OR (c AND d)))",
 		},
+		{
+			name:     "attribute value with colons (quoted)",
+			input:    "rel:'component:cache-server'",
+			expected: "rel:'component:cache-server'",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -160,6 +165,11 @@ func TestParseErrors(t *testing.T) {
 			name:        "string literal only",
 			input:       "'some thing''",
 			expectedErr: "unexpected token at start of expression: STRING",
+		},
+		{
+			name:        "attribute value with colons (quoted)",
+			input:       "rel:component:cache-server",
+			expectedErr: "unexpected token at start of expression: COLON",
 		},
 	}
 

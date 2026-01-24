@@ -183,3 +183,53 @@ func TestComponentGraph_Topology(t *testing.T) {
 		t.Errorf("DOT missing node for api-b")
 	}
 }
+
+func TestGraph_Topology(t *testing.T) {
+	r := setupRepo(t)
+	runner := &mockRunner{}
+	renderer := NewRenderer(r, runner, NewStandardLayouter(Config{}))
+
+	domA := r.Domain(&catalog.Ref{Kind: catalog.KindDomain, Name: "dom-a"})
+	sysA := r.System(&catalog.Ref{Kind: catalog.KindSystem, Name: "sys-a"})
+	compA := r.Component(&catalog.Ref{Kind: catalog.KindComponent, Name: "comp-a"})
+	apiB := r.API(&catalog.Ref{Kind: catalog.KindAPI, Name: "api-b"})
+
+	entities := []catalog.Entity{domA, sysA, compA, apiB}
+
+	_, err := renderer.Graph(context.Background(), entities)
+	if err != nil {
+		t.Fatalf("Graph failed: %v", err)
+	}
+
+	dot := runner.lastDotSource
+
+	// 1. Verify Nodes
+	nodes := []string{
+		`"domain:dom-a"[`,
+		`"system:sys-a"[`,
+		`"component:comp-a"[`,
+		`"api:api-b"[`,
+	}
+	for _, n := range nodes {
+		if !strings.Contains(dot, n) {
+			t.Errorf("DOT missing node: %s", n)
+		}
+	}
+
+	// 2. Verify Edges
+	expectedEdges := []string{
+		`"domain:dom-a" -> "system:sys-a"`,
+		`"system:sys-a" -> "component:comp-a"`,
+		`"component:comp-a" -> "api:api-b"`,
+	}
+	for _, e := range expectedEdges {
+		if !strings.Contains(dot, e) {
+			t.Errorf("DOT missing edge: %s", e)
+		}
+	}
+
+	// 3. Verify something NOT present (e.g. sys-b was not included)
+	if strings.Contains(dot, "sys-b") {
+		t.Errorf("DOT should not contain sys-b")
+	}
+}
