@@ -450,12 +450,9 @@ func newRef(kind Kind, meta *Metadata) *Ref {
 	}
 }
 
-// Compare compares two Refs lexicographically by (kind, namespace, name).
+// Compare compares two Refs lexicographically by (namespace, name, kind).
+// The default namespace comes first.
 func (r *Ref) Compare(s *Ref) int {
-	// kind
-	if c := cmp.Compare(r.Kind, s.Kind); c != 0 {
-		return c
-	}
 	// namespace
 	rDef := r.Namespace == DefaultNamespace
 	sDef := s.Namespace == DefaultNamespace
@@ -469,7 +466,11 @@ func (r *Ref) Compare(s *Ref) int {
 		return c
 	}
 	// name
-	return cmp.Compare(r.Name, s.Name)
+	if c := cmp.Compare(r.Name, s.Name); c != 0 {
+		return c
+	}
+	// kind
+	return cmp.Compare(r.Kind, s.Kind)
 }
 
 func (r *LabelRef) Compare(s *LabelRef) int {
@@ -479,7 +480,7 @@ func (r *LabelRef) Compare(s *LabelRef) int {
 	return cmp.Compare(r.Label, s.Label)
 }
 
-// CompareEntityByRef compares two entities lexicographically by (namespace, name).
+// CompareEntityByRef compares two entities lexicographically by (namespace, name, kind).
 func CompareEntityByRef(a, b Entity) int {
 	return a.GetRef().Compare(b.GetRef())
 }

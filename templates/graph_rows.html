@@ -7,7 +7,7 @@
             {{ .GetQName }}
         </a>
     </td>
-    <td class="px-4 py-2">{{ .GetKind }}</td>
+    <td class="px-4 py-2 text-gray-500">{{ .GetKind }}</td>
     <td class="px-4 py-2">
         {{ with . | parentSystem }}
         <a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ .QName }}</a>
