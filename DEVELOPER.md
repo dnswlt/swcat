@@ -7,7 +7,7 @@ This file contains a collection of information relevant to developers of `swcat`
 See <https://dnswlt.github.io/swcat/getting-started/> 
 (or, locally, [docs/getting-started.md](docs/getting-started.md)).
 
-## Documentation
+## Updating documentation
 
 Documentation is generated using [mkdocs](https://www.mkdocs.org/). 
 
@@ -25,11 +25,11 @@ source .venv/bin/activate
 pip install mkdocs mkdocs-material
 ```
 
-## Tags and releases
+## Creating tags and releases
 
 Releases are only created from tags.
 
-To create and push a tag:
+### 1. Create and push the tag
 
 ```bash
 TAG="v0.4.0"
@@ -40,11 +40,26 @@ git tag -a "$TAG" -m "Release version $TAG:
 git push origin "$TAG"
 ```
 
+### 2. Create the Windows release bundle
+
 To create a release bundle (`.zip`) for Windows:
 
 ```bash
 make release-windows
 ```
 
-Then create a release for the new tag on GitHub and upload the generated `.zip`
-archive.
+### 3. Create the release
+
+Use the GitHub CLI (`gh`) to create the release from the tag and upload
+the generated `.zip` archive:
+
+```bash
+gh release create "$TAG" --notes-from-tag "swcat-$TAG-windows-amd64.zip"
+```
+
+(You might have to run `gh auth login` beforehand.)
+
+Check that the release look as expected on
+<https://github.com/dnswlt/swcat/releases>.
+
+Done!
