@@ -1,0 +1,30 @@
+{{- define "graph_rows.html" -}}
+{{- if .Entities }}
+{{- range .Entities }}
+<tr class="border-t hover:bg-gray-50">
+    <td class="px-4 py-2">
+        <a href="{{ .GetRef | toURL }}" class="text-blue-600 hover:underline">
+            {{ .GetQName }}
+        </a>
+    </td>
+    <td class="px-4 py-2">{{ .GetKind }}</td>
+    <td class="px-4 py-2">
+        {{ with . | parentSystem }}
+        <a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ .QName }}</a>
+        {{ end }}
+    </td>
+    <td class="px-4 py-2 text-right">
+        <button onclick="addEntityToGraph('{{ .GetRef }}')" class="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-medium">
+            Add
+        </button>
+    </td>
+</tr>
+{{- end }}
+{{- else }}
+<tr>
+    <td colspan="4" class="px-4 py-2 text-center text-gray-500">
+        No entities found
+    </td>
+</tr>
+{{- end }}
+{{- end }}

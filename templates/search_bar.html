@@ -1,6 +1,10 @@
 <form role="search" action="{{ .SearchPath }}" method="get" hx-get="{{ .SearchPath }}" hx-target="#{{ .EntitiesLabel }}-tbody"
     hx-swap="innerHTML" hx-indicator="#spinner" hx-push-url="true"
     hx-trigger="input changed from:#q delay:300ms, submit" class="flex items-center gap-2">
+    {{/* Add hidden parameters to retain full query parameter context */}}
+    {{ range .HiddenParams }}
+    <input type="hidden" name="{{ .Name }}" value="{{ .Value }}">
+    {{ end }}
     <input id="q" name="q" type="search" value="{{ .Query }}" placeholder="Filter {{ .EntitiesLabel }}"
         class="flex-1 px-3 py-2 border rounded-md" autocomplete="off">
     <a href="https://dnswlt.github.io/swcat/user-guide/query-syntax/" target="_blank" title="Search Help"

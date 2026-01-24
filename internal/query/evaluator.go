@@ -169,6 +169,93 @@ var attributeAccessors = map[string]attributeAccessor{
 			return nil, false
 		}
 	},
+	"rel": func(e catalog.Entity) ([]string, bool) {
+		refs := relatedEntities(e)
+		if len(refs) == 0 {
+			return nil, false
+		}
+		var results []string
+		for _, r := range refs {
+			results = append(results, r.String())
+		}
+		return results, true
+	},
+}
+
+// relatedEntities returns a slice of references to all entities that are directly
+// related to the given entity (both incoming and outgoing).
+func relatedEntities(e catalog.Entity) []*catalog.Ref {
+	var refs []*catalog.Ref
+	seen := make(map[string]bool)
+	self := e.GetRef()
+	seen[self.String()] = true
+
+	add := func(r *catalog.Ref) {
+		if r == nil {
+			return
+		}
+		s := r.String()
+		if !seen[s] {
+			seen[s] = true
+			refs = append(refs, r)
+		}
+	}
+	addLRs := func(lrs []*catalog.LabelRef) {
+		for _, lr := range lrs {
+			if lr != nil {
+				add(lr.Ref)
+			}
+		}
+	}
+	addRefs := func(rs []*catalog.Ref) {
+		for _, r := range rs {
+			add(r)
+		}
+	}
+
+	add(e.GetOwner())
+	if sp, ok := e.(catalog.SystemPart); ok {
+		add(sp.GetSystem())
+	}
+
+	switch v := e.(type) {
+	case *catalog.Component:
+		if v.Spec != nil {
+			add(v.Spec.SubcomponentOf)
+			addLRs(v.Spec.ProvidesAPIs)
+			addLRs(v.Spec.ConsumesAPIs)
+			addLRs(v.Spec.DependsOn)
+			addLRs(v.GetDependents())
+			addRefs(v.GetSubcomponents())
+		}
+	case *catalog.API:
+		if v.Spec != nil {
+			addLRs(v.GetProviders())
+			addLRs(v.GetConsumers())
+		}
+	case *catalog.Resource:
+		if v.Spec != nil {
+			addLRs(v.Spec.DependsOn)
+			addLRs(v.GetDependents())
+		}
+	case *catalog.System:
+		if v.Spec != nil {
+			add(v.Spec.Domain)
+			addRefs(v.GetComponents())
+			addRefs(v.GetAPIs())
+			addRefs(v.GetResources())
+		}
+	case *catalog.Domain:
+		if v.Spec != nil {
+			add(v.Spec.SubdomainOf)
+			addRefs(v.GetSystems())
+		}
+	case *catalog.Group:
+		if v.Spec != nil {
+			addRefs(v.Spec.Children)
+		}
+	}
+	return refs
 }
 
 // Matches returns true if the entity matches the expression held by the Evaluator.

@@ -395,6 +395,7 @@ func (e *Ref) Equal(other *Ref) bool {
 	return e.Kind == other.Kind && e.Namespace == other.Namespace && e.Name == other.Name
 }
 
+// String returns the fully-qualified entity reference of e.
 func (e *Ref) String() string {
 	var sb strings.Builder
 	if e.Kind != "" {

@@ -150,8 +150,8 @@ func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		// Capture path as it might get updated by middleware handlers
-		urlPath := r.URL.Path
+		// Capture requestURI in case it gets updated by middleware handlers
+		urlPath := r.RequestURI
 		// Wrap ResponseWriter to capture status code
 		lrw := &loggingResponseWriter{ResponseWriter: w}
 
@@ -180,6 +180,7 @@ func (s *Server) reloadTemplates() error {
 		"formatLabels":  formatLabels,
 		"isCloneable":   isCloneable,
 		"entitySummary": entitySummary,
+		"parentSystem":  parentSystem,
 	})
 	var err error
 	if s.opts.BaseDir == "" {
@@ -653,6 +654,87 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 	s.serveHTMLPage(w, r, "group_detail.html", params)
 }
 
+func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	data := s.storeData(r)
+
+	// Process e= query parameters to get selected entities.
+	var hiddenParams []map[string]string
+	var selectedEntities []catalog.Entity
+	selectedIDs := make(map[string]bool)
+	for _, e := range q["e"] {
+		hiddenParams = append(hiddenParams, map[string]string{"Name": "e", "Value": e})
+		if ref, err := catalog.ParseRef(e); err == nil {
+			if entity := data.repo.Entity(ref); entity != nil {
+				selectedEntities = append(selectedEntities, entity)
+				selectedIDs[entity.GetRef().String()] = true
+			}
+		}
+	}
+
+	// Retrieve entities matching query q=, filtering out already selected ones.
+	var entities []catalog.Entity
+	query := q.Get("q")
+	if query != "" {
+		for _, e := range data.repo.FindEntities(query) {
+			if !selectedIDs[e.GetRef().String()] {
+				entities = append(entities, e)
+			}
+		}
+	}
+
+	if r.Header.Get("HX-Request") == "true" {
+		// htmx request: only render search result rows
+		s.serveHTMLPage(w, r, "graph_rows.html", map[string]any{
+			"Entities": entities,
+		})
+		return
+	}
+
+	params := map[string]any{
+		"Entities":         entities,
+		"SelectedEntities": selectedEntities,
+		"SearchPath":       uiURLWithContext(r.Context(), "graph"),
+		"EntitiesLabel":    "entities",
+		"Query":            query,
+		"HiddenParams":     hiddenParams,
+	}
+
+	if len(selectedEntities) > 0 {
+		cacheKeyIDs := make([]string, 0, len(selectedEntities))
+		for _, e := range selectedEntities {
+			cacheKeyIDs = append(cacheKeyIDs, e.GetRef().String())
+		}
+		slices.Sort(cacheKeyIDs)
+		cacheKey := fmt.Sprintf("graph?ids=%s", strings.Join(cacheKeyIDs, ","))
+		svgResult, ok := data.lookupSVG(cacheKey)
+		if !ok {
+			var err error
+			ctx, cancel := s.withDotTimeout(r.Context())
+			defer cancel()
+			svgResult, err = s.svgRenderer(data).Graph(ctx, selectedEntities)
+			if err != nil {
+				log.Printf("Failed to render SVG: %v", err)
+				// Don't fail the whole page, just don't show SVG
+			} else {
+				data.storeSVG(cacheKey, svgResult)
+			}
+		}
+		if svgResult != nil {
+			params["SVG"] = template.HTML(svgResult.SVG)
+			jsonMeta, err := s.svgMetadataJSON(r, svgResult.Metadata)
+			if err != nil {
+				log.Printf("Failed to create metadata JSON: %v", err)
+			} else {
+				params["SVGMetadataJSON"] = jsonMeta
+			}
+		}
+	}
+
+	// full page
+	s.serveHTMLPage(w, r, "graph.html", params)
+}
+
 func (s *Server) serveEntities(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
@@ -661,7 +743,7 @@ func (s *Server) serveEntities(w http.ResponseWriter, r *http.Request) {
 	entities := data.repo.FindEntities(query)
 	params := map[string]any{
 		"Entities":      entities,
-		"SearchPath":    toEntitiesListURL(r.Context()),
+		"SearchPath":    uiURLWithContext(r.Context(), "entities"),
 		"EntitiesLabel": "entities",
 		"Query":         query,
 	}
@@ -1194,7 +1276,8 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		NavItem(toListURLWithContext(r.Context(), catalog.KindResource), "Resources"),
 		NavItem(toListURLWithContext(r.Context(), catalog.KindAPI), "APIs"),
 		NavItem(toListURLWithContext(r.Context(), catalog.KindGroup), "Groups"),
-		NavItem(toEntitiesListURL(r.Context()), "Search"),
+		NavIcon(uiURLWithContext(r.Context(), "graph"), "Graph"),
+		NavIcon(uiURLWithContext(r.Context(), "entities"), "Search"),
 	).SetActive(r.RequestURI)
 
 	templateParams := map[string]any{
@@ -1375,6 +1458,10 @@ func (s *Server) uiMux() *http.ServeMux {
 	mux.HandleFunc("GET /groups/{groupID...}", func(w http.ResponseWriter, r *http.Request) {
 		groupID := r.PathValue("groupID")
 		s.serveGroup(w, r, groupID)
+	})
+
+	mux.HandleFunc("GET /graph", func(w http.ResponseWriter, r *http.Request) {
+		s.serveGraph(w, r)
 	})
 
 	// Generic entities URLs

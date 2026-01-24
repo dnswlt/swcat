@@ -4,10 +4,10 @@
             {{range .NavBar.Items}}
             {{if .Active }}
             <a href="{{.Path}}"
-                class="py-3 px-4 text-blue-600 font-semibold border-b-2 border-blue-600">{{.Title}}</a>
+                class="py-3 px-4 text-blue-600 font-semibold border-b-2 border-blue-600">{{.Display}}</a>
             {{else}}
             <a href="{{.Path}}"
-                class="py-3 px-4 text-gray-700 hover:text-blue-600 font-medium">{{.Title}}</a>
+                class="py-3 px-4 text-gray-700 hover:text-blue-600 font-medium">{{.Display}}</a>
             {{end}}
             {{end}}
         </div>

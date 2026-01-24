@@ -80,19 +80,16 @@ func kindPath(kind catalog.Kind) string {
 	panic(fmt.Sprintf("Unhandled kind: %s", kind))
 }
 
-func toEntitiesListURL(ctx context.Context) string {
+func uiURLWithContext(ctx context.Context, suffix string) string {
+	suffix = strings.TrimPrefix(suffix, "/")
 	if ref := ctx.Value(ctxRef); ref != nil {
-		return fmt.Sprintf("/ui/ref/%s/-/entities", ref)
+		return fmt.Sprintf("/ui/ref/%s/-/%s", ref, suffix)
 	}
-	return "/ui/entities"
+	return "/ui/" + suffix
 }
 
 func toListURLWithContext(ctx context.Context, kind catalog.Kind) string {
-	kp := kindPath(kind)
-	if ref := ctx.Value(ctxRef); ref != nil {
-		return fmt.Sprintf("/ui/ref/%s/-/%s", ref, kp)
-	}
-	return fmt.Sprintf("/ui/%s", kp)
+	return uiURLWithContext(ctx, kindPath(kind))
 }
 
 func toURLWithContext(ctx context.Context, s any) (string, error) {
@@ -187,6 +184,16 @@ func entitySummary(e catalog.Entity) string {
 	return summary
 }
 
+func parentSystem(e catalog.Entity) *catalog.Ref {
+	if sp, ok := e.(catalog.SystemPart); ok {
+		sys := sp.GetSystem()
+		if sys != nil && !sys.Equal(e.GetRef()) {
+			return sys
+		}
+	}
+	return nil
+}
+
 type FormattedChip struct {
 	DisplayKey string // short form of the label key, e.g. "foo" for "example.com/foo".
 	Key        string // original label key, empty for tags
@@ -263,6 +270,21 @@ func formatLabels(meta *catalog.Metadata) []FormattedChip {
 	return result
 }
 
+// SVG Icons
+
+var (
+	svgIcons = map[string]string{
+		// A loupe icon
+		"Search": `<svg width="24px" height="24px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M14.9536 14.9458L21 21M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`,
+		// A graph of three connected nodes.
+		"Graph": `<svg width="24px" height="24px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M11.109 14.546C11 14.7599 11 15.0399 11 15.6V17.4C11 17.9601 11 18.2401 11.109 18.454C11.2049 18.6422 11.3578 18.7951 11.546 18.891C11.7599 19 12.0399 19 12.6 19H14.4C14.9601 19 15.2401 19 15.454 18.891C15.6422 18.7951 15.7951 18.6422 15.891 18.454C16 18.2401 16 17.9601 16 17.4V15.6C16 15.0399 16 14.7599 15.891 14.546C15.7951 14.3578 15.6422 14.2049 15.454 14.109C15.2401 14 14.9601 14 14.4 14H12.6C12.0399 14 11.7599 14 11.546 14.109C11.3578 14.2049 11.2049 14.3578 11.109 14.546ZM11.109 14.546L7.7386 9.67415M8 7.5H16M4.6 10H6.4C6.96005 10 7.24008 10 7.45399 9.89101C7.64215 9.79513 7.79513 9.64215 7.89101 9.45399C8 9.24008 8 8.96005 8 8.4V6.6C8 6.03995 8 5.75992 7.89101 5.54601C7.79513 5.35785 7.64215 5.20487 7.45399 5.10899C7.24008 5 6.96005 5 6.4 5H4.6C4.03995 5 3.75992 5 3.54601 5.10899C3.35785 5.20487 3.20487 5.35785 3.10899 5.54601C3 5.75992 3 6.03995 3 6.6V8.4C3 8.96005 3 9.24008 3.10899 9.45399C3.20487 9.64215 3.35785 9.79513 3.54601 9.89101C3.75992 10 4.03995 10 4.6 10ZM17.6 10H19.4C19.9601 10 20.2401 10 20.454 9.89101C20.6422 9.79513 20.7951 9.64215 20.891 9.45399C21 9.24008 21 8.96005 21 8.4V6.6C21 6.03995 21 5.75992 20.891 5.54601C20.7951 5.35785 20.6422 5.20487 20.454 5.10899C20.2401 5 19.9601 5 19.4 5H17.6C17.0399 5 16.7599 5 16.546 5.10899C16.3578 5.20487 16.2049 5.35785 16.109 5.54601C16 5.75992 16 6.03995 16 6.6V8.4C16 8.96005 16 9.24008 16.109 9.45399C16.2049 9.64215 16.3578 9.79513 16.546 9.89101C16.7599 10 17.0399 10 17.6 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`,
+	}
+)
+
 //
 // Navigation bar utilities
 //
@@ -274,6 +296,7 @@ type NavBar struct {
 type NavBarItem struct {
 	Path   string
 	Title  string
+	Icon   string
 	Active bool
 }
 
@@ -282,6 +305,20 @@ func NavItem(path, title string) *NavBarItem {
 		Path:  path,
 		Title: title,
 	}
+}
+
+func NavIcon(path, iconKey string) *NavBarItem {
+	return &NavBarItem{
+		Path: path,
+		Icon: svgIcons[iconKey],
+	}
+}
+
+func (i *NavBarItem) Display() template.HTML {
+	if i.Icon != "" {
+		return template.HTML(i.Icon)
+	}
+	return template.HTML(i.Title)
 }
 
 func NewNavBar(items ...*NavBarItem) *NavBar {

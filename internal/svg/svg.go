@@ -589,3 +589,109 @@ func runDot(ctx context.Context, runner dot.Runner, ds *dot.DotSource) (*Result,
 		Metadata: ds.Metadata,
 	}, nil
 }
+
+func (r *Renderer) generateGraphDotSource(entities []catalog.Entity) *dot.DotSource {
+	dw := dot.NewWithConfig(dot.WriterConfig{
+		EdgeMinLen: 1, // Ad-hoc graphs can get arbitrarily large. Draw it as compactly as possible.
+	})
+	dw.Start()
+
+	included := make(map[string]bool)
+	for _, e := range entities {
+		included[e.GetRef().String()] = true
+		dw.AddNode(r.entityNode(e))
+	}
+
+	for _, e := range entities {
+		// Owner
+		ownerRef := e.GetOwner()
+		if ownerRef != nil && included[ownerRef.String()] {
+			owner := r.repo.Group(ownerRef)
+			if owner != nil {
+				dw.AddEdge(r.entityEdge(owner, e, dot.ESOwner))
+			}
+		}
+
+		// System to its Domain
+		if sys, ok := e.(*catalog.System); ok {
+			domRef := sys.Spec.Domain
+			if domRef != nil && included[domRef.String()] {
+				dom := r.repo.Domain(domRef)
+				if dom != nil {
+					dw.AddEdge(r.entityEdge(dom, e, dot.ESContains))
+				}
+			}
+		}
+
+		// System (for SystemParts)
+		if sp, ok := e.(catalog.SystemPart); ok {
+			sysRef := sp.GetSystem()
+			if sysRef != nil && !sysRef.Equal(e.GetRef()) && included[sysRef.String()] {
+				sys := r.repo.System(sysRef)
+				if sys != nil {
+					dw.AddEdge(r.entityEdge(sys, e, dot.ESContains))
+				}
+			}
+		}
+
+		// Component specific relationships
+		if c, ok := e.(*catalog.Component); ok {
+			// SubcomponentOf
+			if c.Spec.SubcomponentOf != nil && included[c.Spec.SubcomponentOf.String()] {
+				parent := r.repo.Component(c.Spec.SubcomponentOf)
+				if parent != nil {
+					dw.AddEdge(r.entityEdge(parent, c, dot.ESSubcomponent))
+				}
+			}
+			// ProvidesAPIs
+			for _, ref := range c.Spec.ProvidesAPIs {
+				if included[ref.Ref.String()] {
+					ap := r.repo.API(ref.Ref)
+					if ap != nil {
+						dw.AddEdge(r.entityEdgeLabel(ap, c, ref, dot.ESProvidedBy))
+					}
+				}
+			}
+			// ConsumesAPIs
+			for _, ref := range c.Spec.ConsumesAPIs {
+				if included[ref.Ref.String()] {
+					ap := r.repo.API(ref.Ref)
+					if ap != nil {
+						dw.AddEdge(r.entityEdgeLabel(c, ap, ref, dot.ESNormal))
+					}
+				}
+			}
+			// DependsOn
+			for _, ref := range c.Spec.DependsOn {
+				if included[ref.Ref.String()] {
+					target := r.repo.Entity(ref.Ref)
+					if target != nil {
+						dw.AddEdge(r.entityEdgeLabel(c, target, ref, dot.ESDependsOn))
+					}
+				}
+			}
+		}
+
+		// Resource specific relationships
+		if res, ok := e.(*catalog.Resource); ok {
+			// DependsOn
+			for _, ref := range res.Spec.DependsOn {
+				if included[ref.Ref.String()] {
+					target := r.repo.Entity(ref.Ref)
+					if target != nil {
+						dw.AddEdge(r.entityEdgeLabel(res, target, ref, dot.ESDependsOn))
+					}
+				}
+			}
+		}
+	}
+
+	dw.End()
+	return dw.Result()
+}
+
+// Graph generates an SVG for the given list of entities.
+func (r *Renderer) Graph(ctx context.Context, entities []catalog.Entity) (*Result, error) {
+	dotSource := r.generateGraphDotSource(entities)
+	return runDot(ctx, r.runner, dotSource)
+}
