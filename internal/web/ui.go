@@ -110,6 +110,15 @@ func toURLWithContext(ctx context.Context, s any) (string, error) {
 	return pathPrefix + "/" + url.PathEscape(entityRef.QName()), nil
 }
 
+func toGraphURLWithContext(ctx context.Context, entityRefs []string) string {
+	base := uiURLWithContext(ctx, "graph")
+	vals := url.Values{}
+	for _, e := range entityRefs {
+		vals.Add("e", e)
+	}
+	return base + "?" + vals.Encode()
+}
+
 // refOption holds data for rendering <option>s for different git refs.
 type refOption struct {
 	Ref      string // The git reference name

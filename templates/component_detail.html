@@ -13,7 +13,7 @@
 
         {{ $readOnly := .ReadOnly }}
         {{ $customContent := .CustomContent }}
-        
+
         {{ with .Component }}
         <div class="space-y-3">
             <div class="flex justify-between items-start">
@@ -41,17 +41,20 @@
             <div class="flex flex-wrap gap-x-12 gap-y-4">
                 <div>
                     <h3 class="font-semibold">System</h3>
-                    <p><a href="{{ .Spec.System | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.System.QName }}</a></p>
+                    <p><a href="{{ .Spec.System | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.System.QName
+                            }}</a></p>
                 </div>
                 {{ if .Spec.SubcomponentOf }}
                 <div>
                     <h3 class="font-semibold">Subcomponent of</h3>
-                    <p><a href="{{ .Spec.SubcomponentOf | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.SubcomponentOf.QName }}</a></p>
+                    <p><a href="{{ .Spec.SubcomponentOf | toURL }}" class="text-blue-600 hover:underline">{{
+                            .Spec.SubcomponentOf.QName }}</a></p>
                 </div>
                 {{ end }}
                 <div>
                     <h3 class="font-semibold">Owner</h3>
-                    <p><a href="{{ .Spec.Owner | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.Owner.QName }}</a></p>
+                    <p><a href="{{ .Spec.Owner | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.Owner.QName
+                            }}</a></p>
                 </div>
                 <div>
                     <h3 class="font-semibold">Type</h3>
@@ -154,12 +157,19 @@
         {{ end }}
 
         {{ if .SVG }}
-        <div id="relationships-svg">
+        <div id="relationships-svg" class="relative group">
             {{ .SVG }}
+            {{ if .GraphURL }}
+            <a href="{{ .GraphURL }}"
+                class="absolute bottom-0 right-0 p-2 text-gray-400 hover:text-gray-800 transition-colors"
+                title="Open in Graph Builder">
+                {{ .GraphIcon }}
+            </a>
+            {{ end }}
         </div>
         <script type="application/json" id="relationships-svg-meta">
             {{ .SVGMetadataJSON }}
-        </script>        
+        </script>
         {{ end }}
     </main>
 

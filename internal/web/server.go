@@ -308,6 +308,22 @@ func (s *Server) svgMetadataJSON(r *http.Request, svgMeta *dot.SVGGraphMetadata)
 	return template.JS(json), nil
 }
 
+// graphURLFromMetadata builds a graph builder URL from SVG metadata. It filters out
+// "Group" entities, as they tend to clutter the graph.
+func (s *Server) graphURLFromMetadata(ctx context.Context, meta *dot.SVGGraphMetadata) (string, error) {
+	var entities []string
+	for refStr := range meta.Nodes {
+		ref, err := catalog.ParseRef(refStr)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse ref %q from SVG metadata: %w", refStr, err)
+		}
+		if ref.Kind != catalog.KindGroup {
+			entities = append(entities, refStr)
+		}
+	}
+	return toGraphURLWithContext(ctx, entities), nil
+}
+
 func (s *Server) withDotTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	if s.opts.DotTimeout <= 0 {
 		return context.WithCancel(ctx)
@@ -425,6 +441,15 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		log.Printf("Failed to create metadata JSON: %v", err)
 		return
 	}
+	// Add link to graph explorer
+	graphURL, err := s.graphURLFromMetadata(r.Context(), svgResult.Metadata)
+	if err != nil {
+		log.Printf("Failed to generate graph URL, skipping link: %v", err)
+	} else {
+		params["GraphURL"] = graphURL
+		params["GraphIcon"] = template.HTML(svgIcons["Graph"])
+	}
+
 	s.setCustomContent(component, &data.config.UI, params)
 
 	s.serveHTMLPage(w, r, "component_detail.html", params)
@@ -499,6 +524,15 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 		return
 	}
 
+	// Add link to graph explorer
+	graphURL, err := s.graphURLFromMetadata(r.Context(), svgResult.Metadata)
+	if err != nil {
+		log.Printf("Failed to generate graph URL, skipping link: %v", err)
+	} else {
+		params["GraphURL"] = graphURL
+		params["GraphIcon"] = template.HTML(svgIcons["Graph"])
+	}
+
 	s.setCustomContent(ap, &data.config.UI, params)
 	s.serveHTMLPage(w, r, "api_detail.html", params)
 }
@@ -562,6 +596,15 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 		log.Printf("Failed to create metadata JSON: %v", err)
 		return
 	}
+	// Add link to graph explorer
+	graphURL, err := s.graphURLFromMetadata(r.Context(), svgResult.Metadata)
+	if err != nil {
+		log.Printf("Failed to generate graph URL, skipping link: %v", err)
+	} else {
+		params["GraphURL"] = graphURL
+		params["GraphIcon"] = template.HTML(svgIcons["Graph"])
+	}
+
 	s.setCustomContent(resource, &data.config.UI, params)
 
 	s.serveHTMLPage(w, r, "resource_detail.html", params)
