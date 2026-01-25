@@ -12,3 +12,5 @@ catalogs/
 /sync_*.sh
 /launcher
 /launcher.exe
+/examples/flights/docs/
+/examples/flights/site/

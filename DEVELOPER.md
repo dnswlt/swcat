@@ -22,7 +22,7 @@ If you don't have the virtual environment set up yet, you can create it and inst
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install mkdocs mkdocs-material
+pip install mkdocs mkdocs-material mike
 ```
 
 ## Creating tags and releases

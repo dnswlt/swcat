@@ -36,6 +36,7 @@ const (
 const (
 	AnnotSterotype = "swcat/stereotype"
 	AnnotFillColor = "swcat/fillcolor"
+	AnnotGenDocs   = "swcat/gen-docs"
 )
 
 type Ref struct {

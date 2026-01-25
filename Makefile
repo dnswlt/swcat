@@ -4,7 +4,7 @@ GO ?= go
 VERSION ?= $(shell git describe --tags --always --dirty)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
 
-.PHONY: test test-integration test-race build build-web build-windows release-windows run-examples run-examples-git
+.PHONY: test test-integration test-race build build-web build-windows release-windows run-examples run-examples-git gen-docs-examples
 
 #
 # Building
@@ -41,6 +41,12 @@ run-examples-git:
 		-git-ref main \
 		-config examples/flights/swcat.yml \
 		-catalog-dir examples/flights/catalog
+
+# Generate documentation for the examples/flights catalog
+gen-docs-examples:
+	$(GO) run $(LDFLAGS) ./cmd/swcat gen-docs \
+		-root-dir ./examples/flights \
+		-out-dir ./examples/flights/docs
 
 #
 # Testing

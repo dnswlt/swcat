@@ -12,7 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dnswlt/swcat/internal/docs"
 	"github.com/dnswlt/swcat/internal/gitclient"
+	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/web"
 	"github.com/peterbourgon/ff/v3"
@@ -86,9 +88,31 @@ type Options struct {
 }
 
 func main() {
+	if len(os.Args) < 2 {
+		// Default to "serve"
+		runServe(os.Args[1:])
+		return
+	}
 
+	switch os.Args[1] {
+	case "gen-docs":
+		runGenDocs(os.Args[2:])
+	case "serve":
+		runServe(os.Args[2:])
+	default:
+		// Also default to serve if the argument looks like a flag
+		if strings.HasPrefix(os.Args[1], "-") {
+			runServe(os.Args[1:])
+			return
+		}
+		fmt.Fprintf(os.Stderr, "Unknown command %q. Available commands: serve, gen-docs\n", os.Args[1])
+		os.Exit(1)
+	}
+}
+
+func runServe(args []string) {
 	var opts Options
-	fs := flag.NewFlagSet("swcat", flag.ContinueOnError)
+	fs := flag.NewFlagSet("swcat serve", flag.ExitOnError)
 	fs.StringVar(&opts.Addr, "addr", "localhost:8080", "Address to listen on")
 	fs.StringVar(&opts.RootDir, "root-dir", ".", "Root directory of the local data store")
 	fs.StringVar(&opts.CatalogDir, "catalog-dir", "catalog", "Path to the catalog directory containing YAML files (relative to git root or local -root-dir)")
@@ -101,13 +125,9 @@ func main() {
 	fs.BoolVar(&opts.UseDotStreaming, "dot-streaming", runtime.GOOS == "windows", "Use long-running dot process to render SVG graphs (use only if dot process startup is slow, e.g. on Windows)")
 	fs.IntVar(&opts.SVGCacheSize, "svg-cache-size", 1024, "Max. number of SVG graphs to hold in the in-memory LRU cache")
 
-	err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("SWCAT"))
+	err := ff.Parse(fs, args, ff.WithEnvVarPrefix("SWCAT"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Flag error: %v\n", err)
-		os.Exit(1)
-	}
-	if len(fs.Args()) > 0 {
-		fmt.Fprintf(os.Stderr, "Unexpected positional arguments: %v\n", fs.Args())
 		os.Exit(1)
 	}
 	log.Printf("Using config from flags/env vars: %+v", opts)
@@ -118,33 +138,7 @@ func main() {
 		log.Fatalf("dot was not found in your PATH. Please install Graphviz and add it to the PATH.")
 	}
 
-	var st store.Source
-	if opts.GitURL != "" {
-		auth := gitClientAuthFromEnv()
-		log.Printf("Retrieving catalog from git URL %s", opts.GitURL)
-		loader, err := gitclient.New(opts.GitURL, auth)
-		if err != nil {
-			log.Fatalf("Failed to retrieve git repo: %v", err)
-		}
-		ref := opts.GitRef
-		if ref == "" {
-			ref, err = loader.DefaultBranch()
-			if err != nil {
-				log.Fatalf("No git-ref specified and no default branch found: %v", err)
-			}
-		}
-		log.Printf("Using default git branch %q", ref)
-		st = store.NewGitSource(loader, ref)
-		if !opts.ReadOnly {
-			opts.ReadOnly = true // Enforce read-only mode when using a remote git repo as the store.
-			log.Printf("Activated read-only mode for git-based storage")
-		}
-	} else if opts.RootDir != "" {
-		log.Printf("Using local store at %s", opts.RootDir)
-		st = store.NewDiskStore(opts.RootDir)
-	} else {
-		log.Fatalf("Neither -root-dir nor -git-url specified")
-	}
+	st := createStore(opts)
 
 	server, err := web.NewServer(
 		web.ServerOptions{
@@ -174,5 +168,64 @@ func main() {
 	log.Printf("Read %d entities from catalog", size)
 
 	log.Fatal(server.Serve()) // Never returns
+}
 
+func runGenDocs(args []string) {
+	var opts Options
+	fs := flag.NewFlagSet("swcat gen-docs", flag.ExitOnError)
+	fs.StringVar(&opts.RootDir, "root-dir", ".", "Root directory of the local data store")
+	fs.StringVar(&opts.CatalogDir, "catalog-dir", "catalog", "Path to the catalog directory containing YAML files (relative to -root-dir)")
+	fs.StringVar(&opts.GitURL, "git-url", "", "URL of the git repository to use as the data store")
+	fs.StringVar(&opts.GitRef, "git-ref", "", "Git ref (branch or tag) to use initially")
+
+	var outputDir string
+	fs.StringVar(&outputDir, "out-dir", "docs", "Output directory for the documentation")
+
+	err := ff.Parse(fs, args, ff.WithEnvVarPrefix("SWCAT"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Flag error: %v\n", err)
+		os.Exit(1)
+	}
+
+	log.Printf("Using store at %s to generate docs", opts.RootDir)
+	ds := store.NewDiskStore(opts.RootDir)
+
+	// Create a repo view from the store.
+	r, err := repo.Load(ds, repo.Config{}, opts.CatalogDir)
+	if err != nil {
+		log.Fatalf("Failed to load catalog: %v", err)
+	}
+
+	gen := docs.NewGenerator(r)
+	if err := gen.Generate(outputDir); err != nil {
+		log.Fatalf("Failed to generate documentation: %v", err)
+	}
+	log.Printf("Documentation generated in %q", outputDir)
+}
+
+func createStore(opts Options) store.Source {
+	if opts.GitURL != "" {
+		auth := gitClientAuthFromEnv()
+		log.Printf("Retrieving catalog from git URL %s", opts.GitURL)
+		loader, err := gitclient.New(opts.GitURL, auth)
+		if err != nil {
+			log.Fatalf("Failed to retrieve git repo: %v", err)
+		}
+		ref := opts.GitRef
+		if ref == "" {
+			ref, err = loader.DefaultBranch()
+			if err != nil {
+				log.Fatalf("No git-ref specified and no default branch found: %v", err)
+			}
+		}
+		log.Printf("Using default git branch %q", ref)
+		st := store.NewGitSource(loader, ref)
+		return st
+	} else if opts.RootDir != "" {
+		log.Printf("Using local store at %s", opts.RootDir)
+		return store.NewDiskStore(opts.RootDir)
+	} else {
+		log.Fatalf("Neither -root-dir nor -git-url specified")
+		return nil
+	}
 }

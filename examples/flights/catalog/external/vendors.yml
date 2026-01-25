@@ -4,6 +4,8 @@ metadata:
   namespace: external
   name: ticket-vendors
   description: External ticket vendor systems.
+  annotations:
+    swcat/gen-docs: false  # Do not generate mkdocs documentation for this external domain.
 spec:
   owner: external/vendor-owner
 ---
