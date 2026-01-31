@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	filesys "io/fs"
 	"log"
 	"os"
 	"os/exec"
@@ -12,7 +14,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/gitclient"
+	"github.com/dnswlt/swcat/internal/plugins"
+	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/web"
 	"github.com/peterbourgon/ff/v3"
@@ -70,6 +75,15 @@ func gitClientAuthFromEnv() *gitclient.Auth {
 	}
 }
 
+func createPluginRegistry(configFile string) (*plugins.Registry, error) {
+	config, err := plugins.ReadConfig(configFile)
+	if err != nil {
+		return nil, err
+	}
+
+	return plugins.NewRegistry(config)
+}
+
 // Options contains program options that can be set via command-line flags or environment variables.
 type Options struct {
 	Addr            string
@@ -83,6 +97,37 @@ type Options struct {
 	DotTimeout      time.Duration
 	UseDotStreaming bool
 	SVGCacheSize    int
+}
+
+func runPluginsAndUpdate(r *plugins.Registry, st store.Source, catalogDir string, configFile string) error {
+	s, err := st.Store("")
+	if err != nil {
+		log.Fatalf("Could not get default store: %v", err)
+	}
+
+	cfg := &config.Bundle{} // Default (empty) config
+	if configFile != "" {
+		storeCfg, err := config.Load(s, configFile)
+		if err != nil {
+			return err
+		}
+		cfg = storeCfg
+	}
+
+	repo, err := repo.Load(s, cfg.Catalog, catalogDir)
+	if err != nil {
+		return err
+	}
+
+	allEntities := repo.FindEntities("")
+	log.Printf("Running plugins on %d entities", len(allEntities))
+	for _, e := range allEntities {
+		err := r.Run(context.Background(), e)
+		if err != nil {
+			log.Printf("Error running plugins on %s: %v", e.GetRef(), err)
+		}
+	}
+	return nil
 }
 
 func main() {
@@ -100,6 +145,10 @@ func main() {
 	fs.DurationVar(&opts.DotTimeout, "dot-timeout", 10*time.Second, "Maximum time to wait before cancelling dot executions")
 	fs.BoolVar(&opts.UseDotStreaming, "dot-streaming", runtime.GOOS == "windows", "Use long-running dot process to render SVG graphs (use only if dot process startup is slow, e.g. on Windows)")
 	fs.IntVar(&opts.SVGCacheSize, "svg-cache-size", 1024, "Max. number of SVG graphs to hold in the in-memory LRU cache")
+	var pluginsConfigFile string
+	fs.StringVar(&pluginsConfigFile, "plugins-config", "plugins.yml", "Path to the plugins configuration YAML file (relative to -root-dir)")
+	var runPlugins bool
+	fs.BoolVar(&runPlugins, "run-plugins", false, "If true, executes plugins on all entities at startup")
 
 	err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("SWCAT"))
 	if err != nil {
@@ -146,6 +195,23 @@ func main() {
 		log.Fatalf("Neither -root-dir nor -git-url specified")
 	}
 
+	var pluginRegistry *plugins.Registry
+	if !opts.ReadOnly && pluginsConfigFile != "" {
+		r, err := createPluginRegistry(filepath.Join(opts.RootDir, pluginsConfigFile))
+		if errors.Is(err, filesys.ErrNotExist) {
+			log.Printf("Plugins config file %s not found. Plugins will not be available.", pluginsConfigFile)
+		} else if err != nil {
+			log.Fatalf("Could not create plugin registry: %v", err)
+		}
+		pluginRegistry = r
+
+		if r != nil && runPlugins {
+			if err := runPluginsAndUpdate(r, st, opts.CatalogDir, opts.ConfigFile); err != nil {
+				log.Fatalf("Failed to run plugins: %v", err)
+			}
+		}
+	}
+
 	server, err := web.NewServer(
 		web.ServerOptions{
 			Addr:            opts.Addr,
@@ -160,6 +226,7 @@ func main() {
 			SVGCacheSize:    opts.SVGCacheSize,
 		},
 		st,
+		pluginRegistry,
 	)
 	if err != nil {
 		log.Fatalf("Could not create server: %v", err)

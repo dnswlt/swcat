@@ -61,7 +61,7 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 		Version:    "integration-test",
 	}
 
-	server, err := NewServer(opts, st)
+	server, err := NewServer(opts, st, nil)
 	if err != nil {
 		t.Fatalf("Failed to create server: %v", err)
 	}

@@ -1,0 +1,26 @@
+plugins:
+  asyncApiImporter:
+    kind: AsyncAPIImporterPlugin
+    trigger: |-
+      kind:API AND type~'^kafka/'
+    inhibit: |-
+      annotation='swcat/visibility=internal'
+    spec:
+      providerPlugin: mavenAsyncApiProvider
+      targetAnnotation: swcat/asyncapi
+
+  mavenAsyncApiProvider:
+    kind: MavenArtifactExtractorPlugin
+    # No trigger - this plugin is only used by the asyncApiImporter plugin
+    spec:
+      jarFile: extensions/maven/target/artifact-extractor-1.0-SNAPSHOT.jar
+      # The annotation to use to get manually specified maven coordinates
+      mavenCoordsAnnotation: maven/coords
+      # If the maven/coords annotation is not present, the following groupId is used:
+      # (ArtifactId is derived from the entity name)
+      defaultGroupId: com.example.swcat
+      # Specific artifact to extract the file from: 
+      packaging: jar
+      # classifier: prod
+      includeSnapshots: false
+      file: META-INF/MANIFEST.MF

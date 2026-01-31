@@ -22,6 +22,7 @@ import (
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/dot"
+	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/svg"
@@ -59,11 +60,16 @@ type Server struct {
 	source       store.Source
 
 	dotRunner dot.Runner
+
+	// The optional plugins registry.
+	// If set, plugins are available to update entity annotations.
+	pluginRegistry *plugins.Registry
+
 	// Server startup time. Used for cache busting JS/CSS resources.
 	started time.Time
 }
 
-func NewServer(opts ServerOptions, source store.Source) (*Server, error) {
+func NewServer(opts ServerOptions, source store.Source, pluginRegistry *plugins.Registry) (*Server, error) {
 	if opts.SVGCacheSize <= 0 {
 		opts.SVGCacheSize = 128
 	}
@@ -73,12 +79,14 @@ func NewServer(opts ServerOptions, source store.Source) (*Server, error) {
 	} else {
 		dotRunner = dot.NewRunner(opts.DotPath)
 	}
+
 	s := &Server{
-		opts:         opts,
-		storeDataMap: make(map[string]*storeData),
-		source:       source,
-		dotRunner:    dotRunner,
-		started:      time.Now(),
+		opts:           opts,
+		storeDataMap:   make(map[string]*storeData),
+		source:         source,
+		dotRunner:      dotRunner,
+		pluginRegistry: pluginRegistry,
+		started:        time.Now(),
 	}
 
 	if err := s.reloadTemplates(); err != nil {
@@ -194,10 +202,13 @@ func (s *Server) reloadTemplates() error {
 		"toURL":       undefinedTemplateFunction,
 		"toEntityURL": undefinedTemplateFunction,
 		// "Static" functions
-		"markdown":      markdown,
-		"formatTags":    formatTags,
-		"formatLabels":  formatLabels,
-		"isCloneable":   isCloneable,
+		"markdown":     markdown,
+		"formatTags":   formatTags,
+		"formatLabels": formatLabels,
+		"isCloneable":  isCloneable,
+		"hasPlugins": func(e catalog.Entity) bool {
+			return s.pluginRegistry != nil && s.pluginRegistry.Matches(e)
+		},
 		"entitySummary": entitySummary,
 		"parentSystem":  parentSystem,
 	})
@@ -1039,6 +1050,44 @@ func (s *Server) deleteEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	w.WriteHeader(http.StatusOK)
 }
 
+func (s *Server) runPlugins(w http.ResponseWriter, r *http.Request, entityRef string) {
+	if s.pluginRegistry == nil {
+		http.Error(w, "No plugin registry available", http.StatusPreconditionFailed)
+		return
+	}
+	if !s.isHX(r) {
+		http.Error(w, "Plugin execution must be done via HTMX", http.StatusBadRequest)
+		return
+	}
+	if s.opts.ReadOnly {
+		http.Error(w, "Cannot run plugins in read-only mode", http.StatusPreconditionFailed)
+		return
+	}
+
+	ref, err := catalog.ParseRef(entityRef)
+	if err != nil {
+		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
+		return
+	}
+
+	data := s.storeData(r)
+	entity := data.repo.Entity(ref)
+	if entity == nil {
+		http.Error(w, "Invalid entity", http.StatusNotFound)
+		return
+	}
+
+	if err := s.pluginRegistry.Run(r.Context(), entity); err != nil {
+		message := fmt.Sprintf("Failed to run plugins: %v", err)
+		log.Println(message)
+		s.renderErrorSnippet(w, message)
+		return
+	}
+
+	w.Header().Set("HX-Refresh", "true")
+	w.WriteHeader(http.StatusOK)
+}
+
 func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef string) {
 	if !s.isHX(r) {
 		http.Error(w, "Entity updates must be done via HTMX", http.StatusBadRequest)
@@ -1567,6 +1616,16 @@ func (s *Server) dispatchEntityRequest(w http.ResponseWriter, r *http.Request) {
 			s.deleteEntity(w, r, entityRef)
 		} else {
 			s.serveEntityDelete(w, r, entityRef)
+		}
+		return
+	}
+
+	if strings.HasSuffix(path, "/run-plugins") {
+		entityRef := strings.TrimSuffix(path, "/run-plugins")
+		if r.Method == http.MethodPost {
+			s.runPlugins(w, r, entityRef)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 		return
 	}

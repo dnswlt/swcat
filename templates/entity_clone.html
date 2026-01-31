@@ -13,9 +13,9 @@
         <h1 class="text-2xl font-semibold text-center">Clone {{ .Entity.GetKind }}</h1>
 
         <p>Edit the YAML below to create a new entity. Make sure to change the metadata.name.</p>
-        <div id="error-container"></div>
+        <div id="error-messages"></div>
 
-        <form hx-post="/ui/entities" hx-target="#error-container" hx-swap="innerHTML">
+        <form hx-post="/ui/entities" hx-target="#error-messages" hx-swap="innerHTML">
             <input type="hidden" name="cloned_from" value="{{ .Entity.GetRef }}">
             <div class="space-y-4">
                 <div>

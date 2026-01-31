@@ -15,7 +15,9 @@
         {{ $customContent := .CustomContent }}
 
         {{ with .System }}
-        <div class="space-y-3">
+        <div class="flex flex-col gap-3">
+            <div id="error-messages" class="empty:hidden"></div>
+
             <div class="flex justify-between items-start">
                 {{ if .Metadata.Title }}
                 <div>

@@ -1,5 +1,5 @@
 <footer class="bg-white shadow mt-4 max-w-screen-lg mx-auto rounded-xl">
-    <div id="footer-error-container" class="px-4"></div>
+    <div id="footer-error-messages" class="px-4"></div>
     <div class="px-4 py-3 flex justify-between items-center text-sm text-gray-500">
         <div class="flex items-center space-x-2">
             <span>swcat {{ .Version }}</span>
@@ -21,7 +21,7 @@
             </select>
             {{ end }}
             <!-- Server will return a HX-Refresh header on success, which triggers a page reload -->
-            <button hx-post="/catalog/reload" hx-swap="innerHTML" hx-target="#footer-error-container"
+            <button hx-post="/catalog/reload" hx-swap="innerHTML" hx-target="#footer-error-messages"
                 title="Reload the catalog"
                 class="hover:text-blue-600 transition-colors cursor-pointer font-medium flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
