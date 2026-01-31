@@ -1,5 +1,18 @@
 <!-- "Toolbar" with three edit icons for entities -->
 <div class="flex items-center space-x-2">
+    {{ if . | hasPlugins }}
+    <a href="#" hx-post="{{ . | toEntityURL }}/run-plugins"
+        hx-target="#error-messages"
+        class="bg-orange-200 hover:bg-orange-300 py-1 px-3 rounded text-sm"
+        aria-label="Update auto-generated data " title="Update auto-generated data ">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <!-- Zap (flash/bolt) -->
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+        </svg>
+        <span class="sr-only">Update auto-generated data </span>
+    </a>
+    {{ end }}
     <a href="{{ . | toEntityURL }}/edit" class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm"
         aria-label="Edit" title="Edit">
         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"

@@ -32,6 +32,9 @@ kind: API
 metadata:
   name: analytics-events-api
   description: API for ingesting analytics events.
+  annotations:
+    swcat/visibility: public
+    maven/coords: org.slf4j:slf4j-api
 spec:
   type: kafka/csv
   lifecycle: production

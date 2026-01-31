@@ -40,7 +40,7 @@ func newTestServer(t *testing.T, st store.Source) *Server {
 		Addr:    "127.0.0.1:0",
 		BaseDir: "../..", // loads templates from <repo-root>/templates
 		DotPath: "dot",
-	}, st)
+	}, st, nil)
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
