@@ -41,10 +41,16 @@ type ExternalPlugin struct {
 
 // ExternalPluginInput is the JSON structure sent to the external process's stdin.
 type ExternalPluginInput struct {
-	Entity  catalog.Entity `json:"entity"`
-	Config  map[string]any `json:"config"`
-	TempDir string         `json:"tempDir"`
-	Args    map[string]any `json:"args"`
+	// The entity that the plugin is executed for.
+	Entity catalog.Entity `json:"entity"`
+	// The spec.config section of the plugin's configuration in plugins.yml.
+	Config map[string]any `json:"config"`
+	// The temporary directory that the plugin should write its (optional) outputs to.
+	TempDir string `json:"tempDir"`
+	// Additional dynamic arguments passed to the external command.
+	// This is mostly useful for passing information from one (calling) plugin
+	// to another (called) plugin.
+	Args map[string]any `json:"args"`
 }
 
 // ExternalPluginOutput is the JSON structure expected from the external process's stdout.

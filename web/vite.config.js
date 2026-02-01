@@ -13,7 +13,7 @@ export default {
             },
             output: {
                 entryFileNames: '[name].js',       // disables content hashing
-                chunkFileNames: '[name].js',
+                chunkFileNames: '[name]-[hash].js',
                 assetFileNames: '[name][extname]'
             }
         }

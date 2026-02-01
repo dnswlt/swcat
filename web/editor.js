@@ -17,6 +17,9 @@ async function fetchCompletions(field) {
 }
 
 const yamlCompleter = async (context) => {
+    if (!context.explicit) {
+        return null; // Only trigger on explicit request (Ctrl+Space) for now.
+    }
     const { state, pos } = context;
     const doc = state.doc;
     const currentLine = doc.lineAt(pos);
