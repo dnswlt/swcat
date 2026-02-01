@@ -175,22 +175,22 @@ public class ArtifactExtractor {
 
     private static void performReplacement(String filePath, Map<String, String> properties) throws IOException {
         File file = new File(filePath);
-        StringBuilder content = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                content.append(line).append(System.lineSeparator());
-            }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try (FileInputStream fis = new FileInputStream(file)) {
+            copyStream(fis, baos);
         }
 
-        String text = content.toString();
+        String text = new String(baos.toByteArray(), "UTF-8");
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String placeholder = "@@" + entry.getKey() + "@@";
             text = text.replace(placeholder, entry.getValue());
         }
+        
+        // Replace any remaining placeholders with "undefined"
+        text = text.replaceAll("@@[^@]+@@", "undefined");
 
-        try (FileWriter writer = new FileWriter(file)) {
-            writer.write(text);
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            fos.write(text.getBytes("UTF-8"));
         }
     }
 
