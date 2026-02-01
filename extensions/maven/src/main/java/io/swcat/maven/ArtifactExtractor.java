@@ -15,14 +15,15 @@ import java.util.zip.ZipInputStream;
 
 public class ArtifactExtractor {
 
-    /** 
+    /**
      * Annotation key for Maven coordinates.
      * 
      * Format: groupId:artifactId[:version[:packaging[:classifier]]]
      * 
      * version can be empty or "LATEST" to resolve the latest version.
      * 
-     * empty groupId, packaging and classifier are resolved using the default values from the config.
+     * empty groupId, packaging and classifier are resolved using the default values
+     * from the config.
      */
     public static final String COORD_ANNOTATION = "maven.apache.org/coords";
 
@@ -35,10 +36,10 @@ public class ArtifactExtractor {
             Protocol.Input input = mapper.readValue(System.in, Protocol.Input.class);
 
             if (input == null || input.config == null) {
-                 printOutput(mapper, Protocol.Output.failure("Invalid input: config is missing"));
-                 return;
+                printOutput(mapper, Protocol.Output.failure("Invalid input: config is missing"));
+                return;
             }
-            
+
             Protocol.Config config = input.config;
 
             // Extract Configuration
@@ -55,8 +56,8 @@ public class ArtifactExtractor {
 
             // Parse Entity to get Name and Annotations
             if (input.entity == null || input.entity.metadata == null) {
-                 printOutput(mapper, Protocol.Output.failure("Invalid input: entity metadata is missing"));
-                 return;
+                printOutput(mapper, Protocol.Output.failure("Invalid input: entity metadata is missing"));
+                return;
             }
 
             Protocol.Metadata metadata = input.entity.metadata;
@@ -67,7 +68,7 @@ public class ArtifactExtractor {
             String packaging = defaultPackaging;
             String classifier = defaultClassifier;
             String version = null;
-            
+
             // Allow overriding coordinates via annotation
             // We use "maven.apache.org/coords" as the standard key.
             // Format: groupId:artifactId[:version[:packaging[:classifier]]]
@@ -81,7 +82,7 @@ public class ArtifactExtractor {
                     artifactId = parts[1];
                 }
                 if (parts.length >= 3 && !parts[2].isEmpty()) {
-                     version = parts[2];
+                    version = parts[2];
                 }
                 if (parts.length >= 4 && !parts[3].isEmpty()) {
                     packaging = parts[3];
@@ -92,7 +93,9 @@ public class ArtifactExtractor {
             }
 
             if (groupId == null || groupId.isEmpty()) {
-                printOutput(mapper, Protocol.Output.failure("groupId is required but not set (check defaultGroupId or annotation " + COORD_ANNOTATION + ")"));
+                printOutput(mapper,
+                        Protocol.Output.failure("groupId is required but not set (check defaultGroupId or annotation "
+                                + COORD_ANNOTATION + ")"));
                 return;
             }
 
@@ -103,14 +106,14 @@ public class ArtifactExtractor {
             // Extract
             String outputDir = input.tempDir;
             if (outputDir == null) {
-                 outputDir = System.getProperty("java.io.tmpdir");
+                outputDir = System.getProperty("java.io.tmpdir");
             }
-            
+
             String outputFileName = new File(fileToExtract).getName();
             File outputFile = new File(outputDir, outputFileName);
-            
-            extractFile(artifactFile, fileToExtract, outputFile.getAbsolutePath());
-            
+
+            extractFile(artifactFile, fileToExtract, outputFile.getAbsolutePath(), config.replaceProperties);
+
             // Success Response
             printOutput(mapper, Protocol.Output.success(Collections.singletonList(outputFile.getAbsolutePath())));
 
@@ -128,30 +131,66 @@ public class ArtifactExtractor {
         mapper.writeValue(System.out, output);
     }
 
-    private static void extractFile(File artifactFile, String fileToExtract, String outputPath) throws IOException {
+    private static void extractFile(File artifactFile, String fileToExtract, String outputPath,
+            boolean replaceProperties) throws IOException {
+        Map<String, String> properties = new HashMap<>();
+        boolean fileFound = false;
         List<String> entries = new ArrayList<>();
+
         try (ZipInputStream zis = new ZipInputStream(new FileInputStream(artifactFile))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
-                entries.add(entry.getName());
-                if (entry.getName().equals(fileToExtract)) {
-                    if (outputPath != null) {
-                        try (FileOutputStream fos = new FileOutputStream(outputPath)) {
-                            copyStream(zis, fos);
-                        }
-                    } else {
-                        copyStream(zis, System.out);
+                String name = entry.getName();
+                entries.add(name);
+
+                if (name.equals(fileToExtract)) {
+                    try (FileOutputStream fos = new FileOutputStream(outputPath)) {
+                        copyStream(zis, fos);
                     }
-                    return;
+                    fileFound = true;
+                } else if (replaceProperties && name.endsWith(".properties")) {
+                    // Load properties
+                    java.util.Properties props = new java.util.Properties();
+                    props.load(zis);
+                    for (String key : props.stringPropertyNames()) {
+                        properties.put(key, props.getProperty(key));
+                    }
                 }
             }
-            // Failure logic: throw exception to be caught in main and returned as failure JSON
+        }
+
+        if (!fileFound) {
             StringBuilder sb = new StringBuilder();
             sb.append("File ").append(fileToExtract).append(" not found in artifact. Available files:\n");
             for (String name : entries) {
                 sb.append(" - ").append(name).append("\n");
             }
             throw new FileNotFoundException(sb.toString());
+        }
+
+        if (replaceProperties && !properties.isEmpty()) {
+            performReplacement(outputPath, properties);
+        }
+    }
+
+    private static void performReplacement(String filePath, Map<String, String> properties) throws IOException {
+        File file = new File(filePath);
+        StringBuilder content = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                content.append(line).append(System.lineSeparator());
+            }
+        }
+
+        String text = content.toString();
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String placeholder = "@@" + entry.getKey() + "@@";
+            text = text.replace(placeholder, entry.getValue());
+        }
+
+        try (FileWriter writer = new FileWriter(file)) {
+            writer.write(text);
         }
     }
 
