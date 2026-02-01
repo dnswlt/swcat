@@ -1,5 +1,6 @@
 plugins:
   asyncApiImporter:
+    # Showcases the importer plugin for 3.0.0 AsyncAPI specs.
     kind: AsyncAPIImporterPlugin
     trigger: |-
       kind:API AND type~'^kafka/'
