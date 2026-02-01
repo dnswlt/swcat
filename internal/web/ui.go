@@ -381,6 +381,15 @@ type ccAttr struct {
 	Value string
 }
 
+type ccRow struct {
+	Columns []string
+}
+
+type ccTable struct {
+	Headers []string
+	Rows    []*ccRow
+}
+
 // CustomContent represents content that is displayed in the detail view
 // and is specified in an entity annotation.
 type CustomContent struct {
@@ -388,10 +397,12 @@ type CustomContent struct {
 	Text    string   // Text to be presented as-is.
 	Items   []string // Items to be rendered as an <ul> list.
 	Attrs   []ccAttr // Items to be rendered as a key-value <table>.
+	Table   *ccTable // Items to be rendered in a custom <table>.
 	Code    string   // Preformatted code (typically JSON)
+	Rank    int      // Used to order multiple custom content items.
 }
 
-func customContentFromAnnotations(meta *catalog.Metadata, configMap map[string]config.AnnotationBasedContent) ([]*CustomContent, error) {
+func customContentFromAnnotations(meta *catalog.Metadata, configMap map[string]*config.AnnotationBasedContent) ([]*CustomContent, error) {
 	if len(meta.Annotations) == 0 || len(configMap) == 0 {
 		return nil, nil
 	}
@@ -401,41 +412,39 @@ func customContentFromAnnotations(meta *catalog.Metadata, configMap map[string]c
 		if !ok {
 			continue
 		}
-		cc, err := newCustomContent(abc.Heading, anno, abc.Style)
+		cc, err := newCustomContent(abc, anno)
 		if err != nil {
 			return nil, fmt.Errorf("invalid custom content: %v", err)
 		}
+		cc.Rank = abc.Rank
 		result = append(result, cc)
 	}
+	slices.SortFunc(result, func(a, b *CustomContent) int {
+		if c := cmp.Compare(a.Rank, b.Rank); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Heading, b.Heading)
+	})
+
 	return result, nil
 }
 
-func newCustomContent(heading, content, style string) (*CustomContent, error) {
+func newCustomContent(abc *config.AnnotationBasedContent, annotationValue string) (*CustomContent, error) {
 	cc := &CustomContent{
-		Heading: heading,
+		Heading: abc.Heading,
 	}
-	switch style {
+	switch abc.Style {
 	case "text", "":
-		cc.Text = content
+		cc.Text = annotationValue
 	case "list":
 		var items []string
-		if err := json.Unmarshal([]byte(content), &items); err != nil {
+		if err := json.Unmarshal([]byte(annotationValue), &items); err != nil {
 			return nil, fmt.Errorf("not a valid list of strings: %v", err)
 		}
 		cc.Items = items
-	case "json":
-		var raw any
-		if err := json.Unmarshal([]byte(content), &raw); err != nil {
-			return nil, fmt.Errorf("not a valid JSON object: %v", err)
-		}
-		indentedJSON, err := json.MarshalIndent(raw, "", "  ")
-		if err != nil {
-			return nil, fmt.Errorf("failed to indent JSON: %v", err)
-		}
-		cc.Code = string(indentedJSON)
-	case "table":
+	case "attrs":
 		var dict map[string]any
-		if err := json.Unmarshal([]byte(content), &dict); err != nil {
+		if err := json.Unmarshal([]byte(annotationValue), &dict); err != nil {
 			return nil, fmt.Errorf("not a valid JSON object: %v", err)
 		}
 		keys := make([]string, 0, len(dict))
@@ -449,8 +458,52 @@ func newCustomContent(heading, content, style string) (*CustomContent, error) {
 				Value: fmt.Sprintf("%v", dict[k]),
 			})
 		}
+	case "table":
+		var items []map[string]any
+		if err := json.Unmarshal([]byte(annotationValue), &items); err != nil {
+			return nil, fmt.Errorf("not a valid list of objects: %v", err)
+		}
+		t := &ccTable{
+			Headers: make([]string, len(abc.Columns)),
+			Rows:    make([]*ccRow, len(items)),
+		}
+		hasHeaders := false
+		for i, c := range abc.Columns {
+			t.Headers[i] = c.Header
+			if c.Header != "" {
+				hasHeaders = true
+			}
+		}
+		if !hasHeaders {
+			t.Headers = nil
+		}
+		for i, item := range items {
+			r := &ccRow{
+				Columns: make([]string, len(abc.Columns)),
+			}
+			for j, c := range abc.Columns {
+				var buf bytes.Buffer
+				if err := c.DataTemplate().Execute(&buf, item); err != nil {
+					r.Columns[j] = fmt.Sprintf("template error: %v", err)
+				} else {
+					r.Columns[j] = buf.String()
+				}
+			}
+			t.Rows[i] = r
+		}
+		cc.Table = t
+	case "json":
+		var raw any
+		if err := json.Unmarshal([]byte(annotationValue), &raw); err != nil {
+			return nil, fmt.Errorf("not a valid JSON object: %v", err)
+		}
+		indentedJSON, err := json.MarshalIndent(raw, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("failed to indent JSON: %v", err)
+		}
+		cc.Code = string(indentedJSON)
 	default:
-		return nil, fmt.Errorf("invalid custom content style (must be text|list|json|table): %s", style)
+		return nil, fmt.Errorf("invalid custom content style (must be text|list|attrs|table|json): %s", abc.Style)
 	}
 	return cc, nil
 }

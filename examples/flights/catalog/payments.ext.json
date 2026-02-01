@@ -1,0 +1,18 @@
+{
+    "entities": {
+        "api:credit-card-check": {
+            "annotations": {
+                "asyncapi.com/channels": [
+                    {
+                        "address": "/this/is/yoodle",
+                        "messages": [ "Ack", "Nack" ]
+                    },
+                    {
+                        "address": "/ding/dang/dong",
+                        "messages": [ "SuperNova" ]
+                    }
+                ]
+            }
+        }
+    }
+}

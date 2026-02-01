@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 
+	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/query"
 	"gopkg.in/yaml.v3"
@@ -14,10 +15,12 @@ import (
 
 // Definition defines the YAML structure of a plugin definition.
 type Definition struct {
-	Kind    string    `yaml:"kind"`
-	Trigger string    `yaml:"trigger"`
-	Inhibit string    `yaml:"inhibit"`
-	Spec    yaml.Node `yaml:"spec"`
+	Kind    string `yaml:"kind"`
+	Trigger string `yaml:"trigger"`
+	Inhibit string `yaml:"inhibit"`
+	// Spec contains an arbitrary YAML subtree with plugin-specific configuration.
+	// Each plugin will decode Spec into its own config struct.
+	Spec yaml.Node `yaml:"spec"`
 }
 
 // Config is the top-level YAML node, i.e. the thing that is read from plugins.yml.
@@ -25,6 +28,7 @@ type Config struct {
 	Plugins map[string]*Definition `yaml:"plugins"`
 }
 
+// Trigger combines a plugin with the conditions under which it should be executed.
 type Trigger struct {
 	// The condition under which this Trigger should activate.
 	condition *query.Evaluator
@@ -34,14 +38,19 @@ type Trigger struct {
 	plugin Plugin
 }
 
+// PluginResult is the return type of individual plugin executions.
 type PluginResult struct {
 	// Annotations that this plugin generated for an enitity.
-	Annotations map[string]string
+	// The value type can be anything, but must be JSON marshallable,
+	// which is how the annotation is represented in actual entity
+	// annotations downstream.
+	Annotations map[string]any
 
 	// An optional additional return value that the plugin returns to its caller.
 	ReturnValue any
 }
 
+// PluginArgs contains the arguments passed to any plugin execution.
 type PluginArgs struct {
 	// The registry which initiated the plugin execution.
 	Registry *Registry
@@ -57,10 +66,12 @@ type PluginArgs struct {
 	Args map[string]any
 }
 
+// Plugin in the interface that any plugin implementation must satisfy.
 type Plugin interface {
 	Execute(ctx context.Context, entity catalog.Entity, args *PluginArgs) (*PluginResult, error)
 }
 
+// Registry is the class used by clients of the plugins package to manage and execute plugins.
 type Registry struct {
 	config   *Config
 	triggers map[string]*Trigger
@@ -72,6 +83,7 @@ type FilesReturnValue interface {
 	Files() []string
 }
 
+// EmptyArgs returns a copy of this instance with an empty Args map.
 func (a *PluginArgs) EmptyArgs() *PluginArgs {
 	return &PluginArgs{
 		Registry: a.Registry,
@@ -92,6 +104,7 @@ func ReadConfig(path string) (*Config, error) {
 	return &config, err
 }
 
+// NewRegistry creates a new registry and registers all plugins configured in the given config.
 func NewRegistry(config *Config) (*Registry, error) {
 	r := &Registry{
 		config:   config,
@@ -132,10 +145,19 @@ func (r *Registry) Matches(e catalog.Entity) bool {
 	return false
 }
 
-func (r *Registry) Run(ctx context.Context, e catalog.Entity) error {
+// Plugins returns a list of names of all registered plugins.
+func (r *Registry) Plugins() []string {
+	keys := make([]string, 0, len(r.triggers))
+	for k := range r.triggers {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+func (r *Registry) Run(ctx context.Context, e catalog.Entity) (*api.CatalogExtensions, error) {
 	tempDir, err := os.MkdirTemp("", "swcat-plugins")
 	if err != nil {
-		return fmt.Errorf("failed to create temp dir for plugin runs: %w", err)
+		return nil, fmt.Errorf("failed to create temp dir for plugin runs: %w", err)
 	}
 	defer func() {
 		err := os.RemoveAll(tempDir)
@@ -144,28 +166,43 @@ func (r *Registry) Run(ctx context.Context, e catalog.Entity) error {
 		}
 	}()
 
-	annotations := make(map[string]string)
-	for n, t := range r.triggers {
-		if !t.Matches(e) {
-			continue
-		}
-		log.Printf("Executing plugin %s for %s", n, e.GetRef().String())
-		res, err := t.plugin.Execute(ctx, e, &PluginArgs{
+	annotations := make(map[string]any)
+	execFunc := func(name string, p Plugin) error {
+		log.Printf("Executing plugin %s for %s", name, e.GetRef().String())
+		res, err := p.Execute(ctx, e, &PluginArgs{
 			Registry: r,
 			TempDir:  tempDir,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to execute plugin %s: %v", n, err)
+			return fmt.Errorf("failed to execute plugin %s: %v", name, err)
 		}
 		if len(res.Annotations) > 0 {
 			maps.Copy(annotations, res.Annotations)
 		}
+		return nil
 	}
-	// TODO: Do something with these annotations (store in sidecar file).
+	for n, t := range r.triggers {
+		if !t.Matches(e) {
+			continue
+		}
+		if err := execFunc(n, t.plugin); err != nil {
+			return nil, err
+		}
+	}
 	if len(annotations) > 0 {
+		// Execute the timestamp plugin to add an annotation indicating when they were last updated.
+		if err := execFunc("timestampPlugin", TimestampPlugin{}); err != nil {
+			return nil, err
+		}
 		log.Printf("Collected %d annotations for entity %s: %v", len(annotations), e.GetRef().String(), annotations)
 	}
-	return nil
+	return &api.CatalogExtensions{
+		Entities: map[string]*api.MetadataExtensions{
+			e.GetRef().String(): &api.MetadataExtensions{
+				Annotations: annotations,
+			},
+		},
+	}, nil
 }
 
 func (r *Registry) registerPlugin(name string, def *Definition) error {

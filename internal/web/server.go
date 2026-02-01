@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
@@ -229,9 +230,9 @@ func (s *Server) svgRenderer(data *storeData) *svg.Renderer {
 	return svg.NewRenderer(data.repo, s.dotRunner, layouter)
 }
 
-// storeData retrieves the storeData from the request's context.
+// getStoreData retrieves the storeData from the request's context.
 // It panics if no value is found under the expected context key.
-func (s *Server) storeData(r *http.Request) *storeData {
+func (s *Server) getStoreData(r *http.Request) *storeData {
 	sd := r.Context().Value(ctxRefData)
 	if sd == nil {
 		panic(fmt.Sprintf("storeData called on request without %q context value (URL: %s)", ctxRefData, r.RequestURI))
@@ -242,7 +243,7 @@ func (s *Server) storeData(r *http.Request) *storeData {
 func (s *Server) serveComponents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 	components := data.repo.FindComponents(query)
 	params := map[string]any{
 		"Components":    components,
@@ -263,7 +264,7 @@ func (s *Server) serveComponents(w http.ResponseWriter, r *http.Request) {
 func (s *Server) serveSystems(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 
 	systems := data.repo.FindSystems(query)
 	params := map[string]any{
@@ -349,7 +350,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		return
 	}
 	params := map[string]any{}
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 
 	system := data.repo.System(systemRef)
 	if system == nil {
@@ -422,7 +423,7 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		return
 	}
 	params := map[string]any{}
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 
 	component := data.repo.Component(componentRef)
 	if component == nil {
@@ -469,7 +470,7 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 
 	apis := data.repo.FindAPIs(query)
 	params := map[string]any{
@@ -504,7 +505,7 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 		return
 	}
 	params := map[string]any{}
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 
 	ap := data.repo.API(apiRef)
 	if ap == nil {
@@ -551,7 +552,7 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 func (s *Server) serveResources(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 
 	resources := data.repo.FindResources(query)
 	params := map[string]any{
@@ -576,7 +577,7 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 		http.Error(w, "Invalid resourceID", http.StatusBadRequest)
 		return
 	}
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 
 	params := map[string]any{}
 	resource := data.repo.Resource(resourceRef)
@@ -624,7 +625,7 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 func (s *Server) serveDomains(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 
 	domains := data.repo.FindDomains(query)
 	params := map[string]any{
@@ -650,7 +651,7 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 		return
 	}
 	params := map[string]any{}
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 
 	domain := data.repo.Domain(domainRef)
 	if domain == nil {
@@ -688,7 +689,7 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 func (s *Server) serveGroups(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 
 	groups := data.repo.FindGroups(query)
 	params := map[string]any{
@@ -714,7 +715,7 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 		return
 	}
 	params := map[string]any{}
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 
 	group := data.repo.Group(groupRef)
 	if group == nil {
@@ -729,7 +730,7 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 
 func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 
 	// Process e= query parameters to get selected entities.
 	var hiddenParams []map[string]string
@@ -811,7 +812,7 @@ func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
 func (s *Server) serveEntities(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 
 	entities := data.repo.FindEntities(query)
 	params := map[string]any{
@@ -837,7 +838,7 @@ func (s *Server) serveEntityYAML(w http.ResponseWriter, r *http.Request, entityR
 		return
 	}
 	params := map[string]any{}
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 
 	entity := data.repo.Entity(ref)
 	if entity == nil {
@@ -918,7 +919,7 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
 		return
 	}
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 	clonedEntity := data.repo.Entity(clonedRef)
 	if clonedEntity == nil {
 		http.Error(w, "Invalid entity", http.StatusNotFound)
@@ -999,7 +1000,7 @@ func (s *Server) deleteEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		return
 	}
 
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 	entity := data.repo.Entity(ref)
 	if entity == nil {
 		http.Error(w, "Invalid entity", http.StatusNotFound)
@@ -1070,19 +1071,58 @@ func (s *Server) runPlugins(w http.ResponseWriter, r *http.Request, entityRef st
 		return
 	}
 
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 	entity := data.repo.Entity(ref)
 	if entity == nil {
 		http.Error(w, "Invalid entity", http.StatusNotFound)
 		return
 	}
 
-	if err := s.pluginRegistry.Run(r.Context(), entity); err != nil {
+	exts, err := s.pluginRegistry.Run(r.Context(), entity)
+	if err != nil {
 		message := fmt.Sprintf("Failed to run plugins: %v", err)
 		log.Println(message)
 		s.renderErrorSnippet(w, message)
 		return
 	}
+
+	// Acquire write lock
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Store new extensions on disk and clear storeDataMap, forcing a reload of the repository on the next request.
+
+	// Read extensions file and merge new extensions.
+	st, err := s.source.Store(data.ref)
+	if err != nil {
+		s.renderErrorSnippet(w, fmt.Sprintf("Failed to access store: %v", err))
+		return
+	}
+	extPath := store.ExtensionFile(entity.GetSourceInfo().Path)
+	existingExts, err := store.ReadExtensions(st, extPath)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) && !strings.Contains(err.Error(), "file not found") {
+		s.renderErrorSnippet(w, fmt.Sprintf("Failed to read extensions: %v", err))
+		return
+	}
+	if existingExts == nil {
+		existingExts = &api.CatalogExtensions{}
+	}
+
+	existingExts.Merge(exts)
+
+	// Write extensions file to disk.
+	if err := store.WriteExtensions(st, extPath, existingExts); err != nil {
+		s.renderErrorSnippet(w, fmt.Sprintf("Failed to write extensions: %v", err))
+		return
+	}
+
+	// Clear data, which forces a reload on the next request.
+	err = s.source.Refresh()
+	if err != nil {
+		s.renderErrorSnippet(w, fmt.Sprintf("Failed to refresh: %v", err))
+		return
+	}
+	s.storeDataMap = make(map[string]*storeData)
 
 	w.Header().Set("HX-Refresh", "true")
 	w.WriteHeader(http.StatusOK)
@@ -1109,7 +1149,7 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		return
 	}
 
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 	originalEntity := data.repo.Entity(ref)
 	if originalEntity == nil {
 		http.Error(w, "Invalid entity", http.StatusNotFound)
@@ -1206,7 +1246,7 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 	}
 
 	// Look up the entity in the repository
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 	originalEntity := data.repo.Entity(ref)
 	if originalEntity == nil {
 		http.Error(w, "Entity not found", http.StatusNotFound)
@@ -1308,7 +1348,7 @@ func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Could not retrieve entity ref from Referer: %s: %v", referer, err), http.StatusBadRequest)
 		return
 	}
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 	// Get completions for requested field.
 	fieldType := "plain"
 	var completions []string
@@ -1453,7 +1493,7 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 func (s *Server) serveEntitiesJSON(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
-	data := s.storeData(r)
+	data := s.getStoreData(r)
 	entities := data.repo.FindEntities(query)
 
 	result := make([]map[string]any, 0, len(entities))
@@ -1700,6 +1740,39 @@ func cacheControlHandler(next http.Handler) http.Handler {
 	})
 }
 
+func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	refs := make([]string, 0, len(s.storeDataMap))
+	for k := range s.storeDataMap {
+		refs = append(refs, k)
+	}
+	slices.Sort(refs)
+
+	var registeredPlugins []string
+	if s.pluginRegistry != nil {
+		registeredPlugins = s.pluginRegistry.Plugins()
+		slices.Sort(registeredPlugins)
+	}
+
+	status := map[string]any{
+		"options":           s.opts,
+		"cachedRefs":        refs,
+		"storeSourceType":   fmt.Sprintf("%T", s.source),
+		"started":           s.started,
+		"registeredPlugins": registeredPlugins,
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(status); err != nil {
+		log.Printf("Failed to encode status as JSON: %v", err)
+		http.Error(w, "JSON marshalling error", http.StatusInternalServerError)
+	}
+}
+
 func (s *Server) routes() *http.ServeMux {
 	root := http.NewServeMux()
 
@@ -1727,6 +1800,9 @@ func (s *Server) routes() *http.ServeMux {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "OK")
 	})
+
+	// Status page. Useful for inspecting hosted server instances.
+	root.Handle("/status", http.HandlerFunc(s.handleStatus))
 
 	// Static resources (JavaScript, CSS, etc.)
 	if s.opts.BaseDir == "" {
