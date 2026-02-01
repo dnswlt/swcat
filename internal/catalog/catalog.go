@@ -52,11 +52,11 @@ type LabelRef struct {
 
 // Version represents <major>.<minor>.<patch> versions with optional suffixes.
 type Version struct {
-	RawVersion string // The unparsed full version string, e.g. "v1.2.3"
-	Major      int
-	Minor      int
-	Patch      int
-	Suffix     string // An arbitrary suffix following the last version number, e.g. "alpha"
+	RawVersion string `json:"rawVersion"` // The unparsed full version string, e.g. "v1.2.3"
+	Major      int    `json:"major"`
+	Minor      int    `json:"minor"`
+	Patch      int    `json:"patch"`
+	Suffix     string `json:"suffix"` // An arbitrary suffix following the last version number, e.g. "alpha"
 }
 
 // Entity is the interface implemented by all entity kinds (Component, System, etc.).
@@ -95,47 +95,47 @@ type SystemPart interface {
 type Link struct {
 	// A url in a standard uri format.
 	// [required]
-	URL string
+	URL string `json:"url"`
 	// A user friendly display name for the link.
 	// [optional]
-	Title string
+	Title string `json:"title,omitempty"`
 	// A key representing a visual icon to be displayed in the UI.
 	// [optional]
-	Icon string
+	Icon string `json:"icon,omitempty"`
 	// An optional value to categorize links into specific groups.
 	// [optional]
-	Type string
+	Type string `json:"type,omitempty"`
 
 	// Whether the link was auto-generated. False for user-provided links.
-	IsGenerated bool
+	IsGenerated bool `json:"isGenerated,omitempty"`
 }
 
 type Metadata struct {
 	// The name of the entity. Must be unique within the catalog at any given point in time, for any given namespace + kind pair.
 	// [required]
-	Name string
+	Name string `json:"name"`
 	// The namespace that the entity belongs to. If empty, the entity is assume to live in the default namespace.
 	// [optional]
-	Namespace string
+	Namespace string `json:"namespace,omitempty"`
 	// A display name of the entity, to be presented in user interfaces instead of the name property, when available.
 	// [optional]
-	Title string
+	Title string `json:"title,omitempty"`
 	// A short (typically relatively few words, on one line) description of the entity.
 	// [optional]
-	Description string
+	Description string `json:"description,omitempty"`
 	// Key/value pairs of identifying information attached to the entity.
 	// [optional]
-	Labels map[string]string
+	Labels map[string]string `json:"labels,omitempty"`
 	// Key/value pairs of non-identifying auxiliary information attached to the entity.
 	// Mostly used by plugins to store additional information about the entity.
 	// [optional]
-	Annotations map[string]string
+	Annotations map[string]string `json:"annotations,omitempty"`
 	// A list of single-valued strings, to for example classify catalog entities in various ways.
 	// [optional]
-	Tags []string
+	Tags []string `json:"tags,omitempty"`
 	// A list of external hyperlinks related to the entity.
 	// [optional]
-	Links []*Link
+	Links []*Link `json:"links,omitempty"`
 }
 
 // Domain
@@ -147,15 +147,15 @@ type domainInvRel struct {
 type DomainSpec struct {
 	// An entity reference to the owner of the domain.
 	// [required]
-	Owner *Ref
+	Owner *Ref `json:"owner"`
 	// An entity reference to another domain of which the domain is a part.
 	// [optional]
-	SubdomainOf *Ref
+	SubdomainOf *Ref `json:"subdomainOf,omitempty"`
 	// The type of domain. There is currently no enforced set of values for this field,
 	// so it is left up to the adopting organization to choose a nomenclature that matches
 	// their catalog hierarchy.
 	// [optional]
-	Type string
+	Type string `json:"type,omitempty"`
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
@@ -163,8 +163,8 @@ type DomainSpec struct {
 }
 
 type Domain struct {
-	Metadata *Metadata
-	Spec     *DomainSpec
+	Metadata *Metadata   `json:"metadata"`
+	Spec     *DomainSpec `json:"spec"`
 
 	sourceInfo *api.SourceInfo
 }
@@ -180,15 +180,15 @@ type systemInvRel struct {
 type SystemSpec struct {
 	// An entity reference to the owner of the system.
 	// [required]
-	Owner *Ref
+	Owner *Ref `json:"owner"`
 	// An entity reference to the domain that the system belongs to.
 	// [optional]
-	Domain *Ref
+	Domain *Ref `json:"domain,omitempty"`
 	// The type of system. There is currently no enforced set of values for this field,
 	// so it is left up to the adopting organization to choose a nomenclature that matches
 	// their catalog hierarchy.
 	// [optional]
-	Type string
+	Type string `json:"type,omitempty"`
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
@@ -196,8 +196,8 @@ type SystemSpec struct {
 }
 
 type System struct {
-	Metadata *Metadata
-	Spec     *SystemSpec
+	Metadata *Metadata   `json:"metadata"`
+	Spec     *SystemSpec `json:"spec"`
 
 	sourceInfo *api.SourceInfo
 }
@@ -214,30 +214,30 @@ type ComponentSpec struct {
 	// Should ideally be one of a few well-known values that are used consistently.
 	// For example, ["service", "batch"].
 	// [required]
-	Type string
+	Type string `json:"type"`
 	// The lifecycle state of the component.
 	// Should ideally be one of a few well-known values that are used consistently.
 	// For example, ["production", "test", "dev", "experimental"].
 	// [required]
-	Lifecycle string
+	Lifecycle string `json:"lifecycle"`
 	// An entity reference to the owner of the component.
 	// [required]
-	Owner *Ref
+	Owner *Ref `json:"owner"`
 	// An entity reference to the system that the component belongs to.
 	// [required]
-	System *Ref
+	System *Ref `json:"system"`
 	// An entity reference to another component of which the component is a part.
 	// [optional]
-	SubcomponentOf *Ref
+	SubcomponentOf *Ref `json:"subcomponentOf,omitempty"`
 	// An array of entity references to the APIs that are provided by the component.
 	// [optional]
-	ProvidesAPIs []*LabelRef
+	ProvidesAPIs []*LabelRef `json:"providesApis,omitempty"`
 	// An array of entity references to the APIs that are consumed by the component.
 	// [optional]
-	ConsumesAPIs []*LabelRef
+	ConsumesAPIs []*LabelRef `json:"consumesApis,omitempty"`
 	// An array of references to other entities that the component depends on to function.
 	// [optional]
-	DependsOn []*LabelRef
+	DependsOn []*LabelRef `json:"dependsOn,omitempty"`
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
@@ -245,8 +245,8 @@ type ComponentSpec struct {
 }
 
 type Component struct {
-	Metadata *Metadata
-	Spec     *ComponentSpec
+	Metadata *Metadata      `json:"metadata"`
+	Spec     *ComponentSpec `json:"spec"`
 
 	sourceInfo *api.SourceInfo
 }
@@ -260,16 +260,16 @@ type resourceInvRel struct {
 type ResourceSpec struct {
 	// The type of resource.
 	// [required]
-	Type string
+	Type string `json:"type"`
 	// An entity reference to the owner of the resource.
 	// [required]
-	Owner *Ref
+	Owner *Ref `json:"owner"`
 	// An array of references to other entities that the resource depends on to function.
 	// [optional]
-	DependsOn []*LabelRef
+	DependsOn []*LabelRef `json:"dependsOn,omitempty"`
 	// An entity reference to the system that the resource belongs to.
 	// [required]
-	System *Ref
+	System *Ref `json:"system"`
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
@@ -277,8 +277,8 @@ type ResourceSpec struct {
 }
 
 type Resource struct {
-	Metadata *Metadata
-	Spec     *ResourceSpec
+	Metadata *Metadata     `json:"metadata"`
+	Spec     *ResourceSpec `json:"spec"`
 
 	sourceInfo *api.SourceInfo
 }
@@ -301,24 +301,24 @@ type APISpecVersion struct {
 type APISpec struct {
 	// The type of the API definition.
 	// [required]
-	Type string
+	Type string `json:"type"`
 	// The lifecycle state of the API.
 	// [required]
-	Lifecycle string
+	Lifecycle string `json:"lifecycle"`
 	// An entity reference to the owner of the API.
 	// [required]
-	Owner *Ref
+	Owner *Ref `json:"owner"`
 	// An entity reference to the system that the API belongs to.
 	// [required]
-	System *Ref
+	System *Ref `json:"system"`
 	// The definition of the API, based on the format defined by the type.
 	// A required field in the backstage.io schema, but we leave it as optional.
 	// [optional]
-	Definition string
+	Definition string `json:"definition,omitempty"`
 	// A list of versions in which this API currently exists.
 	// Consumers and providers can specify the version in entity references.
 	// [optional]
-	Versions []*APISpecVersion `yaml:"versions,omitempty"`
+	Versions []*APISpecVersion `yaml:"versions,omitempty" json:"versions,omitempty"`
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
@@ -326,8 +326,8 @@ type APISpec struct {
 }
 
 type API struct {
-	Metadata *Metadata
-	Spec     *APISpec
+	Metadata *Metadata `json:"metadata"`
+	Spec     *APISpec  `json:"spec"`
 
 	sourceInfo *api.SourceInfo
 }
@@ -336,36 +336,36 @@ type API struct {
 
 type GroupSpecProfile struct {
 	// A simple display name to present to users. Should always be set.
-	DisplayName string
+	DisplayName string `json:"displayName"`
 	// An email where the group can be reached.
-	Email string
+	Email string `json:"email,omitempty"`
 	// Optional URL of an image that represents this entity.
-	Picture string
+	Picture string `json:"picture,omitempty"`
 }
 
 type GroupSpec struct {
 	// The type of group. There is currently no enforced set of values for this field,
 	// so it is left up to the adopting organization to choose a nomenclature that matches their org hierarchy.
 	// [required]
-	Type string
+	Type string `json:"type"`
 	// Optional profile information about the group, mainly for display purposes.
 	// [optional]
-	Profile *GroupSpecProfile
+	Profile *GroupSpecProfile `json:"profile,omitempty"`
 	// The immediate parent group in the hierarchy, if any.
 	// [optional]
-	Parent *Ref
+	Parent *Ref `json:"parent,omitempty"`
 	// The immediate child groups of this group in the hierarchy (whose parent field points to this group).
 	// In the backstage.io schema the list must be present, but may be empty if there are no child groups.
 	// [optional]
-	Children []*Ref
+	Children []*Ref `json:"children,omitempty"`
 	// The users that are members of this group. The entries of this array are uninterpreted strings.
 	// [optional]
-	Members []string
+	Members []string `json:"members,omitempty"`
 }
 
 type Group struct {
-	Metadata *Metadata
-	Spec     *GroupSpec
+	Metadata *Metadata  `json:"metadata"`
+	Spec     *GroupSpec `json:"spec"`
 
 	sourceInfo *api.SourceInfo
 }

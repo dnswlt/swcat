@@ -64,35 +64,53 @@ public class MavenResolver {
         }
     }
 
-    public File resolveLatest(String groupId, String artifactId, String classifier, String packaging, boolean includeSnapshots) throws VersionRangeResolutionException, ArtifactResolutionException {
-        // Find latest version
-        Artifact artifactConfig = new DefaultArtifact(groupId, artifactId, classifier, packaging, "[0,)");
+    public File resolve(String groupId, String artifactId, String classifier, String packaging, String version, boolean includeSnapshots) throws ArtifactResolutionException {
+        String effectiveVersion = version;
+        if (isDynamicVersion(version)) {
+            effectiveVersion = resolveLatestVersion(groupId, artifactId, classifier, packaging, includeSnapshots);
+            System.err.println("Resolved latest version: " + effectiveVersion);
+        }
+
+        return resolveArtifact(groupId, artifactId, classifier, packaging, effectiveVersion);
+    }
+
+    private boolean isDynamicVersion(String version) {
+        return version == null || version.isEmpty() || "LATEST".equals(version) || "RELEASE".equals(version);
+    }
+
+    private String resolveLatestVersion(String groupId, String artifactId, String classifier, String packaging, boolean includeSnapshots) throws ArtifactResolutionException {
+        Artifact artifact = new DefaultArtifact(groupId, artifactId, classifier, packaging, "[0,)");
         VersionRangeRequest rangeRequest = new VersionRangeRequest();
-        rangeRequest.setArtifact(artifactConfig);
+        rangeRequest.setArtifact(artifact);
         rangeRequest.setRepositories(repositories);
 
-        VersionRangeResult rangeResult = repositorySystem.resolveVersionRange(session, rangeRequest);
-        
-        Version latestVersion = null;
-        List<Version> versions = rangeResult.getVersions();
+        VersionRangeResult rangeResult;
+        try {
+            rangeResult = repositorySystem.resolveVersionRange(session, rangeRequest);
+        } catch (VersionRangeResolutionException e) {
+            throw new ArtifactResolutionException(new ArrayList<>(), "Failed to resolve version range: " + e.getMessage(), e);
+        }
+
+        Version bestVersion = null;
         // Versions are sorted ascending
-        for (Version v : versions) {
+        for (Version v : rangeResult.getVersions()) {
             boolean isSnapshot = v.toString().endsWith("SNAPSHOT");
             if (includeSnapshots || !isSnapshot) {
-                latestVersion = v;
+                bestVersion = v;
             }
         }
 
-        if (latestVersion == null) {
-            throw new RuntimeException("No suitable version found for " + groupId + ":" + artifactId + " (includeSnapshots=" + includeSnapshots + ")");
+        if (bestVersion == null) {
+            throw new ArtifactResolutionException(new ArrayList<>(), "No suitable version found for " + artifact + " (includeSnapshots=" + includeSnapshots + ")");
         }
 
-        System.err.println("Resolved latest version: " + latestVersion);
+        return bestVersion.toString();
+    }
 
-        // Resolve artifact
-        Artifact artifactToResolve = new DefaultArtifact(groupId, artifactId, classifier, packaging, latestVersion.toString());
+    private File resolveArtifact(String groupId, String artifactId, String classifier, String packaging, String version) throws ArtifactResolutionException {
+        Artifact artifact = new DefaultArtifact(groupId, artifactId, classifier, packaging, version);
         ArtifactRequest artifactRequest = new ArtifactRequest();
-        artifactRequest.setArtifact(artifactToResolve);
+        artifactRequest.setArtifact(artifact);
         artifactRequest.setRepositories(repositories);
 
         ArtifactResult artifactResult = repositorySystem.resolveArtifact(session, artifactRequest);

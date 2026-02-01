@@ -1,56 +1,131 @@
 package io.swcat.maven;
 
-import org.apache.commons.cli.*;
+import io.swcat.maven.protocol.Protocol;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public class ArtifactExtractor {
 
+    /** 
+     * Annotation key for Maven coordinates.
+     * 
+     * Format: groupId:artifactId[:version[:packaging[:classifier]]]
+     * 
+     * version can be empty or "LATEST" to resolve the latest version.
+     * 
+     * empty groupId, packaging and classifier are resolved using the default values from the config.
+     */
+    public static final String COORD_ANNOTATION = "maven.apache.org/coords";
+
     public static void main(String[] args) {
-        Options options = new Options();
-        options.addOption("g", "groupId", true, "Group ID");
-        options.addOption("a", "artifactId", true, "Artifact ID");
-        options.addOption("c", "classifier", true, "Classifier");
-        options.addOption("p", "packaging", true, "Packaging");
-        options.addOption("f", "file", true, "File to extract");
-        options.addOption("o", "output", true, "Output file path (optional, defaults to stdout)");
-        options.addOption("s", "snapshots", false, "Include SNAPSHOT versions");
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-        CommandLineParser parser = new DefaultParser();
         try {
-            CommandLine cmd = parser.parse(options, args);
+            // Read Input JSON from stdin
+            Protocol.Input input = mapper.readValue(System.in, Protocol.Input.class);
 
-            if (!cmd.hasOption("g") || !cmd.hasOption("a") || !cmd.hasOption("f")) {
-                HelpFormatter formatter = new HelpFormatter();
-                formatter.printHelp("artifact-extractor", options);
-                System.exit(1);
+            if (input == null || input.config == null) {
+                 printOutput(mapper, Protocol.Output.failure("Invalid input: config is missing"));
+                 return;
+            }
+            
+            Protocol.Config config = input.config;
+
+            // Extract Configuration
+            String defaultGroupId = config.defaultGroupId;
+            String defaultPackaging = config.defaultPackaging != null ? config.defaultPackaging : "jar";
+            String defaultClassifier = config.defaultClassifier != null ? config.defaultClassifier : "";
+            boolean includeSnapshots = config.includeSnapshots;
+            String fileToExtract = config.file;
+
+            if (fileToExtract == null) {
+                printOutput(mapper, Protocol.Output.failure("Missing 'file' in configuration"));
+                return;
             }
 
-            String groupId = cmd.getOptionValue("g");
-            String artifactId = cmd.getOptionValue("a");
-            String classifier = cmd.getOptionValue("c", ""); // Default to empty
-            String packaging = cmd.getOptionValue("p", "jar"); // Default to jar
-            String fileToExtract = cmd.getOptionValue("f");
-            String outputFile = cmd.getOptionValue("o");
-            boolean includeSnapshots = cmd.hasOption("s");
+            // Parse Entity to get Name and Annotations
+            if (input.entity == null || input.entity.metadata == null) {
+                 printOutput(mapper, Protocol.Output.failure("Invalid input: entity metadata is missing"));
+                 return;
+            }
 
+            Protocol.Metadata metadata = input.entity.metadata;
+            String artifactId = metadata.name; // Default artifactId is entity name
+            Map<String, String> annotations = metadata.annotations != null ? metadata.annotations : new HashMap<>();
+
+            String groupId = defaultGroupId;
+            String packaging = defaultPackaging;
+            String classifier = defaultClassifier;
+            String version = null;
+            
+            // Allow overriding coordinates via annotation
+            // We use "maven.apache.org/coords" as the standard key.
+            // Format: groupId:artifactId[:version[:packaging[:classifier]]]
+            if (annotations.containsKey(COORD_ANNOTATION)) {
+                String val = annotations.get(COORD_ANNOTATION);
+                String[] parts = val.split(":");
+                if (parts.length >= 1 && !parts[0].isEmpty()) {
+                    groupId = parts[0];
+                }
+                if (parts.length >= 2 && !parts[1].isEmpty()) {
+                    artifactId = parts[1];
+                }
+                if (parts.length >= 3 && !parts[2].isEmpty()) {
+                     version = parts[2];
+                }
+                if (parts.length >= 4 && !parts[3].isEmpty()) {
+                    packaging = parts[3];
+                }
+                if (parts.length >= 5 && !parts[4].isEmpty()) {
+                    classifier = parts[4];
+                }
+            }
+
+            if (groupId == null || groupId.isEmpty()) {
+                printOutput(mapper, Protocol.Output.failure("groupId is required but not set (check defaultGroupId or annotation " + COORD_ANNOTATION + ")"));
+                return;
+            }
+
+            // Resolve
             MavenResolver resolver = new MavenResolver();
-            File artifactFile = resolver.resolveLatest(groupId, artifactId, classifier, packaging, includeSnapshots);
-            System.err.println("Resolved artifact to: " + artifactFile.getAbsolutePath());
+            File artifactFile = resolver.resolve(groupId, artifactId, classifier, packaging, version, includeSnapshots);
 
-            extractFile(artifactFile, fileToExtract, outputFile);
+            // Extract
+            String outputDir = input.tempDir;
+            if (outputDir == null) {
+                 outputDir = System.getProperty("java.io.tmpdir");
+            }
+            
+            String outputFileName = new File(fileToExtract).getName();
+            File outputFile = new File(outputDir, outputFileName);
+            
+            extractFile(artifactFile, fileToExtract, outputFile.getAbsolutePath());
+            
+            // Success Response
+            printOutput(mapper, Protocol.Output.success(Collections.singletonList(outputFile.getAbsolutePath())));
 
-        } catch (ParseException e) {
-            System.err.println("Error parsing arguments: " + e.getMessage());
-            System.exit(1);
         } catch (Exception e) {
-            System.err.println("Failed to resolve artifact: " + e.getMessage());
-            System.exit(1);
+            e.printStackTrace(System.err); // Log trace to stderr
+            try {
+                printOutput(mapper, Protocol.Output.failure(e.getMessage()));
+            } catch (IOException ioException) {
+                ioException.printStackTrace(System.err);
+            }
         }
+    }
+
+    private static void printOutput(ObjectMapper mapper, Protocol.Output output) throws IOException {
+        mapper.writeValue(System.out, output);
     }
 
     private static void extractFile(File artifactFile, String fileToExtract, String outputPath) throws IOException {
@@ -70,11 +145,13 @@ public class ArtifactExtractor {
                     return;
                 }
             }
-            System.err.println("File " + fileToExtract + " not found in artifact. Available files:");
+            // Failure logic: throw exception to be caught in main and returned as failure JSON
+            StringBuilder sb = new StringBuilder();
+            sb.append("File ").append(fileToExtract).append(" not found in artifact. Available files:\n");
             for (String name : entries) {
-                System.err.println(" - " + name);
+                sb.append(" - ").append(name).append("\n");
             }
-            System.exit(1);
+            throw new FileNotFoundException(sb.toString());
         }
     }
 
