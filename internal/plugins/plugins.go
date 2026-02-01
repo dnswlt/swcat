@@ -186,7 +186,12 @@ func (r *Registry) Run(ctx context.Context, e catalog.Entity) (*api.CatalogExten
 		if !t.Matches(e) {
 			continue
 		}
-		if err := execFunc(n, t.plugin); err != nil {
+		err := execFunc(n, t.plugin)
+		if err != nil {
+			// TODO: Proceed after plugin failure - we expect it will be quite common
+			// for individual plugins to fail on some entities, while other succeed.
+			// log.Printf("Plugin %s failed on entity %v: %v", n, e.GetRef(), err)
+			// Needs some thought - users should still see something in the UI if there were errors.
 			return nil, err
 		}
 	}
@@ -240,10 +245,10 @@ func (r *Registry) registerPlugin(name string, def *Definition) error {
 			return fmt.Errorf("failed to create AsyncAPIImporterPlugin %s: %w", name, err)
 		}
 		trigger.plugin = p
-	case "MavenArtifactExtractorPlugin":
-		p, err := newMavenArtifactExtractorPlugin(name, &def.Spec)
+	case "ExternalPlugin":
+		p, err := newExternalPlugin(name, &def.Spec)
 		if err != nil {
-			return fmt.Errorf("failed to create MavenArtifactExtractorPlugin %s: %w", name, err)
+			return fmt.Errorf("failed to create ExternalPlugin %s: %w", name, err)
 		}
 		trigger.plugin = p
 	default:

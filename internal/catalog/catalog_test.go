@@ -1,7 +1,9 @@
 package catalog
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -345,5 +347,43 @@ func TestPrintVersion(t *testing.T) {
 	}
 	if got := fmt.Sprint(v); got != v.RawVersion {
 		t.Fatalf("Unexpected version Sprint: got %q, want %q", got, v.RawVersion)
+	}
+}
+
+func TestEntityJSONMarshalling(t *testing.T) {
+	// Tests that entities can be marshalled to JSON and have the expected lower-case keys.
+
+	// Create a sample entity
+	comp := &Component{
+		Metadata: &Metadata{
+			Name:      "my-component",
+			Namespace: "default",
+		},
+		Spec: &ComponentSpec{
+			Type:      "service",
+			Lifecycle: "production",
+			Owner:     &Ref{Kind: "group", Name: "my-team", Namespace: "default"},
+			System:    &Ref{Kind: "system", Name: "my-system", Namespace: "default"},
+		},
+	}
+
+	// Marshal to JSON
+	bytes, err := json.Marshal(comp)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+	jsonStr := string(bytes)
+
+	if !strings.Contains(jsonStr, `"metadata":`) {
+		t.Errorf("JSON should contain 'metadata' key, got: %s", jsonStr)
+	}
+	if !strings.Contains(jsonStr, `"spec":`) {
+		t.Errorf("JSON should contain 'spec' key, got: %s", jsonStr)
+	}
+	if !strings.Contains(jsonStr, `"name":`) {
+		t.Errorf("JSON should contain 'name' key inside metadata, got: %s", jsonStr)
+	}
+	if !strings.Contains(jsonStr, `"type":`) {
+		t.Errorf("JSON should contain 'type' key inside spec, got: %s", jsonStr)
 	}
 }
