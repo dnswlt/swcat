@@ -42,6 +42,7 @@ The following attributes are available for filtering:
 * `lifecycle`: The lifecycle state of the entity (e.g., for components and apis).
 * `consumesApis`: An API listed in the `consumesApis` spec of a component.
 * `providesApis`: An API listed in the `providesApis` spec of a component.
+* `rel`: Entities directly related to the given entity reference (both incoming and outgoing). For example, `rel:component:my-service` will find the owner, the system it belongs to, and any APIs it provides or consumes.
 
 ## Operators
 

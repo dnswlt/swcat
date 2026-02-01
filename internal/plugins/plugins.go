@@ -6,6 +6,7 @@ import (
 	"log"
 	"maps"
 	"os"
+	"slices"
 
 	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
@@ -194,11 +195,12 @@ func (r *Registry) Run(ctx context.Context, e catalog.Entity) (*api.CatalogExten
 		if err := execFunc("timestampPlugin", TimestampPlugin{}); err != nil {
 			return nil, err
 		}
-		log.Printf("Collected %d annotations for entity %s: %v", len(annotations), e.GetRef().String(), annotations)
+		keys := slices.Sorted(maps.Keys(annotations))
+		log.Printf("Collected annotations for entity %s: %v", e.GetRef().String(), keys)
 	}
 	return &api.CatalogExtensions{
 		Entities: map[string]*api.MetadataExtensions{
-			e.GetRef().String(): &api.MetadataExtensions{
+			e.GetRef().String(): {
 				Annotations: annotations,
 			},
 		},
