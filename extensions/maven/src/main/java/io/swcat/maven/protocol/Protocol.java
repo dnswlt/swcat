@@ -50,6 +50,9 @@ public class Protocol {
         
         /** The path of the file inside the artifact to extract. */
         public String file;
+
+        /** Whether to replace placeholders in the extracted file with values from .properties files. */
+        public boolean replaceProperties;
     }
 
     /**
