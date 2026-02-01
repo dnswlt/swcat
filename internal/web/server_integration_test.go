@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/store"
 )
 
@@ -50,6 +51,17 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 	// Create source using the local disk store
 	st := store.NewDiskStore(exampleDir)
 
+	// Load plugins
+	pluginsConfigPath := filepath.Join(exampleDir, "plugins.yml")
+	cfg, err := plugins.ReadConfig(pluginsConfigPath)
+	if err != nil {
+		t.Fatalf("Failed to read plugins config from %s: %v", pluginsConfigPath, err)
+	}
+	pluginRegistry, err := plugins.NewRegistry(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create plugin registry: %v", err)
+	}
+
 	// Create Server
 	opts := ServerOptions{
 		Addr:       "localhost:0", // Random port
@@ -57,11 +69,11 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 		CatalogDir: catalogDir,
 		ConfigFile: configFile,
 		DotPath:    dotPath,
-		ReadOnly:   true,
+		ReadOnly:   false, // Set to false to enable plugins
 		Version:    "integration-test",
 	}
 
-	server, err := NewServer(opts, st, nil)
+	server, err := NewServer(opts, st, pluginRegistry)
 	if err != nil {
 		t.Fatalf("Failed to create server: %v", err)
 	}
@@ -100,6 +112,9 @@ func TestIntegration_ServerSmoke(t *testing.T) {
 		{`/ui/graph`, []string{"diagram"}},
 		{`/ui/graph?q=rel%3D%27component%3Aflights-routes%27&e=component%3Aflights-search-backend&e=api%3Aflights-cache-api&e=component%3Aflights-routes`,
 			[]string{"routes-database", "flights-routes", "<svg"}},
+		// Plugins should trigger for this entity
+		{`/ui/apis/analytics-events-api`, []string{"Update auto-generated data"}},
+		{"/status", []string{"options", "cachedRefs", "storeSourceType", "started", "registeredPlugins", "asyncApiImporter"}},
 		{"/static/dist/main.js", []string{"function"}},
 		{"/static/dist/main.css", []string{"clickable-node"}},
 	}
@@ -130,7 +145,7 @@ func TestIntegration_ServerSmoke(t *testing.T) {
 			bodyStr := string(body)
 			for _, exp := range tc.expected {
 				if !strings.Contains(bodyStr, exp) {
-					t.Errorf("GET %s: response body missing expected substring %q", tc.path, exp)
+					t.Errorf("GET %s: response body missing expected substring %q:\n%s", tc.path, exp, bodyStr)
 				}
 			}
 		})

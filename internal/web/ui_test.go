@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/config"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -300,12 +301,12 @@ func TestNewCustomContent(t *testing.T) {
 			},
 		},
 		{
-			name:    "table style valid",
-			heading: "My Table",
+			name:    "attrs style valid",
+			heading: "My Attrs",
 			content: `{"b": 2, "a": "1"}`,
-			style:   "table",
+			style:   "attrs",
 			want: &CustomContent{
-				Heading: "My Table",
+				Heading: "My Attrs",
 				Attrs: []ccAttr{
 					{Name: "a", Value: "1"},
 					{Name: "b", Value: "2"},
@@ -313,10 +314,10 @@ func TestNewCustomContent(t *testing.T) {
 			},
 		},
 		{
-			name:    "table style invalid json",
-			heading: "My Table",
+			name:    "attrs style invalid json",
+			heading: "My Attrs",
 			content: `invalid`,
-			style:   "table",
+			style:   "attrs",
 			wantErr: true,
 		},
 		{
@@ -330,7 +331,11 @@ func TestNewCustomContent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := newCustomContent(tt.heading, tt.content, tt.style)
+			abc := &config.AnnotationBasedContent{
+				Heading: tt.heading,
+				Style:   tt.style,
+			}
+			got, err := newCustomContent(abc, tt.content)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("newCustomContent() error = %v, wantErr %v", err, tt.wantErr)
 				return

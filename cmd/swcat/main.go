@@ -122,7 +122,8 @@ func runPluginsAndUpdate(r *plugins.Registry, st store.Source, catalogDir string
 	allEntities := repo.FindEntities("")
 	log.Printf("Running plugins on %d entities", len(allEntities))
 	for _, e := range allEntities {
-		err := r.Run(context.Background(), e)
+		// TODO: Collect results and actually update the sidecar files.
+		_, err := r.Run(context.Background(), e)
 		if err != nil {
 			log.Printf("Error running plugins on %s: %v", e.GetRef(), err)
 		}

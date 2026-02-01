@@ -2,6 +2,7 @@ package store
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -317,6 +318,39 @@ func ReadEntities(st Store, path string) ([]api.Entity, error) {
 	}
 
 	return entities, nil
+}
+
+// ExtensionFile returns the ".ext.json" sidecar file for the given file (which is typically a .yml file).
+func ExtensionFile(file string) string {
+	ext := filepath.Ext(file)
+	lowExt := strings.ToLower(ext)
+
+	if lowExt == ".yml" || lowExt == ".yaml" {
+		return strings.TrimSuffix(file, ext) + ".ext.json"
+	}
+
+	return file + ".ext.json"
+}
+
+func ReadExtensions(st Store, path string) (*api.CatalogExtensions, error) {
+	bs, err := st.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var ext api.CatalogExtensions
+	err = json.Unmarshal(bs, &ext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse %s as JSON: %v", path, err)
+	}
+	return &ext, nil
+}
+
+func WriteExtensions(st Store, path string, ext *api.CatalogExtensions) error {
+	bs, err := json.MarshalIndent(ext, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal extensions: %w", err)
+	}
+	return st.WriteFile(path, bs)
 }
 
 // listFilesRecursively lists all files in subDir, which must

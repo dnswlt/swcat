@@ -47,21 +47,8 @@ The `svg` section allows you to customize the appearance of the generated SVG di
 
 The `ui` section allows for customizing the user interface.
 
-* `annotationBasedContent`: Defines custom sections on entity detail pages based on annotations. This provides a powerful way to display entity-specific information directly from your catalog data.
-
-    The configuration is a map where each key is an annotation (e.g., `my-org.com/my-data`). The value specifies how the annotation's content should be rendered:
-
-    * `heading`: The title for the custom content card.
-
-    * `style`: The rendering style for the annotation's value.
-
-        * `text`: Renders the value as plain text.
-
-        * `list`: Renders a JSON array of strings as a bulleted list.
-
-        * `json`: Renders a JSON object or array in a formatted code block.
-
-        * `table`: Renders a simple JSON object (key-value pairs) as a table.
+* `annotationBasedContent`: Defines custom sections on entity detail pages based on annotations. See [Custom Content](custom-content.md) for details.
+* `helpLink`: An optional custom link (with `title` and `url`) displayed in the footer.
 
 ## Example Configuration
 

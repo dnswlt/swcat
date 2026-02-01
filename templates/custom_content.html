@@ -12,7 +12,7 @@
     </div>
     {{ else if $cc.Items }}
     <div class="p-4 max-h-32 overflow-y-auto">
-        <ul class="list-disc list-inside leading-tight">
+        <ul class="list-disc list-inside leading-tight text-sm">
             {{ range $cc.Items }}
             <li>{{ . }}</li>
             {{ end }}
@@ -27,6 +27,29 @@
                  <td class="px-4 py-2 text-gray-800">{{ .Value }}</td>
              </tr>
              {{ end }}
+        </table>
+    </div>
+    {{ else if $cc.Table }}
+    <div class="max-h-48 overflow-y-auto">
+        <table class="w-full text-sm">
+            {{ if $cc.Table.Headers }}
+            <thead>
+                <tr class="border-b bg-gray-50">
+                    {{ range $cc.Table.Headers }}
+                    <th class="px-4 py-2 font-medium text-gray-600 text-left">{{ . }}</th>
+                    {{ end }}
+                </tr>
+            </thead>
+            {{ end }}
+            <tbody>
+                {{ range $cc.Table.Rows }}
+                <tr class="border-b last:border-0">
+                    {{ range .Columns }}
+                    <td class="px-4 py-2 text-gray-800">{{ . }}</td>
+                    {{ end }}
+                </tr>
+                {{ end }}
+            </tbody>
         </table>
     </div>
     {{ end }}

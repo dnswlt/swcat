@@ -2,7 +2,6 @@ package plugins
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/dnswlt/swcat/internal/catalog"
@@ -60,15 +59,9 @@ func (m *AsyncAPIImporterPlugin) Execute(ctx context.Context, entity catalog.Ent
 		return nil, fmt.Errorf("failed to parse AsyncAPI spec: %w", err)
 	}
 
-	channels := spec.SimpleChannels()
-	marshaled, err := json.Marshal(channels)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal AsyncAPI channels: %w", err)
-	}
-
 	return &PluginResult{
-		Annotations: map[string]string{
-			m.spec.TargetAnnotation: string(marshaled),
+		Annotations: map[string]any{
+			m.spec.TargetAnnotation: spec.SimpleChannels(),
 		},
 	}, nil
 }

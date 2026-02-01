@@ -10,10 +10,24 @@ ui:
     # as a card on the API detail page:
     solace.com/topics:
       heading: Solace Topics
-      style: list  # Possible values: text|list|json|table
+      style: list  # Possible values: text|list|attrs|table|json
     swcat/custom-fields:
       heading: Deployment Details
+      style: json
+    asyncapi.com/channels:
+      heading: AsyncAPI Channels
       style: table
+      rank: 99 # This custom content should come last (just for fun)
+      # Define the table structure to be rendered, based on specific
+      # fields of each item in the JSON list stored in this annotation.
+      columns:
+        - header: Topic
+          data: |
+            {{ .address }}
+        - header: Messages
+          data: |
+            {{ .messages | join }}
+
 svg:
   # Show the (programming) language label as a <<stereotype>> on nodes.
   stereotypeLabels:

@@ -2,7 +2,10 @@ package repo
 
 import (
 	"cmp"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/url"
 	"regexp"
@@ -10,6 +13,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/query"
 	"github.com/dnswlt/swcat/internal/store"
@@ -981,6 +985,27 @@ func Load(st store.Store, config Config, catalogDir string) (*Repository, error)
 	return repo, nil
 }
 
+func mergeMetadataExtensions(exts *api.CatalogExtensions, entity catalog.Entity) error {
+	if exts == nil || exts.Entities == nil {
+		return nil
+	}
+	ref := entity.GetRef().String()
+	if metaExt := exts.Entities[ref]; metaExt != nil {
+		for k, v := range metaExt.Annotations {
+			if _, ok := entity.GetMetadata().Annotations[k]; ok {
+				continue // Extensions never overwrite existing entity annotations.
+			}
+			marshaled, err := json.Marshal(v)
+			if err != nil {
+				return fmt.Errorf("failed to marshal annotation: %w", err)
+			}
+
+			entity.GetMetadata().Annotations[k] = string(marshaled)
+		}
+	}
+	return nil
+}
+
 func (r *Repository) initialize(st store.Store, catalogDir string) error {
 	if r.Size() != 0 {
 		return fmt.Errorf("initialize called on a non-empty repo (size: %d)", r.Size())
@@ -995,13 +1020,29 @@ func (r *Repository) initialize(st store.Store, catalogDir string) error {
 		if err != nil {
 			return fmt.Errorf("failed to read entities from %s: %v", catalogPath, err)
 		}
+		// Try to read the sidecar extension file
+		extPath := store.ExtensionFile(catalogPath)
+		ext, err := store.ReadExtensions(st, extPath)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) && !strings.Contains(err.Error(), "file not found") {
+			// Treat failure to read extensions as non-fatal, and ignore missing extension files entirely.
+			log.Printf("Failed to read extension file %s: %v", extPath, err)
+		} else if err == nil {
+			log.Printf("Read extension file %s", extPath)
+		}
+		// Create catalog entities and add to repository
 		for _, e := range entities {
 			entity, err := catalog.NewEntityFromAPI(e)
 			if err != nil {
-				return fmt.Errorf("failed to convert api entity %s:%s/%s (source: %s:%d) to catalog entity: %v",
-					e.GetKind(), e.GetMetadata().Namespace, e.GetMetadata().Namespace,
-					e.GetSourceInfo().Path, e.GetSourceInfo().Line, err)
+				return fmt.Errorf("failed to convert api entity %s (source: %s:%d) to catalog entity: %v",
+					e.GetRef().String(), e.GetSourceInfo().Path, e.GetSourceInfo().Line, err)
 			}
+			// Add annotations from sidecar extension file.
+			if err := mergeMetadataExtensions(ext, entity); err != nil {
+				return fmt.Errorf("failed to merge extension data for %s (source: %s:%d): %v",
+					e.GetRef().String(), e.GetSourceInfo().Path, e.GetSourceInfo().Line, err)
+			}
+
+			// Add to repo.
 			if err := r.AddEntity(entity); err != nil {
 				return fmt.Errorf("failed to add entity %q to the repo: %v", entity.GetRef(), err)
 			}
