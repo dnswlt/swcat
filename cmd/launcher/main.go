@@ -134,6 +134,12 @@ func unzip(src, dest string) error {
 			return fmt.Errorf("%s: illegal file path", fpath)
 		}
 
+		// Do not overwrite the launcher binary itself
+		// (Windows won't let us do this anyway - open files cannot be modified)
+		if f.Name == "swcat-launcher.exe" || f.Name == "swcat-launcher" {
+			continue
+		}
+
 		if f.FileInfo().IsDir() {
 			os.MkdirAll(fpath, os.ModePerm)
 			continue
