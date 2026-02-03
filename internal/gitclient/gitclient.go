@@ -151,16 +151,19 @@ func (c *Client) ListReferences() ([]string, error) {
 }
 
 func (c *Client) resolveRevision(revision string) (*plumbing.Hash, error) {
-	hash, err := c.repo.ResolveRevision(plumbing.Revision(revision))
-	if err == nil {
-		return hash, nil
-	}
-
-	// Try with origin/ prefix if not found (common for clones)
-	if !strings.HasPrefix(revision, "refs/") {
+	// Try with origin/ prefix first.
+	// We prefer the remote branch because Update() only updates refs/remotes/origin/*.
+	// The local branch (refs/heads/*) created by Clone might be stale.
+	if !strings.HasPrefix(revision, "refs/") && !strings.HasPrefix(revision, "origin/") {
 		if hash, err := c.repo.ResolveRevision(plumbing.Revision("origin/" + revision)); err == nil {
 			return hash, nil
 		}
+	}
+
+	// Fallback: try exact revision (tags, hashes, full refs, etc.)
+	hash, err := c.repo.ResolveRevision(plumbing.Revision(revision))
+	if err == nil {
+		return hash, nil
 	}
 
 	return nil, fmt.Errorf("revision %q not found: %w", revision, err)
