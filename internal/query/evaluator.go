@@ -182,6 +182,66 @@ var attributeAccessors = map[string]attributeAccessor{
 			return nil, false
 		}
 	},
+	"dependson": func(e catalog.Entity) ([]string, bool) {
+		var deps []*catalog.LabelRef
+		switch v := e.(type) {
+		case *catalog.Component:
+			if v.Spec != nil {
+				deps = v.Spec.DependsOn
+			}
+		case *catalog.Resource:
+			if v.Spec != nil {
+				deps = v.Spec.DependsOn
+			}
+		default:
+			return nil, false
+		}
+		var results []string
+		for _, d := range deps {
+			results = append(results, d.Ref.QName())
+		}
+		return results, true
+	},
+	"dependents": func(e catalog.Entity) ([]string, bool) {
+		var deps []*catalog.LabelRef
+		switch v := e.(type) {
+		case *catalog.Component:
+			deps = v.GetDependents()
+		case *catalog.Resource:
+			deps = v.GetDependents()
+		default:
+			return nil, false
+		}
+		var results []string
+		for _, d := range deps {
+			results = append(results, d.Ref.QName())
+		}
+		return results, true
+	},
+	"providedby": func(e catalog.Entity) ([]string, bool) {
+		switch v := e.(type) {
+		case *catalog.API:
+			var results []string
+			for _, lr := range v.GetProviders() {
+				results = append(results, lr.Ref.QName())
+			}
+			return results, true
+		default:
+			return nil, false
+		}
+	},
+	"consumedby": func(e catalog.Entity) ([]string, bool) {
+		switch v := e.(type) {
+		case *catalog.API:
+			var results []string
+			for _, lr := range v.GetConsumers() {
+				results = append(results, lr.Ref.QName())
+			}
+			return results, true
+		default:
+			return nil, false
+		}
+	},
 	"rel": func(e catalog.Entity) ([]string, bool) {
 		refs := relatedEntities(e)
 		if len(refs) == 0 {
