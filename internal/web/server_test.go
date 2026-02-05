@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -54,7 +55,7 @@ func newTestServer(t *testing.T, st store.Source) *Server {
 // ---- Tests ------------------------------------------------------------------
 
 func TestHealth_OK(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
 	h := s.Handler()
 
@@ -72,7 +73,7 @@ func TestHealth_OK(t *testing.T) {
 }
 
 func TestRoot_Redirect(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
 	h := s.Handler()
 
@@ -90,7 +91,7 @@ func TestRoot_Redirect(t *testing.T) {
 }
 
 func TestListPages_RenderLinksForAllKinds(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
 	h := s.Handler()
 
@@ -132,7 +133,7 @@ func TestListPages_RenderLinksForAllKinds(t *testing.T) {
 }
 
 func TestComponentDetail_TriggersDotAndCaches(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 
 	s := newTestServer(t, st) // real templates, fake dot runner
 	h := s.Handler()
@@ -179,7 +180,7 @@ func TestComponentDetail_TriggersDotAndCaches(t *testing.T) {
 }
 
 func TestDetailPages_RenderSVGAndName(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 
 	s := newTestServer(t, st)
 	h := s.Handler()
@@ -224,7 +225,7 @@ func TestDetailPages_RenderSVGAndName(t *testing.T) {
 }
 
 func TestDetail_NotFound_AllKinds(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
 	h := s.Handler()
 
@@ -252,7 +253,7 @@ func TestDetail_NotFound_AllKinds(t *testing.T) {
 	}
 }
 func TestGroupDetail_OK_NoSVG(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
 	h := s.Handler()
 
@@ -275,7 +276,7 @@ func TestGroupDetail_OK_NoSVG(t *testing.T) {
 }
 
 func TestServeEntitiesJSON_OK(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
 	h := s.Handler()
 
@@ -326,7 +327,7 @@ func TestServeEntitiesJSON_OK(t *testing.T) {
 }
 
 func TestServeEntitiesJSON_WithQuery(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
 	h := s.Handler()
 
@@ -374,12 +375,16 @@ func TestServeEntitiesJSON_WithQuery(t *testing.T) {
 func testCopyCatalog(t *testing.T) (store.Source, string) {
 	t.Helper()
 	dir := t.TempDir()
-	tmpfile, err := os.CreateTemp(dir, "catalog-*.yml")
+	catDir := filepath.Join(dir, store.CatalogDir)
+	if err := os.Mkdir(catDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	tmpfile, err := os.CreateTemp(catDir, "catalog-*.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	src, err := os.Open("../../testdata/catalog/catalog.yml")
+	src, err := os.Open("../../testdata/test1/catalog/catalog.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -452,7 +457,7 @@ spec:
 }
 
 func TestCreateEntity_ReadOnly(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
 	s.opts.ReadOnly = true // Set read-only mode
 	h := s.Handler()
@@ -584,7 +589,7 @@ spec:
 }
 
 func TestUpdateEntity_ReadOnly(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
 	s.opts.ReadOnly = true // Set read-only mode
 	h := s.Handler()
@@ -617,7 +622,7 @@ spec:
 }
 
 func TestUpdateEntity_NotFound(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
 	h := s.Handler()
 
@@ -728,7 +733,7 @@ func TestDeleteEntity_OK(t *testing.T) {
 }
 
 func TestDeleteEntity_ReadOnly(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
 	s.opts.ReadOnly = true // Set read-only mode
 	h := s.Handler()
@@ -745,7 +750,7 @@ func TestDeleteEntity_ReadOnly(t *testing.T) {
 }
 
 func TestDeleteEntity_NotFound(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
 	h := s.Handler()
 
@@ -804,7 +809,7 @@ func TestUpdateAnnotationValue_OK(t *testing.T) {
 }
 
 func TestUpdateAnnotationValue_ReadOnly(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
 	s.opts.ReadOnly = true // Set read-only mode
 	h := s.Handler()
@@ -823,7 +828,7 @@ func TestUpdateAnnotationValue_ReadOnly(t *testing.T) {
 }
 
 func TestUpdateAnnotationValue_NotFound(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
 	h := s.Handler()
 
@@ -841,7 +846,7 @@ func TestUpdateAnnotationValue_NotFound(t *testing.T) {
 }
 
 func TestUpdateAnnotationValue_InvalidAnnotation(t *testing.T) {
-	st := store.NewDiskStore("../../testdata/catalog")
+	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
 	h := s.Handler()
 

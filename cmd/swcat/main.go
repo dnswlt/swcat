@@ -5,7 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	filesys "io/fs"
+	iofs "io/fs"
 	"log"
 	"os"
 	"os/exec"
@@ -87,11 +87,10 @@ func createPluginRegistry(configFile string) (*plugins.Registry, error) {
 // Options contains program options that can be set via command-line flags or environment variables.
 type Options struct {
 	Addr            string
-	CatalogDir      string
 	RootDir         string
 	GitURL          string
 	GitRef          string
-	ConfigFile      string
+	GitRootDir      string
 	BaseDir         string
 	ReadOnly        bool
 	DotTimeout      time.Duration
@@ -99,22 +98,22 @@ type Options struct {
 	SVGCacheSize    int
 }
 
-func runPluginsAndUpdate(r *plugins.Registry, st store.Source, catalogDir string, configFile string) error {
+func runPluginsAndUpdate(r *plugins.Registry, st store.Source) error {
 	s, err := st.Store("")
 	if err != nil {
 		log.Fatalf("Could not get default store: %v", err)
 	}
 
 	cfg := &config.Bundle{} // Default (empty) config
-	if configFile != "" {
-		storeCfg, err := config.Load(s, configFile)
-		if err != nil {
-			return err
-		}
+	storeCfg, err := config.Load(s, store.ConfigFile)
+	if err != nil && !errors.Is(err, iofs.ErrNotExist) {
+		return err
+	}
+	if storeCfg != nil {
 		cfg = storeCfg
 	}
 
-	repo, err := repo.Load(s, cfg.Catalog, catalogDir)
+	repo, err := repo.Load(s, cfg.Catalog)
 	if err != nil {
 		return err
 	}
@@ -137,17 +136,14 @@ func main() {
 	fs := flag.NewFlagSet("swcat", flag.ContinueOnError)
 	fs.StringVar(&opts.Addr, "addr", "localhost:8080", "Address to listen on")
 	fs.StringVar(&opts.RootDir, "root-dir", ".", "Root directory of the local data store")
-	fs.StringVar(&opts.CatalogDir, "catalog-dir", "catalog", "Path to the catalog directory containing YAML files (relative to git root or local -root-dir)")
-	fs.StringVar(&opts.ConfigFile, "config", "swcat.yml", "Path to the configuration YAML file (relative to git root or local -root-dir)")
 	fs.StringVar(&opts.GitURL, "git-url", "", "URL of the git repository to use as the data store")
 	fs.StringVar(&opts.GitRef, "git-ref", "", "Git ref (branch or tag) to use initially")
+	fs.StringVar(&opts.GitRootDir, "git-root-dir", ".", "Path to the directory within the git repository that contains the catalog structure")
 	fs.StringVar(&opts.BaseDir, "base-dir", "", "Base directory for resource files. If empty, uses embedded resources (recommended for production).")
 	fs.BoolVar(&opts.ReadOnly, "read-only", false, "Start server in read-only mode (no entity editing).")
 	fs.DurationVar(&opts.DotTimeout, "dot-timeout", 10*time.Second, "Maximum time to wait before cancelling dot executions")
 	fs.BoolVar(&opts.UseDotStreaming, "dot-streaming", runtime.GOOS == "windows", "Use long-running dot process to render SVG graphs (use only if dot process startup is slow, e.g. on Windows)")
 	fs.IntVar(&opts.SVGCacheSize, "svg-cache-size", 1024, "Max. number of SVG graphs to hold in the in-memory LRU cache")
-	var pluginsConfigFile string
-	fs.StringVar(&pluginsConfigFile, "plugins-config", "plugins.yml", "Path to the plugins configuration YAML file (relative to -root-dir)")
 	var runPlugins bool
 	fs.BoolVar(&runPlugins, "run-plugins", false, "If true, executes plugins on all entities at startup")
 
@@ -184,7 +180,7 @@ func main() {
 			}
 		}
 		log.Printf("Using default git branch %q", ref)
-		st = store.NewGitSource(loader, ref)
+		st = store.NewGitSource(loader, ref, opts.GitRootDir)
 		if !opts.ReadOnly {
 			opts.ReadOnly = true // Enforce read-only mode when using a remote git repo as the store.
 			log.Printf("Activated read-only mode for git-based storage")
@@ -197,9 +193,10 @@ func main() {
 	}
 
 	var pluginRegistry *plugins.Registry
-	if !opts.ReadOnly && pluginsConfigFile != "" {
-		r, err := createPluginRegistry(filepath.Join(opts.RootDir, pluginsConfigFile))
-		if errors.Is(err, filesys.ErrNotExist) {
+	if !opts.ReadOnly {
+		pluginsConfigFile := filepath.Join(opts.RootDir, store.PluginsFile)
+		r, err := createPluginRegistry(pluginsConfigFile)
+		if errors.Is(err, iofs.ErrNotExist) {
 			log.Printf("Plugins config file %s not found. Plugins will not be available.", pluginsConfigFile)
 		} else if err != nil {
 			log.Fatalf("Could not create plugin registry: %v", err)
@@ -207,7 +204,7 @@ func main() {
 		pluginRegistry = r
 
 		if r != nil && runPlugins {
-			if err := runPluginsAndUpdate(r, st, opts.CatalogDir, opts.ConfigFile); err != nil {
+			if err := runPluginsAndUpdate(r, st); err != nil {
 				log.Fatalf("Failed to run plugins: %v", err)
 			}
 		}
@@ -217,12 +214,10 @@ func main() {
 		web.ServerOptions{
 			Addr:            opts.Addr,
 			BaseDir:         opts.BaseDir,
-			CatalogDir:      opts.CatalogDir,
 			DotPath:         dotPath,
 			DotTimeout:      opts.DotTimeout,
 			UseDotStreaming: opts.UseDotStreaming,
 			ReadOnly:        opts.ReadOnly,
-			ConfigFile:      opts.ConfigFile,
 			Version:         Version,
 			SVGCacheSize:    opts.SVGCacheSize,
 		},

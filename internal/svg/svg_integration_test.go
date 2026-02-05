@@ -18,7 +18,7 @@ import (
 )
 
 func TestGenerateComponentSVG_WithDot(t *testing.T) {
-	repo, err := repo.Load(store.NewDiskStore("../../testdata/catalog"), repo.Config{}, "")
+	repo, err := repo.Load(store.NewDiskStore("../../testdata/test1"), repo.Config{})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestGenerateComponentSVG_WithDot(t *testing.T) {
 }
 
 func TestSystemExternalGraph_WithDot(t *testing.T) {
-	repo, err := repo.Load(store.NewDiskStore("../../testdata/catalog2"), repo.Config{}, "")
+	repo, err := repo.Load(store.NewDiskStore("../../testdata/test2"), repo.Config{})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestSystemExternalGraph_WithDot(t *testing.T) {
 }
 
 func TestSystemInternalGraph_WithDot(t *testing.T) {
-	repo, err := repo.Load(store.NewDiskStore("../../testdata/catalog"), repo.Config{}, "")
+	repo, err := repo.Load(store.NewDiskStore("../../testdata/test1"), repo.Config{})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}

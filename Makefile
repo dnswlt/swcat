@@ -39,8 +39,7 @@ run-examples-git:
 		-addr localhost:9191 \
 		-git-url https://github.com/dnswlt/swcat.git \
 		-git-ref main \
-		-config examples/flights/swcat.yml \
-		-catalog-dir examples/flights/catalog
+		-git-root-dir examples/flights
 
 #
 # Testing

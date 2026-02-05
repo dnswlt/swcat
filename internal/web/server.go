@@ -38,8 +38,6 @@ type ServerOptions struct {
 	DotTimeout      time.Duration // Time after which dot executions will be cancelled
 	UseDotStreaming bool          // If true, keeps the dot process running and streams requests to it (Good for corporate Windows machines).
 	ReadOnly        bool          // If true, no Edit/Clone/Delete operations will be supported.
-	ConfigFile      string        // Path to config file
-	CatalogDir      string        // Path to folder containing catalog files
 	Version         string        // App version
 	SVGCacheSize    int           // Size of the LRU cache for rendered SVGs
 }
@@ -125,15 +123,15 @@ func (s *Server) loadStoreData(ref string) (*storeData, error) {
 	}
 
 	cfg := &config.Bundle{} // Default (empty) config
-	if s.opts.ConfigFile != "" {
-		storeCfg, err := config.Load(st, s.opts.ConfigFile)
-		if err != nil {
-			return nil, err
-		}
+	storeCfg, err := config.Load(st, store.ConfigFile)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	if storeCfg != nil {
 		cfg = storeCfg
 	}
 
-	repo, err := repo.Load(st, cfg.Catalog, s.opts.CatalogDir)
+	repo, err := repo.Load(st, cfg.Catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -1100,7 +1098,7 @@ func (s *Server) runPlugins(w http.ResponseWriter, r *http.Request, entityRef st
 	}
 	extPath := store.ExtensionFile(entity.GetSourceInfo().Path)
 	existingExts, err := store.ReadExtensions(st, extPath)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) && !strings.Contains(err.Error(), "file not found") {
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		s.renderErrorSnippet(w, fmt.Sprintf("Failed to read extensions: %v", err))
 		return
 	}

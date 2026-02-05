@@ -1,8 +1,16 @@
 # Configuration
 
-You can configure swcat by providing a YAML configuration file
-(typically `swcat.yml`) via the `--config` command line flag.
-The following sections explain the available configuration options.
+`swcat` follows a convention-over-configuration approach for its data directory structure.
+It expects the following files and directories to be present under the data root directory:
+
+* `catalog/`: A directory containing your YAML entity definitions.
+* `swcat.yml`: The main configuration file (optional).
+* `plugins.yml`: The plugins configuration file (optional).
+
+You specify the data root directory via the `--root-dir` command line flag (for local storage)
+or the `--git-root-dir` flag (when using a git repository as storage).
+
+The following sections explain the available options within `swcat.yml`.
 
 See [internal/config/config.go](https://github.com/dnswlt/swcat/blob/main/internal/config/config.go)
 for the Go struct that holds all available configuration options.

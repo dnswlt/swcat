@@ -2,6 +2,7 @@ package store
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -11,7 +12,7 @@ import (
 
 func TestInsertOrReplaceEntity(t *testing.T) {
 	// 1. Setup: Load initial data
-	initialData, err := os.ReadFile("../../testdata/catalog/catalog.yml")
+	initialData, err := os.ReadFile("../../testdata/test1/catalog/catalog.yml")
 	if err != nil {
 		t.Fatalf("Failed to read testdata: %v", err)
 	}
@@ -142,7 +143,7 @@ spec:
 
 func TestDeleteEntity(t *testing.T) {
 	// 1. Setup: Load initial data
-	initialData, err := os.ReadFile("../../testdata/catalog/catalog.yml")
+	initialData, err := os.ReadFile("../../testdata/test1/catalog/catalog.yml")
 	if err != nil {
 		t.Fatalf("Failed to read testdata: %v", err)
 	}
@@ -330,23 +331,28 @@ func TestDiskStore(t *testing.T) {
 
 	t.Run("CatalogFiles", func(t *testing.T) {
 		// Uses ListFiles but filters .yml
-		catDir := t.TempDir()
-		cds := NewDiskStore(catDir)
-		cds.WriteFile("a.yml", nil)
-		cds.WriteFile("b.yaml", nil) // Not .yml
-		cds.WriteFile("c.txt", nil)
-		os.Mkdir(filepath.Join(catDir, "sub"), 0755)
-		cds.WriteFile("sub/d.yml", nil)
+		rootDir := t.TempDir()
+		catDir := filepath.Join(rootDir, CatalogDir)
+		if err := os.Mkdir(catDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		cds := NewDiskStore(rootDir)
+		cds.WriteFile(path.Join(CatalogDir, "a.yml"), nil)
+		cds.WriteFile(path.Join(CatalogDir, "b.yaml"), nil) // Not .yml
+		cds.WriteFile(path.Join(CatalogDir, "c.txt"), nil)
+		subDir := filepath.Join(catDir, "sub")
+		os.Mkdir(subDir, 0755)
+		cds.WriteFile(path.Join(CatalogDir, "sub/d.yml"), nil)
 
-		files, err := CatalogFiles(cds, ".")
+		files, err := CatalogFiles(cds)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(files) != 2 {
-			t.Errorf("CatalogFiles returned %v, want [a.yml sub/d.yml]", files)
+			t.Errorf("CatalogFiles returned %v, want [%s/a.yml %s/sub/d.yml]", files, CatalogDir, CatalogDir)
 		}
-		if !slices.Contains(files, "a.yml") || !slices.Contains(files, "sub/d.yml") {
-			t.Errorf("CatalogFiles missing expected files")
+		if !slices.Contains(files, path.Join(CatalogDir, "a.yml")) || !slices.Contains(files, path.Join(CatalogDir, "sub/d.yml")) {
+			t.Errorf("CatalogFiles missing expected files: %v", files)
 		}
 	})
 }

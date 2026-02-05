@@ -27,9 +27,9 @@ to a remote Git repository:
     when cloning the repository.
 * `SWCAT_GIT_PASSWORD` (only supported via environment variable): the optional
   password to authenticate with.
-* `-catalog-dir` (`SWCAT_CATALOG_DIR`): path to the directory in the remote repo
-  containing the catalog files.
-* `-config` (`SWCAT_CONFIG`): path to the `swcat.yml` configuration file in the remote repo.
+* `-git-root-dir` (`SWCAT_GIT_ROOT_DIR`): path to the directory in the remote repo
+  containing the fixed `swcat` structure (`catalog/`, `swcat.yml`, `plugins.yml`).
+  Defaults to `.`.
 
 Note that revision-dependent locations of the catalog and config are not supported:
 all git branches and tags must have them at the same location. The catalog files

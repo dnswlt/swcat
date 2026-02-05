@@ -168,7 +168,7 @@ func TestGitSource(t *testing.T) {
 		t.Fatalf("gitclient.New failed: %v", err)
 	}
 
-	gs := NewGitSource(client, "master")
+	gs := NewGitSource(client, "master", "")
 
 	t.Run("DefaultRef", func(t *testing.T) {
 		if got := gs.DefaultRef(); got != "master" {
@@ -277,16 +277,57 @@ func TestGitSource(t *testing.T) {
 	})
 }
 
+func TestGitSource_WithRootDir(t *testing.T) {
+	repoPath := createTestRepo(t)
+
+	client, err := gitclient.New(repoPath, nil)
+	if err != nil {
+		t.Fatalf("gitclient.New failed: %v", err)
+	}
+
+	gs := NewGitSource(client, "master", "nested")
+
+	t.Run("GitStore_ReadFile_WithRootDir", func(t *testing.T) {
+		st, err := gs.Store("v2.0.0")
+		if err != nil {
+			t.Fatalf("gs.Store failed: %v", err)
+		}
+		// Read 'service.yaml' from 'nested' folder via rooted store
+		content, err := st.ReadFile("service.yaml")
+		if err != nil {
+			t.Fatalf("ReadFile(service.yaml) failed: %v", err)
+		}
+		if string(content) != "service content" {
+			t.Errorf("master: expected 'service content', got %q", string(content))
+		}
+	})
+
+	t.Run("GitStore_ListFiles_WithRootDir", func(t *testing.T) {
+		st, err := gs.Store("v2.0.0")
+		if err != nil {
+			t.Fatalf("gs.Store failed: %v", err)
+		}
+		// List '.' in 'nested' folder via rooted store
+		files, err := st.ListFiles(".")
+		if err != nil {
+			t.Fatalf("ListFiles(.) failed: %v", err)
+		}
+		if len(files) != 1 || files[0] != "service.yaml" {
+			t.Errorf("ListFiles(.) got %v, want [service.yaml]", files)
+		}
+	})
+}
+
 func TestGitSource_ReadEntities(t *testing.T) {
 	// 1. Setup repo
-	dir := createRepoFromTestdata(t, "../../testdata/catalog/catalog.yml")
+	dir := createRepoFromTestdata(t, "../../testdata/test1/catalog/catalog.yml")
 
 	// 2. Create GitSource
 	client, err := gitclient.New(dir, nil)
 	if err != nil {
 		t.Fatalf("gitclient.New failed: %v", err)
 	}
-	gs := NewGitSource(client, "master")
+	gs := NewGitSource(client, "master", "")
 
 	// 3. Get Store
 	st, err := gs.Store("master")
@@ -319,7 +360,7 @@ func TestGitSource_ReadEntities(t *testing.T) {
 }
 
 func TestGitSource_ReadEntities_Comparison(t *testing.T) {
-	sourceFile := "../../testdata/catalog/catalog.yml"
+	sourceFile := "../../testdata/test1/catalog/catalog.yml"
 	fileName := filepath.Base(sourceFile)
 
 	// 1. Read from DiskStore (reference)
@@ -344,7 +385,7 @@ func TestGitSource_ReadEntities_Comparison(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gitclient.New failed: %v", err)
 	}
-	gs := NewGitSource(client, "master")
+	gs := NewGitSource(client, "master", "")
 	st, err := gs.Store("master")
 	if err != nil {
 		t.Fatalf("gs.Store failed: %v", err)

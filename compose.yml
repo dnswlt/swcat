@@ -12,8 +12,6 @@ services:
     environment:
       - SWCAT_ADDR=${SWCAT_ADDR:-0.0.0.0:8080}
       - SWCAT_ROOT_DIR=/data
-      - SWCAT_CATALOG_DIR=${SWCAT_CATALOG_DIR:-catalog}
-      - SWCAT_CONFIG=${SWCAT_CONFIG:-swcat.yml}
 
   swcat-remote:
     build:
@@ -28,5 +26,4 @@ services:
       - SWCAT_GIT_REF=${SWCAT_GIT_REF:-}
       - SWCAT_GIT_USER=${SWCAT_GIT_USER:-}
       - SWCAT_GIT_PASSWORD=${SWCAT_GIT_PASSWORD:-}
-      - SWCAT_CATALOG_DIR=${SWCAT_CATALOG_DIR:-catalog}
-      - SWCAT_CONFIG=${SWCAT_CONFIG:-swcat.yml}
+      - SWCAT_GIT_ROOT_DIR=${SWCAT_GIT_ROOT_DIR:-.}

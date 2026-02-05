@@ -20,6 +20,10 @@ import (
 
 const (
 	YAMLIndent = 2
+
+	CatalogDir  = "catalog"
+	ConfigFile  = "swcat.yml"
+	PluginsFile = "plugins.yml"
 )
 
 var (
@@ -121,22 +125,25 @@ func (d *DiskStore) WriteFile(path string, contents []byte) error {
 type GitSource struct {
 	client     *gitclient.Client
 	defaultRef string   // ref to use if the empty ref ("") is requested
+	rootDir    string   // optional root directory within the repo
 	refs       []string // cached list of available references
 }
 
 // gitStore is a "view" over a single revision in a GitSource.
 type gitStore struct {
-	client *gitclient.Client
-	ref    string
+	client  *gitclient.Client
+	ref     string
+	rootDir string
 }
 
 var _ Source = (*GitSource)(nil)
 var _ Store = (*gitStore)(nil)
 
-func NewGitSource(client *gitclient.Client, defaultRef string) *GitSource {
+func NewGitSource(client *gitclient.Client, defaultRef string, rootDir string) *GitSource {
 	return &GitSource{
 		client:     client,
 		defaultRef: defaultRef,
+		rootDir:    rootDir,
 	}
 }
 
@@ -161,8 +168,9 @@ func (g *GitSource) Store(ref string) (Store, error) {
 		return nil, ErrNoSuchRef
 	}
 	return &gitStore{
-		client: g.client,
-		ref:    ref,
+		client:  g.client,
+		ref:     ref,
+		rootDir: g.rootDir,
 	}, nil
 }
 
@@ -180,21 +188,24 @@ func (g *GitSource) ListReferences() ([]string, error) {
 }
 
 func (g *gitStore) ListFiles(dir string) ([]string, error) {
-	files, err := g.client.ListFilesRecursive(g.ref, dir)
+	fullDir := path.Join(g.rootDir, dir)
+	files, err := g.client.ListFilesRecursive(g.ref, fullDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list files: %v", err)
 	}
-	// Make relative to gitStore root.
+	// Make relative to gitStore root (which is g.rootDir).
 	result := make([]string, len(files))
 	for i, f := range files {
 		// Avoid using filepath here, as gitStore needs "/" on any OS.
+		// files are already relative to fullDir.
 		result[i] = path.Join(dir, f)
 	}
 	return result, nil
 }
 
-func (g *gitStore) ReadFile(path string) ([]byte, error) {
-	return g.client.ReadFile(g.ref, path)
+func (g *gitStore) ReadFile(filePath string) ([]byte, error) {
+	fullPath := path.Join(g.rootDir, filePath)
+	return g.client.ReadFile(g.ref, fullPath)
 }
 
 func (g *gitStore) WriteFile(path string, contents []byte) error {
@@ -393,10 +404,9 @@ func listFilesRecursively(rootDir, subDir string) ([]string, error) {
 	return files, nil
 }
 
-// CatalogFiles lists all *.yml files under catalogRoot, which must be
-// a relative path (relative to the store's root).
-func CatalogFiles(st Store, catalogRoot string) ([]string, error) {
-	allFiles, err := st.ListFiles(catalogRoot)
+// CatalogFiles lists all *.yml files under the default catalog directory.
+func CatalogFiles(st Store) ([]string, error) {
+	allFiles, err := st.ListFiles(CatalogDir)
 	if err != nil {
 		return nil, err
 	}

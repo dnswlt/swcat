@@ -12,3 +12,4 @@ catalogs/
 /sync_*.sh
 /launcher
 /launcher.exe
+.agent/

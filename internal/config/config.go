@@ -83,13 +83,13 @@ func join(v any) string {
 func Load(st store.Store, configPath string) (*Bundle, error) {
 	bs, err := st.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("could not read config %q: %v", configPath, err)
+		return nil, fmt.Errorf("could not read config %q: %w", configPath, err)
 	}
 	dec := yaml.NewDecoder(bytes.NewReader(bs))
 	dec.KnownFields(true)
 	var bundle Bundle
 	if err := dec.Decode(&bundle); err != nil {
-		return nil, fmt.Errorf("invalid configuration YAML in %q: %v", configPath, err)
+		return nil, fmt.Errorf("invalid configuration YAML in %q: %w", configPath, err)
 	}
 
 	// Populate and validate computed fields

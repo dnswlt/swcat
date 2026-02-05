@@ -39,8 +39,6 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 	}
 
 	exampleDir := filepath.Join(projectRoot, "examples", "flights")
-	catalogDir := "catalog"
-	configFile := "swcat.yml"
 	dotPath := mustFindDotPath(t)
 
 	// Verify paths exist
@@ -52,7 +50,7 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 	st := store.NewDiskStore(exampleDir)
 
 	// Load plugins
-	pluginsConfigPath := filepath.Join(exampleDir, "plugins.yml")
+	pluginsConfigPath := filepath.Join(exampleDir, store.PluginsFile)
 	cfg, err := plugins.ReadConfig(pluginsConfigPath)
 	if err != nil {
 		t.Fatalf("Failed to read plugins config from %s: %v", pluginsConfigPath, err)
@@ -64,13 +62,11 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 
 	// Create Server
 	opts := ServerOptions{
-		Addr:       "localhost:0", // Random port
-		BaseDir:    projectRoot,   // Use templates/static from source
-		CatalogDir: catalogDir,
-		ConfigFile: configFile,
-		DotPath:    dotPath,
-		ReadOnly:   false, // Set to false to enable plugins
-		Version:    "integration-test",
+		Addr:     "localhost:0", // Random port
+		BaseDir:  projectRoot,   // Use templates/static from source
+		DotPath:  dotPath,
+		ReadOnly: false, // Set to false to enable plugins
+		Version:  "integration-test",
 	}
 
 	server, err := NewServer(opts, st, pluginRegistry)

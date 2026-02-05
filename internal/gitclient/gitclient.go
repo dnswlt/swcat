@@ -1,8 +1,10 @@
 package gitclient
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
@@ -190,8 +192,13 @@ func (c *Client) ReadFile(revision, filePath string) ([]byte, error) {
 
 	// 4. Find the file in the tree (Virtual path lookup)
 	file, err := tree.File(filePath)
+	if errors.Is(err, object.ErrFileNotFound) {
+		// Return the same error as os.ReadFile(),
+		// so we can deal with missing files in the same way.
+		return nil, fs.ErrNotExist
+	}
 	if err != nil {
-		return nil, err // Returns object.ErrFileNotFound if missing
+		return nil, err
 	}
 
 	// 5. Read the Blob content

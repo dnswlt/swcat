@@ -64,7 +64,7 @@ for the environment variables to set.
 
 ## Getting started (w/out Docker)
 
-### Prequisites
+### Prerequisites
 
 * Install a recent version of [Go](https://go.dev/) (>= 1.24.5).
 * Install `npm` (e.g. via [nvm](https://github.com/nvm-sh/nvm)).
@@ -97,7 +97,7 @@ Point your browser at <http://localhost:9191> and explore the example catalog.
 
 ## Getting started (Windows)
 
-### Prequisites (Windows)
+### Prerequisites (Windows)
 
 * Install [Graphviz](https://graphviz.org/download/).
 * Download the latest binary release version `swcat-<version>.zip` from the
@@ -113,5 +113,5 @@ swcat.exe -addr localhost:9191 -root-dir examples/flights
 
 Point your browser at <http://localhost:9191> and explore the example catalog.
 
-Adjust the `-root-dir` (and potentially `-config` and `-catalog-dir` path)
-to any software catalog you want to view or edit.
+Adjust the `-root-dir` to any software catalog you want to view or edit.
+`swcat` expects a fixed structure under the root directory: `swcat.yml`, `plugins.yml`, and a `catalog/` directory.

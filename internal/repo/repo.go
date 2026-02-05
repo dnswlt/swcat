@@ -976,9 +976,9 @@ func (r *Repository) addGeneratedLinks() error {
 // Load reads entities from the given catalog paths
 // and returns a validated repository.
 // Elements in catalogPaths must be .yml file paths.
-func Load(st store.Store, config Config, catalogDir string) (*Repository, error) {
+func Load(st store.Store, config Config) (*Repository, error) {
 	repo := NewRepositoryWithConfig(config)
-	err := repo.initialize(st, catalogDir)
+	err := repo.initialize(st)
 	if err != nil {
 		return nil, err
 	}
@@ -1006,11 +1006,11 @@ func mergeMetadataExtensions(exts *api.CatalogExtensions, entity catalog.Entity)
 	return nil
 }
 
-func (r *Repository) initialize(st store.Store, catalogDir string) error {
+func (r *Repository) initialize(st store.Store) error {
 	if r.Size() != 0 {
 		return fmt.Errorf("initialize called on a non-empty repo (size: %d)", r.Size())
 	}
-	catalogPaths, err := store.CatalogFiles(st, catalogDir)
+	catalogPaths, err := store.CatalogFiles(st)
 	if err != nil {
 		return fmt.Errorf("initialize: cannot retrieve catalog files :%v", err)
 	}
@@ -1023,7 +1023,7 @@ func (r *Repository) initialize(st store.Store, catalogDir string) error {
 		// Try to read the sidecar extension file
 		extPath := store.ExtensionFile(catalogPath)
 		ext, err := store.ReadExtensions(st, extPath)
-		if err != nil && !errors.Is(err, fs.ErrNotExist) && !strings.Contains(err.Error(), "file not found") {
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			// Treat failure to read extensions as non-fatal, and ignore missing extension files entirely.
 			log.Printf("Failed to read extension file %s: %v", extPath, err)
 		} else if err == nil {
