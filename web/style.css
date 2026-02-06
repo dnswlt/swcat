@@ -50,10 +50,13 @@
     .graphviz-svg .clickable-edge:hover path {
         /* Arrow line */
         cursor: pointer;
+    }
+    .graphviz-svg .edge:hover path {
+        /* Arrow line */
         stroke: #808080;
         stroke-width: 3;
     }
-    .graphviz-svg .clickable-edge:hover polygon {
+    .graphviz-svg .edge:hover polygon {
         /* Arrow head */
         fill: #808080;
         stroke: #808080;
