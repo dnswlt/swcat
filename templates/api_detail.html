@@ -128,6 +128,10 @@
             {{ .SVGMetadataJSON }}
         </script>
         {{ end }}
+
+        {{ if .CommentsEnabled }}
+        {{ template "comments.html" . }}
+        {{ end }}
     </main>
 
     {{ template "footer.html" . }}

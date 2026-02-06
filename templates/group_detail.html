@@ -97,10 +97,13 @@
 
         {{ else }}
         <p class="text-center text-gray-500">Group not found</p>
-        {{ end }}
-
-    </main>
-
+                        {{ end }}
+                
+                        {{ if .CommentsEnabled }}
+                        {{ template "comments.html" . }}
+                        {{ end }}
+                    </main>
+                
     {{ template "footer.html" . }}
 
     <script type="module" src="/static/dist/main.js?v={{.CacheBustingKey}}"></script>

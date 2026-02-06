@@ -13,3 +13,5 @@ catalogs/
 /launcher
 /launcher.exe
 .agent/
+/examples/*/comments
+/comments

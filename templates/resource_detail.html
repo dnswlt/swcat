@@ -102,23 +102,70 @@
         {{ end }}
 
 
-        {{ if .SVG }}
-        <div id="relationships-svg" class="relative group">
-            {{ .SVG }}
-            {{ if .GraphURL }}
-            <a href="{{ .GraphURL }}"
-                class="absolute bottom-0 right-0 p-2 text-gray-400 hover:text-gray-800 transition-colors"
-                title="Open in Graph Builder">
-                {{ .GraphIcon }}
-            </a>
-            {{ end }}
-        </div>
-        <script type="application/json" id="relationships-svg-meta">
-            {{ .SVGMetadataJSON }}
-        </script>
-        {{ end }}
+                {{ if .SVG }}
 
-    </main>
+
+                <div id="relationships-svg" class="relative group">
+
+
+                    {{ .SVG }}
+
+
+                    {{ if .GraphURL }}
+
+
+                    <a href="{{ .GraphURL }}"
+
+
+                        class="absolute bottom-0 right-0 p-2 text-gray-400 hover:text-gray-800 transition-colors"
+
+
+                        title="Open in Graph Builder">
+
+
+                        {{ .GraphIcon }}
+
+
+                    </a>
+
+
+                    {{ end }}
+
+
+                </div>
+
+
+                <script type="application/json" id="relationships-svg-meta">
+
+
+                    {{ .SVGMetadataJSON }}
+
+
+                        </script>
+
+
+                        {{ end }}
+
+
+                
+
+
+                        {{ if .CommentsEnabled }}
+
+
+                        {{ template "comments.html" . }}
+
+
+                        {{ end }}
+
+
+                    </main>
+
+
+                
+
+
+        
 
     {{ template "footer.html" . }}
 

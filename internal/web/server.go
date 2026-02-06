@@ -21,6 +21,7 @@ import (
 	"github.com/dnswlt/swcat"
 	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/comments"
 	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/dot"
 	"github.com/dnswlt/swcat/internal/plugins"
@@ -64,11 +65,13 @@ type Server struct {
 	// If set, plugins are available to update entity annotations.
 	pluginRegistry *plugins.Registry
 
+	commentsStore comments.Store
+
 	// Server startup time. Used for cache busting JS/CSS resources.
 	started time.Time
 }
 
-func NewServer(opts ServerOptions, source store.Source, pluginRegistry *plugins.Registry) (*Server, error) {
+func NewServer(opts ServerOptions, source store.Source, pluginRegistry *plugins.Registry, commentsStore comments.Store) (*Server, error) {
 	if opts.SVGCacheSize <= 0 {
 		opts.SVGCacheSize = 128
 	}
@@ -85,6 +88,7 @@ func NewServer(opts ServerOptions, source store.Source, pluginRegistry *plugins.
 		source:         source,
 		dotRunner:      dotRunner,
 		pluginRegistry: pluginRegistry,
+		commentsStore:  commentsStore,
 		started:        time.Now(),
 	}
 
@@ -100,6 +104,10 @@ func (s *storeData) lookupSVG(cacheKey string) (*svg.Result, bool) {
 
 func (s *storeData) storeSVG(cacheKey string, svg *svg.Result) {
 	s.svgCache.Add(cacheKey, svg)
+}
+
+func (s *Server) commentsEnabled() bool {
+	return s.commentsStore != nil
 }
 
 // loadStoreData retrieves the storeData for ref from the cache, if present,
@@ -409,6 +417,14 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		log.Printf("Failed to create metadata JSON: %v", err)
 		return
 	}
+
+	activeComments, err := s.getActiveComments(system.GetRef().String())
+	if err != nil {
+		log.Printf("Failed to get comments for %s: %v", system.GetRef(), err)
+	}
+	params["Comments"] = activeComments
+	params["Entity"] = system.GetRef()
+
 	s.setCustomContent(system, &data.config.UI, params)
 
 	s.serveHTMLPage(w, r, "system_detail.html", params)
@@ -459,6 +475,13 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		params["GraphURL"] = graphURL
 		params["GraphIcon"] = template.HTML(svgIcons["Graph"])
 	}
+
+	activeComments, err := s.getActiveComments(component.GetRef().String())
+	if err != nil {
+		log.Printf("Failed to get comments for %s: %v", component.GetRef(), err)
+	}
+	params["Comments"] = activeComments
+	params["Entity"] = component.GetRef()
 
 	s.setCustomContent(component, &data.config.UI, params)
 
@@ -543,6 +566,13 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 		params["GraphIcon"] = template.HTML(svgIcons["Graph"])
 	}
 
+	activeComments, err := s.getActiveComments(ap.GetRef().String())
+	if err != nil {
+		log.Printf("Failed to get comments for %s: %v", ap.GetRef(), err)
+	}
+	params["Comments"] = activeComments
+	params["Entity"] = ap.GetRef()
+
 	s.setCustomContent(ap, &data.config.UI, params)
 	s.serveHTMLPage(w, r, "api_detail.html", params)
 }
@@ -615,6 +645,13 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 		params["GraphIcon"] = template.HTML(svgIcons["Graph"])
 	}
 
+	activeComments, err := s.getActiveComments(resource.GetRef().String())
+	if err != nil {
+		log.Printf("Failed to get comments for %s: %v", resource.GetRef(), err)
+	}
+	params["Comments"] = activeComments
+	params["Entity"] = resource.GetRef()
+
 	s.setCustomContent(resource, &data.config.UI, params)
 
 	s.serveHTMLPage(w, r, "resource_detail.html", params)
@@ -679,6 +716,14 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 		log.Printf("Failed to create metadata JSON: %v", err)
 		return
 	}
+
+	activeComments, err := s.getActiveComments(domain.GetRef().String())
+	if err != nil {
+		log.Printf("Failed to get comments for %s: %v", domain.GetRef(), err)
+	}
+	params["Comments"] = activeComments
+	params["Entity"] = domain.GetRef()
+
 	s.setCustomContent(domain, &data.config.UI, params)
 
 	s.serveHTMLPage(w, r, "domain_detail.html", params)
@@ -721,6 +766,14 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 		return
 	}
 	params["Group"] = group
+
+	activeComments, err := s.getActiveComments(group.GetRef().String())
+	if err != nil {
+		log.Printf("Failed to get comments for %s: %v", group.GetRef(), err)
+	}
+	params["Comments"] = activeComments
+	params["Entity"] = group.GetRef()
+
 	s.setCustomContent(group, &data.config.UI, params)
 
 	s.serveHTMLPage(w, r, "group_detail.html", params)
@@ -1433,6 +1486,7 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		"Now":             time.Now().Format("2006-01-02 15:04:05"),
 		"NavBar":          nav,
 		"ReadOnly":        s.opts.ReadOnly,
+		"CommentsEnabled": s.commentsEnabled(),
 		"CacheBustingKey": s.started.Format("20060102150405"),
 		"Version":         s.opts.Version,
 	}
@@ -1668,7 +1722,105 @@ func (s *Server) dispatchEntityRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if strings.HasSuffix(path, "/comments") {
+		entityRef := strings.TrimSuffix(path, "/comments")
+		s.serveComments(w, r, entityRef)
+		return
+	}
+
 	http.NotFound(w, r)
+}
+
+func (s *Server) getActiveComments(entityRef string) ([]comments.Comment, error) {
+	if !s.commentsEnabled() {
+		return nil, nil
+	}
+	all, err := s.commentsStore.GetComments(entityRef)
+	if err != nil {
+		return nil, err
+	}
+	var active []comments.Comment
+	for _, c := range all {
+		if !c.Resolved {
+			active = append(active, c)
+		}
+	}
+	return active, nil
+}
+
+func (s *Server) serveComments(w http.ResponseWriter, r *http.Request, entityRefStr string) {
+	if !s.commentsEnabled() {
+		http.Error(w, "Comments are disabled", http.StatusForbidden)
+		return
+	}
+	ref, err := catalog.ParseRef(entityRefStr)
+	if err != nil {
+		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Failed to parse form", http.StatusBadRequest)
+			return
+		}
+
+		// Check if this is a resolve request
+		if id := r.FormValue("resolve"); id != "" {
+			if err := s.commentsStore.ResolveComment(ref.String(), id); err != nil {
+				http.Error(w, fmt.Sprintf("Failed to resolve comment: %v", err), http.StatusInternalServerError)
+				return
+			}
+			log.Printf("Comment %s resolved for %s", id, ref.String())
+			// Fall through to render updated snippet
+		} else {
+			text := r.FormValue("text")
+			author := r.FormValue("author")
+			if text == "" {
+				http.Error(w, "Comment text cannot be empty", http.StatusBadRequest)
+				return
+			}
+			if len(text) > comments.MaxTextLength {
+				http.Error(w, fmt.Sprintf("Comment text too long (max %d characters)", comments.MaxTextLength), http.StatusBadRequest)
+				return
+			}
+			if len(author) > comments.MaxAuthorLength {
+				http.Error(w, fmt.Sprintf("Author name too long (max %d characters)", comments.MaxAuthorLength), http.StatusBadRequest)
+				return
+			}
+			if author == "" {
+				author = "Anonymous"
+			}
+
+			// Generate a simple unique ID
+			id := fmt.Sprintf("%d-%d", time.Now().UnixNano(), r.Context().Value(ctxRefData).(*storeData).repo.Size())
+
+			comment := comments.Comment{
+				ID:        id,
+				Author:    author,
+				Text:      text,
+				CreatedAt: time.Now(),
+			}
+
+			if err := s.commentsStore.AddComment(ref.String(), comment); err != nil {
+				http.Error(w, fmt.Sprintf("Failed to add comment: %v", err), http.StatusInternalServerError)
+				return
+			}
+			log.Printf("Comment added to %s by %s", ref.String(), author)
+			// Fall through to render updated snippet
+		}
+	}
+
+	activeComments, err := s.getActiveComments(ref.String())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get comments: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	s.serveHTMLPage(w, r, "comments.html", map[string]any{
+		"Comments": activeComments,
+		"Entity":   ref,
+	})
 }
 
 // handleRefDispatch expects to handle a /ui/ref/<git-ref>/-/<rest> URL path,

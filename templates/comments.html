@@ -1,0 +1,49 @@
+<details class="border rounded-lg mt-6 text-sm group" {{ if .Comments }}open{{ end }}>
+    <summary class="font-semibold bg-gray-50 px-3 py-1.5 border-b rounded-t-lg text-gray-700 cursor-pointer hover:bg-gray-100 transition-colors list-none flex justify-between items-center">
+        <span>Comments ({{ len .Comments }})</span>
+        <span class="text-xs text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+    </summary>
+    <div class="p-3">
+        {{ if .Comments }}
+        <div class="space-y-3 mb-4">
+            {{ range .Comments }}
+            <div class="bg-gray-50/50 border-l-2 border-gray-200 pl-3 py-1 pr-2 rounded-r relative group/comment">
+                <div class="flex justify-between items-start mb-0.5">
+                    <div class="flex items-center gap-2">
+                        <span class="font-semibold text-gray-900">{{ .Author }}</span>
+                        <span class="text-[10px] uppercase tracking-wider text-gray-400">{{ .CreatedAt.Format "2006-01-02 15:04" }}</span>
+                    </div>
+                    <form hx-post="{{ $.Entity.String | toEntityURL }}/comments" 
+                          hx-target="closest details" hx-swap="outerHTML">
+                        <input type="hidden" name="resolve" value="{{ .ID }}">
+                        <button type="submit"
+                                class="opacity-0 group-hover/comment:opacity-100 text-[10px] text-blue-600 hover:text-blue-800 font-semibold uppercase tracking-tighter transition-opacity">
+                            Resolve
+                        </button>
+                    </form>
+                </div>
+                <p class="text-gray-600 whitespace-pre-wrap leading-relaxed">{{ .Text }}</p>
+            </div>
+            {{ end }}
+        </div>
+        {{ else }}
+        <p class="text-gray-400 italic mb-3">No comments yet.</p>
+        {{ end }}
+
+        <div class="pt-3 border-t">
+            <form hx-post="{{ .Entity.String | toEntityURL }}/comments" hx-target="closest details" hx-swap="outerHTML" class="space-y-2">
+                <div class="flex gap-2">
+                    <input type="text" name="author" placeholder="Your name" required maxlength="100"
+                           class="flex-1 px-2 py-1 border rounded focus:ring-1 focus:ring-blue-500 focus:outline-none text-xs">
+                    <button type="submit" 
+                            class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-xs font-semibold">
+                        Post Note
+                    </button>
+                </div>
+                <textarea name="text" rows="3" placeholder="What needs to be updated?..." 
+                          required maxlength="2000"
+                          class="w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-500 focus:outline-none text-xs"></textarea>
+            </form>
+        </div>
+    </div>
+</details>

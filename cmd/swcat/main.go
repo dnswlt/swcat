@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/dnswlt/swcat/internal/config"
+	"github.com/dnswlt/swcat/internal/comments"
 	"github.com/dnswlt/swcat/internal/gitclient"
 	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/repo"
@@ -96,6 +97,7 @@ type Options struct {
 	DotTimeout      time.Duration
 	UseDotStreaming bool
 	SVGCacheSize    int
+	CommentsDir     string
 }
 
 func runPluginsAndUpdate(r *plugins.Registry, st store.Source) error {
@@ -144,6 +146,7 @@ func main() {
 	fs.DurationVar(&opts.DotTimeout, "dot-timeout", 10*time.Second, "Maximum time to wait before cancelling dot executions")
 	fs.BoolVar(&opts.UseDotStreaming, "dot-streaming", runtime.GOOS == "windows", "Use long-running dot process to render SVG graphs (use only if dot process startup is slow, e.g. on Windows)")
 	fs.IntVar(&opts.SVGCacheSize, "svg-cache-size", 1024, "Max. number of SVG graphs to hold in the in-memory LRU cache")
+	fs.StringVar(&opts.CommentsDir, "comments-dir", "", "Directory where entity comments are stored (relative to root-dir if not absolute). If empty, comments are disabled.")
 	var runPlugins bool
 	fs.BoolVar(&runPlugins, "run-plugins", false, "If true, executes plugins on all entities at startup")
 
@@ -210,6 +213,19 @@ func main() {
 		}
 	}
 
+	var commentsStore comments.Store
+	if opts.CommentsDir != "" {
+		commentsDir := opts.CommentsDir
+		if !filepath.IsAbs(commentsDir) {
+			commentsDir = filepath.Join(opts.RootDir, commentsDir)
+		}
+		fileCommentsStore, err := comments.NewFileStore(commentsDir)
+		if err != nil {
+			log.Fatalf("Could not create comments store: %v", err)
+		}
+		commentsStore = comments.NewCachingStore(fileCommentsStore)
+	}
+
 	server, err := web.NewServer(
 		web.ServerOptions{
 			Addr:            opts.Addr,
@@ -223,6 +239,7 @@ func main() {
 		},
 		st,
 		pluginRegistry,
+		commentsStore,
 	)
 	if err != nil {
 		log.Fatalf("Could not create server: %v", err)

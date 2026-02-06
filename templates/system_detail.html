@@ -114,34 +114,103 @@
         {{ end }}
 
 
-        {{ if .SVG }}
-        <div id="svg-wrapper">
+                {{ if .SVG }}
 
-            <!-- Tabs to select the internal or external view. -->
-            <div id="svg-tabs" class="flex space-x-4 border-b">
-                {{ range .SVGTabs }}
-                {{ if .Active }}
-                <a role="button" href="{{ .Href }}#svg-wrapper"
-                    class="py-1 px-2 text-blue-600 border-b-2 border-blue-600">{{ .Name }}</a>
-                {{ else }}
-                <a role="button" href="{{ .Href }}#svg-wrapper"
-                    class="py-1 px-2 text-gray-700 hover:text-blue-600">{{ .Name }}</a>
-                {{ end }}
-                {{ end }}
-            </div>
 
-            <!-- SVG and its metadata JSON. -->
-            <div id="relationships-svg">
-                {{ .SVG }}
-            </div>
-            <script type="application/json" id="relationships-svg-meta">
-                {{ .SVGMetadataJSON }}
-            </script>
+                <div id="svg-wrapper">
 
-        </div>
-        {{ end }}
 
-    </main>
+        
+
+
+                    <!-- Tabs to select the internal or external view. -->
+
+
+                    <div id="svg-tabs" class="flex space-x-4 border-b">
+
+
+                        {{ range .SVGTabs }}
+
+
+                        {{ if .Active }}
+
+
+                        <a role="button" href="{{ .Href }}#svg-wrapper"
+
+
+                            class="py-1 px-2 text-blue-600 border-b-2 border-blue-600">{{ .Name }}</a>
+
+
+                        {{ else }}
+
+
+                        <a role="button" href="{{ .Href }}#svg-wrapper"
+
+
+                            class="py-1 px-2 text-gray-700 hover:text-blue-600">{{ .Name }}</a>
+
+
+                        {{ end }}
+
+
+                        {{ end }}
+
+
+                    </div>
+
+
+        
+
+
+                    <!-- SVG and its metadata JSON. -->
+
+
+                    <div id="relationships-svg">
+
+
+                        {{ .SVG }}
+
+
+                    </div>
+
+
+                    <script type="application/json" id="relationships-svg-meta">
+
+
+                        {{ .SVGMetadataJSON }}
+
+
+                            </script>
+
+
+                    
+
+
+                            </div>
+
+
+                            {{ end }}
+
+
+                    
+
+
+                            {{ if .CommentsEnabled }}
+
+
+                            {{ template "comments.html" . }}
+
+
+                            {{ end }}
+
+
+                        </main>
+
+
+                    
+
+
+        
 
     {{ template "footer.html" . }}
 

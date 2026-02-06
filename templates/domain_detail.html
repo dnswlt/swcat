@@ -80,17 +80,21 @@
         <p class="text-center text-gray-500">Domain not found</p>
         {{ end }}
 
-        {{ if .SVG }}
-        <div id="relationships-svg">
-            {{ .SVG }}
-        </div>
-        <script type="application/json" id="relationships-svg-meta">
-            {{ .SVGMetadataJSON }}
-        </script>        
-        {{ end }}
-    </main>
-
-    {{ template "footer.html" . }}
+                {{ if .SVG }}
+                <div id="relationships-svg">
+                    {{ .SVG }}
+                </div>
+                <script type="application/json" id="relationships-svg-meta">
+                    {{ .SVGMetadataJSON }}
+                        </script>
+                        {{ end }}
+                
+                        {{ if .CommentsEnabled }}
+                        {{ template "comments.html" . }}
+                        {{ end }}
+                    </main>
+                
+            {{ template "footer.html" . }}
 
     <script type="module" src="/static/dist/main.js?v={{.CacheBustingKey}}"></script>
 
