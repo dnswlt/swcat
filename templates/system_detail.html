@@ -29,9 +29,7 @@
                 {{ end }}
                 <div class="flex items-center space-x-2">
                     <span class="text-gray-500">System</span>
-                    {{ if not $readOnly }}
-                    {{ template "entity_toolbar.html" . }}
-                    {{ end }}
+                    {{ template "entity_toolbar.html" dict "Entity" . "ReadOnly" $readOnly }}
                 </div>
             </div>
 
@@ -42,8 +40,8 @@
             <div class="flex flex-wrap gap-x-12 gap-y-4">
                 <div>
                     <h3 class="font-semibold">Domain</h3>
-                    <p><a href="{{ .Spec.Domain | toURL }}"
-                            class="text-blue-600 hover:underline">{{ .Spec.Domain.QName }}</a></p>
+                    <p><a href="{{ .Spec.Domain | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.Domain.QName
+                            }}</a></p>
                 </div>
                 <div>
                     <h3 class="font-semibold">Owner</h3>
@@ -114,67 +112,63 @@
         {{ end }}
 
 
-                {{ if .SVG }}
+        {{ if .SVG }}
 
 
-                <div id="svg-wrapper">
+        <div id="svg-wrapper">
 
 
-        
 
 
-                    <!-- Tabs to select the internal or external view. -->
+
+            <!-- Tabs to select the internal or external view. -->
 
 
-                    <div id="svg-tabs" class="flex space-x-4 border-b">
+            <div id="svg-tabs" class="flex space-x-4 border-b">
 
 
-                        {{ range .SVGTabs }}
+                {{ range .SVGTabs }}
 
 
-                        {{ if .Active }}
+                {{ if .Active }}
 
 
-                        <a role="button" href="{{ .Href }}#svg-wrapper"
+                <a role="button" href="{{ .Href }}#svg-wrapper"
+                    class="py-1 px-2 text-blue-600 border-b-2 border-blue-600">{{ .Name }}</a>
 
 
-                            class="py-1 px-2 text-blue-600 border-b-2 border-blue-600">{{ .Name }}</a>
+                {{ else }}
 
 
-                        {{ else }}
+                <a role="button" href="{{ .Href }}#svg-wrapper" class="py-1 px-2 text-gray-700 hover:text-blue-600">{{
+                    .Name }}</a>
 
 
-                        <a role="button" href="{{ .Href }}#svg-wrapper"
+                {{ end }}
 
 
-                            class="py-1 px-2 text-gray-700 hover:text-blue-600">{{ .Name }}</a>
+                {{ end }}
 
 
-                        {{ end }}
+            </div>
 
 
-                        {{ end }}
 
 
-                    </div>
+
+            <!-- SVG and its metadata JSON. -->
 
 
-        
+            <div id="relationships-svg">
 
 
-                    <!-- SVG and its metadata JSON. -->
+                {{ .SVG }}
 
 
-                    <div id="relationships-svg">
+            </div>
 
 
-                        {{ .SVG }}
-
-
-                    </div>
-
-
-                    <script type="application/json" id="relationships-svg-meta">
+            <script type="application/json" id="relationships-svg-meta">
 
 
                         {{ .SVGMetadataJSON }}
@@ -183,34 +177,34 @@
                             </script>
 
 
-                    
 
 
-                            </div>
+
+        </div>
 
 
-                            {{ end }}
+        {{ end }}
 
 
-                    
 
 
-                            {{ if .CommentsEnabled }}
+
+        {{ if .CommentsEnabled }}
 
 
-                            {{ template "comments.html" . }}
+        {{ template "comments.html" . }}
 
 
-                            {{ end }}
+        {{ end }}
 
 
-                        </main>
+    </main>
 
 
-                    
 
 
-        
+
+
 
     {{ template "footer.html" . }}
 

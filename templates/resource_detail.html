@@ -30,9 +30,7 @@
 
                 <div class="flex items-center space-x-2">
                     <span class="text-gray-500">Resource</span>
-                    {{ if not $readOnly }}
-                    {{ template "entity_toolbar.html" . }}
-                    {{ end }}
+                    {{ template "entity_toolbar.html" dict "Entity" . "ReadOnly" $readOnly }}
                 </div>
             </div>
 
@@ -101,71 +99,28 @@
         <p class="text-center text-gray-500">Resource not found</p>
         {{ end }}
 
+        {{ if .SVG }}
+        <div id="relationships-svg" class="relative group">
+            {{ .SVG }}
+            {{ if .GraphURL }}
+            <a href="{{ .GraphURL }}"
+                class="absolute bottom-0 right-0 p-2 text-gray-400 hover:text-gray-800 transition-colors"
+                title="Open in Graph Builder">
+                {{ .GraphIcon }}
+            </a>
+            {{ end }}
+        </div>
 
-                {{ if .SVG }}
+        <script type="application/json" id="relationships-svg-meta">
+            {{ .SVGMetadataJSON }}
+        </script>
+        {{ end }}
 
+        {{ if .CommentsEnabled }}
+        {{ template "comments.html" . }}
+        {{ end }}
 
-                <div id="relationships-svg" class="relative group">
-
-
-                    {{ .SVG }}
-
-
-                    {{ if .GraphURL }}
-
-
-                    <a href="{{ .GraphURL }}"
-
-
-                        class="absolute bottom-0 right-0 p-2 text-gray-400 hover:text-gray-800 transition-colors"
-
-
-                        title="Open in Graph Builder">
-
-
-                        {{ .GraphIcon }}
-
-
-                    </a>
-
-
-                    {{ end }}
-
-
-                </div>
-
-
-                <script type="application/json" id="relationships-svg-meta">
-
-
-                    {{ .SVGMetadataJSON }}
-
-
-                        </script>
-
-
-                        {{ end }}
-
-
-                
-
-
-                        {{ if .CommentsEnabled }}
-
-
-                        {{ template "comments.html" . }}
-
-
-                        {{ end }}
-
-
-                    </main>
-
-
-                
-
-
-        
+    </main>
 
     {{ template "footer.html" . }}
 

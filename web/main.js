@@ -107,7 +107,7 @@ function onClickNode(node, shiftKey) {
         console.error("Cannot process node click: missing svgMeta.routes");
         return;
     }
-    
+
     const url = svgMeta.routes.entities[id];
     if (!url) {
         console.warn("No route defined for entity:", id);
@@ -177,7 +177,7 @@ async function initPage(pageId) {
             });
         }
     }
-    
+
     if (pageId === 'graph') {
         await import('./graph.js');
     }
@@ -186,6 +186,11 @@ async function initPage(pageId) {
     if (['entity-edit', 'entity-clone'].includes(pageId)) {
         const { initYamlEditor } = await import('./editor.js');
         initYamlEditor();
+    }
+
+    if (pageId === 'entity-source') {
+        const { initYamlViewer } = await import('./editor.js');
+        initYamlViewer();
     }
 }
 

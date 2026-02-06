@@ -239,6 +239,7 @@ func (s *Server) reloadTemplates() error {
 		},
 		"entitySummary": entitySummary,
 		"parentSystem":  parentSystem,
+		"dict":          dictFunc,
 	})
 	var err error
 	if s.opts.BaseDir == "" {
@@ -934,6 +935,10 @@ func (s *Server) serveEntityYAML(w http.ResponseWriter, r *http.Request, entityR
 
 func (s *Server) serveEntityClone(w http.ResponseWriter, r *http.Request, entityRef string) {
 	s.serveEntityYAML(w, r, entityRef, "entity_clone.html")
+}
+
+func (s *Server) serveEntitySource(w http.ResponseWriter, r *http.Request, entityRef string) {
+	s.serveEntityYAML(w, r, entityRef, "entity_source.html")
 }
 
 func (s *Server) serveEntityEdit(w http.ResponseWriter, r *http.Request, entityRef string) {
@@ -1730,6 +1735,12 @@ func (s *Server) dispatchEntityRequest(w http.ResponseWriter, r *http.Request) {
 		} else {
 			s.serveEntityDelete(w, r, entityRef)
 		}
+		return
+	}
+
+	if strings.HasSuffix(path, "/source") {
+		entityRef := strings.TrimSuffix(path, "/source")
+		s.serveEntitySource(w, r, entityRef)
 		return
 	}
 

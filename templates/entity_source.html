@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    {{ template "head.html" . }}
+</head>
+
+<body class="min-h-screen bg-gray-50 p-4" data-page="entity-source">
+    <!-- Navbar -->
+    {{template "nav.html" .}}
+
+    <main class="w-full max-w-screen-lg mx-auto space-y-6 bg-white shadow rounded-xl p-6">
+        <h1 class="text-2xl font-semibold text-center">Source: {{ .Entity.GetQName }}</h1>
+
+        <div id="error-messages"></div>
+
+        <div class="space-y-4">
+            <div>
+                <label for="yaml-viewer" class="block text-sm font-medium text-gray-700">YAML</label>
+                <textarea id="yaml-viewer" name="yaml" readonly>{{ .YAML }}</textarea>
+            </div>
+
+            <div class="flex justify-end space-x-4">
+                <a href="{{ .Entity | toURL }}" class="bg-gray-600 text-white font-bold py-2 px-4 rounded">
+                    Back
+                </a>
+            </div>
+        </div>
+    </main>
+
+    {{ template "footer.html" . }}
+
+    <script type="module" src="/static/dist/main.js?v={{.CacheBustingKey}}"></script>
+
+</body>
+
+</html>

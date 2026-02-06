@@ -175,6 +175,26 @@ const yamlAutoCompleteExtension = yamlLanguage.data.of({
     autocomplete: yamlCompleter
 });
 
+// Initializes the CodeMirror EditorView for the YAML editor (read-only mode).
+export function initYamlViewer() {
+    const viewerEl = document.getElementById("yaml-viewer");
+    if (!viewerEl) {
+        return;
+    }
+
+    new EditorView({
+        doc: viewerEl.value,
+        extensions: [
+            basicSetup,
+            yaml(),
+            EditorView.editable.of(false),
+            EditorView.lineWrapping,
+        ],
+        parent: viewerEl.parentElement,
+    });
+    viewerEl.style.display = "none";
+}
+
 // Initializes the CodeMirror EditorView for the YAML editor.
 export function initYamlEditor() {
     const editorEl = document.getElementById("yaml-editor");

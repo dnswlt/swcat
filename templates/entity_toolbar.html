@@ -1,10 +1,28 @@
 <!-- "Toolbar" with three edit icons for entities -->
 <div class="flex items-center space-x-2">
-    {{ if . | hasPlugins }}
-    <a href="#" hx-post="{{ . | toEntityURL }}/run-plugins"
-        hx-target="#error-messages"
-        class="bg-orange-200 hover:bg-orange-300 py-1 px-3 rounded text-sm"
-        aria-label="Update auto-generated data " title="Update auto-generated data ">
+    {{ $entity := .Entity }}
+    {{ $readOnly := .ReadOnly }}
+
+    {{ if $readOnly }}
+    <a href="{{ $entity | toEntityURL }}/source" class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm"
+        aria-label="View Source" title="View Source">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <!-- File text icon -->
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+        </svg>
+        <span class="sr-only">View Source</span>
+    </a>
+    {{ else }}
+
+    {{ if $entity | hasPlugins }}
+    <a href="#" hx-post="{{ $entity | toEntityURL }}/run-plugins" hx-target="#error-messages"
+        class="bg-orange-200 hover:bg-orange-300 py-1 px-3 rounded text-sm" aria-label="Update auto-generated data "
+        title="Update auto-generated data ">
         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <!-- Zap (flash/bolt) -->
@@ -13,7 +31,7 @@
         <span class="sr-only">Update auto-generated data </span>
     </a>
     {{ end }}
-    <a href="{{ . | toEntityURL }}/edit" class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm"
+    <a href="{{ $entity | toEntityURL }}/edit" class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm"
         aria-label="Edit" title="Edit">
         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -23,8 +41,8 @@
         </svg>
         <span class="sr-only">Edit</span>
     </a>
-    {{ if . | isCloneable }}
-    <a href="{{ . | toEntityURL }}/clone" class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm"
+    {{ if $entity | isCloneable }}
+    <a href="{{ $entity | toEntityURL }}/clone" class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm"
         aria-label="Clone" title="Clone">
         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -34,7 +52,7 @@
         </svg>
         <span class="sr-only">Clone</span>
     </a>
-    <a href="{{ . | toEntityURL }}/delete" class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm"
+    <a href="{{ $entity | toEntityURL }}/delete" class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm"
         aria-label="Delete" title="Delete">
         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -44,5 +62,6 @@
         </svg>
         <span class="sr-only">Delete</span>
     </a>
-    {{ end }}
+    {{ end }} <!-- isCloneable -->
+    {{ end }} <!-- if ReadOnly -->
 </div>

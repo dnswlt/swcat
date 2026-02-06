@@ -30,9 +30,7 @@
 
                 <div class="flex items-center space-x-2">
                     <span class="text-gray-500">API</span>
-                    {{ if not $readOnly }}
-                    {{ template "entity_toolbar.html" . }}
-                    {{ end }}
+                    {{ template "entity_toolbar.html" dict "Entity" . "ReadOnly" $readOnly }}
                 </div>
             </div>
 

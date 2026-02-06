@@ -29,9 +29,7 @@
                 {{ end }}
                 <div class="flex items-center space-x-2">
                     <span class="text-gray-500">Group</span>
-                    {{ if not $readOnly }}
-                    {{ template "entity_toolbar.html" . }}
-                    {{ end }}
+                    {{ template "entity_toolbar.html" dict "Entity" . "ReadOnly" $readOnly }}
                 </div>
             </div>
 
@@ -53,13 +51,15 @@
                 {{ if .Spec.Profile.Email }}
                 <div>
                     <h3 class="font-semibold">Email</h3>
-                    <p><a class="text-blue-600 hover:underline" href="mailto:{{ .Spec.Profile.Email }}">{{ .Spec.Profile.Email }}</a></p>
+                    <p><a class="text-blue-600 hover:underline" href="mailto:{{ .Spec.Profile.Email }}">{{
+                            .Spec.Profile.Email }}</a></p>
                 </div>
                 {{ end }}
                 {{ if .Spec.Parent }}
                 <div>
                     <h3 class="font-semibold">Parent</h3>
-                    <p><a href="{{ .Spec.Parent | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.Parent }}</a></p>
+                    <p><a href="{{ .Spec.Parent | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.Parent }}</a>
+                    </p>
                 </div>
                 {{ end }}
                 <div>
@@ -97,13 +97,13 @@
 
         {{ else }}
         <p class="text-center text-gray-500">Group not found</p>
-                        {{ end }}
-                
-                        {{ if .CommentsEnabled }}
-                        {{ template "comments.html" . }}
-                        {{ end }}
-                    </main>
-                
+        {{ end }}
+
+        {{ if .CommentsEnabled }}
+        {{ template "comments.html" . }}
+        {{ end }}
+    </main>
+
     {{ template "footer.html" . }}
 
     <script type="module" src="/static/dist/main.js?v={{.CacheBustingKey}}"></script>
