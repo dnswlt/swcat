@@ -23,6 +23,8 @@ type Store interface {
 	// GetComments returns all comments for the given entity reference.
 	// entityRef is typically in the format kind:namespace/name.
 	GetComments(entityRef string) ([]Comment, error)
+	// GetOpenComments returns only unresolved comments for the given entity reference.
+	GetOpenComments(entityRef string) ([]Comment, error)
 	// AddComment adds a new comment for the given entity reference.
 	AddComment(entityRef string, comment Comment) error
 	// ResolveComment marks a specific comment as resolved.
@@ -33,6 +35,10 @@ type Store interface {
 type EmptyStore struct{}
 
 func (s EmptyStore) GetComments(entityRef string) ([]Comment, error) {
+	return []Comment{}, nil
+}
+
+func (s EmptyStore) GetOpenComments(entityRef string) ([]Comment, error) {
 	return []Comment{}, nil
 }
 

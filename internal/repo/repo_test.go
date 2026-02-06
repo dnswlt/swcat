@@ -181,9 +181,10 @@ func TestRepository_Finders(t *testing.T) {
 	}
 
 	t.Run("FindComponents", func(t *testing.T) {
+		f := NewFinder()
 		finder := func(q string) []catalog.Entity {
 			var entities []catalog.Entity
-			for _, e := range repo.FindComponents(q) {
+			for _, e := range f.FindComponents(repo, q) {
 				entities = append(entities, e)
 			}
 			return entities
@@ -201,9 +202,10 @@ func TestRepository_Finders(t *testing.T) {
 	})
 
 	t.Run("FindSystems", func(t *testing.T) {
+		f := NewFinder()
 		finder := func(q string) []catalog.Entity {
 			var entities []catalog.Entity
-			for _, e := range repo.FindSystems(q) {
+			for _, e := range f.FindSystems(repo, q) {
 				entities = append(entities, e)
 			}
 			return entities
@@ -217,9 +219,10 @@ func TestRepository_Finders(t *testing.T) {
 	})
 
 	t.Run("FindDomains", func(t *testing.T) {
+		f := NewFinder()
 		finder := func(q string) []catalog.Entity {
 			var entities []catalog.Entity
-			for _, e := range repo.FindDomains(q) {
+			for _, e := range f.FindDomains(repo, q) {
 				entities = append(entities, e)
 			}
 			return entities
@@ -232,9 +235,10 @@ func TestRepository_Finders(t *testing.T) {
 	})
 
 	t.Run("FindAPIs", func(t *testing.T) {
+		f := NewFinder()
 		finder := func(q string) []catalog.Entity {
 			var entities []catalog.Entity
-			for _, e := range repo.FindAPIs(q) {
+			for _, e := range f.FindAPIs(repo, q) {
 				entities = append(entities, e)
 			}
 			return entities
@@ -247,9 +251,10 @@ func TestRepository_Finders(t *testing.T) {
 	})
 
 	t.Run("FindResources", func(t *testing.T) {
+		f := NewFinder()
 		finder := func(q string) []catalog.Entity {
 			var entities []catalog.Entity
-			for _, e := range repo.FindResources(q) {
+			for _, e := range f.FindResources(repo, q) {
 				entities = append(entities, e)
 			}
 			return entities
@@ -262,9 +267,10 @@ func TestRepository_Finders(t *testing.T) {
 	})
 
 	t.Run("FindGroups", func(t *testing.T) {
+		f := NewFinder()
 		finder := func(q string) []catalog.Entity {
 			var entities []catalog.Entity
-			for _, e := range repo.FindGroups(q) {
+			for _, e := range f.FindGroups(repo, q) {
 				entities = append(entities, e)
 			}
 			return entities

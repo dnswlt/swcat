@@ -69,7 +69,7 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 		Version:  "integration-test",
 	}
 
-	server, err := NewServer(opts, st, pluginRegistry)
+	server, err := NewServer(opts, st, pluginRegistry, nil)
 	if err != nil {
 		t.Fatalf("Failed to create server: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestIntegration_ServerEntities(t *testing.T) {
 	}
 
 	// We want to test the detail page for every entity in the repo.
-	entities := sd.repo.FindEntities("")
+	entities := s.finder.FindEntities(sd.repo, "")
 	if len(entities) == 0 {
 		t.Fatal("No entities found in repository")
 	}

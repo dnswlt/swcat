@@ -15,7 +15,6 @@ import (
 
 	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
-	"github.com/dnswlt/swcat/internal/query"
 	"github.com/dnswlt/swcat/internal/store"
 )
 
@@ -269,64 +268,7 @@ func (r *Repository) Entity(ref *catalog.Ref) catalog.Entity {
 	return nil // invalid kind specifier
 }
 
-func findEntities[T catalog.Entity](q string, items map[string]T) []T {
-	var result []T
-
-	if strings.TrimSpace(q) == "" {
-		// No filter, return all items
-		result = make([]T, 0, len(items))
-		for _, item := range items {
-			result = append(result, item)
-		}
-	} else {
-		expr, err := query.Parse(q)
-		if err != nil {
-			return nil // Invalid query => no results
-		}
-		ev := query.NewEvaluator(expr)
-		for _, c := range items {
-			ok, err := ev.Matches(c)
-			if err != nil {
-				return nil // Broken query (e.g. broken regex) => no results
-			}
-			if ok {
-				result = append(result, c)
-			}
-		}
-	}
-	slices.SortFunc(result, func(c1, c2 T) int {
-		return catalog.CompareEntityByRef(c1, c2)
-	})
-	return result
-}
-
-func (r *Repository) FindComponents(q string) []*catalog.Component {
-	return findEntities(q, r.components)
-}
-
-func (r *Repository) FindSystems(q string) []*catalog.System {
-	return findEntities(q, r.systems)
-}
-
-func (r *Repository) FindAPIs(q string) []*catalog.API {
-	return findEntities(q, r.apis)
-}
-
-func (r *Repository) FindResources(q string) []*catalog.Resource {
-	return findEntities(q, r.resources)
-}
-
-func (r *Repository) FindDomains(q string) []*catalog.Domain {
-	return findEntities(q, r.domains)
-}
-
-func (r *Repository) FindGroups(q string) []*catalog.Group {
-	return findEntities(q, r.groups)
-}
-
-func (r *Repository) FindEntities(q string) []catalog.Entity {
-	return findEntities(q, r.allEntities)
-}
+// Removed FindEntities and findEntities logic in favor of Finder
 
 func labelKeys[T catalog.Entity](items map[string]T) []string {
 	keySet := map[string]bool{}

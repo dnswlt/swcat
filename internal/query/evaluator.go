@@ -8,18 +8,24 @@ import (
 	"github.com/dnswlt/swcat/internal/catalog"
 )
 
+// PropertyProvider is a function that retrieves external properties for an entity.
+// It returns a slice of string values and a boolean indicating if the property was found.
+type PropertyProvider func(e catalog.Entity, prop string) ([]string, bool)
+
 // Evaluator holds a compiled query expression and provides methods to match it against entities.
 // It caches compiled regular expressions for performance.
 type Evaluator struct {
 	expr       Expression
 	regexCache map[string]*regexp.Regexp
+	providers  []PropertyProvider
 }
 
 // NewEvaluator creates a new Evaluator for the given expression AST.
-func NewEvaluator(expr Expression) *Evaluator {
+func NewEvaluator(expr Expression, providers ...PropertyProvider) *Evaluator {
 	return &Evaluator{
 		expr:       expr,
 		regexCache: make(map[string]*regexp.Regexp),
+		providers:  providers,
 	}
 }
 
@@ -347,11 +353,21 @@ func (ev *Evaluator) evaluateNode(e catalog.Entity, expr Expression) (bool, erro
 	case *AttributeTerm:
 		attr := strings.ToLower(v.Attribute)
 		accessor, ok := attributeAccessors[attr]
-		if !ok {
-			return false, fmt.Errorf("unknown attribute for filtering: %s", v.Attribute)
+		var values []string
+		if ok {
+			values, ok = accessor(e)
+		} else {
+			// Try external providers
+			for _, p := range ev.providers {
+				values, ok = p(e, attr)
+				if ok {
+					break
+				}
+			}
+			if !ok {
+				return false, fmt.Errorf("unknown attribute for filtering: %s", v.Attribute)
+			}
 		}
-
-		values, ok := accessor(e)
 		if !ok {
 			// Attribute is not applicable to this entity kind.
 			return false, nil

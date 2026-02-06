@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/comments"
+	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/gitclient"
 	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/repo"
@@ -115,12 +115,13 @@ func runPluginsAndUpdate(r *plugins.Registry, st store.Source) error {
 		cfg = storeCfg
 	}
 
-	repo, err := repo.Load(s, cfg.Catalog)
+	repository, err := repo.Load(s, cfg.Catalog)
 	if err != nil {
 		return err
 	}
 
-	allEntities := repo.FindEntities("")
+	finder := repo.NewFinder()
+	allEntities := finder.FindEntities(repository, "")
 	log.Printf("Running plugins on %d entities", len(allEntities))
 	for _, e := range allEntities {
 		// TODO: Collect results and actually update the sidecar files.

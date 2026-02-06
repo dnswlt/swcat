@@ -40,6 +40,20 @@ func (s *CachingStore) GetComments(entityRef string) ([]Comment, error) {
 	return comments, nil
 }
 
+func (s *CachingStore) GetOpenComments(entityRef string) ([]Comment, error) {
+	allComments, err := s.GetComments(entityRef)
+	if err != nil {
+		return nil, err
+	}
+	var openComments []Comment
+	for _, c := range allComments {
+		if !c.Resolved {
+			openComments = append(openComments, c)
+		}
+	}
+	return openComments, nil
+}
+
 func (s *CachingStore) AddComment(entityRef string, comment Comment) error {
 	// Write-through to underlying store first
 	if err := s.underlying.AddComment(entityRef, comment); err != nil {

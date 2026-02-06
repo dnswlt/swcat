@@ -52,6 +52,20 @@ func (s *FileStore) GetComments(entityRef string) ([]Comment, error) {
 	return comments, nil
 }
 
+func (s *FileStore) GetOpenComments(entityRef string) ([]Comment, error) {
+	allComments, err := s.GetComments(entityRef)
+	if err != nil {
+		return nil, err
+	}
+	var openComments []Comment
+	for _, c := range allComments {
+		if !c.Resolved {
+			openComments = append(openComments, c)
+		}
+	}
+	return openComments, nil
+}
+
 func (s *FileStore) AddComment(entityRef string, comment Comment) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -58,6 +58,7 @@ type Server struct {
 	mu           sync.RWMutex
 	storeDataMap map[string]*storeData
 	source       store.Source
+	finder       *repo.Finder
 
 	dotRunner dot.Runner
 
@@ -89,7 +90,27 @@ func NewServer(opts ServerOptions, source store.Source, pluginRegistry *plugins.
 		dotRunner:      dotRunner,
 		pluginRegistry: pluginRegistry,
 		commentsStore:  commentsStore,
+		finder:         repo.NewFinder(),
 		started:        time.Now(),
+	}
+
+	if s.commentsStore != nil {
+		s.finder.RegisterPropertyProvider(func(e catalog.Entity, prop string) ([]string, bool) {
+			if prop != "comment" && prop != "comments" {
+				return nil, false
+			}
+			comments, err := s.commentsStore.GetOpenComments(e.GetRef().String())
+			if err != nil {
+				// Warn but don't fail, treating as no comments found
+				log.Printf("Failed to load comments for %s: %v", e.GetRef(), err)
+				return nil, false
+			}
+			var values []string
+			for _, c := range comments {
+				values = append(values, c.Text, c.Author)
+			}
+			return values, true
+		})
 	}
 
 	if err := s.reloadTemplates(); err != nil {
@@ -139,7 +160,7 @@ func (s *Server) loadStoreData(ref string) (*storeData, error) {
 		cfg = storeCfg
 	}
 
-	repo, err := repo.Load(st, cfg.Catalog)
+	repoInstance, err := repo.Load(st, cfg.Catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +173,7 @@ func (s *Server) loadStoreData(ref string) (*storeData, error) {
 	data := &storeData{
 		ref:      ref,
 		config:   cfg,
-		repo:     repo,
+		repo:     repoInstance,
 		svgCache: cache,
 	}
 	s.storeDataMap[ref] = data
@@ -163,7 +184,7 @@ func (s *Server) loadStoreData(ref string) (*storeData, error) {
 // The SVG cache of the new storeData is empty. Other values are copied from the given data.
 //
 // Callers of this method MUST ensure that s.mu is already held.
-func (s *Server) updateStoreData(data *storeData, repo *repo.Repository) {
+func (s *Server) updateStoreData(data *storeData, repository *repo.Repository) {
 	// Create new empty SVG cache
 	cache, err := lru.New[string, *svg.Result](s.opts.SVGCacheSize)
 	if err != nil {
@@ -172,7 +193,7 @@ func (s *Server) updateStoreData(data *storeData, repo *repo.Repository) {
 
 	s.storeDataMap[data.ref] = &storeData{
 		ref:      data.ref,
-		repo:     repo,
+		repo:     repository,
 		config:   data.config,
 		svgCache: cache,
 	}
@@ -250,7 +271,7 @@ func (s *Server) serveComponents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
 	data := s.getStoreData(r)
-	components := data.repo.FindComponents(query)
+	components := s.finder.FindComponents(data.repo, query)
 	params := map[string]any{
 		"Components":    components,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindComponent),
@@ -272,7 +293,7 @@ func (s *Server) serveSystems(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	systems := data.repo.FindSystems(query)
+	systems := s.finder.FindSystems(data.repo, query)
 	params := map[string]any{
 		"Systems":       systems,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindSystem),
@@ -418,7 +439,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		return
 	}
 
-	activeComments, err := s.getActiveComments(system.GetRef().String())
+	activeComments, err := s.getActiveComments(system.GetRef())
 	if err != nil {
 		log.Printf("Failed to get comments for %s: %v", system.GetRef(), err)
 	}
@@ -476,7 +497,7 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		params["GraphIcon"] = template.HTML(svgIcons["Graph"])
 	}
 
-	activeComments, err := s.getActiveComments(component.GetRef().String())
+	activeComments, err := s.getActiveComments(component.GetRef())
 	if err != nil {
 		log.Printf("Failed to get comments for %s: %v", component.GetRef(), err)
 	}
@@ -493,7 +514,7 @@ func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	apis := data.repo.FindAPIs(query)
+	apis := s.finder.FindAPIs(data.repo, query)
 	params := map[string]any{
 		"APIs":          apis,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindAPI),
@@ -566,7 +587,7 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 		params["GraphIcon"] = template.HTML(svgIcons["Graph"])
 	}
 
-	activeComments, err := s.getActiveComments(ap.GetRef().String())
+	activeComments, err := s.getActiveComments(ap.GetRef())
 	if err != nil {
 		log.Printf("Failed to get comments for %s: %v", ap.GetRef(), err)
 	}
@@ -582,7 +603,7 @@ func (s *Server) serveResources(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	resources := data.repo.FindResources(query)
+	resources := s.finder.FindResources(data.repo, query)
 	params := map[string]any{
 		"Resources":     resources,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindResource),
@@ -645,7 +666,7 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 		params["GraphIcon"] = template.HTML(svgIcons["Graph"])
 	}
 
-	activeComments, err := s.getActiveComments(resource.GetRef().String())
+	activeComments, err := s.getActiveComments(resource.GetRef())
 	if err != nil {
 		log.Printf("Failed to get comments for %s: %v", resource.GetRef(), err)
 	}
@@ -662,7 +683,7 @@ func (s *Server) serveDomains(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	domains := data.repo.FindDomains(query)
+	domains := s.finder.FindDomains(data.repo, query)
 	params := map[string]any{
 		"Domains":       domains,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindDomain),
@@ -717,7 +738,7 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 		return
 	}
 
-	activeComments, err := s.getActiveComments(domain.GetRef().String())
+	activeComments, err := s.getActiveComments(domain.GetRef())
 	if err != nil {
 		log.Printf("Failed to get comments for %s: %v", domain.GetRef(), err)
 	}
@@ -734,7 +755,7 @@ func (s *Server) serveGroups(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	groups := data.repo.FindGroups(query)
+	groups := s.finder.FindGroups(data.repo, query)
 	params := map[string]any{
 		"Groups":        groups,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindGroup),
@@ -767,7 +788,7 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 	}
 	params["Group"] = group
 
-	activeComments, err := s.getActiveComments(group.GetRef().String())
+	activeComments, err := s.getActiveComments(group.GetRef())
 	if err != nil {
 		log.Printf("Failed to get comments for %s: %v", group.GetRef(), err)
 	}
@@ -801,7 +822,7 @@ func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
 	var entities []catalog.Entity
 	query := q.Get("q")
 	if query != "" {
-		for _, e := range data.repo.FindEntities(query) {
+		for _, e := range s.finder.FindEntities(data.repo, query) {
 			if !selectedIDs[e.GetRef().String()] {
 				entities = append(entities, e)
 			}
@@ -865,7 +886,7 @@ func (s *Server) serveEntities(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	entities := data.repo.FindEntities(query)
+	entities := s.finder.FindEntities(data.repo, query)
 	params := map[string]any{
 		"Entities":      entities,
 		"SearchPath":    uiURLWithContext(r.Context(), "entities"),
@@ -1412,14 +1433,14 @@ func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 		completions = data.repo.LabelKeys(ref.Kind)
 	case "spec.consumesApis", "spec.providesApis":
 		fieldType = "item"
-		apis := data.repo.FindAPIs("")
+		apis := s.finder.FindAPIs(data.repo, "")
 		completions = make([]string, len(apis))
 		for i, a := range apis {
 			completions[i] = a.GetRef().QName()
 		}
 	case "spec.dependsOn":
 		fieldType = "item"
-		entities := data.repo.FindEntities("kind:component OR kind:resource")
+		entities := s.finder.FindEntities(data.repo, "kind:component OR kind:resource")
 		completions = make([]string, len(entities))
 		for i, a := range entities {
 			// Use fully qualified refs including the kind for dependsOn.
@@ -1427,14 +1448,14 @@ func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 		}
 	case "spec.owner":
 		fieldType = "value"
-		groups := data.repo.FindGroups("")
+		groups := s.finder.FindGroups(data.repo, "")
 		completions = make([]string, len(groups))
 		for i, g := range groups {
 			completions[i] = g.GetRef().QName()
 		}
 	case "spec.system":
 		fieldType = "value"
-		systems := data.repo.FindSystems("")
+		systems := s.finder.FindSystems(data.repo, "")
 		completions = make([]string, len(systems))
 		for i, s := range systems {
 			completions[i] = s.GetRef().QName()
@@ -1546,7 +1567,7 @@ func (s *Server) serveEntitiesJSON(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
 	data := s.getStoreData(r)
-	entities := data.repo.FindEntities(query)
+	entities := s.finder.FindEntities(data.repo, query)
 
 	result := make([]map[string]any, 0, len(entities))
 	for _, e := range entities {
@@ -1731,21 +1752,11 @@ func (s *Server) dispatchEntityRequest(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-func (s *Server) getActiveComments(entityRef string) ([]comments.Comment, error) {
+func (s *Server) getActiveComments(ref *catalog.Ref) ([]comments.Comment, error) {
 	if !s.commentsEnabled() {
 		return nil, nil
 	}
-	all, err := s.commentsStore.GetComments(entityRef)
-	if err != nil {
-		return nil, err
-	}
-	var active []comments.Comment
-	for _, c := range all {
-		if !c.Resolved {
-			active = append(active, c)
-		}
-	}
-	return active, nil
+	return s.commentsStore.GetOpenComments(ref.String())
 }
 
 func (s *Server) serveComments(w http.ResponseWriter, r *http.Request, entityRefStr string) {
@@ -1811,7 +1822,7 @@ func (s *Server) serveComments(w http.ResponseWriter, r *http.Request, entityRef
 		}
 	}
 
-	activeComments, err := s.getActiveComments(ref.String())
+	activeComments, err := s.getActiveComments(ref)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get comments: %v", err), http.StatusInternalServerError)
 		return
