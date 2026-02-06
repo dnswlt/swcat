@@ -1,11 +1,13 @@
 package web
 
 import (
+	"context"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/config"
+	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -347,4 +349,123 @@ func TestNewCustomContent(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestApplyMagicLinks(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "plain text, no refs",
+			input: "this is some text",
+			want:  "this is some text",
+		},
+		{
+			name:  "single component ref",
+			input: "check out component:cache-loader",
+			want:  "check out [component:cache-loader](/ui/components/cache-loader)",
+		},
+		{
+			name:  "api ref with namespace",
+			input: "use api:external/some-api",
+			want:  "use [api:external/some-api](/ui/apis/external%2Fsome-api)",
+		},
+		{
+			name:  "multiple refs",
+			input: "system:sys1 depends on resource:res1",
+			want:  "[system:sys1](/ui/systems/sys1) depends on [resource:res1](/ui/resources/res1)",
+		},
+		{
+			name:  "ref with context",
+			input: "component:c1",
+			want:  "[component:c1](/ui/components/c1)",
+		},
+		{
+			name:  "invalid ref kind",
+			input: "unknown:foo",
+			want:  "unknown:foo",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := applyMagicLinks(ctx, tt.input)
+			if got != tt.want {
+				t.Errorf("applyMagicLinks() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestApplyMagicLinksWithRepo(t *testing.T) {
+	r := repo.NewRepository()
+	// Add an entity
+	err := r.AddEntity(&catalog.Component{
+		Metadata: &catalog.Metadata{
+			Name: "my-comp",
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to add entity: %v", err)
+	}
+
+	sd := &storeData{repo: r}
+	ctx := context.WithValue(context.Background(), ctxRefData, sd)
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "existing entity",
+			input: "see component:my-comp",
+			want:  "see [component:my-comp](/ui/components/my-comp)",
+		},
+		{
+			name:  "missing entity",
+			input: "see component:missing",
+			want:  "see component:missing",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := applyMagicLinks(ctx, tt.input)
+			if got != tt.want {
+				t.Errorf("applyMagicLinks() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMarkdownWithMagicLinks(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("no namespace", func(t *testing.T) {
+		input := "Please see component:my-comp for details."
+		want := "<p>Please see <a href=\"/ui/components/my-comp\">component:my-comp</a> for details.</p>\n"
+		got, err := markdownWithMagicLinks(ctx, input)
+		if err != nil {
+			t.Fatalf("markdownWithMagicLinks() error: %v", err)
+		}
+		if string(got) != want {
+			t.Errorf("markdownWithMagicLinks() = %q, want %q", string(got), want)
+		}
+	})
+
+	t.Run("with namespace", func(t *testing.T) {
+		input := "Use api:ns1/my-api."
+		want := "<p>Use <a href=\"/ui/apis/ns1%2Fmy-api\">api:ns1/my-api</a>.</p>\n"
+		got, err := markdownWithMagicLinks(ctx, input)
+		if err != nil {
+			t.Fatalf("markdownWithMagicLinks() error: %v", err)
+		}
+		if string(got) != want {
+			t.Errorf("markdownWithMagicLinks() = %q, want %q", string(got), want)
+		}
+	})
 }

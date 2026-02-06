@@ -31,7 +31,10 @@ apiVersion: swcat/v1
 kind: API
 metadata:
   name: analytics-events-api
-  description: API for ingesting analytics events.
+  description: |
+    API for ingesting analytics events.
+
+    Ingested events end up in the resource:raw-events-storage.
   annotations:
     swcat/visibility: public
     maven.apache.org/coords: org.slf4j:slf4j-api

@@ -1556,6 +1556,9 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		"toEntityURL": func(s any) (string, error) {
 			return toEntityURLWithContext(r.Context(), s)
 		},
+		"markdown": func(input string) (template.HTML, error) {
+			return markdownWithMagicLinks(r.Context(), input)
+		},
 	})
 
 	err = tmpl.ExecuteTemplate(&output, templateFile, templateParams)

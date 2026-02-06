@@ -10,11 +10,13 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/config"
+	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/yuin/goldmark"
 )
 
@@ -371,12 +373,52 @@ func (ns *NavBar) SetActive(requestURI string) *NavBar {
 	return ns
 }
 
+// markdown converts the given markdown string to HTML.
 func markdown(input string) (template.HTML, error) {
 	var buf bytes.Buffer
 	if err := goldmark.Convert([]byte(input), &buf); err != nil {
 		return "", fmt.Errorf("failed to process markdown: %v", err)
 	}
 	return template.HTML(buf.String()), nil
+}
+
+var entityRefRE = regexp.MustCompile(`\b(domain|system|component|resource|api|group):([a-zA-Z](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\/)?[a-zA-Z](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\b`)
+
+// applyMagicLinks scans the input string for entity references (e.g., "component:my-comp")
+// and replaces them with Markdown links to the respective entity's detail page.
+// If the entity does not exist in the repository (which is extracted from the context),
+// it appends a warning marker.
+func applyMagicLinks(ctx context.Context, input string) string {
+	var r *repo.Repository
+	if v := ctx.Value(ctxRefData); v != nil {
+		if sd, ok := v.(*storeData); ok {
+			r = sd.repo
+		}
+	}
+
+	return entityRefRE.ReplaceAllStringFunc(input, func(m string) string {
+		ref, err := catalog.ParseRef(m)
+		if err != nil {
+			return m
+		}
+		// If a repository is available in the context, check if the entity exists.
+		if r != nil && r.Entity(ref) == nil {
+			return m
+		}
+
+		url, err := toURLWithContext(ctx, ref)
+		if err != nil {
+			return m
+		}
+		return fmt.Sprintf("[%s](%s)", m, url)
+	})
+}
+
+// markdownWithMagicLinks first applies magic links to the input string and then
+// converts the result to HTML.
+func markdownWithMagicLinks(ctx context.Context, input string) (template.HTML, error) {
+	input = applyMagicLinks(ctx, input)
+	return markdown(input)
 }
 
 func setQueryParam(r *http.Request, key, value string) *url.URL {
