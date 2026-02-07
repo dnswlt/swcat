@@ -1,0 +1,62 @@
+{{ if .SVG }}
+<div id="svg-wrapper" class="space-y-4">
+    <!-- Tabs to select the internal or external view. -->
+    <div id="svg-tabs" class="flex space-x-4 border-b">
+        {{ range .SVGTabs }}
+        {{ if .Active }}
+        <a role="button" 
+           href="{{ .Href }}#svg-wrapper"
+           hx-get="{{ .Href }}" 
+           hx-target="#svg-wrapper" 
+           hx-swap="outerHTML" 
+           hx-push-url="true"
+           class="py-1 px-2 text-blue-600 border-b-2 border-blue-600">{{ .Name }}</a>
+        {{ else }}
+        <a role="button" 
+           href="{{ .Href }}#svg-wrapper"
+           hx-get="{{ .Href }}" 
+           hx-target="#svg-wrapper" 
+           hx-swap="outerHTML" 
+           hx-push-url="true"
+           class="py-1 px-2 text-gray-700 hover:text-blue-600">{{ .Name }}</a>
+        {{ end }}
+        {{ end }}
+    </div>
+
+    {{ if .ExternalSystemChips }}
+    <div id="external-systems" class="flex flex-wrap gap-2 items-center">
+        {{ range .ExternalSystemChips }}
+        {{ if .Excluded }}
+        <a href="{{ .Href }}#svg-wrapper"
+           hx-get="{{ .Href }}" 
+           hx-target="#svg-wrapper" 
+           hx-swap="outerHTML" 
+           hx-push-url="true"
+           class="flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-xs hover:bg-gray-200 transition-colors">
+            <span>{{ .Name }}</span>
+            <span class="font-bold ml-1">+</span>
+        </a>
+        {{ else }}
+        <a href="{{ .Href }}#svg-wrapper"
+           hx-get="{{ .Href }}" 
+           hx-target="#svg-wrapper" 
+           hx-swap="outerHTML" 
+           hx-push-url="true"
+           class="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs hover:bg-blue-200 transition-colors">
+            <span>{{ .Name }}</span>
+            <span class="font-bold ml-1">&times;</span>
+        </a>
+        {{ end }}
+        {{ end }}
+    </div>
+    {{ end }}
+
+    <!-- SVG and its metadata JSON. -->
+    <div id="relationships-svg">
+        {{ .SVG }}
+    </div>
+    <script type="application/json" id="relationships-svg-meta">
+        {{ .SVGMetadataJSON }}
+    </script>
+</div>
+{{ end }}

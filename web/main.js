@@ -168,6 +168,13 @@ async function initPage(pageId) {
         loadSVGMetadata();
         addSVGListener();
 
+        // Re-run listener registration and SVG metadata parsing after an SVG update
+        // (triggered by a HX-Trigger-After-Swap response header).
+        document.body.addEventListener("svgUpdated", () => {
+            loadSVGMetadata();
+            addSVGListener();
+        });
+
         // JSON viewer to render JSON annotations.
         const jsonViewers = document.querySelectorAll('.json-viewer');
         if (jsonViewers.length > 0) {

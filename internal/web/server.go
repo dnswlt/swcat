@@ -506,6 +506,13 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 
 	s.setCustomContent(system, &data.config.UI, params)
 
+	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Target") == "svg-wrapper" {
+		// Only replace the SVG div. Trigger an svgUpdated event so the frontend can re-scan the SVG metadata JSON.
+		w.Header().Set("HX-Trigger-After-Swap", "svgUpdated")
+		s.serveHTMLPage(w, r, "system_svg.html", params)
+		return
+	}
+
 	s.serveHTMLPage(w, r, "system_detail.html", params)
 }
 
