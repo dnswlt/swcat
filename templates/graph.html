@@ -14,6 +14,9 @@
             Create ad hoc diagrams for selected entities.
             Shift-click an entity in the graph to search for its related entities.
         </p>
+        <div id="graph-spinner" class="htmx-indicator text-center text-blue-600">
+            <span class="inline-block animate-pulse">Updating graph...</span>
+        </div>
 
         <!-- Search -->
         {{ template "search_bar.html" . }}

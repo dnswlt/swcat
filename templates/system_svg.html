@@ -5,7 +5,7 @@
         {{ range .SVGTabs }}
         {{ if .Active }}
         <a role="button" 
-           href="{{ .Href }}#svg-wrapper"
+           href="{{ .Href }}"
            hx-get="{{ .Href }}" 
            hx-target="#svg-wrapper" 
            hx-swap="outerHTML" 
@@ -13,7 +13,7 @@
            class="py-1 px-2 text-blue-600 border-b-2 border-blue-600">{{ .Name }}</a>
         {{ else }}
         <a role="button" 
-           href="{{ .Href }}#svg-wrapper"
+           href="{{ .Href }}"
            hx-get="{{ .Href }}" 
            hx-target="#svg-wrapper" 
            hx-swap="outerHTML" 
@@ -27,7 +27,7 @@
     <div id="external-systems" class="flex flex-wrap gap-2 items-center">
         {{ range .ExternalSystemChips }}
         {{ if .Excluded }}
-        <a href="{{ .Href }}#svg-wrapper"
+        <a href="{{ .Href }}"
            hx-get="{{ .Href }}" 
            hx-target="#svg-wrapper" 
            hx-swap="outerHTML" 
@@ -37,7 +37,7 @@
             <span class="font-bold ml-1">+</span>
         </a>
         {{ else }}
-        <a href="{{ .Href }}#svg-wrapper"
+        <a href="{{ .Href }}"
            hx-get="{{ .Href }}" 
            hx-target="#svg-wrapper" 
            hx-swap="outerHTML" 

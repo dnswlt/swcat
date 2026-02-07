@@ -83,23 +83,50 @@ function onClickEdge(edge) {
     url.searchParams.append("c", from);
     url.searchParams.append("c", to);
 
-    window.location.assign(url);
+    // Use HTMX to fetch and update just the SVG wrapper, like the system chips do
+    htmx.ajax('GET', url.toString(), {
+        target: '#svg-wrapper',
+        swap: 'outerHTML'
+    });
+
+    // Manually update the browser URL. This will not work well when the user
+    // hits "back", but htmx.ajax has no pushUrl attribute yet.
+    // Pending issue: https://github.com/bigskysoftware/htmx/issues/2744
+    window.history.pushState(null, '', url);
 }
 
-// Handles clicks on SVG nodes by looking up the URL to navigate to in 
+// Searches for entities related to the given entity reference.
+// Only works on the graph page - updates the search input and triggers htmx.
+function searchRelatedEntities(entityRef) {
+    if (document.body.dataset.page !== 'graph') {
+        // Shift-click only works on the interactive graph page
+        return;
+    }
+
+    const searchInput = document.querySelector('input[name="q"]');
+    if (!searchInput) {
+        console.error('Search input not found');
+        return;
+    }
+
+    // Update search input with relation query
+    searchInput.value = `rel='${entityRef}'`;
+
+    // Trigger htmx on the form to perform the search
+    const form = searchInput.closest('form');
+    if (form) {
+        htmx.trigger(form, 'submit');
+    }
+}
+
+// Handles clicks on SVG nodes by looking up the URL to navigate to in
 // svgMeta.routes.
 function onClickNode(node, shiftKey) {
     const id = node.id;
     if (!id) return;
 
     if (shiftKey) {
-        if (document.body.dataset.page !== 'graph') {
-            // Shift-click only works on the interactive graph page.
-            return;
-        }
-        const url = new URL(window.location);
-        url.searchParams.set("q", `rel='${id}'`);
-        window.location.href = url;
+        searchRelatedEntities(id);
         return;
     }
 

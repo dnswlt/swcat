@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"maps"
 	"net/http"
 	"net/url"
 	"path"
@@ -227,12 +228,18 @@ func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 func (s *Server) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
 		// Echo back the requested headers to avoid being brittle with a hardcoded list.
 		if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
 			w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
 		}
+
+		// Expose htmx headers so JavaScript can read them in CORS requests
+		w.Header().Set("Access-Control-Expose-Headers", "HX-Trigger-After-Swap, HX-Redirect, HX-Refresh")
+
+		// Cache preflight requests for 24 hours to reduce overhead
+		w.Header().Set("Access-Control-Max-Age", "86400")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -865,16 +872,80 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 	s.serveHTMLPage(w, r, "group_detail.html", params)
 }
 
+// renderGraphSVG renders the SVG for the given selected entities.
+// Returns the SVG HTML and metadata, or empty params if rendering fails.
+func (s *Server) renderGraphSVG(r *http.Request, data *storeData, selectedEntities []catalog.Entity) map[string]any {
+	params := map[string]any{"SelectedEntities": selectedEntities}
+
+	if len(selectedEntities) == 0 {
+		return params
+	}
+
+	// Build cache key from sorted entity IDs
+	cacheKeyIDs := make([]string, len(selectedEntities))
+	for i, e := range selectedEntities {
+		cacheKeyIDs[i] = e.GetRef().String()
+	}
+	slices.Sort(cacheKeyIDs)
+	cacheKey := fmt.Sprintf("graph?ids=%s", strings.Join(cacheKeyIDs, ","))
+
+	// Get or render SVG
+	svgResult, ok := data.lookupSVG(cacheKey)
+	if !ok {
+		ctx, cancel := s.withDotTimeout(r.Context())
+		defer cancel()
+		var err error
+		svgResult, err = s.svgRenderer(data).Graph(ctx, selectedEntities)
+		if err != nil {
+			log.Printf("Failed to render SVG: %v", err)
+			return params
+		}
+		data.storeSVG(cacheKey, svgResult)
+	}
+
+	params["SVG"] = template.HTML(svgResult.SVG)
+	svgMeta, err := s.svgMetadataJSON(r, svgResult.Metadata)
+	if err != nil {
+		log.Printf("Failed to create metadata JSON: %v", err)
+	} else {
+		params["SVGMetadataJSON"] = svgMeta
+	}
+
+	return params
+}
+
+// renderTemplateFragment renders a template with context-aware URL functions.
+func (s *Server) renderTemplateFragment(r *http.Request, templateName string, params map[string]any) ([]byte, error) {
+	tmpl, err := s.template.Clone()
+	if err != nil {
+		return nil, fmt.Errorf("clone template: %w", err)
+	}
+
+	tmpl = tmpl.Funcs(map[string]any{
+		"toURL": func(s any) (string, error) {
+			return toURLWithContext(r.Context(), s)
+		},
+		"toEntityURL": func(s any) (string, error) {
+			return toEntityURLWithContext(r.Context(), s)
+		},
+	})
+
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, templateName, params); err != nil {
+		return nil, fmt.Errorf("execute template %s: %w", templateName, err)
+	}
+
+	return buf.Bytes(), nil
+}
+
 func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	data := s.getStoreData(r)
 
-	// Process e= query parameters to get selected entities.
-	var hiddenParams []map[string]string
+	// Process e= query parameters to get selected entities
 	var selectedEntities []catalog.Entity
 	selectedIDs := make(map[string]bool)
 	for _, e := range q["e"] {
-		hiddenParams = append(hiddenParams, map[string]string{"Name": "e", "Value": e})
 		if ref, err := catalog.ParseRef(e); err == nil {
 			if entity := data.repo.Entity(ref); entity != nil {
 				selectedEntities = append(selectedEntities, entity)
@@ -883,7 +954,7 @@ func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Retrieve entities matching query q=, filtering out already selected ones.
+	// Retrieve entities matching query q=, filtering out already selected ones
 	var entities []catalog.Entity
 	query := q.Get("q")
 	if query != "" {
@@ -894,53 +965,62 @@ func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Handle htmx requests
 	if r.Header.Get("HX-Request") == "true" {
-		// htmx request: only render search result rows
+		refreshFull := q.Get("refresh") == "full"
+		graphURL := uiURLWithContext(r.Context(), "graph")
+
+		if refreshFull {
+			// Entity add/remove: return table rows + SVG with OOB swap
+			rowsHTML, err := s.renderTemplateFragment(r, "graph_rows.html", map[string]any{
+				"Entities": entities,
+				"GraphURL": graphURL,
+			})
+			if err != nil {
+				log.Printf("Failed to render graph_rows.html: %v", err)
+				http.Error(w, "Template rendering error", http.StatusInternalServerError)
+				return
+			}
+
+			svgParams := s.renderGraphSVG(r, data, selectedEntities)
+			svgParams["GraphURL"] = graphURL
+			svgHTML, err := s.renderTemplateFragment(r, "graph_svg.html", svgParams)
+			if err != nil {
+				log.Printf("Failed to render graph_svg.html: %v", err)
+				// Continue without SVG rather than failing the whole request
+				svgHTML = nil
+			}
+
+			w.Header().Set("Content-Type", "text/html; charset=UTF-8")
+			w.Header().Set("HX-Trigger-After-Swap", "svgUpdated")
+			w.Write(rowsHTML)
+			if svgHTML != nil {
+				w.Write(svgHTML)
+			}
+			return
+		}
+
+		// Search only: render just the table rows
 		s.serveHTMLPage(w, r, "graph_rows.html", map[string]any{
 			"Entities": entities,
+			"GraphURL": graphURL,
 		})
 		return
 	}
 
+	// Full page render
+	graphURL := uiURLWithContext(r.Context(), "graph")
 	params := map[string]any{
 		"Entities":         entities,
 		"SelectedEntities": selectedEntities,
-		"SearchPath":       uiURLWithContext(r.Context(), "graph"),
+		"SearchPath":       graphURL,
+		"GraphURL":         graphURL,
 		"EntitiesLabel":    "entities",
 		"Query":            query,
-		"HiddenParams":     hiddenParams,
 	}
 
-	if len(selectedEntities) > 0 {
-		cacheKeyIDs := make([]string, 0, len(selectedEntities))
-		for _, e := range selectedEntities {
-			cacheKeyIDs = append(cacheKeyIDs, e.GetRef().String())
-		}
-		slices.Sort(cacheKeyIDs)
-		cacheKey := fmt.Sprintf("graph?ids=%s", strings.Join(cacheKeyIDs, ","))
-		svgResult, ok := data.lookupSVG(cacheKey)
-		if !ok {
-			var err error
-			ctx, cancel := s.withDotTimeout(r.Context())
-			defer cancel()
-			svgResult, err = s.svgRenderer(data).Graph(ctx, selectedEntities)
-			if err != nil {
-				log.Printf("Failed to render SVG: %v", err)
-				// Don't fail the whole page, just don't show SVG
-			} else {
-				data.storeSVG(cacheKey, svgResult)
-			}
-		}
-		if svgResult != nil {
-			params["SVG"] = template.HTML(svgResult.SVG)
-			jsonMeta, err := s.svgMetadataJSON(r, svgResult.Metadata)
-			if err != nil {
-				log.Printf("Failed to create metadata JSON: %v", err)
-			} else {
-				params["SVGMetadataJSON"] = jsonMeta
-			}
-		}
-	}
+	// Add SVG rendering (reuse the helper method)
+	maps.Copy(params, s.renderGraphSVG(r, data, selectedEntities))
 
 	// full page
 	s.serveHTMLPage(w, r, "graph.html", params)
