@@ -926,3 +926,42 @@ func TestExtractEntityRef(t *testing.T) {
 		})
 	}
 }
+
+func TestCORS(t *testing.T) {
+	st := store.NewDiskStore("../../testdata/test1")
+	s := newTestServer(t, st)
+	h := s.Handler()
+
+	// Check OPTIONS request
+	req := httptest.NewRequest(http.MethodOptions, "/health", nil)
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d", rr.Code, http.StatusNoContent)
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, "*")
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "GET") {
+		t.Errorf("Access-Control-Allow-Methods = %q, want it to contain GET", got)
+	}
+
+	// Check requested headers are echoed
+	req = httptest.NewRequest(http.MethodOptions, "/health", nil)
+	req.Header.Set("Access-Control-Request-Headers", "X-Custom-Header, HX-Request")
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if got := rr.Header().Get("Access-Control-Allow-Headers"); got != "X-Custom-Header, HX-Request" {
+		t.Errorf("Access-Control-Allow-Headers = %q, want %q", got, "X-Custom-Header, HX-Request")
+	}
+
+	// Check GET request
+	req = httptest.NewRequest(http.MethodGet, "/health", nil)
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, "*")
+	}
+}

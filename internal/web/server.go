@@ -223,6 +223,26 @@ func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 	})
 }
 
+// withCORS adds CORS headers to all responses to allow cross-origin requests.
+func (s *Server) withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+
+		// Echo back the requested headers to avoid being brittle with a hardcoded list.
+		if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
+			w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
+		}
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) reloadTemplates() error {
 	tmpl := template.New("root")
 	tmpl = tmpl.Funcs(map[string]any{
@@ -349,7 +369,7 @@ func (s *Server) svgMetadataJSON(r *http.Request, svgMeta *dot.SVGGraphMetadata)
 }
 
 // graphURLFromMetadata builds a graph builder URL from SVG metadata. It filters out
-// "Group" entities, as they tend to clutter the graph.
+// "Group" and "System" entities, as they tend to clutter the graph.
 func (s *Server) graphURLFromMetadata(ctx context.Context, meta *dot.SVGGraphMetadata) (string, error) {
 	var entities []string
 	for refStr := range meta.Nodes {
@@ -357,7 +377,7 @@ func (s *Server) graphURLFromMetadata(ctx context.Context, meta *dot.SVGGraphMet
 		if err != nil {
 			return "", fmt.Errorf("failed to parse ref %q from SVG metadata: %w", refStr, err)
 		}
-		if ref.Kind != catalog.KindGroup {
+		if ref.Kind != catalog.KindGroup && ref.Kind != catalog.KindSystem {
 			entities = append(entities, refStr)
 		}
 	}
@@ -2017,5 +2037,5 @@ func (s *Server) Serve() error {
 }
 
 func (s *Server) Handler() http.Handler {
-	return s.withRequestLogging(s.routes())
+	return s.withRequestLogging(s.withCORS(s.routes()))
 }
