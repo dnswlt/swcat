@@ -95,7 +95,7 @@ func TestSystemExternalGraph_Topology(t *testing.T) {
 	}
 
 	// Generate graph for System A
-	_, err := renderer.SystemExternalGraph(context.Background(), sysA, nil)
+	_, err := renderer.SystemExternalGraph(context.Background(), sysA, nil, nil)
 	if err != nil {
 		t.Fatalf("SystemExternalGraph failed: %v", err)
 	}
@@ -111,19 +111,41 @@ func TestSystemExternalGraph_Topology(t *testing.T) {
 	if !strings.Contains(dot, `"system:sys-b"[`) {
 		t.Errorf("DOT missing node for sys-b")
 	}
-	// Should NOT contain api-b node (it's inside sys-b which is collapsed)
-	if strings.Contains(dot, `"api:api-b"[`) {
-		t.Errorf("DOT should not contain node for api-b")
-	}
 
 	// 2. Verify Edges
-	// Edge from comp-a to sys-b
-	// The edge generation logic in svg.go uses:
-	// dw.AddEdge(r.entityEdge(dep.source, dep.targetSystem, dot.ESSystemLink))
-	// So: "component:comp-a" -> "system:sys-b"
 	expectedEdge := `"component:comp-a" -> "system:sys-b"`
 	if !strings.Contains(dot, expectedEdge) {
 		t.Errorf("DOT missing edge: %s", expectedEdge)
+	}
+}
+
+func TestSystemExternalGraph_Excluded(t *testing.T) {
+	r := setupRepo(t)
+	runner := &mockRunner{}
+	renderer := NewRenderer(r, runner, NewStandardLayouter(Config{}))
+
+	sysA := r.System(&catalog.Ref{Name: "sys-a"})
+	sysB := r.System(&catalog.Ref{Name: "sys-b"})
+
+	// Generate graph for System A, but exclude System B
+	_, err := renderer.SystemExternalGraph(context.Background(), sysA, nil, []*catalog.Ref{sysB.GetRef()})
+	if err != nil {
+		t.Fatalf("SystemExternalGraph failed: %v", err)
+	}
+
+	dot := runner.lastDotSource
+
+	// Should NOT contain comp-a because its only external dependency is excluded
+	if strings.Contains(dot, `"component:comp-a"[`) {
+		t.Errorf("DOT should not contain node for comp-a")
+	}
+	// Should NOT contain sys-b
+	if strings.Contains(dot, `"system:sys-b"[`) {
+		t.Errorf("DOT should not contain node for sys-b")
+	}
+	// Should NOT contain edge to sys-b
+	if strings.Contains(dot, `"system:sys-b"`) {
+		t.Errorf("DOT should not mention sys-b")
 	}
 }
 

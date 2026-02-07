@@ -232,6 +232,58 @@ func (r *Repository) Resource(ref *catalog.Ref) *catalog.Resource {
 	return getEntity(r.resources, ref, catalog.KindResource)
 }
 
+// SurroundingSystems returns all external systems that have a relationship with any of
+// the given system's components, APIs, or resources.
+func (r *Repository) SurroundingSystems(system *catalog.System) []*catalog.System {
+	extSystemsMap := map[string]*catalog.System{}
+	addExtSys := func(ref *catalog.Ref) {
+		e := r.Entity(ref)
+		if sp, ok := e.(catalog.SystemPart); ok {
+			if !sp.GetSystem().Equal(system.GetRef()) {
+				sys := r.System(sp.GetSystem())
+				extSystemsMap[sys.GetRef().String()] = sys
+			}
+		}
+	}
+
+	for _, cRef := range system.GetComponents() {
+		c := r.Component(cRef)
+		for _, r := range c.Spec.ConsumesAPIs {
+			addExtSys(r.Ref)
+		}
+		for _, r := range c.Spec.DependsOn {
+			addExtSys(r.Ref)
+		}
+		for _, r := range c.GetDependents() {
+			addExtSys(r.Ref)
+		}
+	}
+	for _, aRef := range system.GetAPIs() {
+		a := r.API(aRef)
+		for _, r := range a.GetConsumers() {
+			addExtSys(r.Ref)
+		}
+	}
+	for _, rRef := range system.GetResources() {
+		res := r.Resource(rRef)
+		for _, r := range res.Spec.DependsOn {
+			addExtSys(r.Ref)
+		}
+		for _, r := range res.GetDependents() {
+			addExtSys(r.Ref)
+		}
+	}
+
+	var result []*catalog.System
+	for _, sys := range extSystemsMap {
+		result = append(result, sys)
+	}
+	slices.SortFunc(result, func(a, b *catalog.System) int {
+		return strings.Compare(a.GetQName(), b.GetQName())
+	})
+	return result
+}
+
 // Entity returns the entity identified by the entity reference ref, if it exists.
 // If the entity does not exist, it returns the nil interface.
 // The entity reference must be fully qualified, i.e. <kind>:[<namespace>/]<name>

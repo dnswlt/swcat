@@ -407,25 +407,32 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	}
 	params["System"] = system
 
-	// Extract neighbor systems from context parameter c=.
-	var contextSystems []*catalog.System
+	// Extract neighbor systems from context parameter c= and excluded parameter x=.
+	var contextSystems []*catalog.Ref
+	var excludedSystems []*catalog.Ref
 	q := r.URL.Query()
 	for _, v := range q["c"] {
-		ref, err := catalog.ParseRefAs(catalog.KindSystem, v)
-		if err != nil {
-			continue // Ignore invalid refs
-		}
-		if c := data.repo.System(ref); c != nil {
-			contextSystems = append(contextSystems, c)
+		if ref, err := catalog.ParseRefAs(catalog.KindSystem, v); err == nil {
+			contextSystems = append(contextSystems, ref)
 		}
 	}
-	cacheKeyIDs := make([]string, 0, len(contextSystems))
-	for _, s := range contextSystems {
-		cacheKeyIDs = append(cacheKeyIDs, s.GetRef().String())
+	for _, v := range q["x"] {
+		if ref, err := catalog.ParseRefAs(catalog.KindSystem, v); err == nil {
+			excludedSystems = append(excludedSystems, ref)
+		}
 	}
-	slices.Sort(cacheKeyIDs)
+
+	cacheKeyIDs := func(refs []*catalog.Ref) string {
+		ids := make([]string, 0, len(refs))
+		for _, r := range refs {
+			ids = append(ids, r.String())
+		}
+		slices.Sort(ids)
+		return strings.Join(ids, ",")
+	}
+
 	internalView := r.URL.Query().Get("view") == "internal"
-	cacheKey := fmt.Sprintf("%s?%s%t", system.GetRef(), strings.Join(cacheKeyIDs, ","), internalView)
+	cacheKey := fmt.Sprintf("%s?c=%s&x=%s&i=%t", system.GetRef(), cacheKeyIDs(contextSystems), cacheKeyIDs(excludedSystems), internalView)
 	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
 		var err error
@@ -435,7 +442,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		if internalView {
 			svgResult, err = renderer.SystemInternalGraph(ctx, system)
 		} else {
-			svgResult, err = renderer.SystemExternalGraph(ctx, system, contextSystems)
+			svgResult, err = renderer.SystemExternalGraph(ctx, system, contextSystems, excludedSystems)
 		}
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
@@ -443,6 +450,36 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 			return
 		}
 		data.storeSVG(cacheKey, svgResult)
+	}
+
+	// For the external view, we also want to show chips for all external systems.
+	if !internalView {
+		excludedIDs := map[string]bool{}
+		for _, r := range excludedSystems {
+			excludedIDs[r.String()] = true
+		}
+
+		type systemChip struct {
+			Name     string
+			Excluded bool
+			Href     string
+		}
+		var chips []systemChip
+		for _, sys := range data.repo.SurroundingSystems(system) {
+			excluded := excludedIDs[sys.GetRef().String()]
+			href := r.URL
+			if excluded {
+				href = removeQueryParam(r, "x", sys.GetRef().String())
+			} else {
+				href = addQueryParam(r, "x", sys.GetRef().String())
+			}
+			chips = append(chips, systemChip{
+				Name:     sys.GetQName(),
+				Excluded: excluded,
+				Href:     href.RequestURI(),
+			})
+		}
+		params["ExternalSystemChips"] = chips
 	}
 	params["SVGTabs"] = []struct {
 		Active bool

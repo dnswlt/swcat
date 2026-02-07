@@ -572,3 +572,78 @@ func TestRepository_SpecFieldValues(t *testing.T) {
 		})
 	}
 }
+
+func TestRepository_SurroundingSystems(t *testing.T) {
+	r := NewRepository()
+
+	// External System 1
+	sys1 := &catalog.System{Metadata: &catalog.Metadata{Name: "sys1"}, Spec: &catalog.SystemSpec{Owner: &catalog.Ref{Name: "o"}, Domain: &catalog.Ref{Name: "d"}}}
+	comp1 := &catalog.Component{Metadata: &catalog.Metadata{Name: "comp1"}, Spec: &catalog.ComponentSpec{System: sys1.GetRef(), Owner: &catalog.Ref{Name: "o"}, Type: "service", Lifecycle: "production"}}
+	api1 := &catalog.API{Metadata: &catalog.Metadata{Name: "api1"}, Spec: &catalog.APISpec{System: sys1.GetRef(), Owner: &catalog.Ref{Name: "o"}, Type: "openapi", Lifecycle: "production"}}
+
+	// External System 2
+	sys2 := &catalog.System{Metadata: &catalog.Metadata{Name: "sys2"}, Spec: &catalog.SystemSpec{Owner: &catalog.Ref{Name: "o"}, Domain: &catalog.Ref{Name: "d"}}}
+	res2 := &catalog.Resource{Metadata: &catalog.Metadata{Name: "res2"}, Spec: &catalog.ResourceSpec{System: sys2.GetRef(), Owner: &catalog.Ref{Name: "o"}, Type: "database"}}
+
+	// Target System
+	targetSys := &catalog.System{Metadata: &catalog.Metadata{Name: "target"}, Spec: &catalog.SystemSpec{Owner: &catalog.Ref{Name: "o"}, Domain: &catalog.Ref{Name: "d"}}}
+	targetComp := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "target-comp"},
+		Spec: &catalog.ComponentSpec{
+			System:    targetSys.GetRef(),
+			Owner:     &catalog.Ref{Name: "o"},
+			Type:      "service",
+			Lifecycle: "production",
+			ConsumesAPIs: []*catalog.LabelRef{
+				{Ref: api1.GetRef()},
+			},
+			DependsOn: []*catalog.LabelRef{
+				{Ref: res2.GetRef()},
+			},
+		},
+	}
+	targetAPI := &catalog.API{
+		Metadata: &catalog.Metadata{Name: "target-api"},
+		Spec: &catalog.APISpec{
+			System:    targetSys.GetRef(),
+			Owner:     &catalog.Ref{Name: "o"},
+			Type:      "openapi",
+			Lifecycle: "production",
+		},
+	}
+	// Add a dependent from sys1 to target-api
+	comp1.Spec.ConsumesAPIs = append(comp1.Spec.ConsumesAPIs, &catalog.LabelRef{Ref: targetAPI.GetRef()})
+
+	// Add all to repo
+	group := &catalog.Group{Metadata: &catalog.Metadata{Name: "o"}, Spec: &catalog.GroupSpec{Type: "team"}}
+	domain := &catalog.Domain{Metadata: &catalog.Metadata{Name: "d"}, Spec: &catalog.DomainSpec{Owner: &catalog.Ref{Name: "o"}}}
+	entities := []catalog.Entity{group, domain, sys1, comp1, api1, sys2, res2, targetSys, targetComp, targetAPI}
+	for _, e := range entities {
+		if err := r.AddEntity(e); err != nil {
+			t.Fatalf("AddEntity(%s): %v", e.GetRef(), err)
+		}
+	}
+
+	if err := r.Validate(); err != nil {
+		t.Fatalf("Validate(): %v", err)
+	}
+
+	// targetSys is related to:
+	// - sys1 (via targetComp -> api1, and comp1 -> targetAPI)
+	// - sys2 (via targetComp -> res2)
+	surrounding := r.SurroundingSystems(targetSys)
+
+	if len(surrounding) != 2 {
+		t.Errorf("len(surrounding) = %d, want 2", len(surrounding))
+	}
+
+	var names []string
+	for _, s := range surrounding {
+		names = append(names, s.GetMetadata().Name)
+	}
+	slices.Sort(names)
+	want := []string{"sys1", "sys2"}
+	if !slices.Equal(names, want) {
+		t.Errorf("surrounding systems = %v, want %v", names, want)
+	}
+}

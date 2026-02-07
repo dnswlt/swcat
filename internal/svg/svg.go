@@ -173,11 +173,17 @@ func (r *Renderer) DomainGraph(ctx context.Context, domain *catalog.Domain) (*Re
 	return runDot(ctx, r.runner, dotSource)
 }
 
-func (r *Renderer) generateSystemExternalDotSource(system *catalog.System, contextSystems []*catalog.System) *dot.DotSource {
+func (r *Renderer) generateSystemExternalDotSource(system *catalog.System, contextSystems []*catalog.Ref, excludedSystems []*catalog.Ref) *dot.DotSource {
 	// Potential neighboring systems for which a detailed view is requested.
-	ctxSysMap := map[string]*catalog.System{}
+	ctxSysMap := map[string]bool{}
 	for _, ctxSys := range contextSystems {
-		ctxSysMap[ctxSys.GetRef().QName()] = ctxSys
+		ctxSysMap[ctxSys.QName()] = true
+	}
+
+	// Systems that should be excluded from the view.
+	exclSysMap := map[string]bool{}
+	for _, exclSys := range excludedSystems {
+		exclSysMap[exclSys.QName()] = true
 	}
 
 	dw := dot.New()
@@ -187,20 +193,25 @@ func (r *Renderer) generateSystemExternalDotSource(system *catalog.System, conte
 	extSPDeps := map[string][]extSysPartDep{}
 	// Adds the src->dst dependency to either extDeps or extSPDeps, depending on whether
 	// full context was requested for dst.
-	// Ignores intra-system dependencies.
+	// Ignores intra-system dependencies and excluded systems.
 	// Returns true if the dependency was added.
 	addExtDep := func(src, dst catalog.SystemPart, ref *catalog.LabelRef, dir DependencyDir) bool {
 		if dst.GetSystem().Equal(src.GetSystem()) {
 			return false
 		}
-		dstSys := r.repo.System(dst.GetSystem())
-		if _, ok := ctxSysMap[dstSys.GetRef().QName()]; ok {
+		dstSysRef := dst.GetSystem()
+		if exclSysMap[dstSysRef.QName()] {
+			return false
+		}
+
+		if ctxSysMap[dstSysRef.QName()] {
 			// dst is part of a system for which we want to show full context.
-			extSPDeps[dstSys.GetRef().QName()] = append(extSPDeps[dstSys.GetRef().QName()],
+			extSPDeps[dstSysRef.QName()] = append(extSPDeps[dstSysRef.QName()],
 				extSysPartDep{source: src, target: dst, ref: ref, direction: dir},
 			)
 		} else {
 			// dst is part of a system for which no context was requested.
+			dstSys := r.repo.System(dstSysRef)
 			extDeps = append(extDeps, extSysDep{
 				source: src, targetSystem: dstSys, direction: dir,
 			})
@@ -398,10 +409,11 @@ func (r *Renderer) generateSystemInternalDotSource(system *catalog.System) *dot.
 }
 
 // SystemExternalGraph generates an SVG for an "external" view of the given system.
-// contextSystems are systems that should be expanded in the view. Other systems will be shown
-// as opaque single nodes.
-func (r *Renderer) SystemExternalGraph(ctx context.Context, system *catalog.System, contextSystems []*catalog.System) (*Result, error) {
-	dotSource := r.generateSystemExternalDotSource(system, contextSystems)
+// contextSystems are systems that should be expanded in the view.
+// excludedSystems are systems that should be hidden from the view.
+// Other systems will be shown as opaque single nodes.
+func (r *Renderer) SystemExternalGraph(ctx context.Context, system *catalog.System, contextSystems []*catalog.Ref, excludedSystems []*catalog.Ref) (*Result, error) {
+	dotSource := r.generateSystemExternalDotSource(system, contextSystems, excludedSystems)
 	return runDot(ctx, r.runner, dotSource)
 }
 

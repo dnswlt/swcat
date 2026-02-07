@@ -433,6 +433,39 @@ func setQueryParam(r *http.Request, key, value string) *url.URL {
 	return u
 }
 
+func addQueryParam(r *http.Request, key, value string) *url.URL {
+	u, err := url.ParseRequestURI(r.RequestURI)
+	if err != nil {
+		return r.URL
+	}
+	q := u.Query()
+	q.Add(key, value)
+	u.RawQuery = q.Encode()
+	return u
+}
+
+func removeQueryParam(r *http.Request, key, value string) *url.URL {
+	u, err := url.ParseRequestURI(r.RequestURI)
+	if err != nil {
+		return r.URL
+	}
+	q := u.Query()
+	vals := q[key]
+	newVals := make([]string, 0, len(vals))
+	for _, v := range vals {
+		if v != value {
+			newVals = append(newVals, v)
+		}
+	}
+	if len(newVals) == 0 {
+		q.Del(key)
+	} else {
+		q[key] = newVals
+	}
+	u.RawQuery = q.Encode()
+	return u
+}
+
 type ccAttr struct {
 	Name  string
 	Value string

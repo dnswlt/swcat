@@ -85,7 +85,7 @@ func TestSystemExternalGraph_WithDot(t *testing.T) {
 		t.Fatalf("test-system-1 not found in repo")
 	}
 	system2 := repo.System(&catalog.Ref{Name: "test-system-2"})
-	if system1 == nil {
+	if system2 == nil {
 		t.Fatalf("test-system-2 not found in repo")
 	}
 
@@ -93,7 +93,7 @@ func TestSystemExternalGraph_WithDot(t *testing.T) {
 	defer cancel()
 
 	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(Config{}))
-	res, err := renderer.SystemExternalGraph(ctx, system1, []*catalog.System{system2})
+	res, err := renderer.SystemExternalGraph(ctx, system1, []*catalog.Ref{system2.GetRef()}, nil)
 	if err != nil {
 		t.Fatalf("GenerateSystemSVG failed: %v", err)
 	}

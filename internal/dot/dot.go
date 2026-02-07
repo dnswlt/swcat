@@ -377,8 +377,9 @@ func (dw *Writer) Result() *DotSource {
 	return &DotSource{
 		DotSource: dw.w.String(),
 		Metadata: &SVGGraphMetadata{
-			Nodes: dw.nodeInfo,
-			Edges: dw.edgeInfo,
+			Nodes:    dw.nodeInfo,
+			Edges:    dw.edgeInfo,
+			Clusters: dw.clusterInfo,
 		},
 	}
 }
