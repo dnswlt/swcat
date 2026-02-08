@@ -95,7 +95,7 @@ fillcolor="#f3f4f6"
 "api1"[id="api1",label="api1",fillcolor="#FCE0BA",shape="box",style="filled,rounded",class="clickable-node"]
 }
 "s1"[id="s1",label="s1",fillcolor="#6BABD0",shape="box",style="filled",class="clickable-node"]
-"s1" -> "api1"[class="clickable-edge system-link-edge",id="svg-edge-0"]
+"s1" -> "api1"[class="system-link-edge",id="svg-edge-0"]
 "c1" -> "api1"[id="svg-edge-1",style="dashed"]
 }
 `)

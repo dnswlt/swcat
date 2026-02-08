@@ -47,10 +47,6 @@
     }
 
     /* Hover over edges */
-    .graphviz-svg .clickable-edge:hover path {
-        /* Arrow line */
-        cursor: pointer;
-    }
     .graphviz-svg .edge:hover path {
         /* Arrow line */
         stroke: #808080;

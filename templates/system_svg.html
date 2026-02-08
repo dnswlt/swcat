@@ -26,27 +26,44 @@
     {{ if .ExternalSystemChips }}
     <div id="external-systems" class="flex flex-wrap gap-2 items-center">
         {{ range .ExternalSystemChips }}
-        {{ if .Excluded }}
-        <a href="{{ .Href }}"
-           hx-get="{{ .Href }}" 
-           hx-target="#svg-wrapper" 
-           hx-swap="outerHTML" 
-           hx-push-url="true"
-           class="flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-xs hover:bg-gray-200 transition-colors">
-            <span>{{ .Name }}</span>
-            <span class="font-bold ml-1">+</span>
-        </a>
-        {{ else }}
-        <a href="{{ .Href }}"
-           hx-get="{{ .Href }}" 
-           hx-target="#svg-wrapper" 
-           hx-swap="outerHTML" 
-           hx-push-url="true"
-           class="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs hover:bg-blue-200 transition-colors">
-            <span>{{ .Name }}</span>
-            <span class="font-bold ml-1">&times;</span>
-        </a>
-        {{ end }}
+        <div class="flex items-center rounded-full text-xs overflow-hidden {{ if .Excluded }}bg-gray-100{{ else }}bg-blue-100{{ end }}">
+            <!-- Left: Solo (show only this system) -->
+            <a role="button"
+               hx-get="{{ $.SystemURL }}"
+               hx-target="#svg-wrapper"
+               hx-swap="outerHTML"
+               hx-push-url="true"
+               data-chip-action="solo"
+               data-system-ref="{{ .Ref }}"
+               class="px-3 py-1 {{ if .Excluded }}text-gray-500 hover:bg-gray-200{{ else }}text-blue-700 hover:bg-blue-200{{ end }} transition-colors"
+               title="Show only {{ .Name }}">
+                {{ .Name }}
+            </a>
+            <!-- Middle: Toggle detail view -->
+            <a role="button"
+               hx-get="{{ $.SystemURL }}"
+               hx-target="#svg-wrapper"
+               hx-swap="outerHTML"
+               hx-push-url="true"
+               data-chip-action="toggle-detail"
+               data-system-ref="{{ .Ref }}"
+               class="px-1 py-1 border-l {{ if .Excluded }}border-gray-300 text-gray-500 hover:bg-gray-200{{ else }}border-blue-300 text-blue-700 hover:bg-blue-200{{ end }} transition-colors"
+               title="{{ if .InContext }}Hide details of {{ .Name }}{{ else }}Show details of {{ .Name }}{{ end }}">
+                {{ if .InContext }}⊖{{ else }}⊕{{ end }}
+            </a>
+            <!-- Right: Toggle inclusion/exclusion -->
+            <a role="button"
+               hx-get="{{ $.SystemURL }}"
+               hx-target="#svg-wrapper"
+               hx-swap="outerHTML"
+               hx-push-url="true"
+               data-chip-action="toggle-exclude"
+               data-system-ref="{{ .Ref }}"
+               class="px-2 py-1 font-bold border-l {{ if .Excluded }}border-gray-300 text-gray-500 hover:bg-gray-200{{ else }}border-blue-300 text-blue-700 hover:bg-blue-200{{ end }} transition-colors"
+               title="{{ if .Excluded }}Include {{ .Name }}{{ else }}Exclude {{ .Name }}{{ end }}">
+                {{ if .Excluded }}+{{ else }}&times;{{ end }}
+            </a>
+        </div>
         {{ end }}
     </div>
     {{ end }}

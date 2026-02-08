@@ -60,6 +60,40 @@ type Result struct {
 	Metadata *dot.SVGGraphMetadata
 }
 
+// SystemViewOptions configures which systems to show/hide in a system external view.
+type SystemViewOptions struct {
+	// ContextSystems: show these systems in detail
+	ContextSystems []*catalog.Ref
+	// ExcludedSystems: exclude these systems from the graph
+	ExcludedSystems []*catalog.Ref
+}
+
+// NewSystemViewOptions creates SystemViewOptions and computes the actual exclusions once.
+func NewSystemViewOptions(repo *repo.Repository, system *catalog.System, onlySystems, contextSystems, excludedSystems []*catalog.Ref) *SystemViewOptions {
+	// Compute actual exclusions once
+	var actualExcludedSystems []*catalog.Ref
+	if len(onlySystems) > 0 {
+		// o= overrides x= - exclude all surrounding systems except the "only" ones
+		surroundingSystems := repo.SurroundingSystems(system)
+		onlySet := make(map[string]bool)
+		for _, ref := range onlySystems {
+			onlySet[ref.String()] = true
+		}
+		for _, sys := range surroundingSystems {
+			if !onlySet[sys.GetRef().String()] {
+				actualExcludedSystems = append(actualExcludedSystems, sys.GetRef())
+			}
+		}
+	} else {
+		actualExcludedSystems = excludedSystems
+	}
+
+	return &SystemViewOptions{
+		ContextSystems:  contextSystems,
+		ExcludedSystems: actualExcludedSystems,
+	}
+}
+
 type DependencyDir int
 
 const (
@@ -173,16 +207,16 @@ func (r *Renderer) DomainGraph(ctx context.Context, domain *catalog.Domain) (*Re
 	return runDot(ctx, r.runner, dotSource)
 }
 
-func (r *Renderer) generateSystemExternalDotSource(system *catalog.System, contextSystems []*catalog.Ref, excludedSystems []*catalog.Ref) *dot.DotSource {
+func (r *Renderer) generateSystemExternalDotSource(system *catalog.System, opts *SystemViewOptions) *dot.DotSource {
 	// Potential neighboring systems for which a detailed view is requested.
 	ctxSysMap := map[string]bool{}
-	for _, ctxSys := range contextSystems {
+	for _, ctxSys := range opts.ContextSystems {
 		ctxSysMap[ctxSys.QName()] = true
 	}
 
 	// Systems that should be excluded from the view.
 	exclSysMap := map[string]bool{}
-	for _, exclSys := range excludedSystems {
+	for _, exclSys := range opts.ExcludedSystems {
 		exclSysMap[exclSys.QName()] = true
 	}
 
@@ -409,11 +443,9 @@ func (r *Renderer) generateSystemInternalDotSource(system *catalog.System) *dot.
 }
 
 // SystemExternalGraph generates an SVG for an "external" view of the given system.
-// contextSystems are systems that should be expanded in the view.
-// excludedSystems are systems that should be hidden from the view.
-// Other systems will be shown as opaque single nodes.
-func (r *Renderer) SystemExternalGraph(ctx context.Context, system *catalog.System, contextSystems []*catalog.Ref, excludedSystems []*catalog.Ref) (*Result, error) {
-	dotSource := r.generateSystemExternalDotSource(system, contextSystems, excludedSystems)
+// opts configures which systems to show, hide, or expand in detail.
+func (r *Renderer) SystemExternalGraph(ctx context.Context, system *catalog.System, opts *SystemViewOptions) (*Result, error) {
+	dotSource := r.generateSystemExternalDotSource(system, opts)
 	return runDot(ctx, r.runner, dotSource)
 }
 

@@ -93,7 +93,8 @@ func TestSystemExternalGraph_WithDot(t *testing.T) {
 	defer cancel()
 
 	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(Config{}))
-	res, err := renderer.SystemExternalGraph(ctx, system1, []*catalog.Ref{system2.GetRef()}, nil)
+	viewOpts := NewSystemViewOptions(repo, system1, nil, []*catalog.Ref{system2.GetRef()}, nil)
+	res, err := renderer.SystemExternalGraph(ctx, system1, viewOpts)
 	if err != nil {
 		t.Fatalf("GenerateSystemSVG failed: %v", err)
 	}

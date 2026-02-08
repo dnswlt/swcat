@@ -57,44 +57,6 @@ function loadSVGMetadata() {
     }
 }
 
-// Handles clicks on SVG edges.
-// Finds the source and target of the given edge in svgMeta and adds
-// their IDs as c= query parameters to the URL.
-function onClickEdge(edge) {
-    if (!svgMeta || !svgMeta.edges) {
-        console.error("Metadata missing 'edges' object.");
-        return;
-    }
-
-    const edgeInfo = svgMeta.edges[edge.id];
-    if (!edgeInfo) {
-        console.error(`No edge info for edge with ID ${edge.id}`);
-        return;
-    }
-
-    const { from, to } = edgeInfo;
-    if (!from || !to) {
-        console.error(`Edge ${edge.id} is missing 'from' or 'to' fields.`);
-        return;
-    }
-
-    // Build a new URL with two context params (?c=from&c=to).
-    const url = new URL(window.location.href);
-    url.searchParams.append("c", from);
-    url.searchParams.append("c", to);
-
-    // Use HTMX to fetch and update just the SVG wrapper, like the system chips do
-    htmx.ajax('GET', url.toString(), {
-        target: '#svg-wrapper',
-        swap: 'outerHTML'
-    });
-
-    // Manually update the browser URL. This will not work well when the user
-    // hits "back", but htmx.ajax has no pushUrl attribute yet.
-    // Pending issue: https://github.com/bigskysoftware/htmx/issues/2744
-    window.history.pushState(null, '', url);
-}
-
 // Searches for entities related to the given entity reference.
 // Only works on the graph page - updates the search input and triggers htmx.
 function searchRelatedEntities(entityRef) {
@@ -155,13 +117,6 @@ function addSVGListener() {
             onClickNode(node, e.shiftKey);
             return;
         }
-
-        const edge = e.target.closest(".clickable-edge");
-        if (edge) {
-            onClickEdge(edge);
-            return;
-        }
-
     });
 
     svg.addEventListener('mouseover', (event) => {
@@ -214,6 +169,10 @@ async function initPage(pageId) {
 
     if (pageId === 'graph') {
         await import('./graph.js');
+    }
+
+    if (pageId === 'system') {
+        await import('./system.js');
     }
 
     // YAML editor

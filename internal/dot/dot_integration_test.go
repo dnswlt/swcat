@@ -61,7 +61,7 @@ func TestDotRunner_Simple(t *testing.T) {
 	for _, c := range classes {
 		classSet[c] = true
 	}
-	expectedClasses := []string{"clickable-node", "clickable-edge"}
+	expectedClasses := []string{"clickable-node"}
 	var missingClasses []string
 	for _, want := range expectedClasses {
 		if !classSet[want] {

@@ -332,7 +332,7 @@ func (dw *Writer) AddEdge(edge Edge) {
 		attrs["dir"] = "back"
 		attrs["label"] = "sub-of"
 	case ESSystemLink:
-		attrs["class"] = "clickable-edge system-link-edge"
+		attrs["class"] = "system-link-edge"
 	default:
 		// No special attrs required.
 	}

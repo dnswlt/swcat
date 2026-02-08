@@ -413,14 +413,29 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		return
 	}
 	params["System"] = system
+	systemURL, err := toURLWithContext(r.Context(), system)
+	if err != nil {
+		http.Error(w, "Failed to build system URL", http.StatusInternalServerError)
+		log.Printf("Failed to build system URL: %v", err)
+		return
+	}
+	params["SystemURL"] = systemURL
 
-	// Extract neighbor systems from context parameter c= and excluded parameter x=.
-	var contextSystems []*catalog.Ref
-	var excludedSystems []*catalog.Ref
+	// Parse view options from query params:
+	// - c= (context): systems to show in detail
+	// - x= (exclude): systems to hide
+	// - o= (only): show only these systems (exclusive, overrides x=)
 	q := r.URL.Query()
+	var onlySystems, contextSystems, excludedSystems []*catalog.Ref
+
 	for _, v := range q["c"] {
 		if ref, err := catalog.ParseRefAs(catalog.KindSystem, v); err == nil {
 			contextSystems = append(contextSystems, ref)
+		}
+	}
+	for _, v := range q["o"] {
+		if ref, err := catalog.ParseRefAs(catalog.KindSystem, v); err == nil {
+			onlySystems = append(onlySystems, ref)
 		}
 	}
 	for _, v := range q["x"] {
@@ -429,6 +444,10 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		}
 	}
 
+	// Create view options with pre-computed exclusions
+	viewOpts := svg.NewSystemViewOptions(data.repo, system, onlySystems, contextSystems, excludedSystems)
+
+	// Build cache key from view options
 	cacheKeyIDs := func(refs []*catalog.Ref) string {
 		ids := make([]string, 0, len(refs))
 		for _, r := range refs {
@@ -437,9 +456,9 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		slices.Sort(ids)
 		return strings.Join(ids, ",")
 	}
-
 	internalView := r.URL.Query().Get("view") == "internal"
-	cacheKey := fmt.Sprintf("%s?c=%s&x=%s&i=%t", system.GetRef(), cacheKeyIDs(contextSystems), cacheKeyIDs(excludedSystems), internalView)
+	cacheKey := fmt.Sprintf("%s?c=%s&x=%s&i=%t", system.GetRef(), cacheKeyIDs(viewOpts.ContextSystems), cacheKeyIDs(viewOpts.ExcludedSystems), internalView)
+
 	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
 		var err error
@@ -449,7 +468,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		if internalView {
 			svgResult, err = renderer.SystemInternalGraph(ctx, system)
 		} else {
-			svgResult, err = renderer.SystemExternalGraph(ctx, system, contextSystems, excludedSystems)
+			svgResult, err = renderer.SystemExternalGraph(ctx, system, viewOpts)
 		}
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
@@ -461,29 +480,32 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 
 	// For the external view, we also want to show chips for all external systems.
 	if !internalView {
+		// Use pre-computed exclusions for chip state
 		excludedIDs := map[string]bool{}
-		for _, r := range excludedSystems {
+		for _, r := range viewOpts.ExcludedSystems {
 			excludedIDs[r.String()] = true
 		}
 
-		type systemChip struct {
-			Name     string
-			Excluded bool
-			Href     string
+		contextIDs := map[string]bool{}
+		for _, r := range viewOpts.ContextSystems {
+			contextIDs[r.String()] = true
 		}
+
+		type systemChip struct {
+			Name      string
+			Ref       string // System reference for data-system-ref attribute
+			Excluded  bool   // Whether system is excluded (x= param)
+			InContext bool   // Whether system detail view is enabled (c= param)
+		}
+
+		surroundingSystems := data.repo.SurroundingSystems(system)
 		var chips []systemChip
-		for _, sys := range data.repo.SurroundingSystems(system) {
-			excluded := excludedIDs[sys.GetRef().String()]
-			href := r.URL
-			if excluded {
-				href = removeQueryParam(r, "x", sys.GetRef().String())
-			} else {
-				href = addQueryParam(r, "x", sys.GetRef().String())
-			}
+		for _, sys := range surroundingSystems {
 			chips = append(chips, systemChip{
-				Name:     sys.GetQName(),
-				Excluded: excluded,
-				Href:     href.RequestURI(),
+				Name:      sys.GetQName(),
+				Ref:       sys.GetRef().String(),
+				Excluded:  excludedIDs[sys.GetRef().String()],
+				InContext: contextIDs[sys.GetRef().String()],
 			})
 		}
 		params["ExternalSystemChips"] = chips

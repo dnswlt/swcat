@@ -95,7 +95,8 @@ func TestSystemExternalGraph_Topology(t *testing.T) {
 	}
 
 	// Generate graph for System A
-	_, err := renderer.SystemExternalGraph(context.Background(), sysA, nil, nil)
+	viewOpts := NewSystemViewOptions(r, sysA, nil, nil, nil)
+	_, err := renderer.SystemExternalGraph(context.Background(), sysA, viewOpts)
 	if err != nil {
 		t.Fatalf("SystemExternalGraph failed: %v", err)
 	}
@@ -128,7 +129,8 @@ func TestSystemExternalGraph_Excluded(t *testing.T) {
 	sysB := r.System(&catalog.Ref{Name: "sys-b"})
 
 	// Generate graph for System A, but exclude System B
-	_, err := renderer.SystemExternalGraph(context.Background(), sysA, nil, []*catalog.Ref{sysB.GetRef()})
+	viewOpts := NewSystemViewOptions(r, sysA, nil, nil, []*catalog.Ref{sysB.GetRef()})
+	_, err := renderer.SystemExternalGraph(context.Background(), sysA, viewOpts)
 	if err != nil {
 		t.Fatalf("SystemExternalGraph failed: %v", err)
 	}
