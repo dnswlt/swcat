@@ -24,6 +24,7 @@ const (
 	CatalogDir  = "catalog"
 	ConfigFile  = "swcat.yml"
 	PluginsFile = "plugins.yml"
+	LintFile    = "lint.yml"
 )
 
 var (

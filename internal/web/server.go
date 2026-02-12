@@ -25,6 +25,7 @@ import (
 	"github.com/dnswlt/swcat/internal/comments"
 	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/dot"
+	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
@@ -46,10 +47,11 @@ type ServerOptions struct {
 
 // storeData contains all data extracted from a given view of a Store at reference ref.
 type storeData struct {
-	ref      string
-	repo     *repo.Repository
-	config   *config.Bundle
-	svgCache *lru.Cache[string, *svg.Result]
+	ref           string
+	repo          *repo.Repository
+	config        *config.Bundle
+	svgCache      *lru.Cache[string, *svg.Result]
+	findingsCache *lru.Cache[string, []lint.Finding]
 }
 
 type Server struct {
@@ -67,13 +69,17 @@ type Server struct {
 	// If set, plugins are available to update entity annotations.
 	pluginRegistry *plugins.Registry
 
+	// The optional linter.
+	// If set, all entities will be linted using this global linter.
+	linter *lint.Linter
+
 	commentsStore comments.Store
 
 	// Server startup time. Used for cache busting JS/CSS resources.
 	started time.Time
 }
 
-func NewServer(opts ServerOptions, source store.Source, pluginRegistry *plugins.Registry, commentsStore comments.Store) (*Server, error) {
+func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, pluginRegistry *plugins.Registry, commentsStore comments.Store) (*Server, error) {
 	if opts.SVGCacheSize <= 0 {
 		opts.SVGCacheSize = 128
 	}
@@ -89,6 +95,7 @@ func NewServer(opts ServerOptions, source store.Source, pluginRegistry *plugins.
 		storeDataMap:   make(map[string]*storeData),
 		source:         source,
 		dotRunner:      dotRunner,
+		linter:         linter,
 		pluginRegistry: pluginRegistry,
 		commentsStore:  commentsStore,
 		finder:         repo.NewFinder(),
@@ -132,6 +139,20 @@ func (s *Server) commentsEnabled() bool {
 	return s.commentsStore != nil
 }
 
+func (s *Server) getFindings(data *storeData, e catalog.Entity) []lint.Finding {
+	if s.linter == nil {
+		return nil
+	}
+	ref := e.GetRef().String()
+	if findings, ok := data.findingsCache.Get(ref); ok {
+		return findings
+	}
+
+	findings := s.linter.Lint(catalog.ToPB(e))
+	data.findingsCache.Add(ref, findings)
+	return findings
+}
+
 // loadStoreData retrieves the storeData for ref from the cache, if present,
 // or else loads it from the associated store.
 func (s *Server) loadStoreData(ref string) (*storeData, error) {
@@ -171,18 +192,24 @@ func (s *Server) loadStoreData(ref string) (*storeData, error) {
 		panic(fmt.Sprintf("failed to create SVG cache (size: %d): %v", s.opts.SVGCacheSize, err))
 	}
 
+	findingsCache, err := lru.New[string, []lint.Finding](repoInstance.Size() + 10)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create findings cache: %v", err))
+	}
+
 	data := &storeData{
-		ref:      ref,
-		config:   cfg,
-		repo:     repoInstance,
-		svgCache: cache,
+		ref:           ref,
+		config:        cfg,
+		repo:          repoInstance,
+		svgCache:      cache,
+		findingsCache: findingsCache,
 	}
 	s.storeDataMap[ref] = data
 	return data, nil
 }
 
 // updateStoreData updates the data stored for data.ref with a new storeData that holds the given repo.
-// The SVG cache of the new storeData is empty. Other values are copied from the given data.
+// The SVG cache and findings cache of the new storeData are empty. Other values are copied from the given data.
 //
 // Callers of this method MUST ensure that s.mu is already held.
 func (s *Server) updateStoreData(data *storeData, repository *repo.Repository) {
@@ -192,11 +219,17 @@ func (s *Server) updateStoreData(data *storeData, repository *repo.Repository) {
 		panic(fmt.Sprintf("failed to create SVG cache (size: %d): %v", s.opts.SVGCacheSize, err))
 	}
 
+	findingsCache, err := lru.New[string, []lint.Finding](repository.Size() + 10)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create findings cache: %v", err))
+	}
+
 	s.storeDataMap[data.ref] = &storeData{
-		ref:      data.ref,
-		repo:     repository,
-		config:   data.config,
-		svgCache: cache,
+		ref:           data.ref,
+		repo:          repository,
+		config:        data.config,
+		svgCache:      cache,
+		findingsCache: findingsCache,
 	}
 }
 
@@ -532,6 +565,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	}
 	params["Comments"] = activeComments
 	params["Entity"] = system.GetRef()
+	params["Findings"] = s.getFindings(data, system)
 
 	s.setCustomContent(system, &data.config.UI, params)
 
@@ -597,6 +631,7 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 	}
 	params["Comments"] = activeComments
 	params["Entity"] = component.GetRef()
+	params["Findings"] = s.getFindings(data, component)
 
 	s.setCustomContent(component, &data.config.UI, params)
 
@@ -687,6 +722,7 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 	}
 	params["Comments"] = activeComments
 	params["Entity"] = ap.GetRef()
+	params["Findings"] = s.getFindings(data, ap)
 
 	s.setCustomContent(ap, &data.config.UI, params)
 	s.serveHTMLPage(w, r, "api_detail.html", params)
@@ -766,6 +802,7 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 	}
 	params["Comments"] = activeComments
 	params["Entity"] = resource.GetRef()
+	params["Findings"] = s.getFindings(data, resource)
 
 	s.setCustomContent(resource, &data.config.UI, params)
 
@@ -838,6 +875,7 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 	}
 	params["Comments"] = activeComments
 	params["Entity"] = domain.GetRef()
+	params["Findings"] = s.getFindings(data, domain)
 
 	s.setCustomContent(domain, &data.config.UI, params)
 
@@ -888,6 +926,7 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 	}
 	params["Comments"] = activeComments
 	params["Entity"] = group.GetRef()
+	params["Findings"] = s.getFindings(data, group)
 
 	s.setCustomContent(group, &data.config.UI, params)
 

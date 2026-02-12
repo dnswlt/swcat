@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/store"
 )
 
@@ -41,7 +42,7 @@ func newTestServer(t *testing.T, st store.Source) *Server {
 		Addr:    "127.0.0.1:0",
 		BaseDir: "../..", // loads templates from <repo-root>/templates
 		DotPath: "dot",
-	}, st, nil, nil)
+	}, st, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -221,6 +222,53 @@ func TestDetailPages_RenderSVGAndName(t *testing.T) {
 					tc.name, tc.expectText, body[:max])
 			}
 		})
+	}
+}
+
+func TestDetail_LintFindings(t *testing.T) {
+	testDataDir := "../../testdata/linting"
+	st := store.NewDiskStore(testDataDir)
+
+	// Initialize linter
+	lintCfg, err := lint.LoadConfig(filepath.Join(testDataDir, "lint.yml"))
+	if err != nil {
+		t.Fatalf("failed to load lint config: %v", err)
+	}
+	linter, err := lint.NewLinter(lintCfg)
+	if err != nil {
+		t.Fatalf("failed to create linter: %v", err)
+	}
+
+	s, err := NewServer(ServerOptions{
+		Addr:    "127.0.0.1:0",
+		BaseDir: "../..",
+		DotPath: "dot",
+	}, st, linter, nil, nil)
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	s.dotRunner = &fakeRunner{}
+	h := s.Handler()
+
+	// Request the system detail page
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ui/systems/lint-test-system", nil)
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	body := rr.Body.String()
+	// Check for the lint finding indicator icon (count) and the detailed message
+	if !strings.Contains(body, "1 lint findings") {
+		t.Errorf("expected lint finding count not found in body")
+	}
+	if !strings.Contains(body, "Missing description") {
+		t.Errorf("expected lint finding message 'Missing description' not found in body")
+	}
+	if !strings.Contains(body, "[has-description]") {
+		t.Errorf("expected rule name '[has-description]' not found in body")
 	}
 }
 

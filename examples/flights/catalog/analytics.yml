@@ -22,7 +22,6 @@ kind: System
 metadata:
   name: analytics-pipeline
   title: Analytics Pipeline
-  description: The data pipeline for collecting and processing analytics events.
 spec:
   owner: analytics-owner
   domain: analytics

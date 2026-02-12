@@ -17,6 +17,7 @@ import (
 	"github.com/dnswlt/swcat/internal/comments"
 	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/gitclient"
+	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
@@ -196,6 +197,21 @@ func main() {
 		log.Fatalf("Neither -root-dir nor -git-url specified")
 	}
 
+	// Load optional linter
+	var linter *lint.Linter
+	lintConfigFile := filepath.Join(opts.RootDir, store.LintFile)
+	lintCfg, err := lint.LoadConfig(lintConfigFile)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Printf("Warning: failed to load lint config: %v", err)
+	} else if lintCfg != nil {
+		linter, err = lint.NewLinter(lintCfg)
+		if err != nil {
+			log.Printf("Warning: failed to create linter: %v", err)
+		} else {
+			log.Printf("Linter initialized with latest rules from %s", lintConfigFile)
+		}
+	}
+
 	var pluginRegistry *plugins.Registry
 	if !opts.ReadOnly {
 		pluginsConfigFile := filepath.Join(opts.RootDir, store.PluginsFile)
@@ -239,6 +255,7 @@ func main() {
 			SVGCacheSize:    opts.SVGCacheSize,
 		},
 		st,
+		linter,
 		pluginRegistry,
 		commentsStore,
 	)

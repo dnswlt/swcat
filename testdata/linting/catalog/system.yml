@@ -1,0 +1,23 @@
+apiVersion: swcat/v1
+kind: Domain
+metadata:
+  name: test-domain
+spec:
+  owner: test-group
+---
+apiVersion: swcat/v1
+kind: Group
+metadata:
+  name: test-group
+spec:
+  type: team
+  profile:
+    displayName: Test Group
+---
+apiVersion: swcat/v1
+kind: System
+metadata:
+  name: lint-test-system
+spec:
+  owner: test-group
+  domain: test-domain

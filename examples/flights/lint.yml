@@ -1,0 +1,6 @@
+commonRules:
+  - name: has-description
+    severity: info
+    check: |
+      metadata.description != ""
+    message: "The entity should have a non-empty description for better documentation."

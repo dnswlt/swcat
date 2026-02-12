@@ -25,6 +25,17 @@ source .venv/bin/activate
 pip install mkdocs mkdocs-material
 ```
 
+## Protocol Buffers
+
+The catalog model is defined using Protocol Buffers in `proto/`. To regenerate the Go 
+code in `internal/catalog/pb/`, run:
+
+```bash
+protoc -I=proto --go_out=. --go_opt=module=github.com/dnswlt/swcat swcat/catalog/v1/catalog.proto
+```
+
+This requires `protoc` and `protoc-gen-go` to be installed.
+
 ## Creating tags and releases
 
 Releases are only created from tags.

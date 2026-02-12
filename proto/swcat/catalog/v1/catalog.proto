@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+package swcat.catalog.v1;
+
+option go_package = "github.com/dnswlt/swcat/internal/catalog/pb;catalog_pb";
+
+// Metadata common to all entities.
+message Metadata {
+  // The name of the entity. Must be unique within the catalog at any given point in time, for any given namespace + kind pair.
+  string name = 1;
+  // The namespace that the entity belongs to. If empty, the entity is assume to live in the default namespace.
+  string namespace = 2;
+  // A display name of the entity, to be presented in user interfaces instead of the name property, when available.
+  string title = 3;
+  // A short (typically relatively few words, on one line) description of the entity.
+  string description = 4;
+  // Key/value pairs of identifying information attached to the entity.
+  map<string, string> labels = 5;
+  // Key/value pairs of non-identifying auxiliary information attached to the entity.
+  map<string, string> annotations = 6;
+  // A list of single-valued strings, to for example classify catalog entities in various ways.
+  repeated string tags = 7;
+  // A list of external hyperlinks related to the entity.
+  repeated Link links = 8;
+}
+
+message Link {
+  string url = 1;
+  string title = 2;
+  string icon = 3;
+  string type = 4;
+  bool is_generated = 5;
+}
+
+// Ref represents a reference to another entity.
+message Ref {
+  string kind = 1;
+  string namespace = 2;
+  string name = 3;
+}
+
+// LabelRef represents a reference with an optional label and attributes.
+message LabelRef {
+  Ref ref = 1;
+  string label = 2;
+  map<string, string> attrs = 3;
+}
+
+message Version {
+  string raw_version = 1;
+  int32 major = 2;
+  int32 minor = 3;
+  int32 patch = 4;
+  string suffix = 5;
+}
+
+// Entity represents any catalog entity.
+message Entity {
+  string kind = 1;
+  Metadata metadata = 2;
+  
+  oneof spec {
+    DomainSpec domain_spec = 3;
+    SystemSpec system_spec = 4;
+    ComponentSpec component_spec = 5;
+    ResourceSpec resource_spec = 6;
+    ApiSpec api_spec = 7;
+    GroupSpec group_spec = 8;
+  }
+}
+
+// --- Domain ---
+
+message DomainSpec {
+  Ref owner = 1;
+  Ref subdomain_of = 2;
+  string type = 3;
+}
+
+// --- System ---
+
+message SystemSpec {
+  Ref owner = 1;
+  Ref domain = 2;
+  string type = 3;
+}
+
+// --- Component ---
+
+message ComponentSpec {
+  string type = 1;
+  string lifecycle = 2;
+  Ref owner = 3;
+  Ref system = 4;
+  Ref subcomponent_of = 5;
+  repeated LabelRef provides_apis = 6;
+  repeated LabelRef consumes_apis = 7;
+  repeated LabelRef depends_on = 8;
+}
+
+// --- Resource ---
+
+message ResourceSpec {
+  string type = 1;
+  Ref owner = 2;
+  Ref system = 3;
+  repeated LabelRef depends_on = 4;
+}
+
+// --- API ---
+
+message ApiSpec {
+  string type = 1;
+  string lifecycle = 2;
+  Ref owner = 3;
+  Ref system = 4;
+  string definition = 5;
+  repeated ApiSpecVersion versions = 6;
+}
+
+message ApiSpecVersion {
+  Version version = 1;
+  string lifecycle = 2;
+}
+
+// --- Group ---
+
+message GroupSpec {
+  string type = 1;
+  GroupSpecProfile profile = 2;
+  Ref parent = 3;
+  repeated Ref children = 4;
+  repeated string members = 5;
+}
+
+message GroupSpecProfile {
+  string display_name = 1;
+  string email = 2;
+  string picture = 3;
+}

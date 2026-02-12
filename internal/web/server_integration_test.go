@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/store"
 )
@@ -60,6 +61,19 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 		t.Fatalf("Failed to create plugin registry: %v", err)
 	}
 
+	// Load linter
+	lintConfigPath := filepath.Join(exampleDir, store.LintFile)
+	var linter *lint.Linter
+	lintCfg, err := lint.LoadConfig(lintConfigPath)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("Failed to read lint config from %s: %v", lintConfigPath, err)
+	} else if lintCfg != nil {
+		linter, err = lint.NewLinter(lintCfg)
+		if err != nil {
+			t.Fatalf("Failed to create linter: %v", err)
+		}
+	}
+
 	// Create Server
 	opts := ServerOptions{
 		Addr:     "localhost:0", // Random port
@@ -69,7 +83,7 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 		Version:  "integration-test",
 	}
 
-	server, err := NewServer(opts, st, pluginRegistry, nil)
+	server, err := NewServer(opts, st, linter, pluginRegistry, nil)
 	if err != nil {
 		t.Fatalf("Failed to create server: %v", err)
 	}
@@ -103,6 +117,7 @@ func TestIntegration_ServerSmoke(t *testing.T) {
 		}},
 		{"/ui/domains", []string{"Domains", "analytics"}},
 		{"/ui/apis", []string{"APIs", "flights-search-api"}},
+		{"/ui/systems/analytics-pipeline", []string{"analytics-pipeline", "Lint Findings", "has-description"}},
 		{"/ui/resources", []string{"Resources", "routes-database"}},
 		{"/ui/groups", []string{"Groups", "flights-owner"}},
 		{`/ui/graph`, []string{"diagram"}},

@@ -1,0 +1,5 @@
+commonRules:
+  - name: has-description
+    severity: warn
+    check: 'metadata.description != ""'
+    message: "Missing description"

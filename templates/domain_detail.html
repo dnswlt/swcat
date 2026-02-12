@@ -13,6 +13,7 @@
 
         {{ $readOnly := .ReadOnly }}
         {{ $customContent := .CustomContent }}
+        {{ $findings := .Findings }}
 
         {{ with .Domain }}
         <div class="flex flex-col gap-3">
@@ -28,6 +29,13 @@
                 <h2 class="text-xl font-semibold">{{ .GetQName }}</h2>
                 {{ end }}
                 <div class="flex items-center space-x-2">
+                    {{ if $findings }}
+                    <div class="flex items-center" title="{{ len $findings }} lint findings">
+                        <svg class="h-5 w-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    {{ end }}
                     <span class="text-gray-500">Domain</span>
                     {{ template "entity_toolbar.html" dict "Entity" . "ReadOnly" $readOnly }}
                 </div>
@@ -88,6 +96,8 @@
                     {{ .SVGMetadataJSON }}
                         </script>
         {{ end }}
+
+        {{ template "findings.html" $findings }}
 
         {{ if .CommentsEnabled }}
         {{ template "comments.html" . }}
