@@ -75,6 +75,9 @@ message DomainSpec {
   Ref owner = 1;
   Ref subdomain_of = 2;
   string type = 3;
+
+  // Inverse relationships
+  repeated Ref systems = 4;
 }
 
 // --- System ---
@@ -83,6 +86,11 @@ message SystemSpec {
   Ref owner = 1;
   Ref domain = 2;
   string type = 3;
+
+  // Inverse relationships
+  repeated Ref components = 4;
+  repeated Ref apis = 5;
+  repeated Ref resources = 6;
 }
 
 // --- Component ---
@@ -96,6 +104,10 @@ message ComponentSpec {
   repeated LabelRef provides_apis = 6;
   repeated LabelRef consumes_apis = 7;
   repeated LabelRef depends_on = 8;
+
+  // Inverse relationships
+  repeated LabelRef dependents = 9;
+  repeated Ref subcomponents = 10;
 }
 
 // --- Resource ---
@@ -105,6 +117,9 @@ message ResourceSpec {
   Ref owner = 2;
   Ref system = 3;
   repeated LabelRef depends_on = 4;
+
+  // Inverse relationships
+  repeated LabelRef dependents = 5;
 }
 
 // --- API ---
@@ -116,6 +131,10 @@ message ApiSpec {
   Ref system = 4;
   string definition = 5;
   repeated ApiSpecVersion versions = 6;
+
+  // Inverse relationships
+  repeated LabelRef providers = 7;
+  repeated LabelRef consumers = 8;
 }
 
 message ApiSpecVersion {

@@ -270,6 +270,23 @@ func TestDetail_LintFindings(t *testing.T) {
 	if !strings.Contains(body, "[has-description]") {
 		t.Errorf("expected rule name '[has-description]' not found in body")
 	}
+
+	// Request the API detail page (should have provider violation)
+	rr2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet, "/ui/apis/providerless-api", nil)
+	h.ServeHTTP(rr2, req2)
+
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr2.Code, http.StatusOK)
+	}
+
+	body2 := rr2.Body.String()
+	if !strings.Contains(body2, "api-has-provider") {
+		t.Errorf("expected lint finding 'api-has-provider' not found in body")
+	}
+	if !strings.Contains(body2, "The API must have at least one provider component") {
+		t.Errorf("expected lint finding message not found in body")
+	}
 }
 
 func TestDetail_NotFound_AllKinds(t *testing.T) {

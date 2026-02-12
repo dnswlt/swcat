@@ -21,3 +21,14 @@ metadata:
 spec:
   owner: test-group
   domain: test-domain
+---
+apiVersion: swcat/v1
+kind: API
+metadata:
+  name: providerless-api
+  description: An API that has no provider.
+spec:
+  type: https/json
+  lifecycle: production
+  owner: test-group
+  system: lint-test-system

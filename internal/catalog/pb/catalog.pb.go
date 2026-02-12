@@ -568,10 +568,12 @@ func (*Entity_ApiSpec) isEntity_Spec() {}
 func (*Entity_GroupSpec) isEntity_Spec() {}
 
 type DomainSpec struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Owner         *Ref                   `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
-	SubdomainOf   *Ref                   `protobuf:"bytes,2,opt,name=subdomain_of,json=subdomainOf,proto3" json:"subdomain_of,omitempty"`
-	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Owner       *Ref                   `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
+	SubdomainOf *Ref                   `protobuf:"bytes,2,opt,name=subdomain_of,json=subdomainOf,proto3" json:"subdomain_of,omitempty"`
+	Type        string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	// Inverse relationships
+	Systems       []*Ref `protobuf:"bytes,4,rep,name=systems,proto3" json:"systems,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -627,11 +629,22 @@ func (x *DomainSpec) GetType() string {
 	return ""
 }
 
+func (x *DomainSpec) GetSystems() []*Ref {
+	if x != nil {
+		return x.Systems
+	}
+	return nil
+}
+
 type SystemSpec struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Owner         *Ref                   `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
-	Domain        *Ref                   `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
-	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Owner  *Ref                   `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
+	Domain *Ref                   `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
+	Type   string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	// Inverse relationships
+	Components    []*Ref `protobuf:"bytes,4,rep,name=components,proto3" json:"components,omitempty"`
+	Apis          []*Ref `protobuf:"bytes,5,rep,name=apis,proto3" json:"apis,omitempty"`
+	Resources     []*Ref `protobuf:"bytes,6,rep,name=resources,proto3" json:"resources,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -687,6 +700,27 @@ func (x *SystemSpec) GetType() string {
 	return ""
 }
 
+func (x *SystemSpec) GetComponents() []*Ref {
+	if x != nil {
+		return x.Components
+	}
+	return nil
+}
+
+func (x *SystemSpec) GetApis() []*Ref {
+	if x != nil {
+		return x.Apis
+	}
+	return nil
+}
+
+func (x *SystemSpec) GetResources() []*Ref {
+	if x != nil {
+		return x.Resources
+	}
+	return nil
+}
+
 type ComponentSpec struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Type           string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
@@ -697,8 +731,11 @@ type ComponentSpec struct {
 	ProvidesApis   []*LabelRef            `protobuf:"bytes,6,rep,name=provides_apis,json=providesApis,proto3" json:"provides_apis,omitempty"`
 	ConsumesApis   []*LabelRef            `protobuf:"bytes,7,rep,name=consumes_apis,json=consumesApis,proto3" json:"consumes_apis,omitempty"`
 	DependsOn      []*LabelRef            `protobuf:"bytes,8,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Inverse relationships
+	Dependents    []*LabelRef `protobuf:"bytes,9,rep,name=dependents,proto3" json:"dependents,omitempty"`
+	Subcomponents []*Ref      `protobuf:"bytes,10,rep,name=subcomponents,proto3" json:"subcomponents,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ComponentSpec) Reset() {
@@ -787,12 +824,28 @@ func (x *ComponentSpec) GetDependsOn() []*LabelRef {
 	return nil
 }
 
+func (x *ComponentSpec) GetDependents() []*LabelRef {
+	if x != nil {
+		return x.Dependents
+	}
+	return nil
+}
+
+func (x *ComponentSpec) GetSubcomponents() []*Ref {
+	if x != nil {
+		return x.Subcomponents
+	}
+	return nil
+}
+
 type ResourceSpec struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	Owner         *Ref                   `protobuf:"bytes,2,opt,name=owner,proto3" json:"owner,omitempty"`
-	System        *Ref                   `protobuf:"bytes,3,opt,name=system,proto3" json:"system,omitempty"`
-	DependsOn     []*LabelRef            `protobuf:"bytes,4,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Type      string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Owner     *Ref                   `protobuf:"bytes,2,opt,name=owner,proto3" json:"owner,omitempty"`
+	System    *Ref                   `protobuf:"bytes,3,opt,name=system,proto3" json:"system,omitempty"`
+	DependsOn []*LabelRef            `protobuf:"bytes,4,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
+	// Inverse relationships
+	Dependents    []*LabelRef `protobuf:"bytes,5,rep,name=dependents,proto3" json:"dependents,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -855,14 +908,24 @@ func (x *ResourceSpec) GetDependsOn() []*LabelRef {
 	return nil
 }
 
+func (x *ResourceSpec) GetDependents() []*LabelRef {
+	if x != nil {
+		return x.Dependents
+	}
+	return nil
+}
+
 type ApiSpec struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	Lifecycle     string                 `protobuf:"bytes,2,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
-	Owner         *Ref                   `protobuf:"bytes,3,opt,name=owner,proto3" json:"owner,omitempty"`
-	System        *Ref                   `protobuf:"bytes,4,opt,name=system,proto3" json:"system,omitempty"`
-	Definition    string                 `protobuf:"bytes,5,opt,name=definition,proto3" json:"definition,omitempty"`
-	Versions      []*ApiSpecVersion      `protobuf:"bytes,6,rep,name=versions,proto3" json:"versions,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Type       string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Lifecycle  string                 `protobuf:"bytes,2,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
+	Owner      *Ref                   `protobuf:"bytes,3,opt,name=owner,proto3" json:"owner,omitempty"`
+	System     *Ref                   `protobuf:"bytes,4,opt,name=system,proto3" json:"system,omitempty"`
+	Definition string                 `protobuf:"bytes,5,opt,name=definition,proto3" json:"definition,omitempty"`
+	Versions   []*ApiSpecVersion      `protobuf:"bytes,6,rep,name=versions,proto3" json:"versions,omitempty"`
+	// Inverse relationships
+	Providers     []*LabelRef `protobuf:"bytes,7,rep,name=providers,proto3" json:"providers,omitempty"`
+	Consumers     []*LabelRef `protobuf:"bytes,8,rep,name=consumers,proto3" json:"consumers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -935,6 +998,20 @@ func (x *ApiSpec) GetDefinition() string {
 func (x *ApiSpec) GetVersions() []*ApiSpecVersion {
 	if x != nil {
 		return x.Versions
+	}
+	return nil
+}
+
+func (x *ApiSpec) GetProviders() []*LabelRef {
+	if x != nil {
+		return x.Providers
+	}
+	return nil
+}
+
+func (x *ApiSpec) GetConsumers() []*LabelRef {
+	if x != nil {
+		return x.Consumers
 	}
 	return nil
 }
@@ -1184,17 +1261,23 @@ const file_swcat_catalog_v1_catalog_proto_rawDesc = "" +
 	"\bapi_spec\x18\a \x01(\v2\x19.swcat.catalog.v1.ApiSpecH\x00R\aapiSpec\x12<\n" +
 	"\n" +
 	"group_spec\x18\b \x01(\v2\x1b.swcat.catalog.v1.GroupSpecH\x00R\tgroupSpecB\x06\n" +
-	"\x04spec\"\x87\x01\n" +
+	"\x04spec\"\xb8\x01\n" +
 	"\n" +
 	"DomainSpec\x12+\n" +
 	"\x05owner\x18\x01 \x01(\v2\x15.swcat.catalog.v1.RefR\x05owner\x128\n" +
 	"\fsubdomain_of\x18\x02 \x01(\v2\x15.swcat.catalog.v1.RefR\vsubdomainOf\x12\x12\n" +
-	"\x04type\x18\x03 \x01(\tR\x04type\"|\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x12/\n" +
+	"\asystems\x18\x04 \x03(\v2\x15.swcat.catalog.v1.RefR\asystems\"\x93\x02\n" +
 	"\n" +
 	"SystemSpec\x12+\n" +
 	"\x05owner\x18\x01 \x01(\v2\x15.swcat.catalog.v1.RefR\x05owner\x12-\n" +
 	"\x06domain\x18\x02 \x01(\v2\x15.swcat.catalog.v1.RefR\x06domain\x12\x12\n" +
-	"\x04type\x18\x03 \x01(\tR\x04type\"\x9a\x03\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x125\n" +
+	"\n" +
+	"components\x18\x04 \x03(\v2\x15.swcat.catalog.v1.RefR\n" +
+	"components\x12)\n" +
+	"\x04apis\x18\x05 \x03(\v2\x15.swcat.catalog.v1.RefR\x04apis\x123\n" +
+	"\tresources\x18\x06 \x03(\v2\x15.swcat.catalog.v1.RefR\tresources\"\x93\x04\n" +
 	"\rComponentSpec\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1c\n" +
 	"\tlifecycle\x18\x02 \x01(\tR\tlifecycle\x12+\n" +
@@ -1204,13 +1287,21 @@ const file_swcat_catalog_v1_catalog_proto_rawDesc = "" +
 	"\rprovides_apis\x18\x06 \x03(\v2\x1a.swcat.catalog.v1.LabelRefR\fprovidesApis\x12?\n" +
 	"\rconsumes_apis\x18\a \x03(\v2\x1a.swcat.catalog.v1.LabelRefR\fconsumesApis\x129\n" +
 	"\n" +
-	"depends_on\x18\b \x03(\v2\x1a.swcat.catalog.v1.LabelRefR\tdependsOn\"\xb9\x01\n" +
+	"depends_on\x18\b \x03(\v2\x1a.swcat.catalog.v1.LabelRefR\tdependsOn\x12:\n" +
+	"\n" +
+	"dependents\x18\t \x03(\v2\x1a.swcat.catalog.v1.LabelRefR\n" +
+	"dependents\x12;\n" +
+	"\rsubcomponents\x18\n" +
+	" \x03(\v2\x15.swcat.catalog.v1.RefR\rsubcomponents\"\xf5\x01\n" +
 	"\fResourceSpec\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12+\n" +
 	"\x05owner\x18\x02 \x01(\v2\x15.swcat.catalog.v1.RefR\x05owner\x12-\n" +
 	"\x06system\x18\x03 \x01(\v2\x15.swcat.catalog.v1.RefR\x06system\x129\n" +
 	"\n" +
-	"depends_on\x18\x04 \x03(\v2\x1a.swcat.catalog.v1.LabelRefR\tdependsOn\"\xf5\x01\n" +
+	"depends_on\x18\x04 \x03(\v2\x1a.swcat.catalog.v1.LabelRefR\tdependsOn\x12:\n" +
+	"\n" +
+	"dependents\x18\x05 \x03(\v2\x1a.swcat.catalog.v1.LabelRefR\n" +
+	"dependents\"\xe9\x02\n" +
 	"\aApiSpec\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1c\n" +
 	"\tlifecycle\x18\x02 \x01(\tR\tlifecycle\x12+\n" +
@@ -1219,7 +1310,9 @@ const file_swcat_catalog_v1_catalog_proto_rawDesc = "" +
 	"\n" +
 	"definition\x18\x05 \x01(\tR\n" +
 	"definition\x12<\n" +
-	"\bversions\x18\x06 \x03(\v2 .swcat.catalog.v1.ApiSpecVersionR\bversions\"c\n" +
+	"\bversions\x18\x06 \x03(\v2 .swcat.catalog.v1.ApiSpecVersionR\bversions\x128\n" +
+	"\tproviders\x18\a \x03(\v2\x1a.swcat.catalog.v1.LabelRefR\tproviders\x128\n" +
+	"\tconsumers\x18\b \x03(\v2\x1a.swcat.catalog.v1.LabelRefR\tconsumers\"c\n" +
 	"\x0eApiSpecVersion\x123\n" +
 	"\aversion\x18\x01 \x01(\v2\x19.swcat.catalog.v1.VersionR\aversion\x12\x1c\n" +
 	"\tlifecycle\x18\x02 \x01(\tR\tlifecycle\"\xd9\x01\n" +
@@ -1281,29 +1374,38 @@ var file_swcat_catalog_v1_catalog_proto_depIdxs = []int32{
 	12, // 11: swcat.catalog.v1.Entity.group_spec:type_name -> swcat.catalog.v1.GroupSpec
 	2,  // 12: swcat.catalog.v1.DomainSpec.owner:type_name -> swcat.catalog.v1.Ref
 	2,  // 13: swcat.catalog.v1.DomainSpec.subdomain_of:type_name -> swcat.catalog.v1.Ref
-	2,  // 14: swcat.catalog.v1.SystemSpec.owner:type_name -> swcat.catalog.v1.Ref
-	2,  // 15: swcat.catalog.v1.SystemSpec.domain:type_name -> swcat.catalog.v1.Ref
-	2,  // 16: swcat.catalog.v1.ComponentSpec.owner:type_name -> swcat.catalog.v1.Ref
-	2,  // 17: swcat.catalog.v1.ComponentSpec.system:type_name -> swcat.catalog.v1.Ref
-	2,  // 18: swcat.catalog.v1.ComponentSpec.subcomponent_of:type_name -> swcat.catalog.v1.Ref
-	3,  // 19: swcat.catalog.v1.ComponentSpec.provides_apis:type_name -> swcat.catalog.v1.LabelRef
-	3,  // 20: swcat.catalog.v1.ComponentSpec.consumes_apis:type_name -> swcat.catalog.v1.LabelRef
-	3,  // 21: swcat.catalog.v1.ComponentSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
-	2,  // 22: swcat.catalog.v1.ResourceSpec.owner:type_name -> swcat.catalog.v1.Ref
-	2,  // 23: swcat.catalog.v1.ResourceSpec.system:type_name -> swcat.catalog.v1.Ref
-	3,  // 24: swcat.catalog.v1.ResourceSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
-	2,  // 25: swcat.catalog.v1.ApiSpec.owner:type_name -> swcat.catalog.v1.Ref
-	2,  // 26: swcat.catalog.v1.ApiSpec.system:type_name -> swcat.catalog.v1.Ref
-	11, // 27: swcat.catalog.v1.ApiSpec.versions:type_name -> swcat.catalog.v1.ApiSpecVersion
-	4,  // 28: swcat.catalog.v1.ApiSpecVersion.version:type_name -> swcat.catalog.v1.Version
-	13, // 29: swcat.catalog.v1.GroupSpec.profile:type_name -> swcat.catalog.v1.GroupSpecProfile
-	2,  // 30: swcat.catalog.v1.GroupSpec.parent:type_name -> swcat.catalog.v1.Ref
-	2,  // 31: swcat.catalog.v1.GroupSpec.children:type_name -> swcat.catalog.v1.Ref
-	32, // [32:32] is the sub-list for method output_type
-	32, // [32:32] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	2,  // 14: swcat.catalog.v1.DomainSpec.systems:type_name -> swcat.catalog.v1.Ref
+	2,  // 15: swcat.catalog.v1.SystemSpec.owner:type_name -> swcat.catalog.v1.Ref
+	2,  // 16: swcat.catalog.v1.SystemSpec.domain:type_name -> swcat.catalog.v1.Ref
+	2,  // 17: swcat.catalog.v1.SystemSpec.components:type_name -> swcat.catalog.v1.Ref
+	2,  // 18: swcat.catalog.v1.SystemSpec.apis:type_name -> swcat.catalog.v1.Ref
+	2,  // 19: swcat.catalog.v1.SystemSpec.resources:type_name -> swcat.catalog.v1.Ref
+	2,  // 20: swcat.catalog.v1.ComponentSpec.owner:type_name -> swcat.catalog.v1.Ref
+	2,  // 21: swcat.catalog.v1.ComponentSpec.system:type_name -> swcat.catalog.v1.Ref
+	2,  // 22: swcat.catalog.v1.ComponentSpec.subcomponent_of:type_name -> swcat.catalog.v1.Ref
+	3,  // 23: swcat.catalog.v1.ComponentSpec.provides_apis:type_name -> swcat.catalog.v1.LabelRef
+	3,  // 24: swcat.catalog.v1.ComponentSpec.consumes_apis:type_name -> swcat.catalog.v1.LabelRef
+	3,  // 25: swcat.catalog.v1.ComponentSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
+	3,  // 26: swcat.catalog.v1.ComponentSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
+	2,  // 27: swcat.catalog.v1.ComponentSpec.subcomponents:type_name -> swcat.catalog.v1.Ref
+	2,  // 28: swcat.catalog.v1.ResourceSpec.owner:type_name -> swcat.catalog.v1.Ref
+	2,  // 29: swcat.catalog.v1.ResourceSpec.system:type_name -> swcat.catalog.v1.Ref
+	3,  // 30: swcat.catalog.v1.ResourceSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
+	3,  // 31: swcat.catalog.v1.ResourceSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
+	2,  // 32: swcat.catalog.v1.ApiSpec.owner:type_name -> swcat.catalog.v1.Ref
+	2,  // 33: swcat.catalog.v1.ApiSpec.system:type_name -> swcat.catalog.v1.Ref
+	11, // 34: swcat.catalog.v1.ApiSpec.versions:type_name -> swcat.catalog.v1.ApiSpecVersion
+	3,  // 35: swcat.catalog.v1.ApiSpec.providers:type_name -> swcat.catalog.v1.LabelRef
+	3,  // 36: swcat.catalog.v1.ApiSpec.consumers:type_name -> swcat.catalog.v1.LabelRef
+	4,  // 37: swcat.catalog.v1.ApiSpecVersion.version:type_name -> swcat.catalog.v1.Version
+	13, // 38: swcat.catalog.v1.GroupSpec.profile:type_name -> swcat.catalog.v1.GroupSpecProfile
+	2,  // 39: swcat.catalog.v1.GroupSpec.parent:type_name -> swcat.catalog.v1.Ref
+	2,  // 40: swcat.catalog.v1.GroupSpec.children:type_name -> swcat.catalog.v1.Ref
+	41, // [41:41] is the sub-list for method output_type
+	41, // [41:41] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_swcat_catalog_v1_catalog_proto_init() }

@@ -4,3 +4,10 @@ commonRules:
     check: |
       !matches(metadata.description, "^\\s*$")
     message: "The entity should have a non-empty description for better documentation."
+
+kindRules:
+  API:
+    - name: api-has-provider
+      severity: error
+      check: 'size(spec.providers) > 0'
+      message: "The API must have at least one provider component."

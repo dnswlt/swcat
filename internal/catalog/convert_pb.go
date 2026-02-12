@@ -110,6 +110,12 @@ func componentToPB(c *Component) *catalog_pb.Entity {
 	for _, r := range c.Spec.DependsOn {
 		spec.DependsOn = append(spec.DependsOn, labelRefToPB(r))
 	}
+	for _, r := range c.GetDependents() {
+		spec.Dependents = append(spec.Dependents, labelRefToPB(r))
+	}
+	for _, r := range c.GetSubcomponents() {
+		spec.Subcomponents = append(spec.Subcomponents, refToPB(r))
+	}
 	return &catalog_pb.Entity{
 		Kind:     string(KindComponent),
 		Metadata: metadataToPB(c.Metadata),
@@ -121,16 +127,24 @@ func systemToPB(s *System) *catalog_pb.Entity {
 	if s == nil {
 		return nil
 	}
+	spec := &catalog_pb.SystemSpec{
+		Owner:  refToPB(s.Spec.Owner),
+		Domain: refToPB(s.Spec.Domain),
+		Type:   s.Spec.Type,
+	}
+	for _, r := range s.GetComponents() {
+		spec.Components = append(spec.Components, refToPB(r))
+	}
+	for _, r := range s.GetAPIs() {
+		spec.Apis = append(spec.Apis, refToPB(r))
+	}
+	for _, r := range s.GetResources() {
+		spec.Resources = append(spec.Resources, refToPB(r))
+	}
 	return &catalog_pb.Entity{
 		Kind:     string(KindSystem),
 		Metadata: metadataToPB(s.Metadata),
-		Spec: &catalog_pb.Entity_SystemSpec{
-			SystemSpec: &catalog_pb.SystemSpec{
-				Owner:  refToPB(s.Spec.Owner),
-				Domain: refToPB(s.Spec.Domain),
-				Type:   s.Spec.Type,
-			},
-		},
+		Spec:     &catalog_pb.Entity_SystemSpec{SystemSpec: spec},
 	}
 }
 
@@ -138,16 +152,18 @@ func domainToPB(d *Domain) *catalog_pb.Entity {
 	if d == nil {
 		return nil
 	}
+	spec := &catalog_pb.DomainSpec{
+		Owner:       refToPB(d.Spec.Owner),
+		SubdomainOf: refToPB(d.Spec.SubdomainOf),
+		Type:        d.Spec.Type,
+	}
+	for _, r := range d.GetSystems() {
+		spec.Systems = append(spec.Systems, refToPB(r))
+	}
 	return &catalog_pb.Entity{
 		Kind:     string(KindDomain),
 		Metadata: metadataToPB(d.Metadata),
-		Spec: &catalog_pb.Entity_DomainSpec{
-			DomainSpec: &catalog_pb.DomainSpec{
-				Owner:       refToPB(d.Spec.Owner),
-				SubdomainOf: refToPB(d.Spec.SubdomainOf),
-				Type:        d.Spec.Type,
-			},
-		},
+		Spec:     &catalog_pb.Entity_DomainSpec{DomainSpec: spec},
 	}
 }
 
@@ -162,6 +178,9 @@ func resourceToPB(r *Resource) *catalog_pb.Entity {
 	}
 	for _, d := range r.Spec.DependsOn {
 		spec.DependsOn = append(spec.DependsOn, labelRefToPB(d))
+	}
+	for _, d := range r.GetDependents() {
+		spec.Dependents = append(spec.Dependents, labelRefToPB(d))
 	}
 	return &catalog_pb.Entity{
 		Kind:     string(KindResource),
@@ -186,6 +205,12 @@ func apiToPB(a *API) *catalog_pb.Entity {
 			Version:   versionToPB(v.Version),
 			Lifecycle: v.Lifecycle,
 		})
+	}
+	for _, r := range a.GetProviders() {
+		spec.Providers = append(spec.Providers, labelRefToPB(r))
+	}
+	for _, r := range a.GetConsumers() {
+		spec.Consumers = append(spec.Consumers, labelRefToPB(r))
 	}
 	return &catalog_pb.Entity{
 		Kind:     string(KindAPI),

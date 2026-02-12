@@ -3,3 +3,10 @@ commonRules:
     severity: warn
     check: 'metadata.description != ""'
     message: "Missing description"
+
+kindRules:
+  API:
+    - name: api-has-provider
+      severity: error
+      check: 'size(spec.providers) > 0'
+      message: "The API must have at least one provider component."
