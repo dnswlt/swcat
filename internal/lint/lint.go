@@ -69,10 +69,9 @@ func LoadConfig(path string) (*Config, error) {
 
 // Finding represents a single rule violation.
 type Finding struct {
-	EntityRef *catalog_pb.Ref
-	RuleName  string
-	Severity  Severity
-	Message   string
+	RuleName string
+	Severity Severity
+	Message  string
 }
 
 type compiledRule struct {
@@ -200,11 +199,6 @@ func (l *Linter) evaluate(cr compiledRule, meta *catalog_pb.Metadata, args map[s
 		// Report violation if check evaluation fails (e.g., due to missing field access).
 		return []Finding{
 			{
-				EntityRef: &catalog_pb.Ref{
-					Kind:      args["kind"].(string),
-					Namespace: meta.Namespace,
-					Name:      meta.Name,
-				},
 				RuleName: cr.rule.Name,
 				Severity: SeverityError,
 				Message:  fmt.Sprintf("Rule evaluation error: %v", err),
@@ -219,11 +213,6 @@ func (l *Linter) evaluate(cr compiledRule, meta *catalog_pb.Metadata, args map[s
 		}
 		return []Finding{
 			{
-				EntityRef: &catalog_pb.Ref{
-					Kind:      args["kind"].(string),
-					Namespace: meta.Namespace,
-					Name:      meta.Name,
-				},
 				RuleName: cr.rule.Name,
 				Severity: severity,
 				Message:  cr.rule.Message,
