@@ -12,6 +12,7 @@ import (
 type asyncAPIImporterPluginSpec struct {
 	ProviderPlugin   string `yaml:"providerPlugin"`
 	TargetAnnotation string `yaml:"targetAnnotation"`
+	File             string `yaml:"file"`
 }
 
 type AsyncAPIImporterPlugin struct {
@@ -23,6 +24,10 @@ func newAsyncAPIImporterPlugin(name string, specYaml *yaml.Node) (*AsyncAPIImpor
 	var spec asyncAPIImporterPluginSpec
 	if err := specYaml.Decode(&spec); err != nil {
 		return nil, fmt.Errorf("failed to decode AsyncAPIImporterPlugin spec for %s: %v", name, err)
+	}
+
+	if spec.File == "" {
+		return nil, fmt.Errorf("field 'file' not specified for plugin %s", name)
 	}
 
 	if !catalog.IsValidAnnotation(spec.TargetAnnotation, "true") {
@@ -41,7 +46,12 @@ func (m *AsyncAPIImporterPlugin) Execute(ctx context.Context, entity catalog.Ent
 		return nil, fmt.Errorf("plugin %q not found", m.spec.ProviderPlugin)
 	}
 
-	res, err := trigger.plugin.Execute(ctx, entity, args.EmptyArgs())
+	providerArgs := args.EmptyArgs()
+	providerArgs.Args = map[string]any{
+		"file": m.spec.File,
+	}
+
+	res, err := trigger.plugin.Execute(ctx, entity, providerArgs)
 	if err != nil {
 		return nil, fmt.Errorf("provider plugin %q failed: %w", m.spec.ProviderPlugin, err)
 	}

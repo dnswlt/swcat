@@ -9,6 +9,7 @@ plugins:
     spec:
       providerPlugin: mavenAsyncApiProvider
       targetAnnotation: swcat/asyncapi
+      file: META-INF/MANIFEST.MF
 
   mavenAsyncApiProvider:
     kind: GRPCPlugin
@@ -21,7 +22,6 @@ plugins:
         defaultGroupId: com.example.swcat
         defaultPackaging: jar
         includeSnapshots: false
-        file: META-INF/MANIFEST.MF
   
   javaHello:
     kind: GRPCPlugin

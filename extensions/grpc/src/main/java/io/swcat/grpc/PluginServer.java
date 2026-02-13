@@ -2,13 +2,14 @@ package io.swcat.grpc;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
 
 public class PluginServer {
-    private static final Logger logger = Logger.getLogger(PluginServer.class.getName());
+    private static final Logger logger = LoggerFactory.getLogger(PluginServer.class);
 
     private final int port;
     private final Server server;
@@ -22,15 +23,15 @@ public class PluginServer {
 
     public void start() throws IOException {
         server.start();
-        logger.info("Server started, listening on " + port);
+        logger.info("Server started, listening on {}", port);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.err.println("*** shutting down gRPC server since JVM is shutting down");
+            logger.info("*** shutting down gRPC server since JVM is shutting down");
             try {
                 PluginServer.this.stop();
             } catch (InterruptedException e) {
-                e.printStackTrace(System.err);
+                logger.error("Error during shutdown", e);
             }
-            System.err.println("*** server shut down");
+            logger.info("*** server shut down");
         }));
     }
 

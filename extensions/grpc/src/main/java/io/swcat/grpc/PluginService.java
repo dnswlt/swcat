@@ -3,16 +3,17 @@ package io.swcat.grpc;
 import io.grpc.stub.StreamObserver;
 import io.swcat.grpc.plugins.HelloPlugin;
 import io.swcat.grpc.plugins.maven.MavenArtifactExtractorPlugin;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import swcat.plugin.v1.Plugin.ExecuteRequest;
 import swcat.plugin.v1.Plugin.ExecuteResponse;
 import swcat.plugin.v1.PluginServiceGrpc;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.logging.Logger;
 
 public class PluginService extends PluginServiceGrpc.PluginServiceImplBase {
-    private static final Logger logger = Logger.getLogger(PluginService.class.getName());
+    private static final Logger logger = LoggerFactory.getLogger(PluginService.class);
     private final Map<String, Plugin> implementations = new HashMap<>();
 
     public PluginService() {
@@ -39,17 +40,18 @@ public class PluginService extends PluginServiceGrpc.PluginServiceImplBase {
 
         Plugin impl = implementations.get(pluginName);
         if (impl == null) {
-            logger.info("Invalid plugin requested: " + pluginName);
+            logger.warn("Invalid plugin requested: {}", pluginName);
             responseObserver.onNext(ExecuteResponse.newBuilder()
                     .setSuccess(false)
                     .setError("Unknown plugin " + pluginName)
                     .build());
         } else {
             try {
-                logger.info("Executing plugin: " + pluginName);
+                logger.info("Executing plugin: {}", pluginName);
                 ExecuteResponse response = impl.execute(request);
                 responseObserver.onNext(response);
             } catch (Exception e) {
+                logger.error("Plugin execution failed: {}", pluginName, e);
                 responseObserver.onNext(ExecuteResponse.newBuilder()
                         .setSuccess(false)
                         .setError("Plugin execution failed: " + e.getMessage())

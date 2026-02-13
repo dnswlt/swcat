@@ -1,6 +1,8 @@
 package io.swcat.grpc.plugins.maven;
 
 import io.swcat.grpc.Plugin;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import swcat.plugin.v1.Plugin.ExecuteRequest;
 import swcat.plugin.v1.Plugin.ExecuteResponse;
 import swcat.plugin.v1.Plugin.GeneratedFile;
@@ -22,6 +24,7 @@ import java.util.zip.ZipInputStream;
  */
 public class MavenArtifactExtractorPlugin implements Plugin {
 
+    private static final Logger logger = LoggerFactory.getLogger(MavenArtifactExtractorPlugin.class);
     public static final String COORD_ANNOTATION = "maven.apache.org/coords";
     private final MavenResolver resolver = new MavenResolver();
 
@@ -33,15 +36,22 @@ public class MavenArtifactExtractorPlugin implements Plugin {
             }
 
             Map<String, Value> config = request.getConfig().getFieldsMap();
+            Map<String, Value> args = request.getArgs().getFieldsMap();
+
             String defaultGroupId = getString(config, "defaultGroupId", "");
             String defaultPackaging = getString(config, "defaultPackaging", "jar");
             String defaultClassifier = getString(config, "defaultClassifier", "");
             boolean includeSnapshots = getBool(config, "includeSnapshots", false);
-            String fileToExtract = getString(config, "file", null);
             boolean replaceProperties = getBool(config, "replaceProperties", false);
 
+            // Prioritize 'file' from args, fallback to config
+            String fileToExtract = getString(args, "file", null);
+            if (fileToExtract == null) {
+                fileToExtract = getString(config, "file", null);
+            }
+
             if (fileToExtract == null || fileToExtract.isEmpty()) {
-                return failure("Missing 'file' in configuration");
+                return failure("Missing 'file' in configuration or arguments");
             }
 
             // Extract coordinates from entity
@@ -67,11 +77,16 @@ public class MavenArtifactExtractorPlugin implements Plugin {
                 return failure("groupId is required but not set (check defaultGroupId or annotation " + COORD_ANNOTATION + ")");
             }
 
+            logger.info("Resolving artifact {}:{}:{} (packaging: {}, classifier: \"{}\")", 
+                    groupId, artifactId, version != null ? version : "LATEST", packaging, classifier);
+
             // Resolve
             File artifactFile = resolver.resolve(groupId, artifactId, classifier, packaging, version, includeSnapshots);
+            logger.debug("Resolved to: {}", artifactFile.getAbsolutePath());
 
             // Extract
             byte[] content = extractFile(artifactFile, fileToExtract, replaceProperties);
+            logger.info("Extracted file {} ({} bytes)", fileToExtract, content.length);
 
             // Success Response
             return ExecuteResponse.newBuilder()
@@ -83,6 +98,7 @@ public class MavenArtifactExtractorPlugin implements Plugin {
                     .build();
 
         } catch (Exception e) {
+            logger.error("MavenArtifactExtractorPlugin failed", e);
             return failure("MavenArtifactExtractorPlugin failed: " + e.getMessage());
         }
     }
@@ -120,6 +136,7 @@ public class MavenArtifactExtractorPlugin implements Plugin {
         }
 
         if (replaceProperties && !properties.isEmpty()) {
+            logger.info("Performing property replacement with {} properties", properties.size());
             extractedContent = performReplacement(extractedContent, properties);
         }
 
