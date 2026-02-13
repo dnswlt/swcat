@@ -251,6 +251,12 @@ func (r *Registry) registerPlugin(name string, def *Definition) error {
 			return fmt.Errorf("failed to create ExternalPlugin %s: %w", name, err)
 		}
 		trigger.plugin = p
+	case "GRPCPlugin":
+		p, err := newGRPCPlugin(name, &def.Spec)
+		if err != nil {
+			return fmt.Errorf("failed to create GRPCPlugin %s: %w", name, err)
+		}
+		trigger.plugin = p
 	default:
 		return fmt.Errorf("invalid plugin kind %s for plugin %s", def.Kind, name)
 

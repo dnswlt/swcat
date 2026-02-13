@@ -20,6 +20,12 @@ plugins:
     spec:
       providerPlugin: mavenAsyncApiProvider
       targetAnnotation: swcat/asyncapi
+  grpcPlugin:
+    kind: GRPCPlugin
+    spec:
+      address: localhost:50051
+      config:
+        foo: bar
 `
 
 	var cfg Config
@@ -27,8 +33,8 @@ plugins:
 		t.Fatalf("Failed to unmarshal config: %v", err)
 	}
 
-	if len(cfg.Plugins) != 1 {
-		t.Errorf("Expected 1 plugin, got %d", len(cfg.Plugins))
+	if len(cfg.Plugins) != 2 {
+		t.Errorf("Expected 2 plugins, got %d", len(cfg.Plugins))
 	}
 
 	def, ok := cfg.Plugins["asyncApiImporter"]
@@ -38,6 +44,15 @@ plugins:
 
 	if def.Kind != "AsyncAPIImporterPlugin" {
 		t.Errorf("Expected kind AsyncAPIImporterPlugin, got %s", def.Kind)
+	}
+
+	grpcDef, ok := cfg.Plugins["grpcPlugin"]
+	if !ok {
+		t.Fatal("grpcPlugin not found")
+	}
+
+	if grpcDef.Kind != "GRPCPlugin" {
+		t.Errorf("Expected kind GRPCPlugin, got %s", grpcDef.Kind)
 	}
 
 	// yaml.Node Kind: Document=1, Sequence=2, Mapping=4, Scalar=8, Alias=16

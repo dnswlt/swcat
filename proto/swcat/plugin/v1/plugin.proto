@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package swcat.plugin.v1;
+
+import "swcat/catalog/v1/catalog.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/dnswlt/swcat/internal/plugins/pb;plugin_pb";
+
+// PluginService defines the interface for an external plugin server.
+// This service allows swcat to delegate entity processing to remote processes/containers.
+service PluginService {
+  // Execute runs a plugin for a specific entity.
+  rpc Execute(ExecuteRequest) returns (ExecuteResponse) {}
+}
+
+message ExecuteRequest {
+  // The name of the plugin instance as defined in plugins.yml.
+  string plugin_name = 1;
+
+  // The entity that the plugin is executed for.
+  swcat.catalog.v1.Entity entity = 2;
+
+  // The configuration for the plugin (the spec.config section from plugins.yml).
+  google.protobuf.Struct config = 3;
+
+  // Additional dynamic arguments passed to the plugin execution.
+  google.protobuf.Struct args = 4;
+}
+
+message GeneratedFile {
+  // The relative path or filename of the generated file.
+  string path = 1;
+  // The raw content of the file.
+  bytes content = 2;
+}
+
+message ExecuteResponse {
+  // Success indicates if the operation was successful.
+  bool success = 1;
+
+  // Error message - populated if success is false.
+  string error = 2;
+
+  // Files generated or extracted by the plugin.
+  repeated GeneratedFile files = 3;
+
+  // Annotations to be added to the entity.
+  map<string, google.protobuf.Value> annotations = 4;
+}

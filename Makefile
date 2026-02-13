@@ -4,11 +4,17 @@ GO ?= go
 VERSION ?= $(shell git describe --tags --always --dirty)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
 
-.PHONY: test test-integration test-race build build-web build-windows release-windows run-examples run-examples-git
+.PHONY: proto test test-integration test-race build build-web build-windows release-windows run-examples run-examples-git
 
 #
 # Building
 #
+
+proto:
+	protoc -I=proto --go_out=. --go_opt=module=github.com/dnswlt/swcat swcat/catalog/v1/catalog.proto
+	protoc -I=proto --go_out=. --go_opt=module=github.com/dnswlt/swcat \
+		--go-grpc_out=. --go-grpc_opt=module=github.com/dnswlt/swcat \
+		swcat/plugin/v1/plugin.proto
 
 build:
 	$(GO) build $(LDFLAGS) -o swcat ./cmd/swcat

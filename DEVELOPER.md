@@ -27,14 +27,14 @@ pip install mkdocs mkdocs-material
 
 ## Protocol Buffers
 
-The catalog model is defined using Protocol Buffers in `proto/`. To regenerate the Go 
-code in `internal/catalog/pb/`, run:
+The catalog model and plugin protocols are defined using Protocol Buffers in `proto/`. 
+To regenerate the Go code, run:
 
 ```bash
-protoc -I=proto --go_out=. --go_opt=module=github.com/dnswlt/swcat swcat/catalog/v1/catalog.proto
+make proto
 ```
 
-This requires `protoc` and `protoc-gen-go` to be installed.
+This requires `protoc`, `protoc-gen-go`, and `protoc-gen-go-grpc` to be installed.
 
 ## Creating tags and releases
 
