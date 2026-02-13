@@ -2,6 +2,7 @@ package io.swcat.grpc;
 
 import io.grpc.stub.StreamObserver;
 import io.swcat.grpc.plugins.HelloPlugin;
+import io.swcat.grpc.plugins.maven.MavenArtifactExtractorPlugin;
 import swcat.plugin.v1.Plugin.ExecuteRequest;
 import swcat.plugin.v1.Plugin.ExecuteResponse;
 import swcat.plugin.v1.PluginServiceGrpc;
@@ -18,9 +19,10 @@ public class PluginService extends PluginServiceGrpc.PluginServiceImplBase {
         // --- PLUGIN REGISTRATION START ---
         // Register your plugin implementations here.
         // The key used here is what users specify in plugins.yml (either as the 
-        // plugin name or via the 'implementation' config key).
+        // plugin name or via the 'pluginName' config key).
         
         implementations.put("hello", new HelloPlugin());
+        implementations.put("maven-extractor", new MavenArtifactExtractorPlugin());
         
         // Example: implementations.put("my-custom-plugin", new MyCustomPlugin());
         // --- PLUGIN REGISTRATION END ---

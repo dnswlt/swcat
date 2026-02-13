@@ -11,15 +11,13 @@ plugins:
       targetAnnotation: swcat/asyncapi
 
   mavenAsyncApiProvider:
-    kind: ExternalPlugin
+    kind: GRPCPlugin
     # No trigger - this plugin is only used by the asyncApiImporter plugin
     spec:
-      command: java
-      args: 
-        - '-jar'
-        - extensions/maven/target/artifact-extractor-1.0-SNAPSHOT.jar
+      address: localhost:50051
       verbose: true
       config:
+        pluginName: maven-extractor
         defaultGroupId: com.example.swcat
         defaultPackaging: jar
         includeSnapshots: false
