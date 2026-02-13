@@ -11,3 +11,9 @@ kindRules:
       severity: error
       check: 'size(spec.providers) > 0'
       message: "The API must have at least one provider component."
+
+reportedGroups:
+  - analytics-owner
+  - flights-owner
+  - iam-owner
+  - payments-owner

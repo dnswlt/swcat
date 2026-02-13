@@ -36,6 +36,14 @@ func (s *Server) serveLintFindings(w http.ResponseWriter, r *http.Request) {
 	data := s.getStoreData(r)
 	allEntities := s.finder.FindEntities(data.repo, "")
 
+	reportedGroups := s.linter.ReportedGroups()
+	isReported := func(owner string) bool {
+		if len(reportedGroups) == 0 {
+			return true // No restriction => all groups are reported
+		}
+		return slices.Contains(reportedGroups, owner)
+	}
+
 	// owner -> system -> []entityFindings
 	grouped := make(map[string]map[string][]lintEntityFindings)
 
@@ -53,6 +61,10 @@ func (s *Server) serveLintFindings(w http.ResponseWriter, r *http.Request) {
 		owner := "Unknown Owner"
 		if o := e.GetOwner(); o != nil {
 			owner = o.QName()
+		}
+
+		if !isReported(owner) {
+			owner = "Others"
 		}
 
 		system := "No System"
@@ -110,6 +122,13 @@ func (s *Server) serveLintFindings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slices.SortFunc(result, func(a, b ownerLintGroups) int {
+		// "Others" should come last
+		if a.Owner == "Others" {
+			return 1
+		}
+		if b.Owner == "Others" {
+			return -1
+		}
 		return strings.Compare(a.Owner, b.Owner)
 	})
 

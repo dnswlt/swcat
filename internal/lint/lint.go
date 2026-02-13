@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/dnswlt/swcat/internal/catalog"
 	catalog_pb "github.com/dnswlt/swcat/internal/catalog/pb"
 	"github.com/google/cel-go/cel"
 	"gopkg.in/yaml.v3"
@@ -48,6 +49,11 @@ type Config struct {
 	// KindRules are applied only to entities of the specified Kind.
 	// The map key is the entity Kind (e.g., "Component", "System").
 	KindRules map[string][]Rule `yaml:"kindRules,omitempty"`
+
+	// ReportedGroups is an optional list of group names (qualified names).
+	// If set, the lint report will only show these groups as individual cards.
+	// Findings for entities owned by other groups will be grouped under "Others".
+	ReportedGroups []string `yaml:"reportedGroups,omitempty"`
 }
 
 // LoadConfig reads the linting configuration from the specified path.
@@ -82,9 +88,10 @@ type compiledRule struct {
 
 // Linter provides efficient evaluation of rules against multiple entities.
 type Linter struct {
-	env         *cel.Env
-	commonRules []compiledRule
-	kindRules   map[string][]compiledRule
+	env            *cel.Env
+	commonRules    []compiledRule
+	kindRules      map[string][]compiledRule
+	reportedGroups []string
 }
 
 // NewLinter creates a new Linter from the given configuration.
@@ -100,9 +107,15 @@ func NewLinter(config *Config) (*Linter, error) {
 		return nil, fmt.Errorf("failed to create CEL environment: %v", err)
 	}
 
+	reportedGroups, err := parseReportedGroups(config.ReportedGroups)
+	if err != nil {
+		return nil, err
+	}
+
 	l := &Linter{
-		env:       env,
-		kindRules: make(map[string][]compiledRule),
+		env:            env,
+		kindRules:      make(map[string][]compiledRule),
+		reportedGroups: reportedGroups,
 	}
 
 	for _, r := range config.CommonRules {
@@ -125,6 +138,31 @@ func NewLinter(config *Config) (*Linter, error) {
 	}
 
 	return l, nil
+}
+
+func parseReportedGroups(groups []string) ([]string, error) {
+	var result []string
+	for _, rg := range groups {
+		// Use catalog.KindGroup as the default kind for parsing reported groups.
+		// api.ParseRef handles both "group:name" and just "name".
+		r, err := catalog.ParseRef(rg)
+		if err != nil {
+			return nil, fmt.Errorf("invalid group reference in reportedGroups %q: %v", rg, err)
+		}
+		// If kind was omitted, assume KindGroup. If specified, ensure it is KindGroup.
+		if r.Kind == "" {
+			r.Kind = catalog.KindGroup
+		} else if r.Kind != catalog.KindGroup {
+			return nil, fmt.Errorf("invalid kind %q in reportedGroups %q: only Group entities are allowed", r.Kind, rg)
+		}
+
+		result = append(result, r.QName())
+	}
+	return result, nil
+}
+
+func (l *Linter) ReportedGroups() []string {
+	return l.reportedGroups
 }
 
 func (l *Linter) compileRule(r Rule) (compiledRule, error) {

@@ -22,14 +22,20 @@ A linting rule consists of:
 
 Linter rules are configured in a `lint.yml` file located in your data root directory.
 
-The file has two sections:
+The file has the following sections:
 
 *   `commonRules`: Rules that are applied to all entities, regardless of their `kind`.
 *   `kindRules`: Rules that are applied only to entities of a specific `kind` (e.g., `Component`, `API`, `System`).
+*   `reportedGroups`: (Optional) A list of group names (e.g. `team-alpha` or `my-namespace/team-beta`). If set, the global lint findings page will only show these groups as individual cards. All other groups will be grouped under an "Others" section. This is useful for focusing on your own teams in a large catalog with many external owners.
 
 ### Example `lint.yml`
 
 ```yaml
+reportedGroups:
+  - team-alpha
+  - team-beta
+  - external/partner-team
+
 commonRules:
   - name: has-description
     severity: warn
@@ -59,10 +65,11 @@ kindRules:
 
 ## Viewing Findings
 
-When an entity violates a rule, `swcat` displays the findings in two ways:
+When an entity violates a rule, `swcat` displays the findings in three ways:
 
-1.  **Entity Detail Page:** A small indicator icon (yellow exclamation mark) appears in the top toolbar next to the entity's kind. The detailed findings are shown in a foldable section at the bottom of the page.
-2.  **Search:** You can find all entities with linting violations using the `lint` search property.
+1.  **Global Lint Findings Page:** Click the "Bug" icon in the top navigation bar to see a report of all findings in the catalog, grouped by Owner and System.
+2.  **Entity Detail Page:** A small indicator icon (yellow exclamation mark) appears in the top toolbar next to the entity's kind. The detailed findings are shown in a foldable section at the bottom of the page.
+3.  **Search:** You can find all entities with linting violations using the `lint` search property.
 
 ### Searching for violations
 
