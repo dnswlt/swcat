@@ -144,18 +144,10 @@ func parseReportedGroups(groups []string) ([]string, error) {
 	var result []string
 	for _, rg := range groups {
 		// Use catalog.KindGroup as the default kind for parsing reported groups.
-		// api.ParseRef handles both "group:name" and just "name".
-		r, err := catalog.ParseRef(rg)
+		r, err := catalog.ParseRefAs(catalog.KindGroup, rg)
 		if err != nil {
 			return nil, fmt.Errorf("invalid group reference in reportedGroups %q: %v", rg, err)
 		}
-		// If kind was omitted, assume KindGroup. If specified, ensure it is KindGroup.
-		if r.Kind == "" {
-			r.Kind = catalog.KindGroup
-		} else if r.Kind != catalog.KindGroup {
-			return nil, fmt.Errorf("invalid kind %q in reportedGroups %q: only Group entities are allowed", r.Kind, rg)
-		}
-
 		result = append(result, r.QName())
 	}
 	return result, nil
