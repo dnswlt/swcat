@@ -46,18 +46,34 @@ public class MavenResolver {
         Settings settings = loadSettings();
         this.session = newSession(repositorySystem, settings);
         this.repositories = new ArrayList<>();
-        
-        // Always add Central (Mirrors will override this if configured)
-        this.repositories.add(new RemoteRepository.Builder("central", "default", "https://repo.maven.apache.org/maven2/").build());
-        
-        // Add repositories from active profiles
-        Map<String, Profile> profiles = settings.getProfilesAsMap();
-        for (String profileId : settings.getActiveProfiles()) {
-            Profile profile = profiles.get(profileId);
-            if (profile != null) {
-                for (org.apache.maven.settings.Repository repo : profile.getRepositories()) {
-                    RemoteRepository.Builder builder = new RemoteRepository.Builder(repo.getId(), "default", repo.getUrl());
-                    this.repositories.add(builder.build());
+
+        String envUrl = System.getenv("MAVEN_REPO_URL");
+        String envUser = System.getenv("MAVEN_REPO_USER");
+        String envPass = System.getenv("MAVEN_REPO_PASS");
+
+        if (envUrl != null && !envUrl.isEmpty()) {
+            RemoteRepository.Builder builder = new RemoteRepository.Builder("remote", "default", envUrl);
+            if (envUser != null && !envUser.isEmpty() && envPass != null) {
+                Authentication auth = new AuthenticationBuilder()
+                        .addUsername(envUser)
+                        .addPassword(envPass)
+                        .build();
+                builder.setAuthentication(auth);
+            }
+            this.repositories.add(builder.build());
+        } else {
+            // Always add Central (Mirrors will override this if configured)
+            this.repositories.add(new RemoteRepository.Builder("central", "default", "https://repo.maven.apache.org/maven2/").build());
+
+            // Add repositories from active profiles
+            Map<String, Profile> profiles = settings.getProfilesAsMap();
+            for (String profileId : settings.getActiveProfiles()) {
+                Profile profile = profiles.get(profileId);
+                if (profile != null) {
+                    for (org.apache.maven.settings.Repository repo : profile.getRepositories()) {
+                        RemoteRepository.Builder builder = new RemoteRepository.Builder(repo.getId(), "default", repo.getUrl());
+                        this.repositories.add(builder.build());
+                    }
                 }
             }
         }
