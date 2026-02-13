@@ -12,6 +12,37 @@
     <main class="w-full max-w-screen-lg mx-auto space-y-6 bg-white shadow rounded-xl p-6">
         <h1 class="text-2xl font-semibold text-center mb-6">Lint Findings</h1>
 
+            {{ if .HasKube }}
+            <div class="border rounded-xl p-4 mb-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-800">Kubernetes Workloads</h2>
+                        <p class="text-sm text-gray-500">Check which workloads are running in the configured namespaces.</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                            <input type="checkbox" id="kube-untracked" name="untracked" checked
+                                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            Untracked only
+                        </label>
+                        <button
+                            hx-get="lint/kube-workloads"
+                            hx-target="#kube-workloads-result"
+                            hx-swap="innerHTML"
+                            hx-include="#kube-untracked"
+                            hx-indicator="#kube-spinner"
+                            class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                            Load Workloads
+                        </button>
+                    </div>
+                </div>
+                <div id="kube-spinner" class="htmx-indicator text-center py-4 hidden">
+                    <span class="text-sm text-gray-500">Loading workloads...</span>
+                </div>
+                <div id="kube-workloads-result"></div>
+            </div>
+            {{ end }}
+
             {{ if .OwnerGroups }}
             <div class="space-y-8">
                 {{ range .OwnerGroups }}

@@ -25,6 +25,7 @@ import (
 	"github.com/dnswlt/swcat/internal/comments"
 	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/dot"
+	"github.com/dnswlt/swcat/internal/kube"
 	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/repo"
@@ -75,11 +76,15 @@ type Server struct {
 
 	commentsStore comments.Store
 
+	// The optional Kubernetes client.
+	// If set, workloads can be queried from a remote cluster.
+	kubeClient *kube.Client
+
 	// Server startup time. Used for cache busting JS/CSS resources.
 	started time.Time
 }
 
-func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, pluginRegistry *plugins.Registry, commentsStore comments.Store) (*Server, error) {
+func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, pluginRegistry *plugins.Registry, commentsStore comments.Store, kubeClient *kube.Client) (*Server, error) {
 	if opts.SVGCacheSize <= 0 {
 		opts.SVGCacheSize = 128
 	}
@@ -98,6 +103,7 @@ func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, plu
 		linter:         linter,
 		pluginRegistry: pluginRegistry,
 		commentsStore:  commentsStore,
+		kubeClient:     kubeClient,
 		finder:         repo.NewFinder(),
 		started:        time.Now(),
 	}
@@ -1922,6 +1928,9 @@ func (s *Server) uiMux() *http.ServeMux {
 
 	mux.HandleFunc("GET /lint", func(w http.ResponseWriter, r *http.Request) {
 		s.serveLintFindings(w, r)
+	})
+	mux.HandleFunc("GET /lint/kube-workloads", func(w http.ResponseWriter, r *http.Request) {
+		s.serveKubeWorkloads(w, r)
 	})
 
 	// Generic entities URLs

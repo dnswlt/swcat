@@ -1,11 +1,16 @@
 package web
 
 import (
+	"context"
+	"fmt"
+	"log"
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/kube"
 	"github.com/dnswlt/swcat/internal/lint"
 )
 
@@ -134,7 +139,82 @@ func (s *Server) serveLintFindings(w http.ResponseWriter, r *http.Request) {
 
 	params := map[string]any{
 		"OwnerGroups": result,
+		"HasKube":     s.kubeClient != nil,
 	}
 
 	s.serveHTMLPage(w, r, "lint_findings.html", params)
+}
+
+type kubeWorkloadView struct {
+	kube.Workload
+	Tracked bool
+}
+
+func (s *Server) serveKubeWorkloads(w http.ResponseWriter, r *http.Request) {
+	if s.kubeClient == nil {
+		http.Error(w, "Kubernetes client not configured", http.StatusNotFound)
+		return
+	}
+
+	data := s.getStoreData(r)
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	allWorkloads, err := s.kubeClient.AllWorkloads(ctx)
+	if err != nil {
+		log.Printf("Error fetching workloads: %v", err)
+		http.Error(w, fmt.Sprintf("Error fetching workloads: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Build a set of known workload names from annotations.
+	annotatedNames := make(map[string]bool)
+	for _, e := range s.finder.FindComponents(data.repo, "") {
+		if v, ok := e.GetMetadata().Annotations[catalog.AnnotKubeName]; ok {
+			annotatedNames[v] = true
+		}
+	}
+
+	isTracked := func(w kube.Workload) bool {
+		// Tracked if a Component with the same name exists in the default namespace.
+		ref := &catalog.Ref{Kind: catalog.KindComponent, Namespace: catalog.DefaultNamespace, Name: w.Name}
+		if data.repo.Component(ref) != nil {
+			return true
+		}
+		// Tracked if any entity has a matching annotation.
+		return annotatedNames[w.Name]
+	}
+
+	var workloads []kubeWorkloadView
+	for _, w := range allWorkloads {
+		workloads = append(workloads, kubeWorkloadView{
+			Workload: w,
+			Tracked:  isTracked(w),
+		})
+	}
+
+	// Filter to untracked workloads if requested.
+	untrackedOnly := r.URL.Query().Get("untracked") == "on"
+	if untrackedOnly {
+		workloads = slices.DeleteFunc(workloads, func(w kubeWorkloadView) bool {
+			return w.Tracked
+		})
+	}
+
+	slices.SortFunc(workloads, func(a, b kubeWorkloadView) int {
+		if c := strings.Compare(a.Namespace, b.Namespace); c != 0 {
+			return c
+		}
+		if c := strings.Compare(string(a.Kind), string(b.Kind)); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Name, b.Name)
+	})
+
+	params := map[string]any{
+		"Workloads": workloads,
+		"LabelKeys": []string{"app", "app.kubernetes.io/version"},
+	}
+	s.serveHTMLPage(w, r, "kube_workloads.html", params)
 }

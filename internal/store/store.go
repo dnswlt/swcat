@@ -25,6 +25,7 @@ const (
 	ConfigFile  = "swcat.yml"
 	PluginsFile = "plugins.yml"
 	LintFile    = "lint.yml"
+	KubeFile    = "kube.yml"
 )
 
 var (

@@ -36,6 +36,7 @@ const (
 const (
 	AnnotSterotype = "swcat/stereotype"
 	AnnotFillColor = "swcat/fillcolor"
+	AnnotKubeName  = "app.kubernetes.io/name"
 )
 
 type Ref struct {

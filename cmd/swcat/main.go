@@ -17,6 +17,7 @@ import (
 	"github.com/dnswlt/swcat/internal/comments"
 	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/gitclient"
+	"github.com/dnswlt/swcat/internal/kube"
 	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/repo"
@@ -134,6 +135,30 @@ func runPluginsAndUpdate(r *plugins.Registry, st store.Source) error {
 	return nil
 }
 
+func createKubeClient(source store.Source) (*kube.Client, error) {
+	defaultStore, err := source.Store("")
+	if err != nil {
+		return nil, fmt.Errorf("Could not get default store: %v", err)
+	}
+	kubeData, err := defaultStore.ReadFile(store.KubeFile)
+	if err != nil {
+		if errors.Is(err, iofs.ErrNotExist) {
+			return nil, nil // No kube client configured, not an error.
+		}
+		return nil, fmt.Errorf("Could not load kube config: %w", err)
+	}
+	cfg, err := kube.LoadConfig(kubeData)
+	if err != nil {
+		return nil, fmt.Errorf("Could not parse kube config: %v", err)
+	}
+	client, err := kube.NewClientFromConfig(*cfg)
+	if err != nil {
+		log.Fatalf("Could not create Kubernetes client: %v", err)
+	}
+	log.Printf("Kubernetes client initialized (kubeconfig=%s, namespaces=%v)", cfg.Kubeconfig, cfg.Namespaces)
+	return client, nil
+}
+
 func main() {
 
 	var opts Options
@@ -169,7 +194,7 @@ func main() {
 		log.Fatalf("dot was not found in your PATH. Please install Graphviz and add it to the PATH.")
 	}
 
-	var st store.Source
+	var source store.Source
 	if opts.GitURL != "" {
 		auth := gitClientAuthFromEnv()
 		log.Printf("Retrieving catalog from git URL %s", opts.GitURL)
@@ -185,14 +210,14 @@ func main() {
 			}
 		}
 		log.Printf("Using default git branch %q", ref)
-		st = store.NewGitSource(loader, ref, opts.GitRootDir)
+		source = store.NewGitSource(loader, ref, opts.GitRootDir)
 		if !opts.ReadOnly {
 			opts.ReadOnly = true // Enforce read-only mode when using a remote git repo as the store.
 			log.Printf("Activated read-only mode for git-based storage")
 		}
 	} else if opts.RootDir != "" {
 		log.Printf("Using local store at %s", opts.RootDir)
-		st = store.NewDiskStore(opts.RootDir)
+		source = store.NewDiskStore(opts.RootDir)
 	} else {
 		log.Fatalf("Neither -root-dir nor -git-url specified")
 	}
@@ -224,7 +249,7 @@ func main() {
 		pluginRegistry = r
 
 		if r != nil && runPlugins {
-			if err := runPluginsAndUpdate(r, st); err != nil {
+			if err := runPluginsAndUpdate(r, source); err != nil {
 				log.Fatalf("Failed to run plugins: %v", err)
 			}
 		}
@@ -243,6 +268,12 @@ func main() {
 		commentsStore = comments.NewCachingStore(fileCommentsStore)
 	}
 
+	// Optionally create a Kubernetes client.
+	kubeClient, err := createKubeClient(source)
+	if err != nil {
+		log.Fatalf("Could not create kube client: %v", err)
+	}
+
 	server, err := web.NewServer(
 		web.ServerOptions{
 			Addr:            opts.Addr,
@@ -254,10 +285,11 @@ func main() {
 			Version:         Version,
 			SVGCacheSize:    opts.SVGCacheSize,
 		},
-		st,
+		source,
 		linter,
 		pluginRegistry,
 		commentsStore,
+		kubeClient,
 	)
 	if err != nil {
 		log.Fatalf("Could not create server: %v", err)
