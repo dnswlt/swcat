@@ -287,6 +287,22 @@ func TestDetail_LintFindings(t *testing.T) {
 	if !strings.Contains(body2, "The API must have at least one provider component") {
 		t.Errorf("expected lint finding message not found in body")
 	}
+
+	// Verify search by lint property
+	rr3 := httptest.NewRecorder()
+	req3 := httptest.NewRequest(http.MethodGet, "/ui/entities?q=lint:error", nil)
+	h.ServeHTTP(rr3, req3)
+
+	if rr3.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr3.Code, http.StatusOK)
+	}
+	body3 := rr3.Body.String()
+	if !strings.Contains(body3, "providerless-api") {
+		t.Errorf("expected 'providerless-api' to be found in search results for 'lint:error'")
+	}
+	if strings.Contains(body3, "lint-test-system") {
+		t.Errorf("expected 'lint-test-system' (severity: warn) to be absent in search results for 'lint:error'")
+	}
 }
 
 func TestDetail_NotFound_AllKinds(t *testing.T) {

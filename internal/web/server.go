@@ -121,6 +121,20 @@ func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, plu
 		})
 	}
 
+	if s.linter != nil {
+		s.finder.RegisterPropertyProvider(func(e catalog.Entity, prop string) ([]string, bool) {
+			if prop != "lint" {
+				return nil, false
+			}
+			findings := s.linter.Lint(catalog.ToPB(e))
+			var values []string
+			for _, f := range findings {
+				values = append(values, string(f.Severity), f.RuleName)
+			}
+			return values, true
+		})
+	}
+
 	if err := s.reloadTemplates(); err != nil {
 		return nil, err
 	}
