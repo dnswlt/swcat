@@ -57,6 +57,12 @@ catalog:
     hexz.me/asyncapi:
       url: https://example.com/repos/apis/{{ .Annotation.Value }}_{{ .Version.Major }}
       title: API Schema ({{ .Version }})
+  # Create links for all entities matching a filter.
+  automaticLinks:
+      - filter: |
+          kind=component AND (system=flights-search OR system=flights-tickets)
+        url: https://grafana.example.com/dashboards/prod/{{ first (index .Metadata.Annotations "hexz.me/monitoring") .Metadata.Name }}
+        title: Monitoring
   validation:
     api:
       type:

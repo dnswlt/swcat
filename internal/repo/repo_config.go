@@ -63,9 +63,29 @@ type AnnotationBasedLink struct {
 	Type string `yaml:"type,omitempty"`
 }
 
+type AutomaticLink struct {
+	// A filter expression that determines which entities this link applies to.
+	// [required]
+	Filter string `yaml:"filter"`
+	// The URL to which the link should point.
+	// May use {{ .Metadata.Name }} etc. template placeholders.
+	// [required]
+	URL string `yaml:"url"`
+	// A user friendly display name for the link.
+	// [optional]
+	Title string `yaml:"title,omitempty"`
+	// A key representing a visual icon to be displayed in the UI.
+	// [optional]
+	Icon string `yaml:"icon,omitempty"`
+	// An optional value to categorize links into specific groups.
+	// [optional]
+	Type string `yaml:"type,omitempty"`
+}
+
 // Config holds repository-specific application configuration.
 type Config struct {
 	AnnotationBasedLinks map[string]*AnnotationBasedLink `yaml:"annotationBasedLinks"`
+	AutomaticLinks       []*AutomaticLink                `yaml:"automaticLinks"`
 	Validation           *CatalogValidationRules         `yaml:"validation"`
 }
 

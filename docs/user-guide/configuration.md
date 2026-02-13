@@ -33,6 +33,20 @@ The `catalog` section allows you to configure repository-specific settings.
         The version part fields are only populated if the version string matches a
         common pattern (e.g. *v1*, *1.2.3*, or *v1alpha*).
 
+* `automaticLinks`: A list of link templates that are automatically added to
+    entities matching a filter expression. Each entry has the following fields:
+    * `filter`: A query expression (see [Query Syntax](query-syntax.md)) that
+        determines which entities the link applies to.
+    * `url`: The URL template for the link.
+    * `title`: The title template for the link.
+
+    The `url` and `title` fields support the `{{ .Metadata.<Field> }}` template
+    placeholders.
+
+Both `annotationBasedLinks` and `automaticLinks` support custom template functions:
+* `{{ first <val1> <val2> ... }}` returns the first non-empty string. This is
+    useful to provide fallback values, e.g. `{{ first (index .Metadata.Annotations "my/annot") .Metadata.Name }}`.
+
 * `validation`: Defines validation rules for entity specifications.
   You can define rules for domains, systems, components, resources, and APIs.
     * `values`: A list of allowed values for a field.

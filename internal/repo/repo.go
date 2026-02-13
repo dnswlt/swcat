@@ -15,6 +15,7 @@ import (
 
 	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/query"
 	"github.com/dnswlt/swcat/internal/store"
 )
 
@@ -850,16 +851,43 @@ func isValidAbsoluteURL(s string) bool {
 	return u.Scheme != "" && u.Host != ""
 }
 
-// linkTemplates
+// templateFuncs defines custom template functions available in link templates.
+var templateFuncs = template.FuncMap{
+	// first returns the first non-empty string from the given arguments.
+	"first": func(args ...string) string {
+		for _, arg := range args {
+			if arg != "" {
+				return arg
+			}
+		}
+		return ""
+	},
+}
+
 type linkTemplates struct {
 	url        *template.Template
 	title      *template.Template
 	hasVersion bool // Indicates whether a {{ Version[.*] }} annotation is present in url or title.
 }
 
+type autoLinkTemplates struct {
+	eval  *query.Evaluator
+	url   *template.Template
+	title *template.Template
+	icon  string
+	typ   string
+}
+
+type preparedTemplates struct {
+	annotationBased map[string]linkTemplates
+	automatic       []autoLinkTemplates
+}
+
 // prepareLinkTemplates compiles all url and title templates found in the config.
-func (r *Repository) prepareLinkTemplates() (map[string]linkTemplates, error) {
-	tmpls := map[string]linkTemplates{}
+func (r *Repository) prepareLinkTemplates() (*preparedTemplates, error) {
+	res := &preparedTemplates{
+		annotationBased: make(map[string]linkTemplates),
+	}
 	versionPlaceholderRE := regexp.MustCompile(`\{\{\s*\.Version\b`)
 
 	for annot, abl := range r.config.AnnotationBasedLinks {
@@ -869,22 +897,56 @@ func (r *Repository) prepareLinkTemplates() (map[string]linkTemplates, error) {
 		if strings.TrimSpace(abl.URL) == "" {
 			return nil, fmt.Errorf("annotation-based label for %q has an empty URL", annot)
 		}
-		urlTmpl, err := template.New("url").Parse(abl.URL)
+		urlTmpl, err := template.New("url").Funcs(templateFuncs).Parse(abl.URL)
 		if err != nil {
 			return nil, fmt.Errorf("invalid URL template for annotation %q: %v", annot, err)
 		}
 		urlTmpl.Option("missingkey=error")
-		titleTmpl, err := template.New("title").Parse(abl.Title)
+		titleTmpl, err := template.New("title").Funcs(templateFuncs).Parse(abl.Title)
 		if err != nil {
 			return nil, fmt.Errorf("invalid title template for annotation %q: %v", annot, err)
 		}
 		titleTmpl.Option("missingkey=error")
 		// If either template references .Version, make this a per-version template.
 		hasVersion := versionPlaceholderRE.MatchString(abl.URL + " " + abl.Title)
-		tmpls[annot] = linkTemplates{url: urlTmpl, title: titleTmpl, hasVersion: hasVersion}
+		res.annotationBased[annot] = linkTemplates{url: urlTmpl, title: titleTmpl, hasVersion: hasVersion}
 	}
 
-	return tmpls, nil
+	for _, al := range r.config.AutomaticLinks {
+		if al == nil {
+			continue
+		}
+		if strings.TrimSpace(al.Filter) == "" {
+			return nil, fmt.Errorf("automatic link has an empty filter")
+		}
+		if strings.TrimSpace(al.URL) == "" {
+			return nil, fmt.Errorf("automatic link has an empty URL")
+		}
+		expr, err := query.Parse(al.Filter)
+		if err != nil {
+			return nil, fmt.Errorf("invalid filter expression %q: %v", al.Filter, err)
+		}
+		urlTmpl, err := template.New("url").Funcs(templateFuncs).Parse(al.URL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid URL template for automatic link: %v", err)
+		}
+		urlTmpl.Option("missingkey=error")
+		titleTmpl, err := template.New("title").Funcs(templateFuncs).Parse(al.Title)
+		if err != nil {
+			return nil, fmt.Errorf("invalid title template for automatic link: %v", err)
+		}
+		titleTmpl.Option("missingkey=error")
+
+		res.automatic = append(res.automatic, autoLinkTemplates{
+			eval:  query.NewEvaluator(expr),
+			url:   urlTmpl,
+			title: titleTmpl,
+			icon:  al.Icon,
+			typ:   al.Type,
+		})
+	}
+
+	return res, nil
 }
 
 func (r *Repository) addGeneratedLinks() error {
@@ -904,7 +966,7 @@ func (r *Repository) addGeneratedLinks() error {
 		}
 		// Generate new links
 		var links []*catalog.Link
-		for annot, t := range tmpls {
+		for annot, t := range tmpls.annotationBased {
 			if value, ok := meta.Annotations[annot]; ok && value != "" {
 				makeLink := func(version *catalog.Version) (*catalog.Link, error) {
 					data := map[string]any{
@@ -956,6 +1018,40 @@ func (r *Repository) addGeneratedLinks() error {
 				}
 			}
 		}
+
+		// Generate automatic links
+		for _, t := range tmpls.automatic {
+			matches, err := t.eval.Matches(e)
+			if err != nil {
+				return fmt.Errorf("failed to evaluate filter for entity %v: %v", e.GetRef(), err)
+			}
+			if !matches {
+				continue
+			}
+			data := map[string]any{
+				"Metadata": meta,
+			}
+			var urlSb strings.Builder
+			if err := t.url.Execute(&urlSb, data); err != nil {
+				return fmt.Errorf("failed to execute URL template for automatic link in entity %v: %v", e.GetRef(), err)
+			}
+			url := urlSb.String()
+			if !isValidAbsoluteURL(url) {
+				return fmt.Errorf("invalid url for automatic link in entity %v: %q", e.GetRef(), url)
+			}
+			var titleSb strings.Builder
+			if err := t.title.Execute(&titleSb, data); err != nil {
+				return fmt.Errorf("failed to execute title template for automatic link in entity %v: %v", e.GetRef(), err)
+			}
+			links = append(links, &catalog.Link{
+				Title:       titleSb.String(),
+				URL:         url,
+				Type:        t.typ,
+				Icon:        t.icon,
+				IsGenerated: true,
+			})
+		}
+
 		meta.Links = append(meta.Links, links...)
 		slices.SortFunc(meta.Links, func(a, b *catalog.Link) int {
 			if c := cmp.Compare(a.Title, b.Title); c != 0 {

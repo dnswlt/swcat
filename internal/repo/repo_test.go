@@ -343,10 +343,10 @@ func TestPrepareLinkTemplates(t *testing.T) {
 			if tt.wantErr {
 				return
 			}
-			if l := len(tmpls); l != 1 {
+			if l := len(tmpls.annotationBased); l != 1 {
 				t.Errorf("Wrong number of templates: want 1, got %d", l)
 			}
-			tmpl, ok := tmpls["test"]
+			tmpl, ok := tmpls.annotationBased["test"]
 			if !ok {
 				t.Fatal("Expected template with key 'test' was not prepared")
 			}
@@ -493,6 +493,86 @@ func TestAddGeneratedLinks_MixedEntities(t *testing.T) {
 	}
 	if len(c2.Metadata.Links) != 0 {
 		t.Errorf("len(c2.links) = %d, want 0", len(c2.Metadata.Links))
+	}
+}
+
+func TestAddGeneratedLinks_AutomaticLinks(t *testing.T) {
+	repo := NewRepositoryWithConfig(Config{
+		AutomaticLinks: []*AutomaticLink{
+			{
+				Filter: "kind=component AND type=service",
+				URL:    "https://grafana.example.com/{{ .Metadata.Name }}",
+				Title:  "Monitoring",
+			},
+		},
+	})
+	c1 := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "service-1"},
+		Spec:     &catalog.ComponentSpec{Type: "service"},
+	}
+	c2 := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "library-1"},
+		Spec:     &catalog.ComponentSpec{Type: "library"},
+	}
+	repo.AddEntity(c1)
+	repo.AddEntity(c2)
+
+	if err := repo.addGeneratedLinks(); err != nil {
+		t.Fatalf("addGeneratedLinks() error = %v", err)
+	}
+
+	if len(c1.Metadata.Links) != 1 {
+		t.Errorf("len(c1.links) = %d, want 1", len(c1.Metadata.Links))
+	} else {
+		link := c1.Metadata.Links[0]
+		if link.URL != "https://grafana.example.com/service-1" {
+			t.Errorf("link.URL = %q, want %q", link.URL, "https://grafana.example.com/service-1")
+		}
+	}
+
+	if len(c2.Metadata.Links) != 0 {
+		t.Errorf("len(c2.links) = %d, want 0", len(c2.Metadata.Links))
+	}
+}
+
+func TestAddGeneratedLinks_AutomaticLinks_FirstFunc(t *testing.T) {
+	repo := NewRepositoryWithConfig(Config{
+		AutomaticLinks: []*AutomaticLink{
+			{
+				Filter: "kind=component",
+				URL:    `https://grafana.example.com/{{ first (index .Metadata.Annotations "hexz.me/monitoring") .Metadata.Name }}`,
+				Title:  "Monitoring",
+			},
+		},
+	})
+	c1 := &catalog.Component{
+		Metadata: &catalog.Metadata{
+			Name: "service-1",
+			Annotations: map[string]string{
+				"hexz.me/monitoring": "dashboard-abc",
+			},
+		},
+		Spec: &catalog.ComponentSpec{},
+	}
+	c2 := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "service-2"},
+		Spec:     &catalog.ComponentSpec{},
+	}
+	repo.AddEntity(c1)
+	repo.AddEntity(c2)
+
+	if err := repo.addGeneratedLinks(); err != nil {
+		t.Fatalf("addGeneratedLinks() error = %v", err)
+	}
+
+	link1 := c1.Metadata.Links[0]
+	if link1.URL != "https://grafana.example.com/dashboard-abc" {
+		t.Errorf("link1.URL = %q, want %q", link1.URL, "https://grafana.example.com/dashboard-abc")
+	}
+
+	link2 := c2.Metadata.Links[0]
+	if link2.URL != "https://grafana.example.com/service-2" {
+		t.Errorf("link2.URL = %q, want %q", link2.URL, "https://grafana.example.com/service-2")
 	}
 }
 
