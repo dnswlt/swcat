@@ -169,20 +169,20 @@ func (l *Linter) Lint(e *catalog_pb.Entity) []Finding {
 
 	// Apply common rules.
 	for _, cr := range l.commonRules {
-		findings = append(findings, l.evaluate(cr, e.Metadata, args)...)
+		findings = append(findings, l.evaluate(cr, args)...)
 	}
 
 	// Apply kind-specific rules.
-	if kr, ok := l.kindRules[e.Kind]; ok {
+	if kr, ok := l.kindRules[strings.ToLower(e.Kind)]; ok {
 		for _, r := range kr {
-			findings = append(findings, l.evaluate(r, e.Metadata, args)...)
+			findings = append(findings, l.evaluate(r, args)...)
 		}
 	}
 
 	return findings
 }
 
-func (l *Linter) evaluate(cr compiledRule, meta *catalog_pb.Metadata, args map[string]any) []Finding {
+func (l *Linter) evaluate(cr compiledRule, args map[string]any) []Finding {
 	if cr.condition != nil {
 		out, _, err := cr.condition.Eval(args)
 		if err != nil {

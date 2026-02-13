@@ -3,6 +3,10 @@ commonRules:
     severity: warn
     check: 'metadata.description != ""'
     message: "Missing description"
+  - name: has-docs-link
+    severity: info
+    check: 'metadata.links.exists(l, l.type == "docs")'
+    message: "Consider adding a link of type 'docs' for detailed documentation."
 
 kindRules:
   API:
@@ -10,3 +14,8 @@ kindRules:
       severity: error
       check: 'size(spec.providers) > 0'
       message: "The API must have at least one provider component."
+  Domain:
+    - name: domain-has-org
+      severity: error
+      check: '"company/org" in metadata.labels'
+      message: "The Domain must have a 'company/org' label to indicate ownership."

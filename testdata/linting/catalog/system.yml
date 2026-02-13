@@ -32,3 +32,18 @@ spec:
   lifecycle: production
   owner: test-group
   system: lint-test-system
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: docless-component
+  description: A component without documentation links.
+  links:
+    - url: https://example.com/repo
+      title: Repository
+      type: repo
+spec:
+  type: service
+  lifecycle: production
+  owner: test-group
+  system: lint-test-system
