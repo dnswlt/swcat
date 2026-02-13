@@ -206,9 +206,9 @@ func main() {
 	} else if lintCfg != nil {
 		linter, err = lint.NewLinter(lintCfg)
 		if err != nil {
-			log.Printf("Warning: failed to create linter: %v", err)
+			log.Fatalf("Error: failed to create linter: %v", err)
 		} else {
-			log.Printf("Linter initialized with latest rules from %s", lintConfigFile)
+			log.Printf("Linter initialized with rules from %s", lintConfigFile)
 		}
 	}
 

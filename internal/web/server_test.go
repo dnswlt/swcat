@@ -280,6 +280,11 @@ func TestDetail_LintFindings(t *testing.T) {
 			"/ui/entities?q=lint:error",
 			[]string{"providerless-api"},
 		},
+		{
+			"Lint findings page",
+			"/ui/lint",
+			[]string{"Lint Findings", "Owner: test-group", "System", "lint-test-system", "providerless-api", "[api-has-provider]"},
+		},
 	}
 
 	for _, tc := range testCases {

@@ -1716,7 +1716,7 @@ func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateFile string, params map[string]any) {
 	var output bytes.Buffer
 
-	nav := NewNavBar(
+	navItems := []*NavBarItem{
 		NavItem(toListURLWithContext(r.Context(), catalog.KindDomain), "Domains"),
 		NavItem(toListURLWithContext(r.Context(), catalog.KindSystem), "Systems"),
 		NavItem(toListURLWithContext(r.Context(), catalog.KindComponent), "Components"),
@@ -1725,7 +1725,12 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		NavItem(toListURLWithContext(r.Context(), catalog.KindGroup), "Groups"),
 		NavIcon(uiURLWithContext(r.Context(), "graph"), "Graph"),
 		NavIcon(uiURLWithContext(r.Context(), "entities"), "Search"),
-	).SetActive(r.RequestURI)
+	}
+	if s.linter != nil {
+		navItems = append(navItems, NavIcon(uiURLWithContext(r.Context(), "lint"), "Bug"))
+	}
+
+	nav := NewNavBar(navItems...).SetActive(r.RequestURI)
 
 	templateParams := map[string]any{
 		"Now":             time.Now().Format("2006-01-02 15:04:05"),
@@ -1913,6 +1918,10 @@ func (s *Server) uiMux() *http.ServeMux {
 
 	mux.HandleFunc("GET /graph", func(w http.ResponseWriter, r *http.Request) {
 		s.serveGraph(w, r)
+	})
+
+	mux.HandleFunc("GET /lint", func(w http.ResponseWriter, r *http.Request) {
+		s.serveLintFindings(w, r)
 	})
 
 	// Generic entities URLs
