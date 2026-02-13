@@ -35,6 +35,7 @@ nav:
     - 'Custom content': 'user-guide/custom-content.md'
     - 'Sidecar extensions': 'user-guide/sidecar-extensions.md'
     - 'Plugins': 'user-guide/plugins.md'
+    - 'Linting': 'user-guide/linting.md'
     - 'Remote catalogs': 'user-guide/remote-catalog.md'
     - 'Query syntax': 'user-guide/query-syntax.md'
     - 'JSON API': 'user-guide/json-api.md'

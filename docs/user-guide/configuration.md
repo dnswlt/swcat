@@ -6,6 +6,7 @@ It expects the following files and directories to be present under the data root
 * `catalog/`: A directory containing your YAML entity definitions.
 * `swcat.yml`: The main configuration file (optional).
 * `plugins.yml`: The plugins configuration file (optional).
+* `lint.yml`: The linting rules configuration file (optional).
 
 You specify the data root directory via the `--root-dir` command line flag (for local storage)
 or the `--git-root-dir` flag (when using a git repository as storage).

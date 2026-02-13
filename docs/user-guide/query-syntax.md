@@ -49,6 +49,7 @@ The following attributes are available for filtering:
 * `rel`: Entities directly related to the given entity reference (both incoming and outgoing).
     For example, `rel:'component:my-service'` will find the owner,
     the system it belongs to, and any APIs it provides or consumes.
+* `lint`: A linting violation severity (`error`, `warn`, `info`) or rule name.
 
 ## Operators
 
