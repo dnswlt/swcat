@@ -24,3 +24,13 @@ plugins:
         defaultPackaging: jar
         includeSnapshots: false
         file: META-INF/MANIFEST.MF
+  
+  javaHello:
+    kind: GRPCPlugin
+    trigger: |-
+      kind:Component
+    spec:
+      address: localhost:50051
+      config:
+        pluginName: hello
+        name: Jens
