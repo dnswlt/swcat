@@ -22,6 +22,8 @@ type Config struct {
 	Context string `yaml:"context"`
 	// Namespaces to query for workloads.
 	Namespaces []string `yaml:"namespaces"`
+	// Names of workloads that should be excluded in all namespaces.
+	ExcludedWorkloads []string `yaml:"excludedWorkloads"`
 }
 
 // LoadConfig reads a kube Config from YAML data.
