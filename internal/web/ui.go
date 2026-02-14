@@ -148,26 +148,7 @@ type refOption struct {
 // modifications, transforming paths like "/ui/catalog" or "/ui/ref/main/-/catalog" into
 // the target format "/ui/ref/<new-ref>/-/<tail>".
 func refOptions(refs []string, currentRef string, r *http.Request) []refOption {
-	// 1. Snapshot the raw request to bypass middleware mutations.
-	// Split off the query immediately.
-	rawPath, rawQuery, _ := strings.Cut(r.RequestURI, "?")
-
-	// 2. Isolate the "tail" (the logical page path, e.g., "components/<id>").
-	// We check for the delimiter "/-/" to see if we are already in a ref view.
-	var tail string
-	if _, after, found := strings.Cut(rawPath, "/-/"); found {
-		tail = after
-	} else {
-		// We are in a top-level view. Safely remove the root anchor.
-		tail = strings.TrimPrefix(rawPath, "/ui")
-		tail = strings.TrimPrefix(tail, "/")
-	}
-
-	// 3. Pre-format the query string for reuse
-	queryString := ""
-	if rawQuery != "" {
-		queryString = "?" + rawQuery
-	}
+	tail, queryString := getTailAndQuery(r.RequestURI)
 
 	// 4. Construct the new URLs
 	result := make([]refOption, 0, len(refs))
@@ -181,6 +162,40 @@ func refOptions(refs []string, currentRef string, r *http.Request) []refOption {
 	}
 
 	return result
+}
+
+func getTailAndQuery(rawURL string) (tail string, queryString string) {
+	// 1. Snapshot the raw request to bypass middleware mutations.
+	// Split off the query immediately.
+	rawPath, rawQuery, _ := strings.Cut(rawURL, "?")
+
+	// 2. Isolate the "tail" (the logical page path, e.g., "components/<id>").
+	// We check for the delimiter "/-/" to see if we are already in a ref view.
+	if _, after, found := strings.Cut(rawPath, "/-/"); found {
+		tail = after
+	} else {
+		// We are in a top-level view. Safely remove the root anchor.
+		tail = strings.TrimPrefix(rawPath, "/ui")
+		tail = strings.TrimPrefix(tail, "/")
+	}
+
+	// 3. Pre-format the query string for reuse
+	if rawQuery != "" {
+		queryString = "?" + rawQuery
+	}
+	return tail, queryString
+}
+
+// switchRef takes a full URL (typically from a Referer header) and returns a new URL
+// that points to the same page but within the context of newRef.
+func switchRef(originalURL string, newRef string) string {
+	u, err := url.Parse(originalURL)
+	if err != nil {
+		return fmt.Sprintf("/ui/ref/%s/-/entities", newRef)
+	}
+
+	tail, queryString := getTailAndQuery(u.RequestURI())
+	return fmt.Sprintf("/ui/ref/%s/-/%s%s", newRef, tail, queryString)
 }
 
 // entitySummary returns e's title and description concatenated.

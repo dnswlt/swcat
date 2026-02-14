@@ -2,6 +2,8 @@ package store
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/gitclient"
@@ -195,13 +198,40 @@ func (g *GitSource) Store(ref string) (Store, error) {
 	}, nil
 }
 
-// CreateEditSession creates a new branch and registers it as an active edit session.
-func (g *GitSource) CreateEditSession(branchName, baseRef string, author gitclient.Author) error {
-	if err := g.client.CreateBranch(branchName, baseRef); err != nil {
-		return err
-	}
+func (g *GitSource) IsSession(ref string) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	return g.sessions[ref] != nil
+}
+
+// CreateEditSession creates a new branch and registers it as an active edit session.
+// It generates a unique branch name based on the baseRef and a timestamp.
+func (g *GitSource) CreateEditSession(baseRef string, author gitclient.Author) (string, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	// Generate a unique branch name.
+	// Use minute precision + 4 hex chars suffix.
+	var branchName string
+	for {
+		suffix := make([]byte, 2)
+		if _, err := rand.Read(suffix); err != nil {
+			return "", err
+		}
+		branchName = fmt.Sprintf("edit/%s-%s-%s",
+			strings.ReplaceAll(baseRef, "/", "-"),
+			time.Now().Format("20060102-1504"),
+			hex.EncodeToString(suffix))
+
+		if g.sessions[branchName] == nil {
+			break
+		}
+	}
+
+	if err := g.client.CreateBranch(branchName, baseRef); err != nil {
+		return "", err
+	}
+
 	if g.sessions == nil {
 		g.sessions = make(map[string]*EditSession)
 	}
@@ -210,7 +240,7 @@ func (g *GitSource) CreateEditSession(branchName, baseRef string, author gitclie
 		Author: author,
 	}
 	g.refs = nil // Invalidate cache so the new branch shows up.
-	return nil
+	return branchName, nil
 }
 
 // PushEditSession pushes an edit session's branch to the remote.

@@ -33,6 +33,10 @@ type Author struct {
 	Email string
 }
 
+func (a Author) IsSet() bool {
+	return a.Name != "" && a.Email != ""
+}
+
 // Client holds the repository in memory.
 type Client struct {
 	mu   sync.Mutex

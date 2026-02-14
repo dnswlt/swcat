@@ -94,15 +94,17 @@ type Options struct {
 	GitURL          string
 	GitRef          string
 	GitRootDir      string
+	GitUserName     string
+	GitUserEmail    string
 	BaseDir         string
 	ReadOnly        bool
 	DotTimeout      time.Duration
 	UseDotStreaming bool
 	SVGCacheSize    int
 	CommentsDir     string
-	KubeKubeconfig string
-	KubeContext    string
-	KubeInCluster  bool
+	KubeKubeconfig  string
+	KubeContext     string
+	KubeInCluster   bool
 }
 
 func runPluginsAndUpdate(r *plugins.Registry, st store.Source) error {
@@ -179,6 +181,8 @@ func main() {
 	fs.StringVar(&opts.GitURL, "git-url", "", "URL of the git repository to use as the data store")
 	fs.StringVar(&opts.GitRef, "git-ref", "", "Git ref (branch or tag) to use initially")
 	fs.StringVar(&opts.GitRootDir, "git-root-dir", ".", "Path to the directory within the git repository that contains the catalog structure")
+	fs.StringVar(&opts.GitUserName, "git-user-name", "", "Name used for git commits in edit sessions")
+	fs.StringVar(&opts.GitUserEmail, "git-user-email", "", "Email used for git commits in edit sessions")
 	fs.StringVar(&opts.BaseDir, "base-dir", "", "Base directory for resource files. If empty, uses embedded resources (recommended for production).")
 	fs.BoolVar(&opts.ReadOnly, "read-only", false, "Start server in read-only mode (no entity editing).")
 	fs.DurationVar(&opts.DotTimeout, "dot-timeout", 10*time.Second, "Maximum time to wait before cancelling dot executions")
@@ -225,10 +229,6 @@ func main() {
 		}
 		log.Printf("Using default git branch %q", ref)
 		source = store.NewGitSource(loader, ref, opts.GitRootDir)
-		if !opts.ReadOnly {
-			opts.ReadOnly = true // Enforce read-only mode when using a remote git repo as the store.
-			log.Printf("Activated read-only mode for git-based storage")
-		}
 	} else if opts.RootDir != "" {
 		log.Printf("Using local store at %s", opts.RootDir)
 		source = store.NewDiskStore(opts.RootDir)
@@ -298,6 +298,10 @@ func main() {
 			ReadOnly:        opts.ReadOnly,
 			Version:         Version,
 			SVGCacheSize:    opts.SVGCacheSize,
+			GitAuthor: gitclient.Author{
+				Name:  opts.GitUserName,
+				Email: opts.GitUserEmail,
+			},
 		},
 		source,
 		linter,

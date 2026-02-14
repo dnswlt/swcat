@@ -46,7 +46,9 @@ run-examples-git:
 		-git-url https://github.com/dnswlt/swcat.git \
 		-git-ref main \
 		-git-root-dir examples/flights \
-		-comments-dir /tmp/swcat-comments
+		-comments-dir /tmp/swcat-comments \
+		-git-user-name "swcat" \
+		-git-user-email "nobody@example.com"
 
 #
 # Testing

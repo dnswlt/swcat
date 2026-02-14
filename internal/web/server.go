@@ -25,6 +25,7 @@ import (
 	"github.com/dnswlt/swcat/internal/comments"
 	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/dot"
+	"github.com/dnswlt/swcat/internal/gitclient"
 	"github.com/dnswlt/swcat/internal/kube"
 	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
@@ -36,14 +37,36 @@ import (
 )
 
 type ServerOptions struct {
-	Addr            string        // E.g., "localhost:8080"
-	BaseDir         string        // Directory from which resources (templates etc.) are read.
-	DotPath         string        // E.g., "dot" (with dot on the PATH)
-	DotTimeout      time.Duration // Time after which dot executions will be cancelled
-	UseDotStreaming bool          // If true, keeps the dot process running and streams requests to it (Good for corporate Windows machines).
-	ReadOnly        bool          // If true, no Edit/Clone/Delete operations will be supported.
-	Version         string        // App version
-	SVGCacheSize    int           // Size of the LRU cache for rendered SVGs
+	Addr            string           // E.g., "localhost:8080"
+	BaseDir         string           // Directory from which resources (templates etc.) are read.
+	DotPath         string           // E.g., "dot" (with dot on the PATH)
+	DotTimeout      time.Duration    // Time after which dot executions will be cancelled
+	UseDotStreaming bool             // If true, keeps the dot process running and streams requests to it (Good for corporate Windows machines).
+	ReadOnly        bool             // If true, no Edit/Clone/Delete operations will be supported.
+	Version         string           // App version
+	SVGCacheSize    int              // Size of the LRU cache for rendered SVGs
+	GitAuthor       gitclient.Author // Author for git commits
+}
+
+func (s *Server) isReadOnly(r *http.Request) bool {
+	if s.opts.ReadOnly {
+		return true
+	}
+	if g, ok := s.source.(*store.GitSource); ok {
+		ref := s.getRef(r)
+		return !g.IsSession(ref) || !s.opts.GitAuthor.IsSet()
+	}
+	return false
+}
+
+func (s *Server) getRef(r *http.Request) string {
+	if v := r.Context().Value(ctxRef); v != nil {
+		return v.(string)
+	}
+	if g, ok := s.source.(*store.GitSource); ok {
+		return g.DefaultRef()
+	}
+	return ""
 }
 
 // storeData contains all data extracted from a given view of a Store at reference ref.
@@ -309,6 +332,7 @@ func (s *Server) reloadTemplates() error {
 		// These functions get replaced during request processing.
 		"toURL":       undefinedTemplateFunction,
 		"toEntityURL": undefinedTemplateFunction,
+		"uiURL":       undefinedTemplateFunction,
 		// "Static" functions
 		"markdown":     markdown,
 		"formatTags":   formatTags,
@@ -1205,7 +1229,7 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Entity updates must be done via HTMX", http.StatusBadRequest)
 		return
 	}
-	if s.opts.ReadOnly {
+	if s.isReadOnly(r) {
 		http.Error(w, "Cannot update entities in read-only mode", http.StatusPreconditionFailed)
 		return
 	}
@@ -1291,7 +1315,7 @@ func (s *Server) deleteEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		http.Error(w, "Entity updates must be done via HTMX", http.StatusBadRequest)
 		return
 	}
-	if s.opts.ReadOnly {
+	if s.isReadOnly(r) {
 		http.Error(w, "Cannot update entities in read-only mode", http.StatusPreconditionFailed)
 		return
 	}
@@ -1362,7 +1386,7 @@ func (s *Server) runPlugins(w http.ResponseWriter, r *http.Request, entityRef st
 		http.Error(w, "Plugin execution must be done via HTMX", http.StatusBadRequest)
 		return
 	}
-	if s.opts.ReadOnly {
+	if s.isReadOnly(r) {
 		http.Error(w, "Cannot run plugins in read-only mode", http.StatusPreconditionFailed)
 		return
 	}
@@ -1435,7 +1459,7 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 		http.Error(w, "Entity updates must be done via HTMX", http.StatusBadRequest)
 		return
 	}
-	if s.opts.ReadOnly {
+	if s.isReadOnly(r) {
 		http.Error(w, "Cannot update entities in read-only mode", http.StatusPreconditionFailed)
 		return
 	}
@@ -1521,7 +1545,7 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 }
 
 func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, entityRefStr string, annotationKey string) {
-	if s.opts.ReadOnly {
+	if s.isReadOnly(r) {
 		http.Error(w, "Cannot update entities in read-only mode", http.StatusPreconditionFailed)
 		return
 	}
@@ -1741,7 +1765,7 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 	templateParams := map[string]any{
 		"Now":             time.Now().Format("2006-01-02 15:04:05"),
 		"NavBar":          nav,
-		"ReadOnly":        s.opts.ReadOnly,
+		"ReadOnly":        s.isReadOnly(r),
 		"CommentsEnabled": s.commentsEnabled(),
 		"CacheBustingKey": s.started.Format("20060102150405"),
 		"Version":         s.opts.Version,
@@ -1752,11 +1776,11 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		if err != nil {
 			log.Printf("Failed to list references: %v", err)
 		} else {
-			currentRef := g.DefaultRef()
-			if v := r.Context().Value(ctxRef); v != nil {
-				currentRef = v.(string)
-			}
+			currentRef := s.getRef(r)
+			isSession := g.IsSession(currentRef)
 			templateParams["RefOptions"] = refOptions(refs, currentRef, r)
+			templateParams["CanStartSession"] = !s.opts.ReadOnly && !isSession
+			templateParams["IsSession"] = isSession
 		}
 	}
 	// Copy over provided params
@@ -1785,6 +1809,9 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		},
 		"toEntityURL": func(s any) (string, error) {
 			return toEntityURLWithContext(r.Context(), s)
+		},
+		"uiURL": func(suffix string) string {
+			return uiURLWithContext(r.Context(), suffix)
 		},
 		"markdown": func(input string) (template.HTML, error) {
 			return markdownWithMagicLinks(r.Context(), input)
@@ -1931,6 +1958,13 @@ func (s *Server) uiMux() *http.ServeMux {
 	})
 	mux.HandleFunc("GET /lint/kube-workloads", func(w http.ResponseWriter, r *http.Request) {
 		s.serveKubeWorkloads(w, r)
+	})
+
+	mux.HandleFunc("POST /sessions", func(w http.ResponseWriter, r *http.Request) {
+		s.createEditSession(w, r)
+	})
+	mux.HandleFunc("DELETE /sessions", func(w http.ResponseWriter, r *http.Request) {
+		s.discardEditSession(w, r)
 	})
 
 	// Generic entities URLs
@@ -2119,11 +2153,7 @@ func (s *Server) handleRefDispatch(next http.Handler) http.Handler {
 // and delegates to the given next handler.
 func (s *Server) handleRefDataDispatch(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ref := ""
-		// See if reference has been stored in the context, else use default
-		if v := r.Context().Value(ctxRef); v != nil {
-			ref = v.(string)
-		}
+		ref := s.getRef(r)
 		// Retrieve data for ref.
 		rd, err := s.loadStoreData(ref)
 		if errors.Is(err, store.ErrNoSuchRef) {

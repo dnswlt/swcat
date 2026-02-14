@@ -341,7 +341,8 @@ func TestGitSource_EditSession(t *testing.T) {
 	})
 
 	t.Run("WriteFile_EditSession", func(t *testing.T) {
-		if err := gs.CreateEditSession("edit/test", "master", author); err != nil {
+		branchName, err := gs.CreateEditSession("master", author)
+		if err != nil {
 			t.Fatalf("CreateEditSession failed: %v", err)
 		}
 
@@ -350,14 +351,14 @@ func TestGitSource_EditSession(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListReferences failed: %v", err)
 		}
-		if !slices.Contains(refs, "edit/test") {
-			t.Errorf("edit/test not found in refs: %v", refs)
+		if !slices.Contains(refs, branchName) {
+			t.Errorf("%s not found in refs: %v", branchName, refs)
 		}
 
 		// Get a writable store for the edit session branch.
-		st, err := gs.Store("edit/test")
+		st, err := gs.Store(branchName)
 		if err != nil {
-			t.Fatalf("Store(edit/test) failed: %v", err)
+			t.Fatalf("Store(%s) failed: %v", err, branchName)
 		}
 
 		// Write should succeed.
@@ -390,10 +391,11 @@ func TestGitSource_EditSession(t *testing.T) {
 
 	t.Run("CloseEditSession", func(t *testing.T) {
 		// Create and close a session.
-		if err := gs.CreateEditSession("edit/to-close", "master", author); err != nil {
+		branchName, err := gs.CreateEditSession("master", author)
+		if err != nil {
 			t.Fatalf("CreateEditSession failed: %v", err)
 		}
-		if err := gs.CloseEditSession("edit/to-close"); err != nil {
+		if err := gs.CloseEditSession(branchName); err != nil {
 			t.Fatalf("CloseEditSession failed: %v", err)
 		}
 
@@ -402,14 +404,14 @@ func TestGitSource_EditSession(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListReferences failed: %v", err)
 		}
-		if slices.Contains(refs, "edit/to-close") {
-			t.Errorf("edit/to-close should be gone, but found in refs: %v", refs)
+		if slices.Contains(refs, branchName) {
+			t.Errorf("%s should be gone, but found in refs: %v", branchName, refs)
 		}
 
 		// Store for the closed session should fail.
-		_, err = gs.Store("edit/to-close")
+		_, err = gs.Store(branchName)
 		if err != ErrNoSuchRef {
-			t.Errorf("Store(edit/to-close) = %v, want ErrNoSuchRef", err)
+			t.Errorf("Store(%s) = %v, want ErrNoSuchRef", branchName, err)
 		}
 	})
 }
