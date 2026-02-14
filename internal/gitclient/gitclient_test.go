@@ -1,6 +1,7 @@
 package gitclient
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,25 +15,26 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-// createTestRepo initializes a git repo in a temp dir with some dummy content
-// and returns the path to that directory.
-// Structure:
-// v1.0.0 (tag)
-//   - catalog.yaml ("v1 content")
-//
-// v2.0.0 (tag)
-//   - catalog.yaml ("v2 content")
-//   - nested/service.yaml ("service content")
-//
-// feature/test-branch (branch)
-//   - branch-file.txt ("branch content")
-func createTestRepo(t *testing.T) string {
+// testCommit describes a single commit to create in a test repo.
+type testCommit struct {
+	// Files maps file paths to their content.
+	Files map[string]string
+	// Tag, if non-empty, tags this commit with the given name.
+	Tag string
+	// Branch, if non-empty, creates and checks out this branch before committing.
+	// After all commits are processed, the worktree switches back to master.
+	Branch string
+}
+
+// createTestRepo initializes a git repo in a temp dir from the given commit
+// sequence and returns the path to that directory. Files accumulate across
+// commits (just like a real repo), so later commits only need to specify
+// new or changed files.
+func createTestRepo(t *testing.T, commits []testCommit) string {
 	t.Helper()
 
-	// Create Temp Directory
 	dir := t.TempDir()
 
-	// Initialize Git Repo
 	repo, err := git.PlainInit(dir, false)
 	if err != nil {
 		t.Fatalf("Failed to init git repo: %v", err)
@@ -43,13 +45,33 @@ func createTestRepo(t *testing.T) string {
 		t.Fatalf("Failed to get worktree: %v", err)
 	}
 
-	// Helper to commit
-	commit := func(msg string) {
-		_, err := w.Add(".")
-		if err != nil {
+	onMaster := true
+	for i, c := range commits {
+		if c.Branch != "" {
+			err := w.Checkout(&git.CheckoutOptions{
+				Branch: plumbing.NewBranchReferenceName(c.Branch),
+				Create: true,
+			})
+			if err != nil {
+				t.Fatalf("Failed to checkout branch %s: %v", c.Branch, err)
+			}
+			onMaster = false
+		}
+
+		for path, content := range c.Files {
+			full := filepath.Join(dir, filepath.FromSlash(path))
+			if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+				t.Fatalf("Failed to create dir for %s: %v", path, err)
+			}
+			if err := os.WriteFile(full, []byte(content), 0644); err != nil {
+				t.Fatalf("Failed to write %s: %v", path, err)
+			}
+		}
+
+		if _, err := w.Add("."); err != nil {
 			t.Fatalf("Failed to add files: %v", err)
 		}
-		_, err = w.Commit(msg, &git.CommitOptions{
+		_, err := w.Commit(fmt.Sprintf("commit %d", i), &git.CommitOptions{
 			Author: &object.Signature{
 				Name:  "Test User",
 				Email: "test@example.com",
@@ -59,68 +81,45 @@ func createTestRepo(t *testing.T) string {
 		if err != nil {
 			t.Fatalf("Failed to commit: %v", err)
 		}
+
+		if c.Tag != "" {
+			head, err := repo.Head()
+			if err != nil {
+				t.Fatalf("Failed to get HEAD: %v", err)
+			}
+			if _, err := repo.CreateTag(c.Tag, head.Hash(), nil); err != nil {
+				t.Fatalf("Failed to create tag %s: %v", c.Tag, err)
+			}
+		}
 	}
 
-	// Create v1.0.0 state
-	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("v1 content"), 0644); err != nil {
-		t.Fatalf("Failed to write file: %v", err)
-	}
-	commit("Initial commit")
-
-	head, err := repo.Head()
-	if err != nil {
-		t.Fatalf("Failed to get HEAD: %v", err)
-	}
-	if _, err := repo.CreateTag("v1.0.0", head.Hash(), nil); err != nil {
-		t.Fatalf("Failed to create tag v1.0.0: %v", err)
-	}
-
-	// Create v2.0.0 state
-	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("v2 content"), 0644); err != nil {
-		t.Fatalf("Failed to write file: %v", err)
-	}
-	if err := os.Mkdir(filepath.Join(dir, "nested"), 0755); err != nil {
-		t.Fatalf("Failed to create subdir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "nested", "service.yaml"), []byte("service content"), 0644); err != nil {
-		t.Fatalf("Failed to write nested file: %v", err)
-	}
-	commit("Second commit")
-
-	head, err = repo.Head()
-	if err != nil {
-		t.Fatalf("Failed to get HEAD: %v", err)
-	}
-	if _, err := repo.CreateTag("v2.0.0", head.Hash(), nil); err != nil {
-		t.Fatalf("Failed to create tag v2.0.0: %v", err)
-	}
-
-	// Create a branch
-	err = w.Checkout(&git.CheckoutOptions{
-		Branch: plumbing.NewBranchReferenceName("feature/test-branch"),
-		Create: true,
-	})
-	if err != nil {
-		t.Fatalf("Failed to checkout branch: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "branch-file.txt"), []byte("branch content"), 0644); err != nil {
-		t.Fatalf("Failed to write branch file: %v", err)
-	}
-	commit("Branch commit")
-
-	// Switch back to master so it's the HEAD when cloned
-	err = w.Checkout(&git.CheckoutOptions{
-		Branch: plumbing.NewBranchReferenceName("master"),
-	})
-	if err != nil {
-		t.Fatalf("Failed to checkout master: %v", err)
+	if !onMaster {
+		err := w.Checkout(&git.CheckoutOptions{
+			Branch: plumbing.NewBranchReferenceName("master"),
+		})
+		if err != nil {
+			t.Fatalf("Failed to checkout master: %v", err)
+		}
 	}
 
 	return dir
 }
 
 func TestClient(t *testing.T) {
-	repoPath := createTestRepo(t)
+	repoPath := createTestRepo(t, []testCommit{
+		{
+			Files: map[string]string{"catalog.yaml": "v1 content"},
+			Tag:   "v1.0.0",
+		},
+		{
+			Files: map[string]string{"catalog.yaml": "v2 content", "nested/service.yaml": "service content"},
+			Tag:   "v2.0.0",
+		},
+		{
+			Branch: "feature/test-branch",
+			Files:  map[string]string{"branch-file.txt": "branch content"},
+		},
+	})
 
 	// Initialize the Loader pointing to the local temp repo
 	loader, err := New(repoPath, nil)
@@ -214,7 +213,9 @@ func TestClient(t *testing.T) {
 }
 
 func TestCreateBranch(t *testing.T) {
-	repoPath := createTestRepo(t)
+	repoPath := createTestRepo(t, []testCommit{
+		{Files: map[string]string{"catalog.yaml": "v2 content"}},
+	})
 	client, err := New(repoPath, nil)
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
@@ -243,7 +244,9 @@ func TestCreateBranch(t *testing.T) {
 }
 
 func TestCommitFile(t *testing.T) {
-	repoPath := createTestRepo(t)
+	repoPath := createTestRepo(t, []testCommit{
+		{Files: map[string]string{"catalog.yaml": "v2 content"}},
+	})
 	client, err := New(repoPath, nil)
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
@@ -279,7 +282,9 @@ func TestCommitFile(t *testing.T) {
 }
 
 func TestCommitFileNested(t *testing.T) {
-	repoPath := createTestRepo(t)
+	repoPath := createTestRepo(t, []testCommit{
+		{Files: map[string]string{"catalog.yaml": "v2 content", "nested/service.yaml": "service content"}},
+	})
 	client, err := New(repoPath, nil)
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
@@ -327,8 +332,50 @@ func TestCommitFileNested(t *testing.T) {
 	}
 }
 
+func TestCommitFileTwice(t *testing.T) {
+	repoPath := createTestRepo(t, []testCommit{
+		{Files: map[string]string{"catalog.yaml": "original"}},
+	})
+	client, err := New(repoPath, nil)
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+
+	if err := client.CreateBranch("edit/twice", "master"); err != nil {
+		t.Fatalf("CreateBranch failed: %v", err)
+	}
+
+	author := Author{Name: "Test", Email: "test@example.com"}
+
+	if err := client.CommitFile("edit/twice", "catalog.yaml", []byte("first update"), author, "first"); err != nil {
+		t.Fatalf("CommitFile (first) failed: %v", err)
+	}
+	if err := client.CommitFile("edit/twice", "catalog.yaml", []byte("second update"), author, "second"); err != nil {
+		t.Fatalf("CommitFile (second) failed: %v", err)
+	}
+
+	content, err := client.ReadFile("edit/twice", "catalog.yaml")
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if string(content) != "second update" {
+		t.Errorf("Expected 'second update', got %q", string(content))
+	}
+
+	// Master should be unchanged.
+	original, err := client.ReadFile("master", "catalog.yaml")
+	if err != nil {
+		t.Fatalf("ReadFile master failed: %v", err)
+	}
+	if string(original) != "original" {
+		t.Errorf("Expected master to still have 'original', got %q", string(original))
+	}
+}
+
 func TestDeleteBranch(t *testing.T) {
-	repoPath := createTestRepo(t)
+	repoPath := createTestRepo(t, []testCommit{
+		{Files: map[string]string{"catalog.yaml": "content"}},
+	})
 	client, err := New(repoPath, nil)
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
@@ -348,5 +395,106 @@ func TestDeleteBranch(t *testing.T) {
 	}
 	if slices.Contains(refs, "edit/to-delete") {
 		t.Errorf("Branch edit/to-delete should have been deleted, but found in refs: %v", refs)
+	}
+}
+
+func TestCommitFileSiblings(t *testing.T) {
+	repoPath := createTestRepo(t, []testCommit{
+		{Files: map[string]string{
+			"a.yaml":          "a original",
+			"b.yaml":          "b original",
+			"nested/one.yaml": "one original",
+			"nested/two.yaml": "two original",
+		}},
+	})
+	client, err := New(repoPath, nil)
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+
+	if err := client.CreateBranch("edit/siblings", "master"); err != nil {
+		t.Fatalf("CreateBranch failed: %v", err)
+	}
+
+	author := Author{Name: "Test", Email: "test@example.com"}
+
+	// Commit to a.yaml, then to nested/one.yaml. All siblings must survive.
+	if err := client.CommitFile("edit/siblings", "a.yaml", []byte("a updated"), author, "update a"); err != nil {
+		t.Fatalf("CommitFile a.yaml failed: %v", err)
+	}
+	if err := client.CommitFile("edit/siblings", "nested/one.yaml", []byte("one updated"), author, "update one"); err != nil {
+		t.Fatalf("CommitFile nested/one.yaml failed: %v", err)
+	}
+
+	for _, tc := range []struct {
+		path    string
+		want    string
+	}{
+		{"a.yaml", "a updated"},
+		{"b.yaml", "b original"},
+		{"nested/one.yaml", "one updated"},
+		{"nested/two.yaml", "two original"},
+	} {
+		content, err := client.ReadFile("edit/siblings", tc.path)
+		if err != nil {
+			t.Fatalf("ReadFile %s failed: %v", tc.path, err)
+		}
+		if string(content) != tc.want {
+			t.Errorf("ReadFile %s: got %q, want %q", tc.path, string(content), tc.want)
+		}
+	}
+}
+
+func TestCommitFileNonExistentBranch(t *testing.T) {
+	repoPath := createTestRepo(t, []testCommit{
+		{Files: map[string]string{"catalog.yaml": "content"}},
+	})
+	client, err := New(repoPath, nil)
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+
+	author := Author{Name: "Test", Email: "test@example.com"}
+	err = client.CommitFile("no-such-branch", "file.yaml", []byte("data"), author, "msg")
+	if err == nil {
+		t.Fatal("CommitFile to non-existent branch should have failed")
+	}
+}
+
+func TestCommitFileOverwriteDirWithFile(t *testing.T) {
+	repoPath := createTestRepo(t, []testCommit{
+		{Files: map[string]string{
+			"nested/service.yaml": "service content",
+		}},
+	})
+	client, err := New(repoPath, nil)
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+
+	if err := client.CreateBranch("edit/overwrite-dir", "master"); err != nil {
+		t.Fatalf("CreateBranch failed: %v", err)
+	}
+
+	author := Author{Name: "Test", Email: "test@example.com"}
+
+	// "nested" is a directory. Writing a file at path "nested" replaces the dir entry with a blob.
+	err = client.CommitFile("edit/overwrite-dir", "nested", []byte("now a file"), author, "replace dir")
+	if err != nil {
+		t.Fatalf("CommitFile failed: %v", err)
+	}
+
+	content, err := client.ReadFile("edit/overwrite-dir", "nested")
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if string(content) != "now a file" {
+		t.Errorf("Expected 'now a file', got %q", string(content))
+	}
+
+	// The old nested/service.yaml should no longer be accessible.
+	_, err = client.ReadFile("edit/overwrite-dir", "nested/service.yaml")
+	if err == nil {
+		t.Error("Expected error reading nested/service.yaml after dir was replaced, but got nil")
 	}
 }
