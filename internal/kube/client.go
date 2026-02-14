@@ -31,7 +31,8 @@ func NewClientFromConfig(cfg Config) (*Client, error) {
 			return nil, fmt.Errorf("load kubeconfig %q: %w", cfg.Kubeconfig, err)
 		}
 	} else {
-		// Standard "Staff" move: use the service account token mounted in the pod
+		// Use the service account token mounted in the pod.
+		// (Only works when scanning intra-cluster workloads.)
 		restConfig, err = rest.InClusterConfig()
 		if err != nil {
 			return nil, fmt.Errorf("in-cluster config: %w", err)

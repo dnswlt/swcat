@@ -138,22 +138,22 @@ func runPluginsAndUpdate(r *plugins.Registry, st store.Source) error {
 func createKubeClient(source store.Source) (*kube.Client, error) {
 	defaultStore, err := source.Store("")
 	if err != nil {
-		return nil, fmt.Errorf("Could not get default store: %v", err)
+		return nil, fmt.Errorf("could not get default store: %w", err)
 	}
 	kubeData, err := defaultStore.ReadFile(store.KubeFile)
 	if err != nil {
 		if errors.Is(err, iofs.ErrNotExist) {
 			return nil, nil // No kube client configured, not an error.
 		}
-		return nil, fmt.Errorf("Could not load kube config: %w", err)
+		return nil, fmt.Errorf("could not load kube config: %w", err)
 	}
 	cfg, err := kube.LoadConfig(kubeData)
 	if err != nil {
-		return nil, fmt.Errorf("Could not parse kube config: %v", err)
+		return nil, fmt.Errorf("could not parse kube config: %w", err)
 	}
 	client, err := kube.NewClientFromConfig(*cfg)
 	if err != nil {
-		log.Fatalf("Could not create Kubernetes client: %v", err)
+		return nil, fmt.Errorf("could not create Kubernetes client: %w", err)
 	}
 	log.Printf("Kubernetes client initialized (kubeconfig=%s, namespaces=%v)", cfg.Kubeconfig, cfg.Namespaces)
 	return client, nil
@@ -271,7 +271,7 @@ func main() {
 	// Optionally create a Kubernetes client.
 	kubeClient, err := createKubeClient(source)
 	if err != nil {
-		log.Fatalf("Could not create kube client: %v", err)
+		log.Printf("Could not create kube client: %v", err)
 	}
 
 	server, err := web.NewServer(
