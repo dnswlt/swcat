@@ -168,7 +168,7 @@ func TestGitSource(t *testing.T) {
 		t.Fatalf("gitclient.New failed: %v", err)
 	}
 
-	gs := NewGitSource(client, "master", "")
+	gs := NewGitSource(client, "master", "", gitclient.Author{})
 
 	t.Run("DefaultRef", func(t *testing.T) {
 		if got := gs.DefaultRef(); got != "master" {
@@ -285,7 +285,7 @@ func TestGitSource_WithRootDir(t *testing.T) {
 		t.Fatalf("gitclient.New failed: %v", err)
 	}
 
-	gs := NewGitSource(client, "master", "nested")
+	gs := NewGitSource(client, "master", "nested", gitclient.Author{})
 
 	t.Run("GitStore_ReadFile_WithRootDir", func(t *testing.T) {
 		st, err := gs.Store("v2.0.0")
@@ -326,8 +326,7 @@ func TestGitSource_EditSession(t *testing.T) {
 		t.Fatalf("gitclient.New failed: %v", err)
 	}
 
-	gs := NewGitSource(client, "master", "")
-	author := gitclient.Author{Name: "Test", Email: "test@example.com"}
+	gs := NewGitSource(client, "master", "", gitclient.Author{Name: "Test", Email: "test@example.com"})
 
 	t.Run("WriteFile_ReadOnly", func(t *testing.T) {
 		// A non-session store should still be read-only.
@@ -341,7 +340,7 @@ func TestGitSource_EditSession(t *testing.T) {
 	})
 
 	t.Run("WriteFile_EditSession", func(t *testing.T) {
-		branchName, err := gs.CreateEditSession("master", author)
+		branchName, err := gs.CreateEditSession("master")
 		if err != nil {
 			t.Fatalf("CreateEditSession failed: %v", err)
 		}
@@ -391,7 +390,7 @@ func TestGitSource_EditSession(t *testing.T) {
 
 	t.Run("CloseEditSession", func(t *testing.T) {
 		// Create and close a session.
-		branchName, err := gs.CreateEditSession("master", author)
+		branchName, err := gs.CreateEditSession("master")
 		if err != nil {
 			t.Fatalf("CreateEditSession failed: %v", err)
 		}
@@ -416,6 +415,84 @@ func TestGitSource_EditSession(t *testing.T) {
 	})
 }
 
+func TestGitSource_RestoreSessions(t *testing.T) {
+	repoPath := createTestRepo(t)
+
+	// First "server lifetime": create a session, make an edit, push.
+	client1, err := gitclient.New(repoPath, nil)
+	if err != nil {
+		t.Fatalf("gitclient.New failed: %v", err)
+	}
+	author := gitclient.Author{Name: "Alice", Email: "alice@example.com"}
+	gs1 := NewGitSource(client1, "master", "", author)
+
+	branchName, err := gs1.CreateEditSession("master")
+	if err != nil {
+		t.Fatalf("CreateEditSession failed: %v", err)
+	}
+
+	// Write something via the session.
+	st, err := gs1.Store(branchName)
+	if err != nil {
+		t.Fatalf("Store failed: %v", err)
+	}
+	if err := st.WriteFile("catalog.yaml", []byte("alice edit")); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	// Push the session branch to origin (the local repo acts as origin).
+	if err := gs1.PushEditSession(branchName); err != nil {
+		t.Fatalf("PushEditSession failed: %v", err)
+	}
+
+	// "Server restart": create a fresh Client and GitSource (empty sessions map).
+	client2, err := gitclient.New(repoPath, nil)
+	if err != nil {
+		t.Fatalf("gitclient.New (restart) failed: %v", err)
+	}
+	gs2 := NewGitSource(client2, "master", "", author)
+
+	// Before restore, the session should not be known.
+	if gs2.IsSession(branchName) {
+		t.Fatal("session should not exist before RestoreSessions")
+	}
+
+	// Restore sessions from remote edit/ branches.
+	if _, err := gs2.RestoreSessions(); err != nil {
+		t.Fatalf("RestoreSessions failed: %v", err)
+	}
+
+	// The session should now be registered.
+	if !gs2.IsSession(branchName) {
+		t.Fatalf("session %s not restored", branchName)
+	}
+
+	// The store should be writable and contain Alice's edit.
+	st2, err := gs2.Store(branchName)
+	if err != nil {
+		t.Fatalf("Store(%s) after restore failed: %v", branchName, err)
+	}
+	content, err := st2.ReadFile("catalog.yaml")
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if string(content) != "alice edit" {
+		t.Errorf("Expected 'alice edit', got %q", string(content))
+	}
+
+	// Further edits should work.
+	if err := st2.WriteFile("catalog.yaml", []byte("alice edit 2")); err != nil {
+		t.Fatalf("WriteFile after restore failed: %v", err)
+	}
+	content, err = st2.ReadFile("catalog.yaml")
+	if err != nil {
+		t.Fatalf("ReadFile after second edit failed: %v", err)
+	}
+	if string(content) != "alice edit 2" {
+		t.Errorf("Expected 'alice edit 2', got %q", string(content))
+	}
+}
+
 func TestGitSource_ReadEntities(t *testing.T) {
 	// 1. Setup repo
 	dir := createRepoFromTestdata(t, "../../testdata/test1/catalog/catalog.yml")
@@ -425,7 +502,7 @@ func TestGitSource_ReadEntities(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gitclient.New failed: %v", err)
 	}
-	gs := NewGitSource(client, "master", "")
+	gs := NewGitSource(client, "master", "", gitclient.Author{})
 
 	// 3. Get Store
 	st, err := gs.Store("master")
@@ -483,7 +560,7 @@ func TestGitSource_ReadEntities_Comparison(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gitclient.New failed: %v", err)
 	}
-	gs := NewGitSource(client, "master", "")
+	gs := NewGitSource(client, "master", "", gitclient.Author{})
 	st, err := gs.Store("master")
 	if err != nil {
 		t.Fatalf("gs.Store failed: %v", err)

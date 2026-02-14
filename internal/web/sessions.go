@@ -14,16 +14,8 @@ func (s *Server) createEditSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	author := s.opts.GitAuthor
-	if author.Name == "" || author.Email == "" {
-		msg := "Git author (name and email) not configured. Cannot start edit session."
-		log.Println(msg)
-		http.Error(w, msg, http.StatusPreconditionFailed)
-		return
-	}
-
 	currentRef := s.getRef(r)
-	branchName, err := g.CreateEditSession(currentRef, author)
+	branchName, err := g.CreateEditSession(currentRef)
 	if err != nil {
 		log.Printf("Failed to create edit session: %v", err)
 		http.Error(w, "Failed to create edit session: "+err.Error(), http.StatusInternalServerError)

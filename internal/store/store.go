@@ -127,20 +127,15 @@ func (d *DiskStore) WriteFile(path string, contents []byte) error {
 	return os.WriteFile(fullPath, contents, 0644)
 }
 
-// EditSession represents an active editing session on a git branch.
-type EditSession struct {
-	Branch string
-	Author gitclient.Author
-}
-
 // GitSource is an implementation of Source that reads from a remote Git repository.
 type GitSource struct {
 	client     *gitclient.Client
-	defaultRef string   // ref to use if the empty ref ("") is requested
-	rootDir    string   // optional root directory within the repo
-	refs       []string // cached list of available references
+	defaultRef string           // ref to use if the empty ref ("") is requested
+	rootDir    string           // optional root directory within the repo
+	author     gitclient.Author // author for commits in edit sessions
+	refs       []string         // cached list of available references
 	mu         sync.Mutex
-	sessions   map[string]*EditSession // branch name -> session
+	sessions   map[string]bool // set of active edit session branch names
 }
 
 // gitStore is a "view" over a single revision in a GitSource.
@@ -154,11 +149,13 @@ type gitStore struct {
 var _ Source = (*GitSource)(nil)
 var _ Store = (*gitStore)(nil)
 
-func NewGitSource(client *gitclient.Client, defaultRef string, rootDir string) *GitSource {
+func NewGitSource(client *gitclient.Client, defaultRef string, rootDir string, author gitclient.Author) *GitSource {
 	return &GitSource{
 		client:     client,
 		defaultRef: defaultRef,
 		rootDir:    rootDir,
+		author:     author,
+		sessions:   make(map[string]bool),
 	}
 }
 
@@ -184,11 +181,11 @@ func (g *GitSource) Store(ref string) (Store, error) {
 	}
 	// Check if this ref is an active edit session (writable).
 	g.mu.Lock()
-	session := g.sessions[ref]
+	isSession := g.sessions[ref]
 	g.mu.Unlock()
 	var author *gitclient.Author
-	if session != nil {
-		author = &session.Author
+	if isSession {
+		author = &g.author
 	}
 	return &gitStore{
 		client:  g.client,
@@ -198,15 +195,21 @@ func (g *GitSource) Store(ref string) (Store, error) {
 	}, nil
 }
 
+// IsReadOnly reports whether editing is disabled for this GitSource.
+// A GitSource is read-only when no author has been configured.
+func (g *GitSource) IsReadOnly() bool {
+	return !g.author.IsSet()
+}
+
 func (g *GitSource) IsSession(ref string) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.sessions[ref] != nil
+	return g.sessions[ref]
 }
 
 // CreateEditSession creates a new branch and registers it as an active edit session.
 // It generates a unique branch name based on the baseRef and a timestamp.
-func (g *GitSource) CreateEditSession(baseRef string, author gitclient.Author) (string, error) {
+func (g *GitSource) CreateEditSession(baseRef string) (string, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -223,7 +226,7 @@ func (g *GitSource) CreateEditSession(baseRef string, author gitclient.Author) (
 			time.Now().Format("20060102-1504"),
 			hex.EncodeToString(suffix))
 
-		if g.sessions[branchName] == nil {
+		if !g.sessions[branchName] {
 			break
 		}
 	}
@@ -232,13 +235,7 @@ func (g *GitSource) CreateEditSession(baseRef string, author gitclient.Author) (
 		return "", err
 	}
 
-	if g.sessions == nil {
-		g.sessions = make(map[string]*EditSession)
-	}
-	g.sessions[branchName] = &EditSession{
-		Branch: branchName,
-		Author: author,
-	}
+	g.sessions[branchName] = true
 	g.refs = nil // Invalidate cache so the new branch shows up.
 	return branchName, nil
 }
@@ -256,8 +253,45 @@ func (g *GitSource) CloseEditSession(branchName string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	delete(g.sessions, branchName)
+
 	g.refs = nil // Invalidate cache.
 	return nil
+}
+
+// RestoreSessions scans for remote edit/ branches and reconstructs
+// the sessions map. For each branch, a local branch is created (if it
+// doesn't already exist). Call this after a fresh clone or server restart
+// to resume editing.
+func (g *GitSource) RestoreSessions() ([]string, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	refs, err := g.client.ListReferences()
+	if err != nil {
+		return nil, fmt.Errorf("list references: %w", err)
+	}
+
+	var restored []string
+	for _, ref := range refs {
+		if !strings.HasPrefix(ref, "edit/") {
+			continue
+		}
+		if g.sessions[ref] {
+			continue // already tracked
+		}
+
+		// Ensure a local branch exists. CreateBranch resolves the base ref
+		// via resolveRevision, which will find origin/edit/... if there's
+		// no local branch yet. If the local branch already exists, this
+		// will fail harmlessly.
+		_ = g.client.CreateBranch(ref, ref)
+
+		g.sessions[ref] = true
+		restored = append(restored, ref)
+	}
+
+	g.refs = nil // Invalidate cache.
+	return restored, nil
 }
 
 func (g *GitSource) ListReferences() ([]string, error) {

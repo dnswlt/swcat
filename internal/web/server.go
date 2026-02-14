@@ -25,7 +25,6 @@ import (
 	"github.com/dnswlt/swcat/internal/comments"
 	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/dot"
-	"github.com/dnswlt/swcat/internal/gitclient"
 	"github.com/dnswlt/swcat/internal/kube"
 	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
@@ -45,7 +44,6 @@ type ServerOptions struct {
 	ReadOnly        bool             // If true, no Edit/Clone/Delete operations will be supported.
 	Version         string           // App version
 	SVGCacheSize    int              // Size of the LRU cache for rendered SVGs
-	GitAuthor       gitclient.Author // Author for git commits
 }
 
 func (s *Server) isReadOnly(r *http.Request) bool {
@@ -54,7 +52,7 @@ func (s *Server) isReadOnly(r *http.Request) bool {
 	}
 	if g, ok := s.source.(*store.GitSource); ok {
 		ref := s.getRef(r)
-		return !g.IsSession(ref) || !s.opts.GitAuthor.IsSet()
+		return g.IsReadOnly() || !g.IsSession(ref)
 	}
 	return false
 }

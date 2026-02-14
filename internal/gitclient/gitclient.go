@@ -168,7 +168,14 @@ func (c *Client) ListReferences() ([]string, error) {
 }
 
 func (c *Client) resolveRevision(revision string) (*plumbing.Hash, error) {
-	// Try with origin/ prefix first.
+	// 1. If it's a session branch, prefer the local one (our current edit state).
+	if strings.HasPrefix(revision, "edit/") {
+		if hash, err := c.repo.ResolveRevision(plumbing.Revision(revision)); err == nil {
+			return hash, nil
+		}
+	}
+
+	// 2. Try with origin/ prefix first for other branches (like master).
 	// We prefer the remote branch because Update() only updates refs/remotes/origin/*.
 	// The local branch (refs/heads/*) created by Clone might be stale.
 	if !strings.HasPrefix(revision, "refs/") && !strings.HasPrefix(revision, "origin/") {
@@ -177,7 +184,7 @@ func (c *Client) resolveRevision(revision string) (*plumbing.Hash, error) {
 		}
 	}
 
-	// Fallback: try exact revision (tags, hashes, full refs, etc.)
+	// 3. Fallback: try exact revision (tags, hashes, full refs, etc.)
 	hash, err := c.repo.ResolveRevision(plumbing.Revision(revision))
 	if err == nil {
 		return hash, nil

@@ -228,7 +228,16 @@ func main() {
 			}
 		}
 		log.Printf("Using default git branch %q", ref)
-		source = store.NewGitSource(loader, ref, opts.GitRootDir)
+		gitSource := store.NewGitSource(loader, ref, opts.GitRootDir, gitclient.Author{
+			Name:  opts.GitUserName,
+			Email: opts.GitUserEmail,
+		})
+		if restored, err := gitSource.RestoreSessions(); err != nil {
+			log.Printf("Warning: failed to restore edit sessions: %v", err)
+		} else if l := len(restored); l > 0 {
+			log.Printf("Restored %d edit/ sessions from remote branches", l)
+		}
+		source = gitSource
 	} else if opts.RootDir != "" {
 		log.Printf("Using local store at %s", opts.RootDir)
 		source = store.NewDiskStore(opts.RootDir)
@@ -298,10 +307,6 @@ func main() {
 			ReadOnly:        opts.ReadOnly,
 			Version:         Version,
 			SVGCacheSize:    opts.SVGCacheSize,
-			GitAuthor: gitclient.Author{
-				Name:  opts.GitUserName,
-				Email: opts.GitUserEmail,
-			},
 		},
 		source,
 		linter,
