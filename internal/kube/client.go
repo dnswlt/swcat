@@ -123,20 +123,5 @@ func (c *Client) Workloads(ctx context.Context, namespace string) ([]Workload, e
 		})
 	}
 
-	// Jobs
-	jobs, err := c.clientset.BatchV1().Jobs(namespace).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("list jobs: %w", err)
-	}
-	for _, j := range jobs.Items {
-		result = append(result, Workload{
-			Kind:        KindJob,
-			Name:        j.Name,
-			Namespace:   j.Namespace,
-			Labels:      j.Labels,
-			Annotations: j.Annotations,
-		})
-	}
-
 	return result, nil
 }
