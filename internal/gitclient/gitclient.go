@@ -6,11 +6,15 @@ import (
 	"io"
 	"io/fs"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/storer"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 )
@@ -23,8 +27,15 @@ type Auth struct {
 	Password string // or Token
 }
 
-// Client holds the repository in memory
+// Author identifies the author of a git commit.
+type Author struct {
+	Name  string
+	Email string
+}
+
+// Client holds the repository in memory.
 type Client struct {
+	mu   sync.Mutex
 	repo *git.Repository
 	auth *Auth
 }
@@ -37,7 +48,7 @@ func New(url string, auth *Auth) (*Client, error) {
 		URL:        url,
 		NoCheckout: true, // Critical: Don't inflate files into a worktree
 		Progress:   nil,
-		Depth:      0, // 0 = Full history (needed if you want to jump between widely divergent tags)
+		Depth:      0, // Full history: tags can point to any commit, so a shallow clone would miss them.
 	}
 
 	if auth != nil {
@@ -57,7 +68,7 @@ func New(url string, auth *Auth) (*Client, error) {
 	return &Client{repo: repo, auth: auth}, nil
 }
 
-func (c *Client) Update() error {
+func (c *Client) Fetch() error {
 	// 1. Configure the Fetch options
 	opts := &git.FetchOptions{
 		RemoteName: "origin",
@@ -259,4 +270,213 @@ func (c *Client) ListFilesRecursive(revision, dirPath string) ([]string, error) 
 	}
 
 	return filePaths, nil
+}
+
+// CreateBranch creates a new local branch pointing to the same commit as baseRef.
+func (c *Client) CreateBranch(name, baseRef string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	hash, err := c.resolveRevision(baseRef)
+	if err != nil {
+		return fmt.Errorf("resolve base ref %q: %w", baseRef, err)
+	}
+	ref := plumbing.NewHashReference(plumbing.NewBranchReferenceName(name), *hash)
+	return c.repo.Storer.SetReference(ref)
+}
+
+// CommitFile creates a commit on the given local branch that writes content to filePath.
+// filePath must use forward slashes and be relative to the repo root.
+//
+// This uses bare-repo "plumbing" (manual blob/tree/commit creation) rather than
+// worktree.Add + worktree.Commit for two reasons:
+//
+//  1. The Client has no worktree (cloned with nil filesystem). Creating one would
+//     require inflating all files into a memfs — expensive for a single-file edit.
+//  2. go-git supports only one worktree per Repository. With multiple concurrent
+//     edit sessions on different branches, a shared worktree would require serial
+//     checkout/switching. The plumbing approach operates directly on immutable objects
+//     and independent branch refs, so concurrent sessions don't interfere.
+//
+// The mutex protects writes against each other (preventing lost commits when two
+// CommitFile calls race on the same branch). Reads don't need the mutex: they resolve
+// a ref to immutable objects, and the ref update is the last step of any write.
+func (c *Client) CommitFile(branch, filePath string, content []byte, author Author, message string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	branchRef := plumbing.NewBranchReferenceName(branch)
+
+	// Resolve branch tip.
+	ref, err := c.repo.Storer.Reference(branchRef)
+	if err != nil {
+		return fmt.Errorf("resolve branch %q: %w", branch, err)
+	}
+	tipHash := ref.Hash()
+
+	tipCommit, err := c.repo.CommitObject(tipHash)
+	if err != nil {
+		return fmt.Errorf("get tip commit: %w", err)
+	}
+	rootTree, err := tipCommit.Tree()
+	if err != nil {
+		return fmt.Errorf("get root tree: %w", err)
+	}
+
+	// Store new blob.
+	blobObj := c.repo.Storer.NewEncodedObject()
+	blobObj.SetType(plumbing.BlobObject)
+	blobObj.SetSize(int64(len(content)))
+	w, err := blobObj.Writer()
+	if err != nil {
+		return fmt.Errorf("create blob writer: %w", err)
+	}
+	if _, err := w.Write(content); err != nil {
+		w.Close()
+		return fmt.Errorf("write blob: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("close blob writer: %w", err)
+	}
+	blobHash, err := c.repo.Storer.SetEncodedObject(blobObj)
+	if err != nil {
+		return fmt.Errorf("store blob: %w", err)
+	}
+
+	// Rebuild tree chain.
+	segments := strings.Split(filePath, "/")
+	newRootHash, err := updateTree(c.repo.Storer, rootTree, segments, blobHash)
+	if err != nil {
+		return fmt.Errorf("update tree: %w", err)
+	}
+
+	// Create commit.
+	now := time.Now()
+	sig := object.Signature{
+		Name:  author.Name,
+		Email: author.Email,
+		When:  now,
+	}
+	commit := &object.Commit{
+		TreeHash:     newRootHash,
+		ParentHashes: []plumbing.Hash{tipHash},
+		Author:       sig,
+		Committer:    sig,
+		Message:      message,
+	}
+	commitObj := c.repo.Storer.NewEncodedObject()
+	if err := commit.Encode(commitObj); err != nil {
+		return fmt.Errorf("encode commit: %w", err)
+	}
+	commitHash, err := c.repo.Storer.SetEncodedObject(commitObj)
+	if err != nil {
+		return fmt.Errorf("store commit: %w", err)
+	}
+
+	// Advance branch ref.
+	newRef := plumbing.NewHashReference(branchRef, commitHash)
+	return c.repo.Storer.SetReference(newRef)
+}
+
+// Push pushes a local branch to the remote.
+func (c *Client) Push(branch string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	refSpec := config.RefSpec(fmt.Sprintf("refs/heads/%s:refs/heads/%s", branch, branch))
+	opts := &git.PushOptions{
+		RemoteName: "origin",
+		RefSpecs:   []config.RefSpec{refSpec},
+	}
+	if c.auth != nil {
+		opts.Auth = &http.BasicAuth{
+			Username: c.auth.Username,
+			Password: c.auth.Password,
+		}
+	}
+	return c.repo.Push(opts)
+}
+
+// DeleteBranch removes a local branch reference.
+func (c *Client) DeleteBranch(name string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.repo.Storer.RemoveReference(plumbing.NewBranchReferenceName(name))
+}
+
+// updateTree returns a new tree hash with the blob at the given path replaced or added.
+// segments is the file path split by "/". oldTree is the tree at the current level.
+func updateTree(s storer.EncodedObjectStorer, oldTree *object.Tree, segments []string, blobHash plumbing.Hash) (plumbing.Hash, error) {
+	if len(segments) == 0 {
+		return plumbing.ZeroHash, fmt.Errorf("empty path segments")
+	}
+
+	name := segments[0]
+	isLeaf := len(segments) == 1
+
+	// Copy existing entries, replacing or skipping the target.
+	var entries []object.TreeEntry
+	var found bool
+	for _, e := range oldTree.Entries {
+		if e.Name == name {
+			found = true
+			if isLeaf {
+				// Replace the file entry with the new blob.
+				entries = append(entries, object.TreeEntry{
+					Name: name,
+					Mode: filemode.Regular,
+					Hash: blobHash,
+				})
+			} else {
+				// Recurse into subtree.
+				subTree, err := object.GetTree(s, e.Hash)
+				if err != nil {
+					return plumbing.ZeroHash, fmt.Errorf("get subtree %q: %w", name, err)
+				}
+				newSubHash, err := updateTree(s, subTree, segments[1:], blobHash)
+				if err != nil {
+					return plumbing.ZeroHash, err
+				}
+				entries = append(entries, object.TreeEntry{
+					Name: name,
+					Mode: filemode.Dir,
+					Hash: newSubHash,
+				})
+			}
+		} else {
+			entries = append(entries, e)
+		}
+	}
+
+	if !found {
+		if isLeaf {
+			// New file entry.
+			entries = append(entries, object.TreeEntry{
+				Name: name,
+				Mode: filemode.Regular,
+				Hash: blobHash,
+			})
+		} else {
+			// New intermediate directory — create an empty tree and recurse.
+			emptyTree := &object.Tree{}
+			newSubHash, err := updateTree(s, emptyTree, segments[1:], blobHash)
+			if err != nil {
+				return plumbing.ZeroHash, err
+			}
+			entries = append(entries, object.TreeEntry{
+				Name: name,
+				Mode: filemode.Dir,
+				Hash: newSubHash,
+			})
+		}
+	}
+
+	// Store the new tree.
+	newTree := &object.Tree{Entries: entries}
+	treeObj := &plumbing.MemoryObject{}
+	if err := newTree.Encode(treeObj); err != nil {
+		return plumbing.ZeroHash, fmt.Errorf("encode tree: %w", err)
+	}
+	return s.SetEncodedObject(treeObj)
 }

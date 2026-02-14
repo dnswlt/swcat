@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/gitclient"
@@ -123,12 +124,20 @@ func (d *DiskStore) WriteFile(path string, contents []byte) error {
 	return os.WriteFile(fullPath, contents, 0644)
 }
 
+// EditSession represents an active editing session on a git branch.
+type EditSession struct {
+	Branch string
+	Author gitclient.Author
+}
+
 // GitSource is an implementation of Source that reads from a remote Git repository.
 type GitSource struct {
 	client     *gitclient.Client
 	defaultRef string   // ref to use if the empty ref ("") is requested
 	rootDir    string   // optional root directory within the repo
 	refs       []string // cached list of available references
+	mu         sync.Mutex
+	sessions   map[string]*EditSession // branch name -> session
 }
 
 // gitStore is a "view" over a single revision in a GitSource.
@@ -136,6 +145,7 @@ type gitStore struct {
 	client  *gitclient.Client
 	ref     string
 	rootDir string
+	author  *gitclient.Author // nil = read-only
 }
 
 var _ Source = (*GitSource)(nil)
@@ -155,7 +165,7 @@ func (g *GitSource) DefaultRef() string {
 
 func (g *GitSource) Refresh() error {
 	g.refs = nil
-	return g.client.Update()
+	return g.client.Fetch()
 }
 
 func (g *GitSource) Store(ref string) (Store, error) {
@@ -169,11 +179,55 @@ func (g *GitSource) Store(ref string) (Store, error) {
 	if !slices.Contains(refs, ref) {
 		return nil, ErrNoSuchRef
 	}
+	// Check if this ref is an active edit session (writable).
+	g.mu.Lock()
+	session := g.sessions[ref]
+	g.mu.Unlock()
+	var author *gitclient.Author
+	if session != nil {
+		author = &session.Author
+	}
 	return &gitStore{
 		client:  g.client,
 		ref:     ref,
 		rootDir: g.rootDir,
+		author:  author,
 	}, nil
+}
+
+// CreateEditSession creates a new branch and registers it as an active edit session.
+func (g *GitSource) CreateEditSession(branchName, baseRef string, author gitclient.Author) error {
+	if err := g.client.CreateBranch(branchName, baseRef); err != nil {
+		return err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.sessions == nil {
+		g.sessions = make(map[string]*EditSession)
+	}
+	g.sessions[branchName] = &EditSession{
+		Branch: branchName,
+		Author: author,
+	}
+	g.refs = nil // Invalidate cache so the new branch shows up.
+	return nil
+}
+
+// PushEditSession pushes an edit session's branch to the remote.
+func (g *GitSource) PushEditSession(branchName string) error {
+	return g.client.Push(branchName)
+}
+
+// CloseEditSession removes the local branch and deregisters the edit session.
+func (g *GitSource) CloseEditSession(branchName string) error {
+	if err := g.client.DeleteBranch(branchName); err != nil {
+		return err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.sessions, branchName)
+	g.refs = nil // Invalidate cache.
+	return nil
 }
 
 func (g *GitSource) ListReferences() ([]string, error) {
@@ -210,15 +264,15 @@ func (g *gitStore) ReadFile(filePath string) ([]byte, error) {
 	return g.client.ReadFile(g.ref, fullPath)
 }
 
-func (g *gitStore) WriteFile(path string, contents []byte) error {
-	return ErrReadOnly
+func (g *gitStore) WriteFile(filePath string, contents []byte) error {
+	if g.author == nil {
+		return ErrReadOnly
+	}
+	fullPath := path.Join(g.rootDir, filePath)
+	return g.client.CommitFile(g.ref, fullPath, contents, *g.author, "Update "+filePath)
 }
 
 func DeleteEntity(st Store, path string, ref *api.Ref) error {
-	// Only disk-based repos can currently be modified.
-	if _, ok := st.(*DiskStore); !ok {
-		return fmt.Errorf("cannot update catalog in store of type %T", st)
-	}
 	entities, err := ReadEntities(st, path)
 	if err != nil {
 		return fmt.Errorf("failed to read entity file %s: %v", path, err)
@@ -247,10 +301,6 @@ func DeleteEntity(st Store, path string, ref *api.Ref) error {
 }
 
 func InsertOrReplaceEntity(st Store, path string, entity api.Entity) error {
-	// Only disk-based repos can currently be modified.
-	if _, ok := st.(*DiskStore); !ok {
-		return fmt.Errorf("cannot update catalog in store of type %T", st)
-	}
 	entities, err := ReadEntities(st, path)
 	if err != nil {
 		return fmt.Errorf("failed to read entity file %s: %v", path, err)

@@ -212,3 +212,141 @@ func TestClient(t *testing.T) {
 		}
 	})
 }
+
+func TestCreateBranch(t *testing.T) {
+	repoPath := createTestRepo(t)
+	client, err := New(repoPath, nil)
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+
+	if err := client.CreateBranch("edit/test", "master"); err != nil {
+		t.Fatalf("CreateBranch failed: %v", err)
+	}
+
+	refs, err := client.ListReferences()
+	if err != nil {
+		t.Fatalf("ListReferences failed: %v", err)
+	}
+	if !slices.Contains(refs, "edit/test") {
+		t.Errorf("Branch edit/test not found in refs: %v", refs)
+	}
+
+	// The new branch should have the same content as master.
+	content, err := client.ReadFile("edit/test", "catalog.yaml")
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if string(content) != "v2 content" {
+		t.Errorf("Expected 'v2 content', got %q", string(content))
+	}
+}
+
+func TestCommitFile(t *testing.T) {
+	repoPath := createTestRepo(t)
+	client, err := New(repoPath, nil)
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+
+	if err := client.CreateBranch("edit/write-test", "master"); err != nil {
+		t.Fatalf("CreateBranch failed: %v", err)
+	}
+
+	author := Author{Name: "Test", Email: "test@example.com"}
+
+	// Overwrite an existing file.
+	if err := client.CommitFile("edit/write-test", "catalog.yaml", []byte("modified content"), author, "update catalog"); err != nil {
+		t.Fatalf("CommitFile failed: %v", err)
+	}
+
+	content, err := client.ReadFile("edit/write-test", "catalog.yaml")
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if string(content) != "modified content" {
+		t.Errorf("Expected 'modified content', got %q", string(content))
+	}
+
+	// The original branch should be unaffected.
+	original, err := client.ReadFile("master", "catalog.yaml")
+	if err != nil {
+		t.Fatalf("ReadFile master failed: %v", err)
+	}
+	if string(original) != "v2 content" {
+		t.Errorf("Expected master to still have 'v2 content', got %q", string(original))
+	}
+}
+
+func TestCommitFileNested(t *testing.T) {
+	repoPath := createTestRepo(t)
+	client, err := New(repoPath, nil)
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+
+	if err := client.CreateBranch("edit/nested-test", "master"); err != nil {
+		t.Fatalf("CreateBranch failed: %v", err)
+	}
+
+	author := Author{Name: "Test", Email: "test@example.com"}
+
+	// Write to an existing nested path.
+	if err := client.CommitFile("edit/nested-test", "nested/service.yaml", []byte("updated service"), author, "update service"); err != nil {
+		t.Fatalf("CommitFile nested failed: %v", err)
+	}
+
+	content, err := client.ReadFile("edit/nested-test", "nested/service.yaml")
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if string(content) != "updated service" {
+		t.Errorf("Expected 'updated service', got %q", string(content))
+	}
+
+	// Write to a new nested path that doesn't exist yet.
+	if err := client.CommitFile("edit/nested-test", "new/dir/file.txt", []byte("new file"), author, "add new file"); err != nil {
+		t.Fatalf("CommitFile new path failed: %v", err)
+	}
+
+	content, err = client.ReadFile("edit/nested-test", "new/dir/file.txt")
+	if err != nil {
+		t.Fatalf("ReadFile new path failed: %v", err)
+	}
+	if string(content) != "new file" {
+		t.Errorf("Expected 'new file', got %q", string(content))
+	}
+
+	// Existing files should still be readable.
+	content, err = client.ReadFile("edit/nested-test", "catalog.yaml")
+	if err != nil {
+		t.Fatalf("ReadFile catalog failed: %v", err)
+	}
+	if string(content) != "v2 content" {
+		t.Errorf("Expected 'v2 content', got %q", string(content))
+	}
+}
+
+func TestDeleteBranch(t *testing.T) {
+	repoPath := createTestRepo(t)
+	client, err := New(repoPath, nil)
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+
+	if err := client.CreateBranch("edit/to-delete", "master"); err != nil {
+		t.Fatalf("CreateBranch failed: %v", err)
+	}
+
+	if err := client.DeleteBranch("edit/to-delete"); err != nil {
+		t.Fatalf("DeleteBranch failed: %v", err)
+	}
+
+	refs, err := client.ListReferences()
+	if err != nil {
+		t.Fatalf("ListReferences failed: %v", err)
+	}
+	if slices.Contains(refs, "edit/to-delete") {
+		t.Errorf("Branch edit/to-delete should have been deleted, but found in refs: %v", refs)
+	}
+}

@@ -318,6 +318,102 @@ func TestGitSource_WithRootDir(t *testing.T) {
 	})
 }
 
+func TestGitSource_EditSession(t *testing.T) {
+	repoPath := createTestRepo(t)
+
+	client, err := gitclient.New(repoPath, nil)
+	if err != nil {
+		t.Fatalf("gitclient.New failed: %v", err)
+	}
+
+	gs := NewGitSource(client, "master", "")
+	author := gitclient.Author{Name: "Test", Email: "test@example.com"}
+
+	t.Run("WriteFile_ReadOnly", func(t *testing.T) {
+		// A non-session store should still be read-only.
+		st, err := gs.Store("master")
+		if err != nil {
+			t.Fatalf("Store failed: %v", err)
+		}
+		if err := st.WriteFile("any.txt", []byte("data")); err != ErrReadOnly {
+			t.Errorf("WriteFile() = %v, want ErrReadOnly", err)
+		}
+	})
+
+	t.Run("WriteFile_EditSession", func(t *testing.T) {
+		if err := gs.CreateEditSession("edit/test", "master", author); err != nil {
+			t.Fatalf("CreateEditSession failed: %v", err)
+		}
+
+		// The new branch should appear in references.
+		refs, err := gs.ListReferences()
+		if err != nil {
+			t.Fatalf("ListReferences failed: %v", err)
+		}
+		if !slices.Contains(refs, "edit/test") {
+			t.Errorf("edit/test not found in refs: %v", refs)
+		}
+
+		// Get a writable store for the edit session branch.
+		st, err := gs.Store("edit/test")
+		if err != nil {
+			t.Fatalf("Store(edit/test) failed: %v", err)
+		}
+
+		// Write should succeed.
+		if err := st.WriteFile("catalog.yaml", []byte("edited content")); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+
+		// Read back the written content.
+		content, err := st.ReadFile("catalog.yaml")
+		if err != nil {
+			t.Fatalf("ReadFile failed: %v", err)
+		}
+		if string(content) != "edited content" {
+			t.Errorf("Expected 'edited content', got %q", string(content))
+		}
+
+		// Master should be unaffected.
+		masterSt, err := gs.Store("master")
+		if err != nil {
+			t.Fatalf("Store(master) failed: %v", err)
+		}
+		masterContent, err := masterSt.ReadFile("catalog.yaml")
+		if err != nil {
+			t.Fatalf("ReadFile master failed: %v", err)
+		}
+		if string(masterContent) != "v2 content" {
+			t.Errorf("Expected master 'v2 content', got %q", string(masterContent))
+		}
+	})
+
+	t.Run("CloseEditSession", func(t *testing.T) {
+		// Create and close a session.
+		if err := gs.CreateEditSession("edit/to-close", "master", author); err != nil {
+			t.Fatalf("CreateEditSession failed: %v", err)
+		}
+		if err := gs.CloseEditSession("edit/to-close"); err != nil {
+			t.Fatalf("CloseEditSession failed: %v", err)
+		}
+
+		// Branch should be gone from references.
+		refs, err := gs.ListReferences()
+		if err != nil {
+			t.Fatalf("ListReferences failed: %v", err)
+		}
+		if slices.Contains(refs, "edit/to-close") {
+			t.Errorf("edit/to-close should be gone, but found in refs: %v", refs)
+		}
+
+		// Store for the closed session should fail.
+		_, err = gs.Store("edit/to-close")
+		if err != ErrNoSuchRef {
+			t.Errorf("Store(edit/to-close) = %v, want ErrNoSuchRef", err)
+		}
+	})
+}
+
 func TestGitSource_ReadEntities(t *testing.T) {
 	// 1. Setup repo
 	dir := createRepoFromTestdata(t, "../../testdata/test1/catalog/catalog.yml")
