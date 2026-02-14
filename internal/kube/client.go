@@ -16,27 +16,27 @@ type Client struct {
 	config    Config
 }
 
-// NewClientFromConfig creates a Client from a Config.
-func NewClientFromConfig(cfg Config) (*Client, error) {
+// NewClientFromConfig creates a Client from a ConnectConfig and a Config.
+func NewClientFromConfig(cc ConnectConfig, cfg Config) (*Client, error) {
 	var restConfig *rest.Config
 	var err error
-	if cfg.Kubeconfig != "" {
-		rules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: cfg.Kubeconfig}
+	if cc.Kubeconfig != "" {
+		rules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: cc.Kubeconfig}
 		overrides := &clientcmd.ConfigOverrides{}
-		if cfg.Context != "" {
-			overrides.CurrentContext = cfg.Context
+		if cc.Context != "" {
+			overrides.CurrentContext = cc.Context
 		}
 		restConfig, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, overrides).ClientConfig()
 		if err != nil {
-			return nil, fmt.Errorf("load kubeconfig %q: %w", cfg.Kubeconfig, err)
+			return nil, fmt.Errorf("load kubeconfig %q: %w", cc.Kubeconfig, err)
 		}
-	} else {
-		// Use the service account token mounted in the pod.
-		// (Only works when scanning intra-cluster workloads.)
+	} else if cc.InCluster {
 		restConfig, err = rest.InClusterConfig()
 		if err != nil {
 			return nil, fmt.Errorf("in-cluster config: %w", err)
 		}
+	} else {
+		return nil, fmt.Errorf("no kubeconfig path or in-cluster mode specified")
 	}
 
 	cs, err := kubernetes.NewForConfig(restConfig)

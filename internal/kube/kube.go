@@ -14,12 +14,19 @@ var DefaultLabels = []string{
 	"app.kubernetes.io/version",
 }
 
-// Config holds the configuration for connecting to a Kubernetes cluster.
-type Config struct {
+// ConnectConfig holds deployment-specific settings for connecting to a Kubernetes cluster.
+// These are typically provided via command-line flags or environment variables.
+type ConnectConfig struct {
 	// Path to the kubeconfig file.
-	Kubeconfig string `yaml:"kubeconfig"`
+	Kubeconfig string
 	// Optional context to use from the kubeconfig. If empty, the current-context is used.
-	Context string `yaml:"context"`
+	Context string
+	// If true, use the in-cluster service account config instead of a kubeconfig file.
+	InCluster bool
+}
+
+// Config holds the application-level configuration for scanning Kubernetes workloads.
+type Config struct {
 	// Namespaces to query for workloads.
 	Namespaces []string `yaml:"namespaces"`
 	// Names of workloads that should be excluded in all namespaces.

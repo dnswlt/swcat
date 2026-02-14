@@ -100,6 +100,9 @@ type Options struct {
 	UseDotStreaming bool
 	SVGCacheSize    int
 	CommentsDir     string
+	KubeKubeconfig string
+	KubeContext    string
+	KubeInCluster  bool
 }
 
 func runPluginsAndUpdate(r *plugins.Registry, st store.Source) error {
@@ -135,7 +138,15 @@ func runPluginsAndUpdate(r *plugins.Registry, st store.Source) error {
 	return nil
 }
 
-func createKubeClient(source store.Source) (*kube.Client, error) {
+func createKubeClient(source store.Source, opts Options) (*kube.Client, error) {
+	cc := kube.ConnectConfig{
+		Kubeconfig: opts.KubeKubeconfig,
+		Context:    opts.KubeContext,
+		InCluster:  opts.KubeInCluster,
+	}
+	if cc.Kubeconfig == "" && !cc.InCluster {
+		return nil, nil // Kube not configured, not an error.
+	}
 	defaultStore, err := source.Store("")
 	if err != nil {
 		return nil, fmt.Errorf("could not get default store: %w", err)
@@ -143,7 +154,7 @@ func createKubeClient(source store.Source) (*kube.Client, error) {
 	kubeData, err := defaultStore.ReadFile(store.KubeFile)
 	if err != nil {
 		if errors.Is(err, iofs.ErrNotExist) {
-			return nil, nil // No kube client configured, not an error.
+			return nil, fmt.Errorf("kube connection configured but no %s config file found", store.KubeFile)
 		}
 		return nil, fmt.Errorf("could not load kube config: %w", err)
 	}
@@ -151,11 +162,11 @@ func createKubeClient(source store.Source) (*kube.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not parse kube config: %w", err)
 	}
-	client, err := kube.NewClientFromConfig(*cfg)
+	client, err := kube.NewClientFromConfig(cc, *cfg)
 	if err != nil {
 		return nil, fmt.Errorf("could not create Kubernetes client: %w", err)
 	}
-	log.Printf("Kubernetes client initialized (kubeconfig=%s, namespaces=%v)", cfg.Kubeconfig, cfg.Namespaces)
+	log.Printf("Kubernetes client initialized (kubeconfig=%s, in-cluster=%v, namespaces=%v)", cc.Kubeconfig, cc.InCluster, cfg.Namespaces)
 	return client, nil
 }
 
@@ -174,6 +185,9 @@ func main() {
 	fs.BoolVar(&opts.UseDotStreaming, "dot-streaming", runtime.GOOS == "windows", "Use long-running dot process to render SVG graphs (use only if dot process startup is slow, e.g. on Windows)")
 	fs.IntVar(&opts.SVGCacheSize, "svg-cache-size", 1024, "Max. number of SVG graphs to hold in the in-memory LRU cache")
 	fs.StringVar(&opts.CommentsDir, "comments-dir", "", "Directory where entity comments are stored (relative to root-dir if not absolute). If empty, comments are disabled.")
+	fs.StringVar(&opts.KubeKubeconfig, "kube-kubeconfig", "", "Path to the kubeconfig file for Kubernetes workload scanning")
+	fs.StringVar(&opts.KubeContext, "kube-context", "", "Kubernetes context to use (only with -kube-kubeconfig)")
+	fs.BoolVar(&opts.KubeInCluster, "kube-in-cluster", false, "Use in-cluster Kubernetes config (for running inside a pod)")
 	var runPlugins bool
 	fs.BoolVar(&runPlugins, "run-plugins", false, "If true, executes plugins on all entities at startup")
 
@@ -269,7 +283,7 @@ func main() {
 	}
 
 	// Optionally create a Kubernetes client.
-	kubeClient, err := createKubeClient(source)
+	kubeClient, err := createKubeClient(source, opts)
 	if err != nil {
 		log.Printf("Could not create kube client: %v", err)
 	}
