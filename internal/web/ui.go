@@ -198,6 +198,84 @@ func switchRef(originalURL string, newRef string) string {
 	return fmt.Sprintf("/ui/ref/%s/-/%s%s", newRef, tail, queryString)
 }
 
+// extractEntityRef extracts the entity reference from a given URL path.
+// It supports both /ui/ref/<ref>/-/<kind>/<qname> and /ui/<kind>/<qname> patterns.
+// It assumes the qname is the last segment of the path.
+func extractEntityRef(urlPath string) (*catalog.Ref, error) {
+	// Support /ui/ref/<ref>/-/<kind>/<qname> pattern
+	if _, after, found := strings.Cut(urlPath, "/-/"); found {
+		urlPath = after
+	} else {
+		urlPath = strings.TrimPrefix(urlPath, "/ui")
+		urlPath = strings.TrimPrefix(urlPath, "/")
+	}
+
+	segments := strings.Split(urlPath, "/")
+	if len(segments) < 2 {
+		return nil, fmt.Errorf("invalid path: not enough segments")
+	}
+
+	// The logical kind path part (e.g., "components")
+	kindPart := segments[len(segments)-2]
+	// The qname part (e.g., "namespace/name" or "name")
+	qnamePart, err := url.PathUnescape(segments[len(segments)-1])
+	if err != nil {
+		return nil, fmt.Errorf("failed to unescape qname: %v", err)
+	}
+
+	var kind catalog.Kind
+	switch kindPart {
+	case "domains":
+		kind = catalog.KindDomain
+	case "systems":
+		kind = catalog.KindSystem
+	case "components":
+		kind = catalog.KindComponent
+	case "resources":
+		kind = catalog.KindResource
+	case "apis":
+		kind = catalog.KindAPI
+	case "groups":
+		kind = catalog.KindGroup
+	default:
+		return nil, fmt.Errorf("invalid kind part: %s", kindPart)
+	}
+
+	return catalog.ParseRefAs(kind, qnamePart)
+}
+
+// entityRefFromReferer extracts the entity ref from a Referer header.
+// Example: extracts "component:availability-aggregator" from
+// http://localhost:9191/ui/entities/component:availability-aggregator/edit
+func entityRefFromReferer(referer string) (*catalog.Ref, error) {
+	// 1. Parse the URL to ensure we are safely handling schemes, hosts, and query params.
+	u, err := url.Parse(referer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URL: %v", err)
+	}
+
+	pathSegments := strings.Split(u.EscapedPath(), "/")
+
+	// 3. Iterate through segments to find the ref after "entities".
+	var refStr string
+	for i, seg := range pathSegments {
+		if seg == "entities" {
+			// Ensure there is actually a segment following "entities"
+			if i+1 < len(pathSegments) {
+				var err error
+				refStr, err = url.PathUnescape(pathSegments[i+1])
+				if err != nil {
+					return nil, fmt.Errorf("failed to unescape entity ref from path: %v", err)
+				}
+			}
+		}
+	}
+	if refStr == "" {
+		return nil, fmt.Errorf("no entity ref found in path")
+	}
+	return catalog.ParseRef(refStr)
+}
+
 // entitySummary returns e's title and description concatenated.
 // The text is truncated at 157 characters and an ellipse (...)
 // is appended if the text's total length exceeds 160 characters.

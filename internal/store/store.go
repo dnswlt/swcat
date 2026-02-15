@@ -209,22 +209,19 @@ func (g *GitSource) IsSession(ref string) bool {
 
 // CreateEditSession creates a new branch and registers it as an active edit session.
 // It generates a unique branch name based on the baseRef and a timestamp.
-func (g *GitSource) CreateEditSession(baseRef string) (string, error) {
+// If namePrefix is not empty, it's used as part of the branch name.
+func (g *GitSource) CreateEditSession(baseRef string, namePrefix string) (string, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	// Generate a unique branch name.
-	// Use minute precision + 4 hex chars suffix.
 	var branchName string
 	for {
-		suffix := make([]byte, 2)
-		if _, err := rand.Read(suffix); err != nil {
+		var err error
+		branchName, err = buildSessionBranchName(baseRef, namePrefix)
+		if err != nil {
 			return "", err
 		}
-		branchName = fmt.Sprintf("edit/%s-%s-%s",
-			strings.ReplaceAll(baseRef, "/", "-"),
-			time.Now().Format("20060102-1504"),
-			hex.EncodeToString(suffix))
 
 		if !g.sessions[branchName] {
 			break
@@ -238,6 +235,37 @@ func (g *GitSource) CreateEditSession(baseRef string) (string, error) {
 	g.sessions[branchName] = true
 	g.refs = nil // Invalidate cache so the new branch shows up.
 	return branchName, nil
+}
+
+func buildSessionBranchName(baseRef string, namePrefix string) (string, error) {
+	suffix := make([]byte, 2)
+	if _, err := rand.Read(suffix); err != nil {
+		return "", err
+	}
+
+	var prefix string
+	if namePrefix != "" {
+		prefix = strings.ReplaceAll(namePrefix, "/", "-")
+	} else {
+		prefix = strings.ReplaceAll(baseRef, "/", "-")
+	}
+
+	timestamp := time.Now().Format("20060102-1504")
+	hexSuffix := hex.EncodeToString(suffix)
+
+	// branchName = "edit/<prefix>-<timestamp>-<hexSuffix>"
+	// Limit prefix length so total branch name doesn't exceed 100 chars.
+	// "edit/" (5) + "-" (1) + timestamp (13) + "-" (1) + hexSuffix (4) = 24 chars
+	// Max prefix length = 100 - 24 = 76
+	const maxLen = 100
+	fixedPartsLen := len("edit/") + 1 + len(timestamp) + 1 + len(hexSuffix)
+	maxPrefixLen := maxLen - fixedPartsLen
+
+	if len(prefix) > maxPrefixLen {
+		prefix = prefix[:maxPrefixLen]
+	}
+
+	return fmt.Sprintf("edit/%s-%s-%s", prefix, timestamp, hexSuffix), nil
 }
 
 // PushEditSession pushes an edit session's branch to the remote.

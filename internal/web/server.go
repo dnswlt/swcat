@@ -12,7 +12,6 @@ import (
 	"log"
 	"maps"
 	"net/http"
-	"net/url"
 	"path"
 	"slices"
 	"strings"
@@ -1654,38 +1653,6 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w, "OK")
-}
-
-// Extracts the entity ref from a Referer header.
-// Example: extracts "component:availability-aggregator" from
-// http://localhost:9191/ui/entities/component:availability-aggregator/edit
-func entityRefFromReferer(referer string) (*catalog.Ref, error) {
-	// 1. Parse the URL to ensure we are safely handling schemes, hosts, and query params.
-	u, err := url.Parse(referer)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL: %v", err)
-	}
-
-	pathSegments := strings.Split(u.EscapedPath(), "/")
-
-	// 3. Iterate through segments to find the ref after "entities".
-	var refStr string
-	for i, seg := range pathSegments {
-		if seg == "entities" {
-			// Ensure there is actually a segment following "entities"
-			if i+1 < len(pathSegments) {
-				var err error
-				refStr, err = url.PathUnescape(pathSegments[i+1])
-				if err != nil {
-					return nil, fmt.Errorf("failed to unescape entity ref from path: %v", err)
-				}
-			}
-		}
-	}
-	if refStr == "" {
-		return nil, fmt.Errorf("no entity ref found in path")
-	}
-	return catalog.ParseRef(refStr)
 }
 
 func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {

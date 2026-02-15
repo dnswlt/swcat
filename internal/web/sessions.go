@@ -16,7 +16,16 @@ func (s *Server) createEditSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	currentRef := s.getRef(r)
-	branchName, err := g.CreateEditSession(currentRef)
+
+	// Try to extract entity reference from Referer to use as branch name prefix.
+	var namePrefix string
+	if referer := r.Header.Get("Referer"); referer != "" {
+		if ref, err := extractEntityRef(referer); err == nil {
+			namePrefix = ref.Name
+		}
+	}
+
+	branchName, err := g.CreateEditSession(currentRef, namePrefix)
 	if err != nil {
 		log.Printf("Failed to create edit session: %v", err)
 		http.Error(w, "Failed to create edit session: "+err.Error(), http.StatusInternalServerError)

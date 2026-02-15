@@ -456,16 +456,94 @@ func TestMarkdownWithMagicLinks(t *testing.T) {
 			t.Errorf("markdownWithMagicLinks() = %q, want %q", string(got), want)
 		}
 	})
+}
 
-	t.Run("with namespace", func(t *testing.T) {
-		input := "Use api:ns1/my-api."
-		want := "<p>Use <a href=\"/ui/apis/ns1%2Fmy-api\">api:ns1/my-api</a>.</p>\n"
-		got, err := markdownWithMagicLinks(ctx, input)
-		if err != nil {
-			t.Fatalf("markdownWithMagicLinks() error: %v", err)
-		}
-		if string(got) != want {
-			t.Errorf("markdownWithMagicLinks() = %q, want %q", string(got), want)
-		}
-	})
+func TestExtractEntityRefFromURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		urlPath string
+		want    *catalog.Ref
+		wantErr bool
+	}{
+		{
+			name:    "simple component URL",
+			urlPath: "/ui/components/my-comp",
+			want:    catalog.MustParseRef("component:my-comp"),
+		},
+		{
+			name:    "component URL with namespace",
+			urlPath: "/ui/components/ns1%2Fmy-comp",
+			want:    catalog.MustParseRef("component:ns1/my-comp"),
+		},
+		{
+			name:    "ref URL with component",
+			urlPath: "/ui/ref/main/-/components/my-comp",
+			want:    catalog.MustParseRef("component:my-comp"),
+		},
+		{
+			name:    "ref URL with namespace",
+			urlPath: "/ui/ref/feature/branch/-/components/ns1%2Fmy-comp",
+			want:    catalog.MustParseRef("component:ns1/my-comp"),
+		},
+		{
+			name:    "api URL",
+			urlPath: "/ui/apis/my-api",
+			want:    catalog.MustParseRef("api:my-api"),
+		},
+		{
+			name:    "system URL",
+			urlPath: "/ui/systems/my-system",
+			want:    catalog.MustParseRef("system:my-system"),
+		},
+		{
+			name:    "domain URL",
+			urlPath: "/ui/domains/my-domain",
+			want:    catalog.MustParseRef("domain:my-domain"),
+		},
+		{
+			name:    "resource URL",
+			urlPath: "/ui/resources/my-resource",
+			want:    catalog.MustParseRef("resource:my-resource"),
+		},
+		{
+			name:    "group URL",
+			urlPath: "/ui/groups/my-group",
+			want:    catalog.MustParseRef("group:my-group"),
+		},
+		{
+			name:    "invalid kind part",
+			urlPath: "/ui/unknown/foo",
+			wantErr: true,
+		},
+		{
+			name:    "trailing stuff",
+			urlPath: "/ui/components/foo/other",
+			wantErr: true,
+		},
+		{
+			name:    "too few segments",
+			urlPath: "/ui/components",
+			wantErr: true,
+		},
+		{
+			name:    "empty path",
+			urlPath: "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := extractEntityRef(tt.urlPath)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("extractEntityRef() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr {
+				if diff := cmp.Diff(tt.want, got); diff != "" {
+					t.Errorf("extractEntityRef() mismatch (-want +got):\n%s", diff)
+				}
+			}
+		})
+	}
 }

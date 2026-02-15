@@ -663,3 +663,11 @@ func ParseRefAs(kind Kind, s string) (*Ref, error) {
 	}
 	return NewRefFromAPIWithKind(kind, r)
 }
+
+func MustParseRef(s string) *Ref {
+	ref, err := ParseRef(s)
+	if err != nil {
+		panic(fmt.Sprintf("MustParseRef(%q): %v", s, err))
+	}
+	return ref
+}

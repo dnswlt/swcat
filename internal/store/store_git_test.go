@@ -340,7 +340,7 @@ func TestGitSource_EditSession(t *testing.T) {
 	})
 
 	t.Run("WriteFile_EditSession", func(t *testing.T) {
-		branchName, err := gs.CreateEditSession("master")
+		branchName, err := gs.CreateEditSession("master", "")
 		if err != nil {
 			t.Fatalf("CreateEditSession failed: %v", err)
 		}
@@ -390,7 +390,7 @@ func TestGitSource_EditSession(t *testing.T) {
 
 	t.Run("CloseEditSession", func(t *testing.T) {
 		// Create and close a session.
-		branchName, err := gs.CreateEditSession("master")
+		branchName, err := gs.CreateEditSession("master", "")
 		if err != nil {
 			t.Fatalf("CreateEditSession failed: %v", err)
 		}
@@ -426,7 +426,7 @@ func TestGitSource_RestoreSessions(t *testing.T) {
 	author := gitclient.Author{Name: "Alice", Email: "alice@example.com"}
 	gs1 := NewGitSource(client1, "master", "", author)
 
-	branchName, err := gs1.CreateEditSession("master")
+	branchName, err := gs1.CreateEditSession("master", "")
 	if err != nil {
 		t.Fatalf("CreateEditSession failed: %v", err)
 	}
