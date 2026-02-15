@@ -39,7 +39,7 @@ func (a Author) IsSet() bool {
 
 // Client holds the repository in memory.
 type Client struct {
-	mu   sync.Mutex
+	mu   sync.RWMutex
 	repo *git.Repository
 	auth *Auth
 }
@@ -73,6 +73,9 @@ func New(url string, auth *Auth) (*Client, error) {
 }
 
 func (c *Client) Fetch() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	// 1. Configure the Fetch options
 	opts := &git.FetchOptions{
 		RemoteName: "origin",
@@ -114,6 +117,9 @@ func (c *Client) Fetch() error {
 }
 
 func (c *Client) DefaultBranch() (string, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	refs, err := c.repo.References()
 	if err != nil {
 		return "", err
@@ -136,6 +142,9 @@ func (c *Client) DefaultBranch() (string, error) {
 }
 
 func (c *Client) ListReferences() ([]string, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	refMap := make(map[string]bool)
 
 	// List all references (branches, tags, remotes)
@@ -196,6 +205,9 @@ func (c *Client) resolveRevision(revision string) (*plumbing.Hash, error) {
 }
 
 func (c *Client) ReadFile(revision, filePath string) ([]byte, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	// 1. Resolve the revision (tag/branch name) to a SHA-1 hash
 	hash, err := c.resolveRevision(revision)
 	if err != nil {
@@ -236,6 +248,9 @@ func (c *Client) ReadFile(revision, filePath string) ([]byte, error) {
 }
 
 func (c *Client) ListFilesRecursive(revision, dirPath string) ([]string, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	// Resolve Revision to a Commit Hash
 	hash, err := c.resolveRevision(revision)
 	if err != nil {
