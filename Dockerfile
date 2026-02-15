@@ -9,7 +9,7 @@ COPY templates /app/templates
 RUN npm run build
 
 # --- Stage 2: build Go binary ---
-FROM golang:1.24.5-alpine AS gobuilder
+FROM golang:1.25.7-alpine AS gobuilder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
