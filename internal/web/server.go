@@ -36,14 +36,14 @@ import (
 )
 
 type ServerOptions struct {
-	Addr            string           // E.g., "localhost:8080"
-	BaseDir         string           // Directory from which resources (templates etc.) are read.
-	DotPath         string           // E.g., "dot" (with dot on the PATH)
-	DotTimeout      time.Duration    // Time after which dot executions will be cancelled
-	UseDotStreaming bool             // If true, keeps the dot process running and streams requests to it (Good for corporate Windows machines).
-	ReadOnly        bool             // If true, no Edit/Clone/Delete operations will be supported.
-	Version         string           // App version
-	SVGCacheSize    int              // Size of the LRU cache for rendered SVGs
+	Addr            string        // E.g., "localhost:8080"
+	BaseDir         string        // Directory from which resources (templates etc.) are read.
+	DotPath         string        // E.g., "dot" (with dot on the PATH)
+	DotTimeout      time.Duration // Time after which dot executions will be cancelled
+	UseDotStreaming bool          // If true, keeps the dot process running and streams requests to it (Good for corporate Windows machines).
+	ReadOnly        bool          // If true, no Edit/Clone/Delete operations will be supported.
+	Version         string        // App version
+	SVGCacheSize    int           // Size of the LRU cache for rendered SVGs
 }
 
 func (s *Server) isReadOnly(r *http.Request) bool {
@@ -55,6 +55,18 @@ func (s *Server) isReadOnly(r *http.Request) bool {
 		return g.IsReadOnly() || !g.IsSession(ref)
 	}
 	return false
+}
+
+func (s *Server) canStartSession(r *http.Request) bool {
+	if s.opts.ReadOnly {
+		return false
+	}
+	g, ok := s.source.(*store.GitSource)
+	if !ok {
+		return false
+	}
+	ref := s.getRef(r)
+	return !g.IsReadOnly() && !g.IsSession(ref)
 }
 
 func (s *Server) getRef(r *http.Request) string {
@@ -1792,10 +1804,9 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 			log.Printf("Failed to list references: %v", err)
 		} else {
 			currentRef := s.getRef(r)
-			isSession := g.IsSession(currentRef)
 			templateParams["RefOptions"] = refOptions(refs, currentRef, r)
-			templateParams["CanStartSession"] = !s.opts.ReadOnly && !isSession
-			templateParams["IsSession"] = isSession
+			templateParams["CanStartSession"] = s.canStartSession(r)
+			templateParams["IsSession"] = g.IsSession(currentRef)
 		}
 	}
 	// Copy over provided params
