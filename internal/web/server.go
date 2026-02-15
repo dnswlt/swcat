@@ -1222,6 +1222,23 @@ func (s *Server) renderErrorSnippet(w http.ResponseWriter, errorMsg string) {
 	}
 }
 
+func (s *Server) renderSuccessSnippet(w http.ResponseWriter, msg string) {
+	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
+	tmpl, err := s.template.Clone()
+	if err != nil {
+		log.Printf("Failed to clone template: %v", err)
+		http.Error(w, "Template clone error", http.StatusInternalServerError)
+		return
+	}
+
+	err = tmpl.ExecuteTemplate(w, "success_message.html", map[string]any{
+		"Message": msg,
+	})
+	if err != nil {
+		log.Printf("Failed to render success message: %v", err)
+	}
+}
+
 func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 	if !s.isHX(r) {
 		http.Error(w, "Entity updates must be done via HTMX", http.StatusBadRequest)
@@ -1960,6 +1977,9 @@ func (s *Server) uiMux() *http.ServeMux {
 
 	mux.HandleFunc("POST /sessions", func(w http.ResponseWriter, r *http.Request) {
 		s.createEditSession(w, r)
+	})
+	mux.HandleFunc("POST /sessions/push", func(w http.ResponseWriter, r *http.Request) {
+		s.uploadEditSession(w, r)
 	})
 	mux.HandleFunc("DELETE /sessions", func(w http.ResponseWriter, r *http.Request) {
 		s.discardEditSession(w, r)

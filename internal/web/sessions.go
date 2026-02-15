@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -50,4 +51,27 @@ func (s *Server) discardEditSession(w http.ResponseWriter, r *http.Request) {
 	newURL := switchRef(r.Header.Get("Referer"), g.DefaultRef())
 	w.Header().Set("HX-Redirect", newURL)
 	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) uploadEditSession(w http.ResponseWriter, r *http.Request) {
+	g, ok := s.source.(*store.GitSource)
+	if !ok {
+		s.renderErrorSnippet(w, "Sessions only supported for Git sources")
+		return
+	}
+
+	currentRef := s.getRef(r)
+	if !g.IsSession(currentRef) {
+		s.renderErrorSnippet(w, "Not a session branch")
+		return
+	}
+
+	if err := g.PushEditSession(currentRef); err != nil {
+		log.Printf("Failed to push edit session: %v", err)
+		s.renderErrorSnippet(w, "Failed to push edit session: "+err.Error())
+		return
+	}
+
+	s.renderSuccessSnippet(w,
+		fmt.Sprintf("Session %s successfully uploaded to remote Git server.", currentRef))
 }
