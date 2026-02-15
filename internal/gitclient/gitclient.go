@@ -78,6 +78,8 @@ func (c *Client) Fetch() error {
 		RemoteName: "origin",
 		// Download all tags, even those unreachable from the branch heads
 		Tags: git.AllTags,
+		// Prune remote-tracking branches no longer on remote
+		Prune: true,
 		// Force-update all remote branches to match origin
 		// The '+' allows non-fast-forward updates (e.g. if history was rewritten on remote)
 		RefSpecs: []config.RefSpec{
