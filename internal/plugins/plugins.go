@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"slices"
+	"strings"
 
 	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
@@ -98,8 +99,21 @@ func ReadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to read plugins config: %w", err)
 	}
 
+	// Expand environment variables in the config file.
+	// This allows using ${VAR} or ${VAR:-default} in plugins.yml.
+	expanded := os.Expand(string(data), func(k string) string {
+		if key, def, found := strings.Cut(k, ":-"); found {
+			val := os.Getenv(key)
+			if val == "" {
+				return def
+			}
+			return val
+		}
+		return os.Getenv(k)
+	})
+
 	var config Config
-	if err := yaml.Unmarshal(data, &config); err != nil {
+	if err := yaml.Unmarshal([]byte(expanded), &config); err != nil {
 		return nil, fmt.Errorf("failed to parse plugins config: %w", err)
 	}
 	return &config, err

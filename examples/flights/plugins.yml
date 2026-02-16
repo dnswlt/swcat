@@ -15,7 +15,7 @@ plugins:
     kind: GRPCPlugin
     # No trigger - this plugin is only used by the asyncApiImporter plugin
     spec:
-      address: localhost:50051
+      address: ${SWCAT_GRPC_PLUGIN_ADDR:-localhost:50051}
       verbose: true
       config:
         pluginName: maven-extractor
@@ -28,7 +28,7 @@ plugins:
     trigger: |-
       kind:Component
     spec:
-      address: localhost:50051
+      address: ${SWCAT_HELLO_PLUGIN_ADDR:-localhost:50051}
       config:
         pluginName: hello
         name: Jens

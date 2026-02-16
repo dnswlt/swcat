@@ -1,4 +1,5 @@
 # Go
+swcat
 bin/
 dist/
 build/
@@ -6,12 +7,29 @@ build/
 *.out
 
 # Node
-web/node_modules
-web/.vite
-web/dist
+web/node_modules/
+web/.vite/
+web/dist/
 
-# VCS & misc
-.git
+# Java / Maven
+**/target/
+.m2/
+dependency-reduced-pom.xml
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# VCS, IDE & misc
+.git/
 .gitignore
+.vscode/
+.idea/
+.agent/
 Dockerfile
+compose*.yml
 docker-compose.yml
+docs/
+scripts/
+testdata/

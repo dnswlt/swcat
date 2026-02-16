@@ -1,0 +1,27 @@
+# Run swcat with a local catalog mounted as a volume
+# and a grpc-plugin-server next to it.
+services:
+  swcat:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-dev}
+    ports:
+      - "9191:8080"
+    volumes:
+      - ${CATALOG_DIR:-./examples/flights}:/data:rw
+    user: "${UID}:${GID}"
+    environment:
+      - SWCAT_ADDR=${SWCAT_ADDR:-0.0.0.0:8080}
+      - SWCAT_ROOT_DIR=/data
+      - SWCAT_GRPC_PLUGIN_ADDR=grpc-plugin-server:50051
+    depends_on:
+      - grpc-plugin-server
+
+  grpc-plugin-server:
+    build:
+      context: .
+      dockerfile: extensions/grpc/Dockerfile
+    # Exposed on the internal network by default, but let's expose it to the host too for testing
+    ports:
+      - "50051:50051"
