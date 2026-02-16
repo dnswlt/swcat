@@ -1,5 +1,10 @@
+# --- Base Image Definitions ---
+ARG NODE_BASE=node:20-alpine
+ARG GO_BASE=golang:1.25.7-alpine
+ARG RUNTIME_BASE=alpine:3.21
+
 # --- Stage 1: build web assets ---
-FROM node:20-alpine AS webbuilder
+FROM ${NODE_BASE} AS webbuilder
 WORKDIR /app/web
 COPY web/package*.json ./
 RUN npm ci
@@ -9,7 +14,7 @@ COPY templates /app/templates
 RUN npm run build
 
 # --- Stage 2: build Go binary ---
-FROM golang:1.25.7-alpine AS gobuilder
+FROM ${GO_BASE} AS gobuilder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -21,7 +26,7 @@ ARG VERSION=dev
 RUN go build -ldflags "-X main.Version=${VERSION}" -o /out/swcat ./cmd/swcat
 
 # --- Stage 3: runtime image ---
-FROM alpine:3.21
+FROM ${RUNTIME_BASE}
 WORKDIR /app
 
 # Install graphviz (swcat needs the dot tool)
