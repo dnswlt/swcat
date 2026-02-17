@@ -150,6 +150,11 @@ async function initPage(pageId) {
         loadSVGMetadata();
         addSVGListener();
 
+        // Reload the page after plugins have completed successfully.
+        document.body.addEventListener("pluginsComplete", () => {
+            setTimeout(() => location.reload(), 1500);
+        });
+
         // Re-run listener registration and SVG metadata parsing after an SVG update
         // (triggered by a HX-Trigger-After-Swap response header).
         document.body.addEventListener("svgUpdated", () => {

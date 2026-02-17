@@ -19,16 +19,21 @@
     </a>
     {{ else }}
 
-    {{ if $entity | hasPlugins }}
+    {{ $isSystem := eq $entity.GetKind "system" }}
+    {{ if or ($entity | hasPlugins) $isSystem }}
     <a href="#" hx-post="{{ $entity | toEntityURL }}/run-plugins" hx-target="#error-messages"
         class="bg-orange-200 hover:bg-orange-300 py-1 px-3 rounded text-sm" aria-label="Update auto-generated data "
-        title="Update auto-generated data ">
-        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        title='Update auto-generated data{{if $isSystem }} (including children) {{ end }}'>
+        <svg class="h-4 w-4 plugin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <!-- Zap (flash/bolt) -->
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
         </svg>
-        <span class="sr-only">Update auto-generated data </span>
+        <svg class="h-4 w-4 animate-spin plugin-spinner" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
+            <path d="M12 2a10 10 0 0 1 10 10" stroke-opacity="0.75"></path>
+        </svg>
     </a>
     {{ end }}
     <a href="{{ $entity | toEntityURL }}/edit" class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm"

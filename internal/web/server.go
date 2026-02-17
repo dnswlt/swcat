@@ -1476,8 +1476,8 @@ func (s *Server) runPlugins(w http.ResponseWriter, r *http.Request, entityRef st
 	}
 	s.storeDataMap = make(map[string]*storeData)
 
-	w.Header().Set("HX-Refresh", "true")
-	w.WriteHeader(http.StatusOK)
+	w.Header().Set("HX-Trigger-After-Swap", "pluginsComplete")
+	s.renderSuccessSnippet(w, "Plugins ran successfully. Reloading…")
 }
 
 func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef string) {

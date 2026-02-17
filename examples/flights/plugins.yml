@@ -28,7 +28,7 @@ plugins:
     trigger: |-
       kind:Component
     spec:
-      address: ${SWCAT_HELLO_PLUGIN_ADDR:-localhost:50051}
+      address: ${SWCAT_GRPC_PLUGIN_ADDR:-localhost:50051}
       config:
         pluginName: hello
         name: Jens

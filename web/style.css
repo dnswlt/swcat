@@ -25,6 +25,17 @@
         font-size: 0.9em;
     }
 
+    /* Swap between default icon and spinner on the run-plugins button */
+    .plugin-spinner {
+        display: none;
+    }
+    .htmx-request .plugin-spinner {
+        display: inline;
+    }
+    .htmx-request .plugin-icon {
+        display: none;
+    }
+
     /* --- Graphviz Styling --- */
     .clickable-node:hover {
         cursor: pointer;
