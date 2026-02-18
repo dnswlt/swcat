@@ -1233,6 +1233,24 @@ func (s *Server) renderErrorSnippet(w http.ResponseWriter, errorMsg string) {
 	}
 }
 
+func (s *Server) renderErrorList(w http.ResponseWriter, summary string, errs []string) {
+	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
+	tmpl, err := s.template.Clone()
+	if err != nil {
+		log.Printf("Failed to clone template: %v", err)
+		http.Error(w, "Template clone error", http.StatusInternalServerError)
+		return
+	}
+
+	err = tmpl.ExecuteTemplate(w, "error_list.html", map[string]any{
+		"Summary": summary,
+		"Errors":  errs,
+	})
+	if err != nil {
+		log.Printf("Failed to render error list: %v", err)
+	}
+}
+
 func (s *Server) renderSuccessSnippet(w http.ResponseWriter, msg string) {
 	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
 	tmpl, err := s.template.Clone()
@@ -1401,83 +1419,6 @@ func (s *Server) deleteEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	}
 	w.Header().Set("HX-Redirect", redirectURL)
 	w.WriteHeader(http.StatusOK)
-}
-
-func (s *Server) runPlugins(w http.ResponseWriter, r *http.Request, entityRef string) {
-	if s.pluginRegistry == nil {
-		http.Error(w, "No plugin registry available", http.StatusPreconditionFailed)
-		return
-	}
-	if !s.isHX(r) {
-		http.Error(w, "Plugin execution must be done via HTMX", http.StatusBadRequest)
-		return
-	}
-	if s.isReadOnly(r) {
-		http.Error(w, "Cannot run plugins in read-only mode", http.StatusPreconditionFailed)
-		return
-	}
-
-	ref, err := catalog.ParseRef(entityRef)
-	if err != nil {
-		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
-		return
-	}
-
-	data := s.getStoreData(r)
-	entity := data.repo.Entity(ref)
-	if entity == nil {
-		http.Error(w, "Invalid entity", http.StatusNotFound)
-		return
-	}
-
-	exts, err := s.pluginRegistry.Run(r.Context(), entity)
-	if err != nil {
-		message := fmt.Sprintf("Failed to run plugins: %v", err)
-		log.Println(message)
-		s.renderErrorSnippet(w, message)
-		return
-	}
-
-	// Acquire write lock
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Store new extensions on disk and clear storeDataMap, forcing a reload of the repository on the next request.
-
-	// Read extensions file and merge new extensions.
-	st, err := s.source.Store(data.ref)
-	if err != nil {
-		s.renderErrorSnippet(w, fmt.Sprintf("Failed to access store: %v", err))
-		return
-	}
-	extPath := store.ExtensionFile(entity.GetSourceInfo().Path)
-	existingExts, err := store.ReadExtensions(st, extPath)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		s.renderErrorSnippet(w, fmt.Sprintf("Failed to read extensions: %v", err))
-		return
-	}
-	if existingExts == nil {
-		existingExts = &api.CatalogExtensions{}
-	}
-
-	existingExts.Merge(exts)
-
-	// Write extensions file to disk.
-	if err := store.WriteExtensions(st, extPath, existingExts); err != nil {
-		s.renderErrorSnippet(w, fmt.Sprintf("Failed to write extensions: %v", err))
-		return
-	}
-
-	// Clear data, which forces a reload on the next request.
-	err = s.source.Refresh()
-	if err != nil {
-		s.renderErrorSnippet(w, fmt.Sprintf("Failed to refresh: %v", err))
-		return
-	}
-	s.storeDataMap = make(map[string]*storeData)
-
-	w.Header().Set("HX-Trigger-After-Swap", "pluginsComplete")
-	s.renderSuccessSnippet(w, "Plugins ran successfully. Reloading…")
 }
 
 func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef string) {

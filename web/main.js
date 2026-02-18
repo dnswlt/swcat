@@ -151,7 +151,7 @@ async function initPage(pageId) {
         addSVGListener();
 
         // Reload the page after plugins have completed successfully.
-        document.body.addEventListener("pluginsComplete", () => {
+        document.body.addEventListener("pluginsSuccess", () => {
             setTimeout(() => location.reload(), 1500);
         });
 

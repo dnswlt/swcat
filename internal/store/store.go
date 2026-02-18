@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"path/filepath"
 	"strings"
 
@@ -196,6 +197,23 @@ func WriteExtensions(st Store, path string, ext *api.CatalogExtensions) error {
 		return fmt.Errorf("failed to marshal extensions: %w", err)
 	}
 	return st.WriteFile(path, bs)
+}
+
+func MergeExtensions(st Store, path string, newExts *api.CatalogExtensions) error {
+	extPath := ExtensionFile(path)
+	existingExts, err := ReadExtensions(st, extPath)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("read extensions: %w", err)
+	}
+	if existingExts == nil {
+		existingExts = &api.CatalogExtensions{}
+	}
+	existingExts.Merge(newExts)
+
+	if err := WriteExtensions(st, extPath, existingExts); err != nil {
+		return fmt.Errorf("write extensions: %w", err)
+	}
+	return nil
 }
 
 // CatalogFiles lists all *.yml files under the default catalog directory.

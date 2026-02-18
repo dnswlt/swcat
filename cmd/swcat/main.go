@@ -131,10 +131,13 @@ func runPluginsAndUpdate(r *plugins.Registry, st store.Source) error {
 	allEntities := finder.FindEntities(repository, "")
 	log.Printf("Running plugins on %d entities", len(allEntities))
 	for _, e := range allEntities {
-		// TODO: Collect results and actually update the sidecar files.
-		_, err := r.Run(context.Background(), e)
+		exts, err := r.Run(context.Background(), e)
 		if err != nil {
 			log.Printf("Error running plugins on %s: %v", e.GetRef(), err)
+			continue
+		}
+		if err := store.MergeExtensions(s, e.GetSourceInfo().Path, exts); err != nil {
+			log.Printf("Error updating sidecar for %s: %v", e.GetRef(), err)
 		}
 	}
 	return nil
