@@ -239,7 +239,7 @@ func TestLinter(t *testing.T) {
 }
 
 func TestCustomRuleWithCondition(t *testing.T) {
-	customCheck := func(e *catalog_pb.Entity) []Finding {
+	customCheck := func(rule CustomRule, e *catalog_pb.Entity) []Finding {
 		return []Finding{
 			{
 				RuleName: "custom-check",
@@ -301,7 +301,7 @@ func TestCustomRuleWithCondition(t *testing.T) {
 }
 
 func TestCustomRuleWithSeverityOverride(t *testing.T) {
-	customCheck := func(e *catalog_pb.Entity) []Finding {
+	customCheck := func(rule CustomRule, e *catalog_pb.Entity) []Finding {
 		return []Finding{
 			{
 				RuleName: "custom-check",

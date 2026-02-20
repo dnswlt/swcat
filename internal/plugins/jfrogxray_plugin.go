@@ -11,7 +11,9 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/plugins/maven"
 	"github.com/dnswlt/swcat/internal/plugins/sbom"
@@ -293,7 +295,8 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 	if args.Repository == nil {
 		return nil, fmt.Errorf("repository not set in plugin args")
 	}
-	catalogComponents := p.filterByCatalogEntities(bom, args.Repository)
+	idx := p.newCatalogIndexFromEntities(args.Repository.AllEntities())
+	catalogComponents := p.filterByCatalogEntities(bom, idx)
 
 	if p.spec.OnlyCatalogEntities {
 		bom.Components = catalogComponents
@@ -303,9 +306,12 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 	}
 
 	if p.spec.LintFindingAnnotation != "" {
-		mismatches := p.detectDependencyMismatches(bom, entity, args.Repository)
-		if len(mismatches) > 0 {
-			annotations[p.spec.LintFindingAnnotation] = strings.Join(mismatches, ",")
+		missing, _ := p.detectDependencyMismatches(bom, entity, idx, args.Repository)
+		if len(missing) > 0 {
+			annotations[p.spec.LintFindingAnnotation] = api.LintFinding{
+				CreateTime: time.Now(),
+				Message:    fmt.Sprintf("Dependencies found in BOM, but missing in entity: %s", strings.Join(missing, ",")),
+			}
 		}
 	}
 
@@ -316,13 +322,13 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 
 // detectDependencyMismatches compares bom.Components and all dependencies (including API usage)
 // of the given entity.
-// It returns mismatches as a list of diffs: "-{component}" for components present in bom but missing
-// in entity's deps; "+{component}" for deps present in entity deps, but missing in bom.
+// It returns mismatches as two lists: missing for components present in bom but missing
+// in entity's deps; extra for deps present in entity deps, but missing in bom.
 // It only works for Component entities.
-func (p *JFrogXrayPlugin) detectDependencyMismatches(bom *sbom.MiniBOM, entity catalog.Entity, repository *repo.Repository) []string {
+func (p *JFrogXrayPlugin) detectDependencyMismatches(bom *sbom.MiniBOM, entity catalog.Entity, fullIdx *catalogIndex, repository *repo.Repository) (missing []string, extra []string) {
 	comp, ok := entity.(*catalog.Component)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 
 	// 1. Resolve all declared dependencies of this component.
@@ -346,9 +352,7 @@ func (p *JFrogXrayPlugin) detectDependencyMismatches(bom *sbom.MiniBOM, entity c
 	declaredIdx := p.newCatalogIndexFromEntities(declaredEntities)
 
 	// 3. Compare SBOM components with declared dependencies.
-	var mismatches []string
 	matchedRefs := make(map[string]bool)
-	fullIdx := p.newCatalogIndex(repository)
 
 	for _, bomComp := range bom.Components {
 		if e := declaredIdx.matchComponent(bomComp); e != nil {
@@ -357,7 +361,7 @@ func (p *JFrogXrayPlugin) detectDependencyMismatches(bom *sbom.MiniBOM, entity c
 			// Not in declared deps. Is it in the catalog at all?
 			if e := fullIdx.matchComponent(bomComp); e != nil {
 				// Yes, it's a catalog entity but missing from declared deps.
-				mismatches = append(mismatches, "-"+bomComp)
+				missing = append(missing, bomComp)
 			}
 		}
 	}
@@ -365,19 +369,16 @@ func (p *JFrogXrayPlugin) detectDependencyMismatches(bom *sbom.MiniBOM, entity c
 	// 4. Any declared dependency missing from the SBOM?
 	for ref, e := range declared {
 		if !matchedRefs[ref] {
-			mismatches = append(mismatches, "+"+e.GetMetadata().Name)
+			extra = append(extra, e.GetMetadata().Name)
 		}
 	}
 
-	slices.SortFunc(mismatches, func(a, b string) int {
-		return -strings.Compare(a, b)
-	})
-	return mismatches
+	slices.Sort(missing)
+	slices.Sort(extra)
+	return
 }
 
-func (p *JFrogXrayPlugin) filterByCatalogEntities(bom *sbom.MiniBOM, repository *repo.Repository) []string {
-	idx := p.newCatalogIndex(repository)
-
+func (p *JFrogXrayPlugin) filterByCatalogEntities(bom *sbom.MiniBOM, idx *catalogIndex) []string {
 	var components []string
 	for _, c := range bom.Components {
 		if idx.matchComponent(c) != nil {
@@ -396,10 +397,6 @@ type indexedEntity struct {
 type catalogIndex struct {
 	coordsAnnotation string
 	entities         []indexedEntity
-}
-
-func (p *JFrogXrayPlugin) newCatalogIndex(repository *repo.Repository) *catalogIndex {
-	return p.newCatalogIndexFromEntities(repository.AllEntities())
 }
 
 func (p *JFrogXrayPlugin) newCatalogIndexFromEntities(allEntities []catalog.Entity) *catalogIndex {

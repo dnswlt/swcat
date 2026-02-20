@@ -1,5 +1,7 @@
 package api
 
+import "time"
+
 // MetadataExtensions represents supplemental metadata derived from automated processes.
 // These are merged into the core entity during catalog ingestion.
 type MetadataExtensions struct {
@@ -12,6 +14,14 @@ type MetadataExtensions struct {
 type CatalogExtensions struct {
 	// Entities maps entity references to their auto-generated extensions.
 	Entities map[string]*MetadataExtensions `json:"entities"`
+}
+
+// LintFinding can be used as a JSON-as-string annotation value (e.g. by plugins)
+// to store an indication that an entity has issues.
+// The lintAnnotation custom lint rule can interpret these.
+type LintFinding struct {
+	CreateTime time.Time `json:"createTime"`
+	Message    string    `json:"message"`
 }
 
 // Merge merges other into c.

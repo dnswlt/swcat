@@ -55,7 +55,8 @@ func TestJFrogXrayPlugin_FilterByCatalogEntities(t *testing.T) {
 			},
 		}
 
-		bom.Components = p.filterByCatalogEntities(bom, repository)
+		idx := p.newCatalogIndexFromEntities(repository.AllEntities())
+		bom.Components = p.filterByCatalogEntities(bom, idx)
 
 		want := []string{"org.example:alpha:1.0.0", "org.acme:beta:2.0.0", "gamma"}
 		if len(bom.Components) != len(want) {
@@ -116,6 +117,7 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches(t *testing.T) {
 			CoordsAnnotation: "my/coords",
 		},
 	}
+	fullIdx := p.newCatalogIndexFromEntities(repository.AllEntities())
 
 	t.Run("PerfectMatch", func(t *testing.T) {
 		bom := &sbom.MiniBOM{
@@ -124,9 +126,9 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches(t *testing.T) {
 				"org.acme:beta:2.0.0",
 			},
 		}
-		mismatches := p.detectDependencyMismatches(bom, mainComp, repository)
-		if len(mismatches) != 0 {
-			t.Errorf("expected 0 mismatches, got %v", mismatches)
+		missing, extra := p.detectDependencyMismatches(bom, mainComp, fullIdx, repository)
+		if len(missing) != 0 || len(extra) != 0 {
+			t.Errorf("expected 0 mismatches, got missing=%v, extra=%v", missing, extra)
 		}
 	})
 
@@ -138,10 +140,13 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches(t *testing.T) {
 				"org.example:gamma:1.0.0", // gamma is in catalog but not in main's deps
 			},
 		}
-		mismatches := p.detectDependencyMismatches(bom, mainComp, repository)
-		want := []string{"-org.example:gamma:1.0.0"}
-		if !slices.Equal(mismatches, want) {
-			t.Errorf("got %v, want %v", mismatches, want)
+		missing, extra := p.detectDependencyMismatches(bom, mainComp, fullIdx, repository)
+		wantMissing := []string{"org.example:gamma:1.0.0"}
+		if !slices.Equal(missing, wantMissing) {
+			t.Errorf("got missing=%v, want %v", missing, wantMissing)
+		}
+		if len(extra) != 0 {
+			t.Errorf("got extra=%v, want empty", extra)
 		}
 	})
 
@@ -152,10 +157,13 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches(t *testing.T) {
 				// beta is missing
 			},
 		}
-		mismatches := p.detectDependencyMismatches(bom, mainComp, repository)
-		want := []string{"+beta"}
-		if !slices.Equal(mismatches, want) {
-			t.Errorf("got %v, want %v", mismatches, want)
+		missing, extra := p.detectDependencyMismatches(bom, mainComp, fullIdx, repository)
+		wantExtra := []string{"beta"}
+		if !slices.Equal(extra, wantExtra) {
+			t.Errorf("got extra=%v, want %v", extra, wantExtra)
+		}
+		if len(missing) != 0 {
+			t.Errorf("got missing=%v, want empty", missing)
 		}
 	})
 
@@ -167,11 +175,14 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches(t *testing.T) {
 				// beta missing
 			},
 		}
-		mismatches := p.detectDependencyMismatches(bom, mainComp, repository)
-		// Descending sort sorts '-' before '+'
-		want := []string{"-org.example:gamma:1.0.0", "+beta"}
-		if !slices.Equal(mismatches, want) {
-			t.Errorf("got %v, want %v", mismatches, want)
+		missing, extra := p.detectDependencyMismatches(bom, mainComp, fullIdx, repository)
+		wantMissing := []string{"org.example:gamma:1.0.0"}
+		wantExtra := []string{"beta"}
+		if !slices.Equal(missing, wantMissing) {
+			t.Errorf("got missing=%v, want %v", missing, wantMissing)
+		}
+		if !slices.Equal(extra, wantExtra) {
+			t.Errorf("got extra=%v, want %v", extra, wantExtra)
 		}
 	})
 }

@@ -42,14 +42,9 @@ type Rule struct {
 	Message string `yaml:"message"`
 }
 
-// EntityFinder provides access to other entities in the catalog during linting.
-type EntityFinder interface {
-	Entity(ref *catalog.Ref) catalog.Entity
-}
-
 // CustomCheckFunc is a Go function that performs complex validation on an entity.
 // It may return multiple findings, each with its own message and severity.
-type CustomCheckFunc func(e *catalog_pb.Entity) []Finding
+type CustomCheckFunc func(rule CustomRule, e *catalog_pb.Entity) []Finding
 
 // CustomRule wires a registered CustomCheckFunc into the linter by name.
 type CustomRule struct {
@@ -66,6 +61,8 @@ type CustomRule struct {
 
 	// Func is the key under which the CustomCheckFunc was registered.
 	Func string `yaml:"func"`
+
+	Params map[string]string `yaml:"params"`
 }
 
 // Config represents the linting configuration, typically loaded from a lint.yaml file.
@@ -165,6 +162,7 @@ func NewLinter(config *Config, customChecks map[string]CustomCheckFunc) (*Linter
 	for _, cr := range config.CustomRules {
 		fn, ok := customChecks[cr.Func]
 		if !ok {
+			// Invalid function. Add existing ones to error message for simpler debugging.
 			knownFunctions := make([]string, 0, len(customChecks))
 			for k := range customChecks {
 				knownFunctions = append(knownFunctions, k)
@@ -259,19 +257,24 @@ func (l *Linter) Lint(e *catalog_pb.Entity) []Finding {
 	}
 
 	for _, cr := range l.celRules {
+		if !l.shouldEvaluate(cr.condition, args) {
+			continue
+		}
 		findings = append(findings, l.evaluate(cr, args)...)
 	}
 
 	for _, cr := range l.customRules {
-		if l.shouldEvaluate(cr.condition, args) {
-			customFindings := cr.fn(e)
-			if cr.rule.Severity != "" {
-				for i := range customFindings {
-					customFindings[i].Severity = cr.rule.Severity
-				}
-			}
-			findings = append(findings, customFindings...)
+		if !l.shouldEvaluate(cr.condition, args) {
+			continue
 		}
+		customFindings := cr.fn(cr.rule, e)
+		if cr.rule.Severity != "" {
+			// Overwrite severity with configured value
+			for i := range customFindings {
+				customFindings[i].Severity = cr.rule.Severity
+			}
+		}
+		findings = append(findings, customFindings...)
 	}
 
 	return findings
@@ -290,10 +293,6 @@ func (l *Linter) shouldEvaluate(condition cel.Program, args map[string]any) bool
 }
 
 func (l *Linter) evaluate(cr compiledRule, args map[string]any) []Finding {
-	if !l.shouldEvaluate(cr.condition, args) {
-		return nil
-	}
-
 	out, _, err := cr.check.Eval(args)
 	if err != nil {
 		// Report violation if check evaluation fails (e.g., due to missing field access).
