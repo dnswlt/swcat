@@ -50,7 +50,7 @@ func (s *Server) runPlugins(w http.ResponseWriter, r *http.Request, entityRef st
 	}
 	results := make([]pluginResult, 0, len(entities))
 	for _, e := range entities {
-		exts, err := s.pluginRegistry.Run(r.Context(), e)
+		exts, err := s.pluginRegistry.Run(r.Context(), data.repo, e)
 		results = append(results, pluginResult{entity: e, exts: exts, err: err})
 	}
 

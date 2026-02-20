@@ -8,7 +8,7 @@ import (
 	cdx "github.com/CycloneDX/cyclonedx-go"
 )
 
-type ComponentFilter struct {
+type ComponentsFilter struct {
 	Types       []string `yaml:"types"`
 	NamePattern string   `yaml:"namePattern"`
 }
@@ -28,7 +28,7 @@ func Parse(input string) (*cdx.BOM, error) {
 	return &bom, nil
 }
 
-func FilterComponents(bom *cdx.BOM, filter ComponentFilter) (*MiniBOM, error) {
+func FilterComponents(bom *cdx.BOM, filter ComponentsFilter) (*MiniBOM, error) {
 	var nameRE *regexp.Regexp
 	if filter.NamePattern != "" {
 		r, err := regexp.Compile(filter.NamePattern)

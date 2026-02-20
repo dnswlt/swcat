@@ -68,7 +68,7 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 	if err != nil && !os.IsNotExist(err) {
 		t.Fatalf("Failed to read lint config from %s: %v", lintConfigPath, err)
 	} else if lintCfg != nil {
-		linter, err = lint.NewLinter(lintCfg)
+		linter, err = lint.NewLinter(lintCfg, nil)
 		if err != nil {
 			t.Fatalf("Failed to create linter: %v", err)
 		}

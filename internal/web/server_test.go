@@ -234,7 +234,7 @@ func TestDetail_LintFindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to load lint config: %v", err)
 	}
-	linter, err := lint.NewLinter(lintCfg)
+	linter, err := lint.NewLinter(lintCfg, nil)
 	if err != nil {
 		t.Fatalf("failed to create linter: %v", err)
 	}

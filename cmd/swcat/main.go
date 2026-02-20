@@ -131,7 +131,7 @@ func runPluginsAndUpdate(r *plugins.Registry, st store.Source) error {
 	allEntities := finder.FindEntities(repository, "")
 	log.Printf("Running plugins on %d entities", len(allEntities))
 	for _, e := range allEntities {
-		exts, err := r.Run(context.Background(), e)
+		exts, err := r.Run(context.Background(), repository, e)
 		if err != nil {
 			log.Printf("Error running plugins on %s: %v", e.GetRef(), err)
 			continue
@@ -255,7 +255,7 @@ func main() {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		log.Printf("Warning: failed to load lint config: %v", err)
 	} else if lintCfg != nil {
-		linter, err = lint.NewLinter(lintCfg)
+		linter, err = lint.NewLinter(lintCfg, lint.KnownCustomChecks)
 		if err != nil {
 			log.Fatalf("Error: failed to create linter: %v", err)
 		} else {

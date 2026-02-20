@@ -12,6 +12,7 @@ import (
 	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/query"
+	"github.com/dnswlt/swcat/internal/repo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -57,6 +58,11 @@ type PluginArgs struct {
 	// The registry which initiated the plugin execution.
 	Registry *Registry
 
+	// The repository holding all catalog entities.
+	// This allows plugins to retrieve information about other entities
+	// than the one for which the plugin is executed.
+	Repository *repo.Repository
+
 	// The base directory under which the plugin should create subfolders,
 	// in case it generates output files for downstream plugins to use.
 	//
@@ -88,8 +94,9 @@ type FilesReturnValue interface {
 // EmptyArgs returns a copy of this instance with an empty Args map.
 func (a *PluginArgs) EmptyArgs() *PluginArgs {
 	return &PluginArgs{
-		Registry: a.Registry,
-		TempDir:  a.TempDir,
+		Registry:   a.Registry,
+		Repository: a.Repository,
+		TempDir:    a.TempDir,
 	}
 }
 
@@ -169,7 +176,7 @@ func (r *Registry) Plugins() []string {
 	return keys
 }
 
-func (r *Registry) Run(ctx context.Context, e catalog.Entity) (*api.CatalogExtensions, error) {
+func (r *Registry) Run(ctx context.Context, repository *repo.Repository, e catalog.Entity) (*api.CatalogExtensions, error) {
 	tempDir, err := os.MkdirTemp("", "swcat-plugins")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp dir for plugin runs: %w", err)
@@ -185,8 +192,9 @@ func (r *Registry) Run(ctx context.Context, e catalog.Entity) (*api.CatalogExten
 	execFunc := func(name string, p Plugin) error {
 		log.Printf("Executing plugin %s for %s", name, e.GetRef().String())
 		res, err := p.Execute(ctx, e, &PluginArgs{
-			Registry: r,
-			TempDir:  tempDir,
+			Registry:   r,
+			Repository: repository,
+			TempDir:    tempDir,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to execute plugin %s: %v", name, err)

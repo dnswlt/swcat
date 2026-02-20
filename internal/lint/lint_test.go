@@ -140,34 +140,31 @@ func TestCELComponentViaJSON(t *testing.T) {
 
 func TestLinter(t *testing.T) {
 	config := &Config{
-		CommonRules: []Rule{
+		CELRules: []Rule{
 			{
 				Name:     "name-too-short",
 				Severity: SeverityError,
 				Check:    "metadata.name.size() > 3",
 				Message:  "Entity name must be longer than 3 characters",
 			},
-		},
-		KindRules: map[string][]Rule{
-			"Component": {
-				{
-					Name:     "component-type-required",
-					Severity: SeverityError,
-					Check:    "spec.type != ''",
-					Message:  "Component type is required",
-				},
-				{
-					Name:      "production-needs-lifecycle",
-					Severity:  SeverityWarn,
-					Condition: "spec.type == 'service'",
-					Check:     "spec.lifecycle == 'production'",
-					Message:   "Services should ideally be in production",
-				},
+			{
+				Name:      "component-type-required",
+				Severity:  SeverityError,
+				Condition: "kind == 'component'",
+				Check:     "spec.type != ''",
+				Message:   "Component type is required",
+			},
+			{
+				Name:      "production-needs-lifecycle",
+				Severity:  SeverityWarn,
+				Condition: "kind == 'component' && spec.type == 'service'",
+				Check:     "spec.lifecycle == 'production'",
+				Message:   "Services should ideally be in production",
 			},
 		},
 	}
 
-	linter, err := NewLinter(config)
+	linter, err := NewLinter(config, nil)
 	if err != nil {
 		t.Fatalf("NewLinter: %v", err)
 	}
@@ -238,5 +235,110 @@ func TestLinter(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCustomRuleWithCondition(t *testing.T) {
+	customCheck := func(e *catalog_pb.Entity) []Finding {
+		return []Finding{
+			{
+				RuleName: "custom-check",
+				Severity: SeverityError,
+				Message:  "Custom check failed",
+			},
+		}
+	}
+
+	config := &Config{
+		CustomRules: []CustomRule{
+			{
+				Name:      "custom-on-component",
+				Condition: "kind == 'component'",
+				Func:      "my-custom-check",
+			},
+		},
+	}
+
+	linter, err := NewLinter(config, map[string]CustomCheckFunc{
+		"my-custom-check": customCheck,
+	})
+	if err != nil {
+		t.Fatalf("NewLinter: %v", err)
+	}
+
+	tests := []struct {
+		name         string
+		entity       catalog.Entity
+		wantFindings int
+	}{
+		{
+			"component matches condition",
+			&catalog.Component{
+				Metadata: &catalog.Metadata{Name: "my-service"},
+				Spec:     &catalog.ComponentSpec{Type: "service"},
+			},
+			1,
+		},
+		{
+			"system does not match condition",
+			&catalog.System{
+				Metadata: &catalog.Metadata{Name: "my-system"},
+				Spec:     &catalog.SystemSpec{},
+			},
+			0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pb := catalog.ToPB(tt.entity)
+			findings := linter.Lint(pb)
+			if len(findings) != tt.wantFindings {
+				t.Errorf("got %d findings, want %d", len(findings), tt.wantFindings)
+			}
+		})
+	}
+}
+
+func TestCustomRuleWithSeverityOverride(t *testing.T) {
+	customCheck := func(e *catalog_pb.Entity) []Finding {
+		return []Finding{
+			{
+				RuleName: "custom-check",
+				Severity: SeverityError,
+				Message:  "Custom check failed",
+			},
+		}
+	}
+
+	config := &Config{
+		CustomRules: []CustomRule{
+			{
+				Name:     "custom-on-component",
+				Severity: SeverityInfo,
+				Func:     "my-custom-check",
+			},
+		},
+	}
+
+	linter, err := NewLinter(config, map[string]CustomCheckFunc{
+		"my-custom-check": customCheck,
+	})
+	if err != nil {
+		t.Fatalf("NewLinter: %v", err)
+	}
+
+	comp := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "my-service"},
+		Spec:     &catalog.ComponentSpec{Type: "service"},
+	}
+	pb := catalog.ToPB(comp)
+	findings := linter.Lint(pb)
+
+	if len(findings) != 1 {
+		t.Fatalf("got %d findings, want 1", len(findings))
+	}
+	if findings[0].Severity != SeverityInfo {
+		t.Errorf("got severity %q, want %q", findings[0].Severity, SeverityInfo)
 	}
 }

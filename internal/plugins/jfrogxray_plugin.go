@@ -15,6 +15,7 @@ import (
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/plugins/maven"
 	"github.com/dnswlt/swcat/internal/plugins/sbom"
+	"github.com/dnswlt/swcat/internal/repo"
 	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
 )
@@ -34,10 +35,15 @@ type jfrogXrayPluginSpec struct {
 	// Annotation in which to find the Docker image name
 	ImageAnnotation string `yaml:"imageAnnotation"`
 	// Annotation in which to find the Artifactory repository name
-	RepositoryAnnotation string               `yaml:"repositoryAnnotation"`
-	Auth                 jfrogAuth            `yaml:"auth"`
-	ComponentsFilter     sbom.ComponentFilter `yaml:"componentsFilter"`
-	TargetAnnotation     string               `yaml:"targetAnnotation"`
+	RepositoryAnnotation string                `yaml:"repositoryAnnotation"`
+	Auth                 jfrogAuth             `yaml:"auth"`
+	ComponentsFilter     sbom.ComponentsFilter `yaml:"componentsFilter"`
+	// If true, only BOM dependencies are retained that can be matched to
+	// catalog entities.
+	OnlyCatalogEntities   bool   `yaml:"onlyCatalogEntities"`
+	CoordsAnnotation      string `yaml:"coordsAnnotation"`
+	TargetAnnotation      string `yaml:"targetAnnotation"`
+	LintFindingAnnotation string `yaml:"lintFindingAnnotation"`
 }
 
 type JFrogXrayPlugin struct {
@@ -74,7 +80,7 @@ func NewJFrogXrayBOMPlugin(name string, specYaml *yaml.Node) (*JFrogXrayPlugin, 
 		return nil, fmt.Errorf("invalid targetAnnotation %q for plugin %s", spec.TargetAnnotation, name)
 	}
 
-	if spec.Auth.MavenServerID != "" {
+	if spec.Auth.MavenServerID != "" && spec.Auth.Username == "" {
 		auth, err := readAuthFromMavenSettings(spec.Auth.MavenSettingsPath, spec.Auth.MavenServerID)
 		if err != nil {
 			log.Printf("Failed to use maven settings for jFrog auth: %v", err)
@@ -284,9 +290,166 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 	}
 	log.Printf("Processed SBOM %s for entity %s: %d components", bom.Name, entity.GetQName(), len(bom.Components))
 
+	if args.Repository == nil {
+		return nil, fmt.Errorf("repository not set in plugin args")
+	}
+	catalogComponents := p.filterByCatalogEntities(bom, args.Repository)
+
+	if p.spec.OnlyCatalogEntities {
+		bom.Components = catalogComponents
+	}
+	annotations := map[string]any{
+		p.spec.TargetAnnotation: bom,
+	}
+
+	if p.spec.LintFindingAnnotation != "" {
+		mismatches := p.detectDependencyMismatches(bom, entity, args.Repository)
+		if len(mismatches) > 0 {
+			annotations[p.spec.LintFindingAnnotation] = strings.Join(mismatches, ",")
+		}
+	}
+
 	return &PluginResult{
-		Annotations: map[string]any{
-			p.spec.TargetAnnotation: bom,
-		},
+		Annotations: annotations,
 	}, nil
+}
+
+// detectDependencyMismatches compares bom.Components and all dependencies (including API usage)
+// of the given entity.
+// It returns mismatches as a list of diffs: "-{component}" for components present in bom but missing
+// in entity's deps; "+{component}" for deps present in entity deps, but missing in bom.
+// It only works for Component entities.
+func (p *JFrogXrayPlugin) detectDependencyMismatches(bom *sbom.MiniBOM, entity catalog.Entity, repository *repo.Repository) []string {
+	comp, ok := entity.(*catalog.Component)
+	if !ok {
+		return nil
+	}
+
+	// 1. Resolve all declared dependencies of this component.
+	declared := make(map[string]catalog.Entity)
+	add := func(refs []*catalog.LabelRef) {
+		for _, r := range refs {
+			if e := repository.Entity(r.Ref); e != nil {
+				declared[e.GetRef().String()] = e
+			}
+		}
+	}
+	add(comp.Spec.DependsOn)
+	add(comp.Spec.ConsumesAPIs)
+	add(comp.Spec.ProvidesAPIs)
+
+	// 2. Create index for declared dependencies for fast matching.
+	declaredEntities := make([]catalog.Entity, 0, len(declared))
+	for _, e := range declared {
+		declaredEntities = append(declaredEntities, e)
+	}
+	declaredIdx := p.newCatalogIndexFromEntities(declaredEntities)
+
+	// 3. Compare SBOM components with declared dependencies.
+	var mismatches []string
+	matchedRefs := make(map[string]bool)
+	fullIdx := p.newCatalogIndex(repository)
+
+	for _, bomComp := range bom.Components {
+		if e := declaredIdx.matchComponent(bomComp); e != nil {
+			matchedRefs[e.GetRef().String()] = true
+		} else {
+			// Not in declared deps. Is it in the catalog at all?
+			if e := fullIdx.matchComponent(bomComp); e != nil {
+				// Yes, it's a catalog entity but missing from declared deps.
+				mismatches = append(mismatches, "-"+bomComp)
+			}
+		}
+	}
+
+	// 4. Any declared dependency missing from the SBOM?
+	for ref, e := range declared {
+		if !matchedRefs[ref] {
+			mismatches = append(mismatches, "+"+e.GetMetadata().Name)
+		}
+	}
+
+	slices.SortFunc(mismatches, func(a, b string) int {
+		return -strings.Compare(a, b)
+	})
+	return mismatches
+}
+
+func (p *JFrogXrayPlugin) filterByCatalogEntities(bom *sbom.MiniBOM, repository *repo.Repository) []string {
+	idx := p.newCatalogIndex(repository)
+
+	var components []string
+	for _, c := range bom.Components {
+		if idx.matchComponent(c) != nil {
+			components = append(components, c)
+		}
+	}
+	return components
+}
+
+type indexedEntity struct {
+	entity    catalog.Entity
+	g, a      string
+	hasCoords bool
+}
+
+type catalogIndex struct {
+	coordsAnnotation string
+	entities         []indexedEntity
+}
+
+func (p *JFrogXrayPlugin) newCatalogIndex(repository *repo.Repository) *catalogIndex {
+	return p.newCatalogIndexFromEntities(repository.AllEntities())
+}
+
+func (p *JFrogXrayPlugin) newCatalogIndexFromEntities(allEntities []catalog.Entity) *catalogIndex {
+	entities := make([]indexedEntity, 0, len(allEntities))
+	for _, e := range allEntities {
+		info := indexedEntity{entity: e}
+		if p.spec.CoordsAnnotation != "" {
+			if coords, ok := e.GetMetadata().Annotations[p.spec.CoordsAnnotation]; ok {
+				parts := strings.Split(coords, ":")
+				if len(parts) == 1 {
+					info.a = parts[0]
+				} else if len(parts) >= 2 {
+					info.g = parts[0]
+					info.a = parts[1]
+				}
+				info.hasCoords = true
+			}
+		}
+		entities = append(entities, info)
+	}
+	return &catalogIndex{
+		coordsAnnotation: p.spec.CoordsAnnotation,
+		entities:         entities,
+	}
+}
+
+func (idx *catalogIndex) matchComponent(comp string) catalog.Entity {
+	parts := strings.Split(comp, ":")
+
+	if len(parts) == 1 {
+		return idx.matchEntity("", parts[0])
+	} else if len(parts) >= 2 {
+		return idx.matchEntity(parts[0], parts[1])
+	}
+	return nil
+}
+
+func (idx *catalogIndex) matchEntity(g, a string) catalog.Entity {
+	if a == "" {
+		return nil
+	}
+	for _, info := range idx.entities {
+		if info.hasCoords {
+			if info.a == a && (info.g == "" || g == "" || info.g == g) {
+				return info.entity
+			}
+		}
+		if info.entity.GetMetadata().Name == a {
+			return info.entity
+		}
+	}
+	return nil
 }

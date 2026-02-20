@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
@@ -20,7 +21,7 @@ const (
 	SeverityInfo  Severity = "info"
 )
 
-// Rule defines a single linting rule to be evaluated against catalog entities.
+// Rule defines a single CEL-based linting rule evaluated against catalog entities.
 type Rule struct {
 	// Name is a unique identifier for the rule.
 	Name string `yaml:"name"`
@@ -41,14 +42,41 @@ type Rule struct {
 	Message string `yaml:"message"`
 }
 
+// EntityFinder provides access to other entities in the catalog during linting.
+type EntityFinder interface {
+	Entity(ref *catalog.Ref) catalog.Entity
+}
+
+// CustomCheckFunc is a Go function that performs complex validation on an entity.
+// It may return multiple findings, each with its own message and severity.
+type CustomCheckFunc func(e *catalog_pb.Entity) []Finding
+
+// CustomRule wires a registered CustomCheckFunc into the linter by name.
+type CustomRule struct {
+	// Name is a unique identifier for the rule, used in findings.
+	Name string `yaml:"name"`
+
+	// Severity indicates the importance of the rule.
+	// If set, it overrides the severity of all findings returned by the function.
+	Severity Severity `yaml:"severity,omitempty"`
+
+	// Condition is an optional CEL expression.
+	// If present, the rule is only evaluated if the condition returns true.
+	Condition string `yaml:"condition,omitempty"`
+
+	// Func is the key under which the CustomCheckFunc was registered.
+	Func string `yaml:"func"`
+}
+
 // Config represents the linting configuration, typically loaded from a lint.yaml file.
 type Config struct {
-	// CommonRules are applied to all entities, regardless of their Kind.
-	CommonRules []Rule `yaml:"commonRules,omitempty"`
+	// CELRules are evaluated via CEL expressions against every entity (use
+	// condition to restrict to specific kinds).
+	CELRules []Rule `yaml:"celRules,omitempty"`
 
-	// KindRules are applied only to entities of the specified Kind.
-	// The map key is the entity Kind (e.g., "Component", "System").
-	KindRules map[string][]Rule `yaml:"kindRules,omitempty"`
+	// CustomRules invoke registered Go functions for complex validation that
+	// cannot be expressed cleanly in CEL.
+	CustomRules []CustomRule `yaml:"customRules,omitempty"`
 
 	// ReportedGroups is an optional list of group names (qualified names).
 	// If set, the lint report will only show these groups as individual cards.
@@ -86,17 +114,26 @@ type compiledRule struct {
 	check     cel.Program
 }
 
+type compiledCustomRule struct {
+	rule      CustomRule
+	condition cel.Program
+	fn        CustomCheckFunc
+}
+
 // Linter provides efficient evaluation of rules against multiple entities.
 type Linter struct {
 	env            *cel.Env
-	commonRules    []compiledRule
-	kindRules      map[string][]compiledRule
+	celRules       []compiledRule
+	customRules    []compiledCustomRule
 	reportedGroups []string
 }
 
 // NewLinter creates a new Linter from the given configuration.
-// It compiles all CEL expressions once and caches them for subsequent evaluations.
-func NewLinter(config *Config) (*Linter, error) {
+// CEL expressions are compiled once and cached for subsequent evaluations.
+// customChecks maps function names to their implementations; it may be nil
+// if the config contains no customRules. NewLinter returns an error if any
+// customRule references a name not present in customChecks.
+func NewLinter(config *Config, customChecks map[string]CustomCheckFunc) (*Linter, error) {
 	env, err := cel.NewEnv(
 		cel.Types(&catalog_pb.Entity{}),
 		cel.Variable("kind", cel.StringType),
@@ -114,27 +151,32 @@ func NewLinter(config *Config) (*Linter, error) {
 
 	l := &Linter{
 		env:            env,
-		kindRules:      make(map[string][]compiledRule),
 		reportedGroups: reportedGroups,
 	}
 
-	for _, r := range config.CommonRules {
+	for _, r := range config.CELRules {
 		cr, err := l.compileRule(r)
 		if err != nil {
 			return nil, err
 		}
-		l.commonRules = append(l.commonRules, cr)
+		l.celRules = append(l.celRules, cr)
 	}
 
-	for kind, rules := range config.KindRules {
-		lowerKind := strings.ToLower(kind)
-		for _, r := range rules {
-			cr, err := l.compileRule(r)
-			if err != nil {
-				return nil, err
+	for _, cr := range config.CustomRules {
+		fn, ok := customChecks[cr.Func]
+		if !ok {
+			knownFunctions := make([]string, 0, len(customChecks))
+			for k := range customChecks {
+				knownFunctions = append(knownFunctions, k)
 			}
-			l.kindRules[lowerKind] = append(l.kindRules[lowerKind], cr)
+			slices.Sort(knownFunctions)
+			return nil, fmt.Errorf("custom rule %q references unknown function %q (available: %s)", cr.Name, cr.Func, strings.Join(knownFunctions, ", "))
 		}
+		ccr, err := l.compileCustomRule(cr, fn)
+		if err != nil {
+			return nil, err
+		}
+		l.customRules = append(l.customRules, ccr)
 	}
 
 	return l, nil
@@ -157,18 +199,25 @@ func (l *Linter) ReportedGroups() []string {
 	return l.reportedGroups
 }
 
+func (l *Linter) compileCondition(name, condition string) (cel.Program, error) {
+	if condition == "" {
+		return nil, nil
+	}
+	ast, iss := l.env.Compile(condition)
+	if iss.Err() != nil {
+		return nil, fmt.Errorf("rule %q: condition compilation failed: %v", name, iss.Err())
+	}
+	prog, err := l.env.Program(ast)
+	if err != nil {
+		return nil, fmt.Errorf("rule %q: condition program failed: %v", name, err)
+	}
+	return prog, nil
+}
+
 func (l *Linter) compileRule(r Rule) (compiledRule, error) {
-	var condition cel.Program
-	if r.Condition != "" {
-		ast, iss := l.env.Compile(r.Condition)
-		if iss.Err() != nil {
-			return compiledRule{}, fmt.Errorf("rule %q: condition compilation failed: %v", r.Name, iss.Err())
-		}
-		var err error
-		condition, err = l.env.Program(ast)
-		if err != nil {
-			return compiledRule{}, fmt.Errorf("rule %q: condition program failed: %v", r.Name, err)
-		}
+	condition, err := l.compileCondition(r.Name, r.Condition)
+	if err != nil {
+		return compiledRule{}, err
 	}
 
 	ast, iss := l.env.Compile(r.Check)
@@ -187,6 +236,18 @@ func (l *Linter) compileRule(r Rule) (compiledRule, error) {
 	}, nil
 }
 
+func (l *Linter) compileCustomRule(cr CustomRule, fn CustomCheckFunc) (compiledCustomRule, error) {
+	condition, err := l.compileCondition(cr.Name, cr.Condition)
+	if err != nil {
+		return compiledCustomRule{}, err
+	}
+	return compiledCustomRule{
+		rule:      cr,
+		condition: condition,
+		fn:        fn,
+	}, nil
+}
+
 // Lint evaluates all applicable rules against the given entity.
 func (l *Linter) Lint(e *catalog_pb.Entity) []Finding {
 	var findings []Finding
@@ -197,31 +258,40 @@ func (l *Linter) Lint(e *catalog_pb.Entity) []Finding {
 		"spec":     extractSpec(e),
 	}
 
-	// Apply common rules.
-	for _, cr := range l.commonRules {
+	for _, cr := range l.celRules {
 		findings = append(findings, l.evaluate(cr, args)...)
 	}
 
-	// Apply kind-specific rules.
-	if kr, ok := l.kindRules[strings.ToLower(e.Kind)]; ok {
-		for _, r := range kr {
-			findings = append(findings, l.evaluate(r, args)...)
+	for _, cr := range l.customRules {
+		if l.shouldEvaluate(cr.condition, args) {
+			customFindings := cr.fn(e)
+			if cr.rule.Severity != "" {
+				for i := range customFindings {
+					customFindings[i].Severity = cr.rule.Severity
+				}
+			}
+			findings = append(findings, customFindings...)
 		}
 	}
 
 	return findings
 }
 
+func (l *Linter) shouldEvaluate(condition cel.Program, args map[string]any) bool {
+	if condition == nil {
+		return true
+	}
+	out, _, err := condition.Eval(args)
+	if err != nil {
+		// Skip rule if condition evaluation fails.
+		return false
+	}
+	return out.Value() == true
+}
+
 func (l *Linter) evaluate(cr compiledRule, args map[string]any) []Finding {
-	if cr.condition != nil {
-		out, _, err := cr.condition.Eval(args)
-		if err != nil {
-			// Skip rule if condition evaluation fails.
-			return nil
-		}
-		if out.Value() != true {
-			return nil
-		}
+	if !l.shouldEvaluate(cr.condition, args) {
+		return nil
 	}
 
 	out, _, err := cr.check.Eval(args)

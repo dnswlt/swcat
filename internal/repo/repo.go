@@ -65,6 +65,14 @@ func (r *Repository) Size() int {
 	return len(r.allEntities)
 }
 
+func (r *Repository) AllEntities() []catalog.Entity {
+	entities := make([]catalog.Entity, 0, len(r.allEntities))
+	for _, e := range r.allEntities {
+		entities = append(entities, e)
+	}
+	return entities
+}
+
 func (r *Repository) setEntity(e catalog.Entity) error {
 	qname := e.GetRef().QName()
 
