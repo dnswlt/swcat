@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/plugins/maven"
 	"github.com/dnswlt/swcat/internal/plugins/sbom"
 	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
@@ -19,6 +21,10 @@ import (
 type jfrogAuth struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+	// If set, the plugin will attempt to get user/pass from MavenSettingsPath
+	// (or the default ~/.m2/settings) for the specified server.
+	MavenServerID     string `yaml:"mavenServerID"`
+	MavenSettingsPath string `yaml:"mavenSettingsPath"`
 }
 
 type jfrogXrayPluginSpec struct {
@@ -38,6 +44,22 @@ type JFrogXrayPlugin struct {
 	spec *jfrogXrayPluginSpec
 }
 
+func readAuthFromMavenSettings(path string, serverID string) (jfrogAuth, error) {
+	settings, err := maven.ReadSettings(path)
+	if err != nil {
+		return jfrogAuth{}, err
+	}
+	server, err := settings.ServerByID(serverID)
+	if err != nil {
+		return jfrogAuth{}, err
+	}
+	return jfrogAuth{
+		Username:      server.Username,
+		Password:      server.Password,
+		MavenServerID: server.ID,
+	}, nil
+}
+
 func NewJFrogXrayBOMPlugin(name string, specYaml *yaml.Node) (*JFrogXrayPlugin, error) {
 	var spec jfrogXrayPluginSpec
 	if err := specYaml.Decode(&spec); err != nil {
@@ -46,6 +68,18 @@ func NewJFrogXrayBOMPlugin(name string, specYaml *yaml.Node) (*JFrogXrayPlugin, 
 
 	if spec.JFrogURL == "" {
 		return nil, fmt.Errorf("field 'jfrogURL' not specified for plugin %s", name)
+	}
+	if !catalog.IsValidAnnotation(spec.TargetAnnotation, "true") {
+		return nil, fmt.Errorf("invalid targetAnnotation %q for plugin %s", spec.TargetAnnotation, name)
+	}
+
+	if spec.Auth.MavenServerID != "" {
+		auth, err := readAuthFromMavenSettings(spec.Auth.MavenSettingsPath, spec.Auth.MavenServerID)
+		if err != nil {
+			log.Printf("Failed to use maven settings for jFrog auth: %v", err)
+		} else {
+			spec.Auth = auth
+		}
 	}
 
 	return &JFrogXrayPlugin{
