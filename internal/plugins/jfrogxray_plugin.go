@@ -23,12 +23,12 @@ type jfrogAuth struct {
 	Password string `yaml:"password"`
 	// If set, the plugin will attempt to get user/pass from MavenSettingsPath
 	// (or the default ~/.m2/settings) for the specified server.
-	MavenServerID     string `yaml:"mavenServerID"`
+	MavenServerID     string `yaml:"mavenServerId"`
 	MavenSettingsPath string `yaml:"mavenSettingsPath"`
 }
 
 type jfrogXrayPluginSpec struct {
-	JFrogURL          string `yaml:"jfrogURL"`
+	JFrogURL          string `yaml:"jfrogUrl"`
 	DefaultRepository string `yaml:"defaultRepository"`
 	// Annotation in which to find the Docker image name
 	ImageAnnotation string `yaml:"imageAnnotation"`
@@ -78,6 +78,7 @@ func NewJFrogXrayBOMPlugin(name string, specYaml *yaml.Node) (*JFrogXrayPlugin, 
 		if err != nil {
 			log.Printf("Failed to use maven settings for jFrog auth: %v", err)
 		} else {
+			log.Printf("Successfully read maven settings for server ID %s from %s", spec.Auth.MavenServerID, spec.Auth.MavenSettingsPath)
 			spec.Auth = auth
 		}
 	}
@@ -244,10 +245,14 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 		}
 	}
 
+	// Fetch CycloneDX SBOM from jFrog XRay
 	sbomStr, err := p.fetchSBOM(ctx, repository, image)
 	if err != nil {
 		return nil, err
 	}
+
+	// Process SBOM and extract flat string list of component coordinates
+	// (group:artifact).
 	sbomObj, err := sbom.Parse(sbomStr)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse SBOM: %w", err)
@@ -256,9 +261,19 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 	if err != nil {
 		return nil, fmt.Errorf("filtering components: %w", err)
 	}
+	var version string
+	if sbomObj.Metadata != nil && sbomObj.Metadata.Component != nil {
+		version = sbomObj.Metadata.Component.Version
+	}
+	log.Printf("Processed SBOM (version %q) for entity %s: %d components", version, entity.GetQName(), len(components))
+
+	names := make([]string, 0, len(components))
+	for _, c := range components {
+		names = append(names, c.Name)
+	}
 	return &PluginResult{
 		Annotations: map[string]any{
-			p.spec.TargetAnnotation: components,
+			p.spec.TargetAnnotation: names,
 		},
 	}, nil
 }
