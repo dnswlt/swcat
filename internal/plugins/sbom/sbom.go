@@ -13,10 +13,9 @@ type ComponentFilter struct {
 	NamePattern string   `yaml:"namePattern"`
 }
 
-type Component struct {
-	Type    string `json:"type"`
-	Name    string `json:"name"`
-	Version string `json:"version"`
+type MiniBOM struct {
+	Name       string   `json:"name"`
+	Components []string `json:"components"`
 }
 
 func Parse(input string) (*cdx.BOM, error) {
@@ -29,7 +28,7 @@ func Parse(input string) (*cdx.BOM, error) {
 	return &bom, nil
 }
 
-func FilterComponents(bom *cdx.BOM, filter ComponentFilter) ([]Component, error) {
+func FilterComponents(bom *cdx.BOM, filter ComponentFilter) (*MiniBOM, error) {
 	var nameRE *regexp.Regexp
 	if filter.NamePattern != "" {
 		r, err := regexp.Compile(filter.NamePattern)
@@ -45,7 +44,7 @@ func FilterComponents(bom *cdx.BOM, filter ComponentFilter) ([]Component, error)
 	if bom.Components == nil {
 		return nil, nil
 	}
-	var result []Component
+	var components []string
 	for _, comp := range *bom.Components {
 		if nameRE != nil && !nameRE.MatchString(comp.Name) {
 			continue
@@ -53,11 +52,18 @@ func FilterComponents(bom *cdx.BOM, filter ComponentFilter) ([]Component, error)
 		if len(types) > 0 && !types[string(comp.Type)] {
 			continue
 		}
-		result = append(result, Component{
-			Type:    string(comp.Type),
-			Name:    comp.Name,
-			Version: comp.Version,
-		})
+		components = append(components, comp.Name+":"+comp.Version)
 	}
-	return result, nil
+
+	var name, version string
+	if bom.Metadata != nil && bom.Metadata.Component != nil {
+		c := bom.Metadata.Component
+		name = c.Name
+		version = c.Version
+	}
+
+	return &MiniBOM{
+		Name:       name + ":" + version,
+		Components: components,
+	}, nil
 }

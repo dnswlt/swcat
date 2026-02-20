@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/plugins/sbom"
 	"gopkg.in/yaml.v3"
 )
 
@@ -64,8 +65,7 @@ func newTestPlugin(t *testing.T, jfrogURL string) *JFrogXrayPlugin {
 	specYAML := fmt.Sprintf(`
 jfrogUrl: %s
 defaultRepository: docker-local
-componentsAnnotation: swcat/components
-versionAnnotation: swcat/version
+targetAnnotation: swcat/bom
 `, jfrogURL)
 	var doc yaml.Node
 	if err := yaml.Unmarshal([]byte(specYAML), &doc); err != nil {
@@ -138,26 +138,21 @@ func TestJFrogXrayPlugin_Execute(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	components, ok := result.Annotations["swcat/components"].([]string)
+	bom, ok := result.Annotations["swcat/bom"].(*sbom.MiniBOM)
 	if !ok {
-		t.Fatalf("swcat/components annotation missing or wrong type: %v", result.Annotations)
+		t.Fatalf("swcat/bom annotation missing or wrong type: %v", result.Annotations)
+	}
+	if want := "myimage:" + latestVersion; bom.Name != want {
+		t.Errorf("bom.Name = %q, want %q", bom.Name, want)
 	}
 	wantComponents := []string{"com.example:alpha:1.0.0", "org.acme:beta:2.5.0"}
-	if len(components) != len(wantComponents) {
-		t.Fatalf("components = %v, want %v", components, wantComponents)
+	if len(bom.Components) != len(wantComponents) {
+		t.Fatalf("bom.Components = %v, want %v", bom.Components, wantComponents)
 	}
 	for i, c := range wantComponents {
-		if components[i] != c {
-			t.Errorf("components[%d] = %q, want %q", i, components[i], c)
+		if bom.Components[i] != c {
+			t.Errorf("bom.Components[%d] = %q, want %q", i, bom.Components[i], c)
 		}
-	}
-
-	version, ok := result.Annotations["swcat/version"].(string)
-	if !ok {
-		t.Fatalf("swcat/version annotation missing or wrong type")
-	}
-	if version != latestVersion {
-		t.Errorf("version = %q, want %q", version, latestVersion)
 	}
 }
 
@@ -201,11 +196,11 @@ func TestJFrogXrayPlugin_Execute_Fallback(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	version, ok := result.Annotations["swcat/version"].(string)
+	bom, ok := result.Annotations["swcat/bom"].(*sbom.MiniBOM)
 	if !ok {
-		t.Fatalf("swcat/version annotation missing or wrong type")
+		t.Fatalf("swcat/bom annotation missing or wrong type: %v", result.Annotations)
 	}
-	if version != fallbackVersion {
-		t.Errorf("version = %q, want %q (fallback)", version, fallbackVersion)
+	if want := "myimage:" + fallbackVersion; bom.Name != want {
+		t.Errorf("bom.Name = %q, want %q (fallback)", bom.Name, want)
 	}
 }

@@ -37,8 +37,7 @@ type jfrogXrayPluginSpec struct {
 	RepositoryAnnotation string               `yaml:"repositoryAnnotation"`
 	Auth                 jfrogAuth            `yaml:"auth"`
 	ComponentsFilter     sbom.ComponentFilter `yaml:"componentsFilter"`
-	ComponentsAnnotation string               `yaml:"componentsAnnotation"`
-	VersionAnnotation    string               `yaml:"versionAnnotation"`
+	TargetAnnotation     string               `yaml:"targetAnnotation"`
 }
 
 type JFrogXrayPlugin struct {
@@ -71,11 +70,8 @@ func NewJFrogXrayBOMPlugin(name string, specYaml *yaml.Node) (*JFrogXrayPlugin, 
 	if spec.JFrogURL == "" {
 		return nil, fmt.Errorf("field 'jfrogURL' not specified for plugin %s", name)
 	}
-	if !catalog.IsValidAnnotation(spec.ComponentsAnnotation, "true") {
-		return nil, fmt.Errorf("invalid componentsAnnotation %q for plugin %s", spec.ComponentsAnnotation, name)
-	}
-	if !catalog.IsValidAnnotation(spec.VersionAnnotation, "true") {
-		return nil, fmt.Errorf("invalid versionAnnotation %q for plugin %s", spec.VersionAnnotation, name)
+	if !catalog.IsValidAnnotation(spec.TargetAnnotation, "true") {
+		return nil, fmt.Errorf("invalid targetAnnotation %q for plugin %s", spec.TargetAnnotation, name)
 	}
 
 	if spec.Auth.MavenServerID != "" {
@@ -282,25 +278,15 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse SBOM: %w", err)
 	}
-	components, err := sbom.FilterComponents(sbomObj, p.spec.ComponentsFilter)
+	bom, err := sbom.FilterComponents(sbomObj, p.spec.ComponentsFilter)
 	if err != nil {
 		return nil, fmt.Errorf("filtering components: %w", err)
 	}
-	var version string
-	if sbomObj.Metadata != nil && sbomObj.Metadata.Component != nil {
-		version = sbomObj.Metadata.Component.Version
-	}
-	log.Printf("Processed SBOM (version %q) for entity %s: %d components", version, entity.GetQName(), len(components))
+	log.Printf("Processed SBOM %s for entity %s: %d components", bom.Name, entity.GetQName(), len(bom.Components))
 
-	names := make([]string, 0, len(components))
-	for _, c := range components {
-		names = append(names, c.Name+":"+c.Version)
-	}
-	slices.Sort(names)
 	return &PluginResult{
 		Annotations: map[string]any{
-			p.spec.ComponentsAnnotation: names,
-			p.spec.VersionAnnotation:    version,
+			p.spec.TargetAnnotation: bom,
 		},
 	}, nil
 }
