@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
@@ -35,8 +36,9 @@ type jfrogXrayPluginSpec struct {
 	// Annotation in which to find the Artifactory repository name
 	RepositoryAnnotation string               `yaml:"repositoryAnnotation"`
 	Auth                 jfrogAuth            `yaml:"auth"`
-	ComponentFilter      sbom.ComponentFilter `yaml:"componentFilter"`
-	TargetAnnotation     string               `yaml:"targetAnnotation"`
+	ComponentsFilter     sbom.ComponentFilter `yaml:"componentsFilter"`
+	ComponentsAnnotation string               `yaml:"componentsAnnotation"`
+	VersionAnnotation    string               `yaml:"versionAnnotation"`
 }
 
 type JFrogXrayPlugin struct {
@@ -69,8 +71,11 @@ func NewJFrogXrayBOMPlugin(name string, specYaml *yaml.Node) (*JFrogXrayPlugin, 
 	if spec.JFrogURL == "" {
 		return nil, fmt.Errorf("field 'jfrogURL' not specified for plugin %s", name)
 	}
-	if !catalog.IsValidAnnotation(spec.TargetAnnotation, "true") {
-		return nil, fmt.Errorf("invalid targetAnnotation %q for plugin %s", spec.TargetAnnotation, name)
+	if !catalog.IsValidAnnotation(spec.ComponentsAnnotation, "true") {
+		return nil, fmt.Errorf("invalid componentsAnnotation %q for plugin %s", spec.ComponentsAnnotation, name)
+	}
+	if !catalog.IsValidAnnotation(spec.VersionAnnotation, "true") {
+		return nil, fmt.Errorf("invalid versionAnnotation %q for plugin %s", spec.VersionAnnotation, name)
 	}
 
 	if spec.Auth.MavenServerID != "" {
@@ -103,126 +108,146 @@ type SBOMRequest struct {
 	Vex             bool   `json:"vex"`
 }
 
-func (p *JFrogXrayPlugin) fetchSBOM(ctx context.Context, repository, image string) (string, error) {
-
-	// Get versions list
-	tagsURL := fmt.Sprintf("%s/artifactory/api/docker/%s/v2/%s/tags/list", p.spec.JFrogURL, repository, image)
-	req, err := http.NewRequestWithContext(ctx, "GET", tagsURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
+func (p *JFrogXrayPlugin) setBasicAuth(req *http.Request) {
 	if p.spec.Auth.Username != "" {
 		req.SetBasicAuth(p.spec.Auth.Username, p.spec.Auth.Password)
 	}
+}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+// fetchTags returns the list of tags for the given image in repository.
+func (p *JFrogXrayPlugin) fetchTags(ctx context.Context, repository, image string) ([]string, error) {
+	url := fmt.Sprintf("%s/artifactory/api/docker/%s/v2/%s/tags/list", p.spec.JFrogURL, repository, image)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to get tags: %w", err)
+		return nil, fmt.Errorf("failed to create tags request: %w", err)
+	}
+	p.setBasicAuth(req)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch tags: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to get tags, status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("tags request returned status %d", resp.StatusCode)
 	}
-
 	var tagsResp TagsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tagsResp); err != nil {
-		return "", fmt.Errorf("failed to decode tags response: %w", err)
+		return nil, fmt.Errorf("failed to decode tags response: %w", err)
 	}
+	return tagsResp.Tags, nil
+}
 
-	// Extract latest version using semver.Compare
-	latestVersion := ""
-	for _, tag := range tagsResp.Tags {
-		// Ensure tag has 'v' prefix for semver comparison
-		tagWithV := tag
-		if !strings.HasPrefix(tag, "v") {
-			tagWithV = "v" + tag
-		}
+// semverNormalize returns tag with a "v" prefix for semver comparison,
+// leaving tags that already have one unchanged.
+func semverNormalize(tag string) string {
+	if strings.HasPrefix(tag, "v") {
+		return tag
+	}
+	return "v" + tag
+}
 
-		if !semver.IsValid(tagWithV) {
-			continue
-		}
-
-		if latestVersion == "" || semver.Compare(tagWithV, latestVersion) > 0 {
-			latestVersion = tagWithV
+// latestSemverVersions filters tags to those with valid semver, sorts them in
+// descending order, and returns the top n original tags (preserving their
+// original "v"-prefix or lack thereof).
+func latestSemverVersions(tags []string, n int) []string {
+	var valid []string
+	for _, tag := range tags {
+		if semver.IsValid(semverNormalize(tag)) {
+			valid = append(valid, tag)
 		}
 	}
-
-	if latestVersion == "" {
-		return "", fmt.Errorf("no valid semver tags found")
+	slices.SortFunc(valid, func(v1, v2 string) int {
+		return semver.Compare(semverNormalize(v2), semverNormalize(v1)) // descending
+	})
+	if len(valid) > n {
+		valid = valid[:n]
 	}
+	return valid
+}
 
-	// Remove 'v' prefix for component name
-	version := strings.TrimPrefix(latestVersion, "v")
-
-	// Download the SBOM for the latest version
+// downloadSBOM fetches the CycloneDX SBOM zip for image:version from JFrog
+// Xray and returns the JSON content of the first .json file in the archive.
+func (p *JFrogXrayPlugin) downloadSBOM(ctx context.Context, repository, image, version string) (string, error) {
 	sbomReq := SBOMRequest{
 		PackageType:     "docker",
 		ComponentName:   fmt.Sprintf("%s:%s", image, version),
 		Path:            fmt.Sprintf("%s/%s/%s/manifest.json", repository, image, version),
 		CycloneDX:       true,
 		CycloneDXFormat: "json",
-		Vex:             false,
 	}
-
-	reqBody, err := json.Marshal(sbomReq)
+	body, err := json.Marshal(sbomReq)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal SBOM request: %w", err)
 	}
 
-	sbomURL := fmt.Sprintf("%s/xray/api/v2/component/exportDetails", p.spec.JFrogURL)
-	req, err = http.NewRequestWithContext(ctx, "POST", sbomURL, bytes.NewBuffer(reqBody))
+	url := fmt.Sprintf("%s/xray/api/v2/component/exportDetails", p.spec.JFrogURL)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(body))
 	if err != nil {
 		return "", fmt.Errorf("failed to create SBOM request: %w", err)
 	}
-	if p.spec.Auth.Username != "" {
-		req.SetBasicAuth(p.spec.Auth.Username, p.spec.Auth.Password)
-	}
+	p.setBasicAuth(req)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err = client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to get SBOM: %w", err)
+		return "", fmt.Errorf("failed to fetch SBOM: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("failed to get SBOM, status code: %d, body: %s", resp.StatusCode, string(body))
+		errBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("SBOM request for %s returned status %d: %s", sbomReq.Path, resp.StatusCode, errBody)
 	}
 
-	// Read the zip file into memory
 	zipData, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read SBOM response: %w", err)
+		return "", fmt.Errorf("failed to read SBOM response body: %w", err)
 	}
-
-	// Extract the SBOM from the zip file
 	zipReader, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
 	if err != nil {
-		return "", fmt.Errorf("failed to open zip file: %w", err)
+		return "", fmt.Errorf("failed to open SBOM zip: %w", err)
 	}
-
-	// Find and read the SBOM JSON file
-	for _, file := range zipReader.File {
-		if strings.HasSuffix(file.Name, ".json") {
-			rc, err := file.Open()
+	for _, f := range zipReader.File {
+		if strings.HasSuffix(f.Name, ".json") {
+			rc, err := f.Open()
 			if err != nil {
-				return "", fmt.Errorf("failed to open file in zip: %w", err)
+				return "", fmt.Errorf("failed to open %s in SBOM zip: %w", f.Name, err)
 			}
 			defer rc.Close()
-
-			sbomData, err := io.ReadAll(rc)
+			data, err := io.ReadAll(rc)
 			if err != nil {
-				return "", fmt.Errorf("failed to read SBOM from zip: %w", err)
+				return "", fmt.Errorf("failed to read %s in SBOM zip: %w", f.Name, err)
 			}
-
-			return string(sbomData), nil
+			return string(data), nil
 		}
 	}
+	return "", fmt.Errorf("no JSON file found in SBOM zip for %s:%s", image, version)
+}
 
-	return "", fmt.Errorf("no JSON file found in SBOM zip")
+// fetchSBOM retrieves the SBOM for the latest available semver version of
+// image in repository, trying up to the three most recent versions.
+func (p *JFrogXrayPlugin) fetchSBOM(ctx context.Context, repository, image string) (string, error) {
+	tags, err := p.fetchTags(ctx, repository, image)
+	if err != nil {
+		return "", err
+	}
+	versions := latestSemverVersions(tags, 3)
+	if len(versions) == 0 {
+		return "", fmt.Errorf("no valid semver tags found for %s/%s", repository, image)
+	}
+	var lastErr error
+	for _, version := range versions {
+		data, err := p.downloadSBOM(ctx, repository, image, version)
+		if err != nil {
+			log.Printf("fetchSBOM: skipping %s:%s: %v", image, version, err)
+			lastErr = err
+			continue
+		}
+		return data, nil
+	}
+	return "", fmt.Errorf("could not download SBOM for %s/%s (tried %v): %w", repository, image, versions, lastErr)
 }
 
 func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, args *PluginArgs) (*PluginResult, error) {
@@ -257,7 +282,7 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse SBOM: %w", err)
 	}
-	components, err := sbom.FilterComponents(sbomObj, p.spec.ComponentFilter)
+	components, err := sbom.FilterComponents(sbomObj, p.spec.ComponentsFilter)
 	if err != nil {
 		return nil, fmt.Errorf("filtering components: %w", err)
 	}
@@ -269,11 +294,13 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 
 	names := make([]string, 0, len(components))
 	for _, c := range components {
-		names = append(names, c.Name)
+		names = append(names, c.Name+":"+c.Version)
 	}
+	slices.Sort(names)
 	return &PluginResult{
 		Annotations: map[string]any{
-			p.spec.TargetAnnotation: names,
+			p.spec.ComponentsAnnotation: names,
+			p.spec.VersionAnnotation:    version,
 		},
 	}, nil
 }
