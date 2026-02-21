@@ -1,17 +1,17 @@
 <!-- Custom content based on entity annotations -->
 {{ range $index, $cc := . }}
-<div class="border rounded-xl">
-    <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">{{ $cc.Heading }}</h3>
+<div class="border rounded-lg">
+    <h3 class="font-semibold bg-gray-100 px-3 py-1 rounded-t-lg">{{ $cc.Heading }}</h3>
     {{ if $cc.Code }}
     <div class="max-h-32 overflow-y-auto">
         <textarea id="custom-content-{{$index}}" class="json-viewer">{{ $cc.Code }}</textarea>
     </div>
     {{ else if $cc.Text }}
-    <div class="p-4 max-h-32 overflow-y-auto">
+    <div class="p-3 max-h-32 overflow-y-auto">
         <p>{{ $cc.Text }}</p>
     </div>
     {{ else if $cc.Items }}
-    <div class="p-4 max-h-32 overflow-y-auto">
+    <div class="p-3 max-h-32 overflow-y-auto">
         <ul class="list-disc list-inside leading-tight text-sm">
             {{ range $cc.Items }}
             <li>{{ . }}</li>
@@ -23,8 +23,8 @@
         <table class="w-full text-sm">
              {{ range $cc.Attrs }}
              <tr class="border-b last:border-0">
-                 <td class="px-4 py-2 font-medium text-gray-600 bg-gray-50 w-1/3">{{ .Name }}</td>
-                 <td class="px-4 py-2 text-gray-800">{{ .Value }}</td>
+                 <td class="px-3 py-1 font-medium text-gray-600 bg-gray-50 w-1/3">{{ .Name }}</td>
+                 <td class="px-3 py-1 text-gray-800">{{ .Value }}</td>
              </tr>
              {{ end }}
         </table>
@@ -36,7 +36,7 @@
             <thead>
                 <tr class="border-b bg-gray-50">
                     {{ range $cc.Table.Headers }}
-                    <th class="px-4 py-2 font-medium text-gray-600 text-left">{{ . }}</th>
+                    <th class="px-3 py-1 font-medium text-gray-600 text-left">{{ . }}</th>
                     {{ end }}
                 </tr>
             </thead>
@@ -45,7 +45,7 @@
                 {{ range $cc.Table.Rows }}
                 <tr class="border-b last:border-0">
                     {{ range .Columns }}
-                    <td class="px-4 py-2 text-gray-800">{{ . }}</td>
+                    <td class="px-3 py-1 text-gray-800">{{ . }}</td>
                     {{ end }}
                 </tr>
                 {{ end }}

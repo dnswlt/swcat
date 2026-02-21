@@ -8,21 +8,20 @@
 <body class="min-h-screen bg-gray-50 p-4" data-page="graph">
     {{ template "nav.html" . }}
 
-    <main class="w-full max-w-screen-lg mx-auto space-y-6 bg-white shadow rounded-xl p-6">
-        <h1 class="text-2xl font-semibold text-center">Graph builder</h1>
-        <p class="text-gray-600 text-center text-sm">
-            Create ad hoc diagrams for selected entities.
-            Shift-click an entity in the graph to search for its related entities.
-        </p>
-        <div id="graph-spinner" class="htmx-indicator text-center text-blue-600">
-            <span class="inline-block animate-pulse">Updating graph...</span>
+    <main class="w-full max-w-screen-lg mx-auto space-y-4 bg-white shadow p-4">
+        <div>
+            <h1 class="text-xl font-semibold">Graph builder</h1>
+            <p class="text-gray-600 text-sm">
+                Create ad hoc diagrams for selected entities.
+                Shift-click an entity in the graph to search for its related entities.
+            </p>
         </div>
 
         <!-- Search -->
         {{ template "search_bar.html" . }}
 
         <!-- Table -->
-        <div class="overflow-x-auto border rounded-xl max-h-60 overflow-y-auto">
+        <div class="overflow-x-auto border rounded-lg max-h-60 overflow-y-auto">
             <table class="min-w-full table-auto border-collapse">
                 <thead class="bg-gray-100">
                     <tr>

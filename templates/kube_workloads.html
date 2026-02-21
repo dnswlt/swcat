@@ -1,19 +1,19 @@
 {{ if .Workloads }}
-<div class="mt-2 overflow-auto max-h-[500px]">
+<div class="mt-1 overflow-auto max-h-[500px]">
     <table class="min-w-full text-sm">
         <thead>
             <tr class="border-b text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                <th class="px-3 py-2 w-8">Status</th>
-                <th class="px-3 py-2">Kind</th>
-                <th class="px-3 py-2">Namespace</th>
-                <th class="px-3 py-2">Name</th>
-                <th class="px-3 py-2">Labels</th>
+                <th class="px-3 py-1 w-8">Status</th>
+                <th class="px-3 py-1">Kind</th>
+                <th class="px-3 py-1">Namespace</th>
+                <th class="px-3 py-1">Name</th>
+                <th class="px-3 py-1">Labels</th>
             </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
             {{ range .Workloads }}
             <tr>
-                <td class="px-3 py-1.5">
+                <td class="px-3 py-1">
                     {{ if .Tracked }}
                     <span title="Tracked in catalog">
                         <svg class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -28,12 +28,12 @@
                     </span>
                     {{ end }}
                 </td>
-                <td class="px-3 py-1.5">
+                <td class="px-3 py-1">
                     <span class="bg-purple-50 text-purple-700 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-purple-100">{{ .Kind }}</span>
                 </td>
-                <td class="px-3 py-1.5 text-gray-600">{{ .Namespace }}</td>
-                <td class="px-3 py-1.5 font-medium text-gray-900">{{ .Name }}</td>
-                <td class="px-3 py-1.5 text-xs text-gray-500">
+                <td class="px-3 py-1 text-gray-600">{{ .Namespace }}</td>
+                <td class="px-3 py-1 font-medium text-gray-900">{{ .Name }}</td>
+                <td class="px-3 py-1 text-xs text-gray-500">
                     {{ $labels := .Labels }}
                     {{ range $.LabelKeys }}
                         {{ $label := index $labels . }}

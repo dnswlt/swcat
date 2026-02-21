@@ -392,7 +392,16 @@ func formatLabels(meta *catalog.Metadata) []FormattedChip {
 // SVG Icons
 
 var (
-	svgIcons = map[string]string{
+	// linkIconSVGs maps link icon keys to small inline SVG strings.
+	linkIconSVGs = map[string]string{
+		// Lucide code-2: </>
+		"code": `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>`,
+		// Lucide link: chain link (default)
+		"": `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
+	}
+
+	// navbarIconSVGs maps icon names to inline SVG strings for the navbar.
+	navbarIconSVGs = map[string]string{
 		// A loupe icon
 		"Search": `<svg width="24px" height="24px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path d="M14.9536 14.9458L21 21M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -406,6 +415,17 @@ var (
 </svg>`,
 	}
 )
+
+// linkIcon returns a small SVG icon for the given link icon key.
+// Unrecognised keys fall back to the generic link icon.
+func linkIcon(icon string) template.HTML {
+	if svg, ok := linkIconSVGs[icon]; ok {
+		return template.HTML(svg)
+	}
+	return template.HTML(linkIconSVGs[""])
+}
+
+var ()
 
 //
 // Navigation bar utilities
@@ -432,7 +452,7 @@ func NavItem(path, title string) *NavBarItem {
 func NavIcon(path, iconKey string) *NavBarItem {
 	return &NavBarItem{
 		Path: path,
-		Icon: svgIcons[iconKey],
+		Icon: navbarIconSVGs[iconKey],
 	}
 }
 

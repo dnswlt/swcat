@@ -9,14 +9,14 @@
     <!-- Navbar -->
     {{template "nav.html" .}}
 
-    <main class="w-full max-w-screen-lg mx-auto space-y-6 bg-white shadow rounded-xl p-6">
+    <main class="w-full max-w-screen-lg mx-auto space-y-4 bg-white shadow p-4">
 
         {{ $readOnly := .ReadOnly }}
         {{ $customContent := .CustomContent }}
         {{ $findings := .Findings }}
 
         {{ with .Domain }}
-        <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-2">
             <div id="error-messages" class="empty:hidden"></div>
 
             <div class="flex justify-between items-start">
@@ -43,28 +43,26 @@
 
             {{ template "tags_labels.html" . }}
 
-            {{ template "metadata_description.html" . }}
-
-            <div class="flex flex-wrap gap-x-12 gap-y-4">
-                <div>
-                    <h3 class="font-semibold">Owner</h3>
-                    <p><a href="{{ .Spec.Owner | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.Owner.QName
-                            }}</a></p>
+            <dl class="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                <div class="flex gap-1.5 items-baseline">
+                    <dt class="text-gray-500">Owner</dt>
+                    <dd><a href="{{ .Spec.Owner | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.Owner.QName }}</a></dd>
                 </div>
                 {{ if .Spec.SubdomainOf }}
-                <div>
-                    <h3 class="font-semibold">Subdomain Of</h3>
-                    <p><a href="{{ .Spec.SubdomainOf | toURL }}" class="text-blue-600 hover:underline">{{
-                            .Spec.SubdomainOf.QName }}</a></p>
+                <div class="flex gap-1.5 items-baseline">
+                    <dt class="text-gray-500">Subdomain Of</dt>
+                    <dd><a href="{{ .Spec.SubdomainOf | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.SubdomainOf.QName }}</a></dd>
                 </div>
                 {{ end }}
                 {{ if .Spec.Type }}
-                <div>
-                    <h3 class="font-semibold">Type</h3>
-                    <p>{{ .Spec.Type }}</p>
+                <div class="flex gap-1.5 items-baseline">
+                    <dt class="text-gray-500">Type</dt>
+                    <dd>{{ .Spec.Type }}</dd>
                 </div>
                 {{ end }}
-            </div>
+            </dl>
+
+            {{ template "metadata_description.html" . }}
         </div>
 
         {{ template "metadata_links.html" . }}
@@ -72,10 +70,10 @@
         {{ template "custom_content.html" $customContent }}
 
         {{ if .GetSystems }}
-        <div class="border rounded-xl">
-            <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Systems</h3>
-            <div class="p-4">
-                <ul class="list-disc list-inside">
+        <div class="border rounded-lg">
+            <h3 class="font-semibold bg-gray-100 px-3 py-1 rounded-t-lg">Systems</h3>
+            <div class="p-3">
+                <ul class="space-y-1">
                     {{ range .GetSystems }}
                     <li><a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ .QName }}</a></li>
                     {{ end }}

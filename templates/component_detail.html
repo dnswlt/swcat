@@ -9,24 +9,28 @@
     <!-- Navbar -->
     {{template "nav.html" .}}
 
-    <main class="w-full max-w-screen-lg mx-auto space-y-6 bg-white shadow rounded-xl p-6">
+    <main class="w-full max-w-screen-lg mx-auto space-y-4 bg-white shadow p-4">
 
         {{ $readOnly := .ReadOnly }}
         {{ $customContent := .CustomContent }}
         {{ $findings := .Findings }}
 
         {{ with .Component }}
-        <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-2">
             <div id="error-messages" class="empty:hidden"></div>
 
             <div class="flex justify-between items-start">
                 {{ if .Metadata.Title }}
                 <div>
-                    <h2 class="text-xl font-semibold">{{ .GetQName }}</h2>
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-xl font-semibold">{{ .GetQName }}</h2>
+                    </div>
                     <p class="text-m text-gray-500">{{ .Metadata.Title }}</p>
                 </div>
                 {{ else }}
-                <h2 class="text-xl font-semibold">{{ .GetQName }}</h2>
+                <div class="flex items-center gap-2">
+                    <h2 class="text-xl font-semibold">{{ .GetQName }}</h2>
+                </div>
                 {{ end }}
 
                 <div class="flex items-center space-x-2">
@@ -44,35 +48,32 @@
 
             {{ template "tags_labels.html" . }}
 
-            {{ template "metadata_description.html" . }}
-
-            <div class="flex flex-wrap gap-x-12 gap-y-4">
-                <div>
-                    <h3 class="font-semibold">System</h3>
-                    <p><a href="{{ .Spec.System | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.System.QName
-                            }}</a></p>
+            <dl class="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                <div class="flex gap-1.5 items-baseline">
+                    <dt class="text-gray-500">System</dt>
+                    <dd><a href="{{ .Spec.System | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.System.QName }}</a></dd>
                 </div>
                 {{ if .Spec.SubcomponentOf }}
-                <div>
-                    <h3 class="font-semibold">Subcomponent of</h3>
-                    <p><a href="{{ .Spec.SubcomponentOf | toURL }}" class="text-blue-600 hover:underline">{{
-                            .Spec.SubcomponentOf.QName }}</a></p>
+                <div class="flex gap-1.5 items-baseline">
+                    <dt class="text-gray-500">Subcomponent of</dt>
+                    <dd><a href="{{ .Spec.SubcomponentOf | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.SubcomponentOf.QName }}</a></dd>
                 </div>
                 {{ end }}
-                <div>
-                    <h3 class="font-semibold">Owner</h3>
-                    <p><a href="{{ .Spec.Owner | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.Owner.QName
-                            }}</a></p>
+                <div class="flex gap-1.5 items-baseline">
+                    <dt class="text-gray-500">Owner</dt>
+                    <dd><a href="{{ .Spec.Owner | toURL }}" class="text-blue-600 hover:underline">{{ .Spec.Owner.QName }}</a></dd>
                 </div>
-                <div>
-                    <h3 class="font-semibold">Type</h3>
-                    <p>{{ .Spec.Type }}</p>
+                <div class="flex gap-1.5 items-baseline">
+                    <dt class="text-gray-500">Type</dt>
+                    <dd>{{ .Spec.Type }}</dd>
                 </div>
-                <div>
-                    <h3 class="font-semibold">Lifecycle</h3>
-                    <p>{{ .Spec.Lifecycle }}</p>
+                <div class="flex gap-1.5 items-baseline">
+                    <dt class="text-gray-500">Lifecycle</dt>
+                    <dd>{{ .Spec.Lifecycle }}</dd>
                 </div>
-            </div>
+            </dl>
+
+            {{ template "metadata_description.html" . }}
         </div>
 
         {{ template "metadata_links.html" . }}
@@ -80,13 +81,13 @@
         {{ template "custom_content.html" $customContent }}
 
         {{ if or .Spec.ProvidesAPIs .Spec.ConsumesAPIs }}
-        <div class="border rounded-xl">
-            <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">APIs</h3>
-            <div class="grid grid-cols-2 gap-4 p-4">
+        <div class="border rounded-lg">
+            <h3 class="font-semibold bg-gray-100 px-3 py-1 rounded-t-lg">APIs</h3>
+            <div class="grid grid-cols-2 gap-3 p-3">
                 {{ if .Spec.ProvidesAPIs }}
                 <div>
-                    <h3 class="font-semibold">Provides</h3>
-                    <ul class="list-disc list-inside">
+                    <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Provides</h3>
+                    <ul class="space-y-1">
                         {{ range .Spec.ProvidesAPIs }}
                         <li>
                             <a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ .QName }}</a>
@@ -99,8 +100,8 @@
 
                 {{ if .Spec.ConsumesAPIs }}
                 <div>
-                    <h3 class="font-semibold">Consumes</h3>
-                    <ul class="list-disc list-inside">
+                    <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Consumes</h3>
+                    <ul class="space-y-1">
                         {{ range .Spec.ConsumesAPIs }}
                         <li>
                             <a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ .QName }}</a>
@@ -115,14 +116,14 @@
         {{ end }}
 
         {{ if or .Spec.DependsOn .GetDependents .GetSubcomponents }}
-        <div class="border rounded-xl">
-            <h3 class="text-lg font-semibold bg-gray-100 px-4 py-2 rounded-t-xl">Dependencies</h3>
-            <div class="grid grid-cols-2 gap-4 p-4">
+        <div class="border rounded-lg">
+            <h3 class="font-semibold bg-gray-100 px-3 py-1 rounded-t-lg">Dependencies</h3>
+            <div class="grid grid-cols-2 gap-3 p-3">
                 {{ if or .GetDependents .GetSubcomponents }}
                 <div>
                     {{ if .GetDependents }}
-                    <h3 class="font-semibold">Incoming</h3>
-                    <ul class="list-disc list-inside">
+                    <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Incoming</h3>
+                    <ul class="space-y-1">
                         {{ range .GetDependents }}
                         <li>
                             <a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ .QName }}</a>
@@ -132,8 +133,8 @@
                     </ul>
                     {{ end }}
                     {{ if .GetSubcomponents }}
-                    <h3 class="font-semibold">Subcomponents</h3>
-                    <ul class="list-disc list-inside">
+                    <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Subcomponents</h3>
+                    <ul class="space-y-1">
                         {{ range .GetSubcomponents }}
                         <li>
                             <a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ .QName }}</a>
@@ -146,8 +147,8 @@
 
                 {{ if .Spec.DependsOn }}
                 <div>
-                    <h3 class="font-semibold">Outgoing</h3>
-                    <ul class="list-disc list-inside">
+                    <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Outgoing</h3>
+                    <ul class="space-y-1">
                         {{ range .Spec.DependsOn }}
                         <li>
                             <a href="{{ . | toURL }}" class="text-blue-600 hover:underline">{{ .QName }}</a>

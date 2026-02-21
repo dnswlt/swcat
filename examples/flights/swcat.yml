@@ -54,6 +54,7 @@ catalog:
     hexz.me/repo:
       url: https://example.com/projects/{{ .Annotation.Value }}/repos/{{ .Metadata.Name }}
       title: Source code
+      icon: code
     hexz.me/asyncapi:
       url: https://example.com/repos/apis/{{ .Annotation.Value }}_{{ .Version.Major }}
       title: API Schema ({{ .Version }})

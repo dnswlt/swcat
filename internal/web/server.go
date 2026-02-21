@@ -357,6 +357,7 @@ func (s *Server) reloadTemplates() error {
 		"entitySummary": entitySummary,
 		"parentSystem":  parentSystem,
 		"dict":          dictFunc,
+		"linkIcon":      linkIcon,
 	})
 	var err error
 	if s.opts.BaseDir == "" {
@@ -679,7 +680,7 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		log.Printf("Failed to generate graph URL, skipping link: %v", err)
 	} else {
 		params["GraphURL"] = graphURL
-		params["GraphIcon"] = template.HTML(svgIcons["Graph"])
+		params["GraphIcon"] = template.HTML(navbarIconSVGs["Graph"])
 	}
 
 	activeComments, err := s.getActiveComments(component.GetRef())
@@ -770,7 +771,7 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 		log.Printf("Failed to generate graph URL, skipping link: %v", err)
 	} else {
 		params["GraphURL"] = graphURL
-		params["GraphIcon"] = template.HTML(svgIcons["Graph"])
+		params["GraphIcon"] = template.HTML(navbarIconSVGs["Graph"])
 	}
 
 	activeComments, err := s.getActiveComments(ap.GetRef())
@@ -850,7 +851,7 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 		log.Printf("Failed to generate graph URL, skipping link: %v", err)
 	} else {
 		params["GraphURL"] = graphURL
-		params["GraphIcon"] = template.HTML(svgIcons["Graph"])
+		params["GraphIcon"] = template.HTML(navbarIconSVGs["Graph"])
 	}
 
 	activeComments, err := s.getActiveComments(resource.GetRef())
