@@ -1,0 +1,35 @@
+apiVersion: swcat/v1
+kind: Domain
+metadata:
+  name: test-domain
+spec:
+  owner: test-owner
+  type: test
+---
+apiVersion: swcat/v1
+kind: Group
+metadata:
+  name: test-owner
+spec:
+  type: team
+  profile:
+    displayName: Test Owner
+---
+apiVersion: swcat/v1
+kind: System
+metadata:
+  name: test-system
+spec:
+  owner: test-owner
+  domain: test-domain
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: test-component
+  description: A minimal test component for plugin integration tests.
+spec:
+  type: service
+  lifecycle: production
+  owner: test-owner
+  system: test-system

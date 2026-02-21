@@ -261,6 +261,10 @@ func (r *Registry) registerPlugin(name string, def *Definition) error {
 		inhibitCondition: inhibitCondition,
 	}
 	switch def.Kind {
+	case "TimestampPlugin":
+		// Configuring TimestampPlugin explicitly is mostly useful for plugin testing:
+		// a timestamp gets added whenever any other plugin runs anyway.
+		trigger.plugin = TimestampPlugin{}
 	case "AsyncAPIImporterPlugin":
 		p, err := newAsyncAPIImporterPlugin(name, &def.Spec)
 		if err != nil {

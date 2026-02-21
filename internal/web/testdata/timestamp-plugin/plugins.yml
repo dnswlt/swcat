@@ -1,0 +1,4 @@
+plugins:
+  timestamp:
+    kind: TimestampPlugin
+    trigger: "kind:Component"
