@@ -45,6 +45,10 @@ type ServerOptions struct {
 	SVGCacheSize    int           // Size of the LRU cache for rendered SVGs
 }
 
+const (
+	FindingsCacheSize = 128 // Maximum number of elements to hold in the lint findings cache.
+)
+
 func (s *Server) isReadOnly(r *http.Request) bool {
 	if s.opts.ReadOnly {
 		return true
@@ -244,7 +248,7 @@ func (s *Server) loadStoreData(ref string) (*storeData, error) {
 		panic(fmt.Sprintf("failed to create SVG cache (size: %d): %v", s.opts.SVGCacheSize, err))
 	}
 
-	findingsCache, err := lru.New[string, []lint.Finding](repoInstance.Size() + 10)
+	findingsCache, err := lru.New[string, []lint.Finding](FindingsCacheSize)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create findings cache: %v", err))
 	}
@@ -271,7 +275,7 @@ func (s *Server) updateStoreData(data *storeData, repository *repo.Repository) {
 		panic(fmt.Sprintf("failed to create SVG cache (size: %d): %v", s.opts.SVGCacheSize, err))
 	}
 
-	findingsCache, err := lru.New[string, []lint.Finding](repository.Size() + 10)
+	findingsCache, err := lru.New[string, []lint.Finding](FindingsCacheSize)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create findings cache: %v", err))
 	}

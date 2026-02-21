@@ -37,11 +37,17 @@ type Repository struct {
 
 	// Repository configuration
 	config Config
+
+	// Extensions that were merged into the entities during initialization.
+	// They are re-applied when the repository is rebuilt during InsertOrUpdateEntity.
+	extensions *api.CatalogExtensions
 }
 
 // cloneEmpty returns a copy of r with all maps empty, but config etc. preserved.
 func (r *Repository) cloneEmpty() *Repository {
-	return NewRepositoryWithConfig(r.config)
+	repo := NewRepositoryWithConfig(r.config)
+	repo.extensions = r.extensions
+	return repo
 }
 
 func NewRepositoryWithConfig(config Config) *Repository {
@@ -54,6 +60,7 @@ func NewRepositoryWithConfig(config Config) *Repository {
 		groups:      make(map[string]*catalog.Group),
 		allEntities: make(map[string]catalog.Entity),
 		config:      config,
+		extensions:  api.NewCatalogExtensions(),
 	}
 }
 
@@ -206,6 +213,10 @@ func (r *Repository) AddEntity(e catalog.Entity) error {
 	}
 	if r.Exists(e) {
 		return fmt.Errorf("entity %q already exists in the repository", e.GetRef())
+	}
+	// Add annotations from sidecar extensions, if any match this entity.
+	if err := mergeMetadataExtensions(r.extensions, e); err != nil {
+		return err
 	}
 	return r.setEntity(e)
 }
@@ -1126,17 +1137,13 @@ func (r *Repository) initialize(st store.Store) error {
 			log.Printf("Failed to read extension file %s: %v", extPath, err)
 		} else if err == nil {
 			log.Printf("Read extension file %s", extPath)
+			r.extensions.Merge(ext)
 		}
 		// Create catalog entities and add to repository
 		for _, e := range entities {
 			entity, err := catalog.NewEntityFromAPI(e)
 			if err != nil {
 				return fmt.Errorf("failed to convert api entity %s (source: %s:%d) to catalog entity: %v",
-					e.GetRef().String(), e.GetSourceInfo().Path, e.GetSourceInfo().Line, err)
-			}
-			// Add annotations from sidecar extension file.
-			if err := mergeMetadataExtensions(ext, entity); err != nil {
-				return fmt.Errorf("failed to merge extension data for %s (source: %s:%d): %v",
 					e.GetRef().String(), e.GetSourceInfo().Path, e.GetSourceInfo().Line, err)
 			}
 

@@ -24,6 +24,12 @@ type LintFinding struct {
 	Message    string    `json:"message"`
 }
 
+func NewCatalogExtensions() *CatalogExtensions {
+	return &CatalogExtensions{
+		Entities: make(map[string]*MetadataExtensions),
+	}
+}
+
 // Merge merges other into c.
 // It overwrites the MetadataExtensions for any entity present in 'other'.
 func (c *CatalogExtensions) Merge(other *CatalogExtensions) {
