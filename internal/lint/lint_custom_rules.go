@@ -11,16 +11,16 @@ import (
 var (
 	KnownCustomChecks = map[string]CustomCheckFunc{
 		"alwaysFail":     CheckAlwaysFail,
-		"lintAnnotation": CheckLintAnnotation,
+		"hasLintFinding": CheckHasLintFinding,
 	}
 )
 
-// CheckLintAnnotation is a custom lint rule that checks for the existence of a
+// CheckHasLintFinding is a custom lint rule that checks for the existence of a
 // specific annotation on an entity and returns its content as a lint finding.
 // The rule expects an "annotation" parameter in its configuration. If the
 // annotation's value is a JSON-encoded api.LintFinding, its message is used;
 // otherwise, the raw annotation value is returned as the finding message.
-func CheckLintAnnotation(rule CustomRule, e *catalog_pb.Entity) []Finding {
+func CheckHasLintFinding(rule CustomRule, e *catalog_pb.Entity) []Finding {
 	const annotationKey = "annotation"
 	if rule.Params == nil || rule.Params[annotationKey] == "" {
 		return []Finding{
