@@ -12,7 +12,7 @@ func TestCheckLintAnnotation(t *testing.T) {
 			{
 				Name:     "check-my-annotation",
 				Severity: SeverityWarn,
-				Func:     "lintAnnotation",
+				Func:     "hasLintFinding",
 				Params: map[string]string{
 					"annotation": "my/lint-finding",
 				},

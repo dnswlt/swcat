@@ -359,8 +359,8 @@ func (p *JFrogXrayPlugin) detectDependencyMismatches(bom *sbom.MiniBOM, entity c
 			matchedRefs[e.GetRef().String()] = true
 		} else {
 			// Not in declared deps. Is it in the catalog at all?
-			if e := fullIdx.matchComponent(bomComp); e != nil {
-				// Yes, it's a catalog entity but missing from declared deps.
+			if e := fullIdx.matchComponent(bomComp); e != nil && e != entity {
+				// Yes, it's a catalog entity (different from 'entity' itself) that is missing from declared deps.
 				missing = append(missing, bomComp)
 			}
 		}
@@ -395,8 +395,7 @@ type indexedEntity struct {
 }
 
 type catalogIndex struct {
-	coordsAnnotation string
-	entities         []indexedEntity
+	entities []indexedEntity
 }
 
 func (p *JFrogXrayPlugin) newCatalogIndexFromEntities(allEntities []catalog.Entity) *catalogIndex {
@@ -418,8 +417,7 @@ func (p *JFrogXrayPlugin) newCatalogIndexFromEntities(allEntities []catalog.Enti
 		entities = append(entities, info)
 	}
 	return &catalogIndex{
-		coordsAnnotation: p.spec.CoordsAnnotation,
-		entities:         entities,
+		entities: entities,
 	}
 }
 
