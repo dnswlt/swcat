@@ -39,7 +39,7 @@ A sidecar file named `payments.ext.json` might look like this:
 
 Plugins are responsible for populating these sidecar files. A plugin typically fetches data from an external system (like a build server, artifact repository, or cloud provider) and attaches it to an entity as an annotation.
 
-For more details, see the [Plugins](plugins.md) page.
+For more details, see the [Plugins](plugins/index.md) page.
 
 ## Visualization
 

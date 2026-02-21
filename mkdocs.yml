@@ -34,7 +34,12 @@ nav:
     - 'Configuration': 'user-guide/configuration.md'
     - 'Custom content': 'user-guide/custom-content.md'
     - 'Sidecar extensions': 'user-guide/sidecar-extensions.md'
-    - 'Plugins': 'user-guide/plugins.md'
+    - 'Plugins':
+      - 'user-guide/plugins/index.md'
+      - 'AsyncAPI Importer': 'user-guide/plugins/asyncapi.md'
+      - 'External Plugins': 'user-guide/plugins/external.md'
+      - 'gRPC Plugins': 'user-guide/plugins/grpc.md'
+      - 'JFrog Xray BOM': 'user-guide/plugins/jfrog-xray.md'
     - 'Linting': 'user-guide/linting.md'
     - 'Remote catalogs': 'user-guide/remote-catalog.md'
     - 'Query syntax': 'user-guide/query-syntax.md'
