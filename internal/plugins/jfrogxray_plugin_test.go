@@ -9,67 +9,6 @@ import (
 	"github.com/dnswlt/swcat/internal/repo"
 )
 
-func TestJFrogXrayPlugin_FilterByCatalogEntities(t *testing.T) {
-	repository := repo.NewRepository()
-
-	// Entity 1: Matched by name
-	e1 := &catalog.Component{
-		Metadata: &catalog.Metadata{Name: "alpha"},
-		Spec:     &catalog.ComponentSpec{Type: "service", Lifecycle: "production", Owner: &catalog.Ref{Name: "owner"}, System: &catalog.Ref{Name: "system"}},
-	}
-	// Entity 2: Matched by CoordsAnnotation
-	e2 := &catalog.Component{
-		Metadata: &catalog.Metadata{
-			Name: "beta-component",
-			Annotations: map[string]string{
-				"my/coords": "org.acme:beta",
-			},
-		},
-		Spec: &catalog.ComponentSpec{Type: "service", Lifecycle: "production", Owner: &catalog.Ref{Name: "owner"}, System: &catalog.Ref{Name: "system"}},
-	}
-	// Entity 3: Another one matched by name
-	e3 := &catalog.Component{
-		Metadata: &catalog.Metadata{Name: "gamma"},
-		Spec:     &catalog.ComponentSpec{Type: "service", Lifecycle: "production", Owner: &catalog.Ref{Name: "owner"}, System: &catalog.Ref{Name: "system"}},
-	}
-
-	repository.AddEntity(e1)
-	repository.AddEntity(e2)
-	repository.AddEntity(e3)
-
-	t.Run("WithCoordsAnnotation", func(t *testing.T) {
-		p := &JFrogXrayPlugin{
-			spec: &jfrogXrayPluginSpec{
-				CoordsAnnotation: "my/coords",
-			},
-		}
-
-		bom := &sbom.MiniBOM{
-			Components: []string{
-				"org.example:alpha:1.0.0", // Matches e1 by name
-				"org.acme:beta:2.0.0",    // Matches e2 by CoordsAnnotation
-				"gamma",                  // Matches e3 by name
-				"org.example:delta:1.0.0", // Should NOT match
-				"unknown:unknown:1.0",    // Should NOT match
-				"wrong.group:beta:1.0",   // Should NOT match e2 because group differs
-			},
-		}
-
-		idx := p.newCatalogIndexFromEntities(repository.AllEntities())
-		bom.Components = p.filterByCatalogEntities(bom, idx)
-
-		want := []string{"org.example:alpha:1.0.0", "org.acme:beta:2.0.0", "gamma"}
-		if len(bom.Components) != len(want) {
-			t.Fatalf("got %d components, want %d: %v", len(bom.Components), len(want), bom.Components)
-		}
-		for i, c := range want {
-			if bom.Components[i] != c {
-				t.Errorf("bom.Components[%d] = %q, want %q", i, bom.Components[i], c)
-			}
-		}
-	})
-}
-
 func TestJFrogXrayPlugin_DetectDependencyMismatches(t *testing.T) {
 	repository := repo.NewRepository()
 
@@ -183,6 +122,76 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches(t *testing.T) {
 		}
 		if !slices.Equal(extra, wantExtra) {
 			t.Errorf("got extra=%v, want %v", extra, wantExtra)
+		}
+	})
+}
+
+func TestJFrogXrayPlugin_DetectDependencyMismatches_Ignore(t *testing.T) {
+	repository := repo.NewRepository()
+
+	e1 := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "alpha"},
+		Spec:     &catalog.ComponentSpec{Type: "service", Lifecycle: "production", Owner: &catalog.Ref{Name: "owner"}, System: &catalog.Ref{Name: "system"}},
+	}
+	e2 := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "beta"},
+		Spec:     &catalog.ComponentSpec{Type: "service", Lifecycle: "production", Owner: &catalog.Ref{Name: "owner"}, System: &catalog.Ref{Name: "system"}},
+	}
+	repository.AddEntity(e1)
+	repository.AddEntity(e2)
+
+	mainComp := &catalog.Component{
+		Metadata: &catalog.Metadata{
+			Name:        "main",
+			Annotations: make(map[string]string),
+		},
+		Spec: &catalog.ComponentSpec{
+			Type:      "service",
+			Lifecycle: "production",
+			Owner:     &catalog.Ref{Name: "owner"},
+			System:    &catalog.Ref{Name: "system"},
+			DependsOn: []*catalog.LabelRef{
+				{Ref: &catalog.Ref{Kind: catalog.KindComponent, Name: "alpha"}},
+			},
+		},
+	}
+	repository.AddEntity(mainComp)
+
+	p := &JFrogXrayPlugin{
+		spec: &jfrogXrayPluginSpec{
+			LintIgnoreAnnotation: "my/ignore",
+		},
+	}
+	fullIdx := p.newCatalogIndexFromEntities(repository.AllEntities())
+
+	bom := &sbom.MiniBOM{
+		Components: []string{
+			"org.example:alpha:1.0.0",
+			"org.example:beta:1.0.0", // beta is missing in mainComp deps
+		},
+	}
+
+	t.Run("NoIgnore", func(t *testing.T) {
+		missing, _ := p.detectDependencyMismatches(bom, mainComp, fullIdx, repository)
+		wantMissing := []string{"org.example:beta:1.0.0"}
+		if !slices.Equal(missing, wantMissing) {
+			t.Errorf("got missing=%v, want %v", missing, wantMissing)
+		}
+	})
+
+	t.Run("IgnoreByArtifactId", func(t *testing.T) {
+		mainComp.Metadata.Annotations["my/ignore"] = `["beta"]`
+		missing, _ := p.detectDependencyMismatches(bom, mainComp, fullIdx, repository)
+		if len(missing) != 0 {
+			t.Errorf("got missing=%v, want empty (ignored by artifactId)", missing)
+		}
+	})
+
+	t.Run("IgnoreByGroupArtifactId", func(t *testing.T) {
+		mainComp.Metadata.Annotations["my/ignore"] = `["org.example:beta"]`
+		missing, _ := p.detectDependencyMismatches(bom, mainComp, fullIdx, repository)
+		if len(missing) != 0 {
+			t.Errorf("got missing=%v, want empty (ignored by groupId:artifactId)", missing)
 		}
 	})
 }

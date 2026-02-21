@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -37,15 +38,17 @@ type jfrogXrayPluginSpec struct {
 	// Annotation in which to find the Docker image name
 	ImageAnnotation string `yaml:"imageAnnotation"`
 	// Annotation in which to find the Artifactory repository name
-	RepositoryAnnotation string                `yaml:"repositoryAnnotation"`
-	Auth                 jfrogAuth             `yaml:"auth"`
-	ComponentsFilter     sbom.ComponentsFilter `yaml:"componentsFilter"`
-	// If true, only BOM dependencies are retained that can be matched to
-	// catalog entities.
-	OnlyCatalogEntities   bool   `yaml:"onlyCatalogEntities"`
-	CoordsAnnotation      string `yaml:"coordsAnnotation"`
-	TargetAnnotation      string `yaml:"targetAnnotation"`
-	LintFindingAnnotation string `yaml:"lintFindingAnnotation"`
+	RepositoryAnnotation  string                `yaml:"repositoryAnnotation"`
+	Auth                  jfrogAuth             `yaml:"auth"`
+	ComponentsFilter      sbom.ComponentsFilter `yaml:"componentsFilter"`
+	CoordsAnnotation      string                `yaml:"coordsAnnotation"`
+	TargetAnnotation      string                `yaml:"targetAnnotation"`
+	LintFindingAnnotation string                `yaml:"lintFindingAnnotation"`
+	// Annotation in which to find a JSON list of "[groupId:]artifactId"
+	// strings of dependencies that should never be declared as missing during linting.
+	// This is the usual "lint:ignore" hook that's always needed for weird edge
+	// cases, to avoid flooding the system with lint warnings that no none looks at.
+	LintIgnoreAnnotation string `yaml:"lintIgnoreAnnotation"`
 }
 
 type JFrogXrayPlugin struct {
@@ -296,11 +299,7 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 		return nil, fmt.Errorf("repository not set in plugin args")
 	}
 	idx := p.newCatalogIndexFromEntities(args.Repository.AllEntities())
-	catalogComponents := p.filterByCatalogEntities(bom, idx)
 
-	if p.spec.OnlyCatalogEntities {
-		bom.Components = catalogComponents
-	}
 	annotations := map[string]any{
 		p.spec.TargetAnnotation: bom,
 	}
@@ -331,6 +330,31 @@ func (p *JFrogXrayPlugin) detectDependencyMismatches(bom *sbom.MiniBOM, entity c
 		return nil, nil
 	}
 
+	ignored := make(map[string]bool)
+	if p.spec.LintIgnoreAnnotation != "" {
+		if val, ok := entity.GetMetadata().Annotations[p.spec.LintIgnoreAnnotation]; ok {
+			var list []string
+			if err := json.Unmarshal([]byte(val), &list); err == nil {
+				for _, s := range list {
+					ignored[s] = true
+				}
+			}
+		}
+	}
+
+	isIgnored := func(bc gav) bool {
+		if len(ignored) == 0 {
+			return false
+		}
+		if ignored[bc.a] { // artifactId
+			return true
+		}
+		if bc.g != "" && ignored[bc.g+":"+bc.a] { // groupId:artifactId
+			return true
+		}
+		return false
+	}
+
 	// 1. Resolve all declared dependencies of this component.
 	declared := make(map[string]catalog.Entity)
 	add := func(refs []*catalog.LabelRef) {
@@ -354,14 +378,18 @@ func (p *JFrogXrayPlugin) detectDependencyMismatches(bom *sbom.MiniBOM, entity c
 	// 3. Compare SBOM components with declared dependencies.
 	matchedRefs := make(map[string]bool)
 
-	for _, bomComp := range bom.Components {
-		if e := declaredIdx.matchComponent(bomComp); e != nil {
+	for _, raw := range bom.Components {
+		bc := parseGAV(raw)
+		if e := declaredIdx.matchEntity(bc); e != nil {
 			matchedRefs[e.GetRef().String()] = true
 		} else {
 			// Not in declared deps. Is it in the catalog at all?
-			if e := fullIdx.matchComponent(bomComp); e != nil && e != entity {
-				// Yes, it's a catalog entity (different from 'entity' itself) that is missing from declared deps.
-				missing = append(missing, bomComp)
+			if e := fullIdx.matchEntity(bc); e != nil {
+				// Yes, it's a catalog entity.
+				// Add to mising if it's different from 'entity' itself and not explicitly ignored.
+				if !isIgnored(bc) && !e.GetRef().Equal(entity.GetRef()) {
+					missing = append(missing, raw)
+				}
 			}
 		}
 	}
@@ -369,7 +397,7 @@ func (p *JFrogXrayPlugin) detectDependencyMismatches(bom *sbom.MiniBOM, entity c
 	// 4. Any declared dependency missing from the SBOM?
 	for ref, e := range declared {
 		if !matchedRefs[ref] {
-			extra = append(extra, e.GetMetadata().Name)
+			extra = append(extra, e.GetQName())
 		}
 	}
 
@@ -378,20 +406,24 @@ func (p *JFrogXrayPlugin) detectDependencyMismatches(bom *sbom.MiniBOM, entity c
 	return
 }
 
-func (p *JFrogXrayPlugin) filterByCatalogEntities(bom *sbom.MiniBOM, idx *catalogIndex) []string {
-	var components []string
-	for _, c := range bom.Components {
-		if idx.matchComponent(c) != nil {
-			components = append(components, c)
-		}
+type gav struct {
+	g, a, v string
+}
+
+func parseGAV(s string) gav {
+	parts := strings.Split(s, ":")
+	if len(parts) == 1 {
+		return gav{a: parts[0]}
 	}
-	return components
+	if len(parts) == 2 {
+		return gav{g: parts[0], a: parts[1]}
+	}
+	return gav{g: parts[0], a: parts[1], v: parts[2]}
 }
 
 type indexedEntity struct {
-	entity    catalog.Entity
-	g, a      string
-	hasCoords bool
+	entity catalog.Entity
+	coords gav
 }
 
 type catalogIndex struct {
@@ -401,48 +433,41 @@ type catalogIndex struct {
 func (p *JFrogXrayPlugin) newCatalogIndexFromEntities(allEntities []catalog.Entity) *catalogIndex {
 	entities := make([]indexedEntity, 0, len(allEntities))
 	for _, e := range allEntities {
-		info := indexedEntity{entity: e}
+		info := indexedEntity{entity: e, coords: gav{a: e.GetMetadata().Name}}
 		if p.spec.CoordsAnnotation != "" {
 			if coords, ok := e.GetMetadata().Annotations[p.spec.CoordsAnnotation]; ok {
-				parts := strings.Split(coords, ":")
-				if len(parts) == 1 {
-					info.a = parts[0]
-				} else if len(parts) >= 2 {
-					info.g = parts[0]
-					info.a = parts[1]
-				}
-				info.hasCoords = true
+				info.coords = parseGAV(coords)
 			}
 		}
 		entities = append(entities, info)
 	}
+
+	slices.SortFunc(entities, func(i, j indexedEntity) int {
+		if cmp := strings.Compare(i.coords.a, j.coords.a); cmp != 0 {
+			return cmp
+		}
+		return strings.Compare(i.coords.g, j.coords.g)
+	})
+
 	return &catalogIndex{
 		entities: entities,
 	}
 }
 
-func (idx *catalogIndex) matchComponent(comp string) catalog.Entity {
-	parts := strings.Split(comp, ":")
-
-	if len(parts) == 1 {
-		return idx.matchEntity("", parts[0])
-	} else if len(parts) >= 2 {
-		return idx.matchEntity(parts[0], parts[1])
-	}
-	return nil
-}
-
-func (idx *catalogIndex) matchEntity(g, a string) catalog.Entity {
-	if a == "" {
+func (idx *catalogIndex) matchEntity(bc gav) catalog.Entity {
+	if bc.a == "" {
 		return nil
 	}
-	for _, info := range idx.entities {
-		if info.hasCoords {
-			if info.a == a && (info.g == "" || g == "" || info.g == g) {
-				return info.entity
-			}
-		}
-		if info.entity.GetMetadata().Name == a {
+
+	// sort.Search returns the smallest index i such that f(i) is true.
+	start := sort.Search(len(idx.entities), func(i int) bool {
+		return idx.entities[i].coords.a >= bc.a
+	})
+
+	// Scan only the block with matching artifactId.
+	for j := start; j < len(idx.entities) && idx.entities[j].coords.a == bc.a; j++ {
+		info := idx.entities[j]
+		if info.coords.g == "" || bc.g == "" || info.coords.g == bc.g {
 			return info.entity
 		}
 	}
