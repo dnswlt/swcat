@@ -123,6 +123,9 @@ func (p *JFrogXrayPlugin) setBasicAuth(req *http.Request) {
 
 // fetchTags returns the list of tags for the given image in repository.
 func (p *JFrogXrayPlugin) fetchTags(ctx context.Context, repository, image string) ([]string, error) {
+	// Use short timeout for fetching tags, this should be quick, else we've probably got network issues.
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
 	url := fmt.Sprintf("%s/artifactory/api/docker/%s/v2/%s/tags/list", p.spec.JFrogURL, repository, image)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
