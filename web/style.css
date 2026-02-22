@@ -60,13 +60,13 @@
     /* Hover over edges */
     .graphviz-svg .edge:hover path {
         /* Arrow line */
-        stroke: #808080;
+        stroke: #8493A5;
         stroke-width: 3;
     }
     .graphviz-svg .edge:hover polygon {
         /* Arrow head */
-        fill: #808080;
-        stroke: #808080;
+        fill: #8493A5;
+        stroke: #8493A5;
         stroke-width: 3;
     }
 

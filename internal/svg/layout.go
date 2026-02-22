@@ -70,10 +70,11 @@ func (l *StandardLayouter) fillColor(e catalog.Entity) string {
 		return "#FCE0BA"
 		// return "#FADA7A"
 	case catalog.KindResource:
-		return "#B4DEBD"
+		return "#D5E8D4"
+		// return "#B4DEBD"
 	case catalog.KindGroup:
-		// return "#F5EEDC"
-		return "#F2F0EB"
+		return "#F5EEDC"
+		// return "#F2F0EB"
 	}
 	return "#F5EEDC" // neutral beige
 }
@@ -182,10 +183,19 @@ func (l *StandardLayouter) Node(e catalog.Entity) dot.NodeLayout {
 
 func (l *StandardLayouter) NodeContext(e, contextEntity catalog.Entity) dot.NodeLayout {
 
+	fillColor := l.fillColor(e)
+	borderColor := "#000000"
+	if strings.HasPrefix(fillColor, "#") {
+		// Use slightly darkened version of the fill color for borders.
+		if c, err := AdjustLightness(fillColor, 0.85); err == nil {
+			borderColor = c
+		}
+	}
 	return dot.NodeLayout{
-		Label:     l.label(e, contextEntity),
-		FillColor: l.fillColor(e),
-		Shape:     l.shape(e),
+		Label:       l.label(e, contextEntity),
+		FillColor:   fillColor,
+		BorderColor: borderColor,
+		Shape:       l.shape(e),
 	}
 }
 

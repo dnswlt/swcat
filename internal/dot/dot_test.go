@@ -90,13 +90,14 @@ id="svg-cluster-0"
 label="sys1"
 fontsize="11"
 style=filled
-fillcolor="#f3f4f6"
-"c1"[id="c1",label="c1",fillcolor="#D2E5EF",shape="box",style="filled,rounded",class="clickable-node"]
-"api1"[id="api1",label="api1",fillcolor="#FCE0BA",shape="box",style="filled,rounded",class="clickable-node"]
+color="#C9CED7"
+fillcolor="#F3F4F6"
+"c1"[id="c1",label="c1",color="#000000",fillcolor="#D2E5EF",shape="box",style="filled,rounded",class="clickable-node"]
+"api1"[id="api1",label="api1",color="#000000",fillcolor="#FCE0BA",shape="box",style="filled,rounded",class="clickable-node"]
 }
-"s1"[id="s1",label="s1",fillcolor="#6BABD0",shape="box",style="filled",class="clickable-node"]
-"s1" -> "api1"[class="system-link-edge",id="svg-edge-0"]
-"c1" -> "api1"[id="svg-edge-1",style="dashed"]
+"s1"[id="s1",label="s1",color="#000000",fillcolor="#6BABD0",shape="box",style="filled",class="clickable-node"]
+"s1" -> "api1"[class="system-link-edge",color="#8493A5",id="svg-edge-0"]
+"c1" -> "api1"[color="#8493A5",id="svg-edge-1",style="dashed"]
 }
 `)
 

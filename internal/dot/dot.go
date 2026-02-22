@@ -103,9 +103,10 @@ func (r *dotRunner) Close() error {
 }
 
 type NodeLayout struct {
-	Label     string // Multi-line labels should use Graphviz \n \l \r sequences.
-	FillColor string // Either hex ("#ff00aa") or a well-known color name ("red").
-	Shape     NodeShape
+	Label       string // Multi-line labels should use Graphviz \n \l \r sequences.
+	FillColor   string // Either hex ("#ff00aa") or a well-known color name ("red").
+	BorderColor string
+	Shape       NodeShape
 }
 
 type NodeShape int
@@ -130,6 +131,13 @@ func (n *Node) FillColor() string {
 		return n.Layout.FillColor
 	}
 	return "#FFFFFF"
+}
+
+func (n *Node) BorderColor() string {
+	if n.Layout.BorderColor != "" {
+		return n.Layout.BorderColor
+	}
+	return "#000000"
 }
 
 func (n *Node) dotShape() string {
@@ -246,10 +254,11 @@ func (dw *Writer) AddNode(node Node) {
 		return
 	}
 	label := escLabel(node.Label())
-	fillColor := escLabel(node.FillColor())
+	fillColor := node.FillColor()
+	borderColor := node.BorderColor()
 
-	fmt.Fprintf(dw.w, `"%s"[id="%s",label="%s",fillcolor="%s",shape="%s",style="%s",class="clickable-node"]`,
-		node.ID, node.ID, label, fillColor, node.dotShape(), node.dotStyle())
+	fmt.Fprintf(dw.w, `"%s"[id="%s",label="%s",color="%s",fillcolor="%s",shape="%s",style="%s",class="clickable-node"]`,
+		node.ID, node.ID, label, borderColor, fillColor, node.dotShape(), node.dotStyle())
 	fmt.Fprintln(dw.w)
 	dw.nodeInfo[node.ID] = &NodeInfo{
 		Label: node.Label(),
@@ -296,12 +305,16 @@ func escLabel(label string) string {
 }
 
 func (dw *Writer) AddEdge(edge Edge) {
-	attrs := map[string]string{}
-
 	// Use a synthetic ID. The frontend will get its information about this
 	// edge from its associated metadata JSON.
 	edgeID := fmt.Sprintf("svg-edge-%d", len(dw.edgeInfo))
-	attrs["id"] = edgeID
+
+	// Edge attributes for dot
+	attrs := map[string]string{
+		"id":    edgeID,
+		"color": "#8493A5",
+	}
+
 	dw.edgeInfo[edgeID] = &EdgeInfo{
 		From:         edge.From,
 		To:           edge.To,
@@ -366,7 +379,11 @@ func (dw *Writer) StartCluster(label string) {
 	fmt.Fprintf(dw.w, "label=\"%s\"\n", label)
 	fmt.Fprintf(dw.w, "fontsize=\"11\"\n")
 	fmt.Fprintf(dw.w, "style=filled\n")
-	fmt.Fprintf(dw.w, "fillcolor=\"#f3f4f6\"\n")
+
+	fillColor := "#F3F4F6"
+	borderColor := "#C9CED7" // AdjustLightness(fillColor, 0.85)
+	fmt.Fprintf(dw.w, "color=\"%s\"\n", borderColor)
+	fmt.Fprintf(dw.w, "fillcolor=\"%s\"\n", fillColor)
 }
 
 func (dw *Writer) EndCluster() {
