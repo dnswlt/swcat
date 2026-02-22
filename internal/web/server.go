@@ -354,10 +354,21 @@ func (s *Server) reloadTemplates() error {
 		"hasPlugins": func(e catalog.Entity) bool {
 			return s.pluginRegistry != nil && s.pluginRegistry.Matches(e)
 		},
+		"matchingPlugins": func(e catalog.Entity) []string {
+			if s.pluginRegistry == nil {
+				return nil
+			}
+			res := s.pluginRegistry.MatchingPlugins(e)
+			slices.Sort(res)
+			return res
+		},
 		"entitySummary": entitySummary,
 		"parentSystem":  parentSystem,
 		"dict":          dictFunc,
 		"linkIcon":      linkIcon,
+		"strJoin": func(elems []string, sep string) string {
+			return strings.Join(elems, sep)
+		},
 	})
 	var err error
 	if s.opts.BaseDir == "" {

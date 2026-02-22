@@ -20,10 +20,15 @@
     {{ else }}
 
     {{ $isSystem := eq $entity.GetKind "system" }}
-    {{ if or ($entity | hasPlugins) $isSystem }}
+    {{ $matching := $entity | matchingPlugins }}
+    {{ if or $matching $isSystem }}
     <a href="#" hx-post="{{ $entity | toEntityURL }}/run-plugins" hx-target="#error-messages"
-        class="bg-orange-200 hover:bg-orange-300 py-1 px-3 rounded text-sm" aria-label="Update auto-generated data "
-        title='Update auto-generated data{{if $isSystem }} (including children) {{ end }}'>
+        class="bg-orange-200 hover:bg-orange-300 py-1 px-3 rounded text-sm" aria-label="Update auto-generated data"
+        {{ if $isSystem }}
+        title="Run plugins (including child entities)"
+        {{ else }}
+        title='Run plugins: {{ strJoin $matching ", " }}'
+        {{ end }}>
         <svg class="h-4 w-4 plugin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <!-- Zap (flash/bolt) -->

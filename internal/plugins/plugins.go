@@ -167,6 +167,17 @@ func (r *Registry) Matches(e catalog.Entity) bool {
 	return false
 }
 
+func (r *Registry) MatchingPlugins(e catalog.Entity) []string {
+	var keys []string
+
+	for k, t := range r.triggers {
+		if t.Matches(e) {
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
+
 // Plugins returns a list of names of all registered plugins.
 func (r *Registry) Plugins() []string {
 	keys := make([]string, 0, len(r.triggers))
