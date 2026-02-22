@@ -18,6 +18,9 @@ A linting rule consists of:
 *   **Check:** The CEL expression that validates the entity. If it returns `false`, the rule is considered violated.
 *   **Message:** The message shown to the user when the rule is violated.
 
+!!! tip
+    For a comprehensive list of CEL examples and how to use them with the `swcat` model, see the [CEL Demo test file](https://github.com/dnswlt/swcat/blob/main/internal/lint/lint_demo_test.go) in the repository.
+
 ## Configuration
 
 Linter rules are configured in a `lint.yml` file located in your data root directory.
