@@ -26,6 +26,23 @@
                 </a>
             </div>
         </div>
+
+        {{ if .ExtensionsJSON }}
+        <details class="border rounded-lg mt-6 text-sm group">
+            <summary class="font-semibold bg-gray-50 px-3 py-2 border-b rounded-t-lg text-gray-700 cursor-pointer hover:bg-gray-100 transition-colors list-none flex justify-between items-center">
+                <span>Auto-generated Metadata (Annotations)</span>
+                <span class="text-xs text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+            </summary>
+            <div class="p-4 space-y-2">
+                <p class="text-sm text-gray-500 mb-4">
+                    These annotations are automatically managed by plugins and reflect data from external systems or automated analysis. They are updated whenever plugins run.
+                </p>
+                <div class="max-h-96 overflow-y-auto border rounded-md">
+                    <textarea id="extensions-viewer" class="json-viewer" readonly>{{ .ExtensionsJSON }}</textarea>
+                </div>
+            </div>
+        </details>
+        {{ end }}
     </main>
 
     {{ template "footer.html" . }}

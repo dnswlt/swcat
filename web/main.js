@@ -182,13 +182,25 @@ async function initPage(pageId) {
 
     // YAML editor
     if (['entity-edit', 'entity-clone'].includes(pageId)) {
-        const { initYamlEditor } = await import('./editor.js');
+        const { initYamlEditor, initJsonViewer } = await import('./editor.js');
         initYamlEditor();
+
+        // JSON viewer to render JSON annotations if present (e.g. read-only ExtensionsJSON)
+        const jsonViewers = document.querySelectorAll('.json-viewer');
+        jsonViewers.forEach(viewer => {
+            initJsonViewer(viewer.id);
+        });
     }
 
     if (pageId === 'entity-source') {
-        const { initYamlViewer } = await import('./editor.js');
+        const { initYamlViewer, initJsonViewer } = await import('./editor.js');
         initYamlViewer();
+
+        // JSON viewer to render JSON annotations if present (e.g. read-only ExtensionsJSON)
+        const jsonViewers = document.querySelectorAll('.json-viewer');
+        jsonViewers.forEach(viewer => {
+            initJsonViewer(viewer.id);
+        });
     }
 }
 

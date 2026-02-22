@@ -1204,6 +1204,19 @@ func (s *Server) serveEntityYAML(w http.ResponseWriter, r *http.Request, entityR
 	}
 	params["YAML"] = buf.String()
 
+	// Add annotations stored in extensions.
+	exts := data.repo.Extensions(entity.GetRef())
+	if exts != nil {
+		var jb bytes.Buffer
+		jsonEnc := json.NewEncoder(&jb)
+		jsonEnc.SetIndent("", "  ")
+
+		err := jsonEnc.Encode(exts.Annotations)
+		if err == nil {
+			params["ExtensionsJSON"] = jb.String()
+		}
+	}
+
 	s.serveHTMLPage(w, r, templateFile, params)
 }
 

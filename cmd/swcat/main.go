@@ -98,6 +98,7 @@ type Options struct {
 	GitUserEmail    string
 	BaseDir         string
 	ReadOnly        bool
+	DisablePlugins  bool
 	DotTimeout      time.Duration
 	UseDotStreaming bool
 	SVGCacheSize    int
@@ -188,6 +189,7 @@ func main() {
 	fs.StringVar(&opts.GitUserEmail, "git-user-email", "", "Email used for git commits in edit sessions")
 	fs.StringVar(&opts.BaseDir, "base-dir", "", "Base directory for resource files. If empty, uses embedded resources (recommended for production).")
 	fs.BoolVar(&opts.ReadOnly, "read-only", false, "Start server in read-only mode (no entity editing).")
+	fs.BoolVar(&opts.DisablePlugins, "disable-plugins", false, "Disable all plugins (even if a plugin config is found)")
 	fs.DurationVar(&opts.DotTimeout, "dot-timeout", 10*time.Second, "Maximum time to wait before cancelling dot executions")
 	fs.BoolVar(&opts.UseDotStreaming, "dot-streaming", runtime.GOOS == "windows", "Use long-running dot process to render SVG graphs (use only if dot process startup is slow, e.g. on Windows)")
 	fs.IntVar(&opts.SVGCacheSize, "svg-cache-size", 1024, "Max. number of SVG graphs to hold in the in-memory LRU cache")
@@ -264,7 +266,7 @@ func main() {
 	}
 
 	var pluginRegistry *plugins.Registry
-	if !opts.ReadOnly {
+	if !opts.ReadOnly && !opts.DisablePlugins {
 		pluginsConfigFile := filepath.Join(opts.RootDir, store.PluginsFile)
 		r, err := createPluginRegistry(pluginsConfigFile)
 		if errors.Is(err, iofs.ErrNotExist) {

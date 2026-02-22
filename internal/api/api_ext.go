@@ -30,6 +30,13 @@ func NewCatalogExtensions() *CatalogExtensions {
 	}
 }
 
+func (c *CatalogExtensions) Get(ref string) *MetadataExtensions {
+	if c.Entities == nil {
+		return nil
+	}
+	return c.Entities[ref]
+}
+
 // Merge merges other into c.
 // It overwrites the MetadataExtensions for any entity present in 'other'.
 func (c *CatalogExtensions) Merge(other *CatalogExtensions) {

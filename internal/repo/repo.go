@@ -304,6 +304,10 @@ func (r *Repository) SurroundingSystems(system *catalog.System) []*catalog.Syste
 	return result
 }
 
+func (r *Repository) Extensions(ref *catalog.Ref) *api.MetadataExtensions {
+	return r.extensions.Get(ref.String())
+}
+
 // Entity returns the entity identified by the entity reference ref, if it exists.
 // If the entity does not exist, it returns the nil interface.
 // The entity reference must be fully qualified, i.e. <kind>:[<namespace>/]<name>

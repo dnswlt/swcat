@@ -10,7 +10,7 @@
     {{template "nav.html" .}}
 
     <main class="w-full max-w-screen-lg mx-auto space-y-6 bg-white shadow rounded-xl p-6">
-        <h1 class="text-2xl font-semibold text-center">Clone {{ .Entity.GetKind }}</h1>
+        <h1 class="text-2xl font-semibold text-center">Clone {{ .Entity.GetQName }}</h1>
 
         <p>Edit the YAML below to create a new entity. Make sure to change the metadata.name.</p>
         <div id="error-messages"></div>
