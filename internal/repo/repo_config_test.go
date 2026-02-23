@@ -104,6 +104,48 @@ func TestCatalogValidationRules_Accept(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "API: valid version lifecycle",
+			rules: &CatalogValidationRules{
+				API: &APIValidationRules{
+					Lifecycle: &ValueRule{
+						Values: []string{"experimental", "production"},
+					},
+				},
+			},
+			entity: &catalog.API{
+				Spec: &catalog.APISpec{
+					Type:      "openapi",
+					Lifecycle: "production",
+					Versions: []*catalog.APISpecVersion{
+						{Version: catalog.Version{RawVersion: "v1"}, Lifecycle: "production"},
+						{Version: catalog.Version{RawVersion: "v2"}, Lifecycle: "experimental"},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "API: invalid version lifecycle",
+			rules: &CatalogValidationRules{
+				API: &APIValidationRules{
+					Lifecycle: &ValueRule{
+						Values: []string{"experimental", "production"},
+					},
+				},
+			},
+			entity: &catalog.API{
+				Spec: &catalog.APISpec{
+					Type:      "openapi",
+					Lifecycle: "production",
+					Versions: []*catalog.APISpecVersion{
+						{Version: catalog.Version{RawVersion: "v1"}, Lifecycle: "production"},
+						{Version: catalog.Version{RawVersion: "v2"}, Lifecycle: "deprecated"},
+					},
+				},
+			},
+			wantErr: true,
+		},
 
 		// --- Component Tests ---
 		{

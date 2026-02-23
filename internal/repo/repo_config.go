@@ -126,6 +126,11 @@ func (r *CatalogValidationRules) Accept(e catalog.Entity) error {
 			if !r.API.Lifecycle.Accept(v.GetLifecycle()) {
 				return fmt.Errorf("invalid lifecycle %q (allowed: %s)", v.GetLifecycle(), r.API.Lifecycle.Describe())
 			}
+			for _, ver := range v.Spec.Versions {
+				if !r.API.Lifecycle.Accept(ver.Lifecycle) {
+					return fmt.Errorf("invalid lifecycle %q (allowed: %s)", ver.Lifecycle, r.API.Lifecycle.Describe())
+				}
+			}
 		}
 	}
 	// If no specific rules failed, the entity is considered valid.

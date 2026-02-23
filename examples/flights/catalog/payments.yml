@@ -92,7 +92,7 @@ spec:
     - version: v1
       lifecycle: production
     - version: v2alpha
-      lifecycle: preview
+      lifecycle: experimental
 ---
 apiVersion: swcat/v1
 kind: Component
