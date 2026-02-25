@@ -87,12 +87,16 @@ func LoadConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read lint config %q: %w", path, err)
 	}
+	return LoadConfigFromYAML(bs)
+}
 
-	dec := yaml.NewDecoder(bytes.NewReader(bs))
+// LoadConfigFromYAML reads the linting configuration from the specified yamlData.
+func LoadConfigFromYAML(yamlData []byte) (*Config, error) {
+	dec := yaml.NewDecoder(bytes.NewReader(yamlData))
 	dec.KnownFields(true)
 	var config Config
 	if err := dec.Decode(&config); err != nil {
-		return nil, fmt.Errorf("invalid lint configuration YAML in %q: %w", path, err)
+		return nil, fmt.Errorf("invalid lint configuration YAML: %w", err)
 	}
 
 	return &config, nil
@@ -195,6 +199,10 @@ func parseReportedGroups(groups []string) ([]string, error) {
 
 func (l *Linter) ReportedGroups() []string {
 	return l.reportedGroups
+}
+
+func (l *Linter) NumRules() int {
+	return len(l.celRules) + len(l.customRules)
 }
 
 func (l *Linter) compileCondition(name, condition string) (cel.Program, error) {

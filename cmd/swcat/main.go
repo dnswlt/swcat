@@ -176,6 +176,24 @@ func createKubeClient(source store.Source, opts Options) (*kube.Client, error) {
 	return client, nil
 }
 
+func createLinter(source store.Source) (*lint.Linter, error) {
+	st, err := source.Store("")
+	if err != nil {
+		return nil, fmt.Errorf("could not get default store: %w", err)
+	}
+	lintYaml, err := st.ReadFile(store.LintFile)
+	if errors.Is(err, iofs.ErrNotExist) {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to load lint config: %w", err)
+	}
+	lintCfg, err := lint.LoadConfigFromYAML(lintYaml)
+	if err != nil {
+		return nil, err
+	}
+	return lint.NewLinter(lintCfg, lint.KnownCustomChecks)
+}
+
 func main() {
 
 	var opts Options
@@ -251,18 +269,11 @@ func main() {
 	}
 
 	// Load optional linter
-	var linter *lint.Linter
-	lintConfigFile := filepath.Join(opts.RootDir, store.LintFile)
-	lintCfg, err := lint.LoadConfig(lintConfigFile)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		log.Printf("Warning: failed to load lint config: %v", err)
-	} else if lintCfg != nil {
-		linter, err = lint.NewLinter(lintCfg, lint.KnownCustomChecks)
-		if err != nil {
-			log.Fatalf("Error: failed to create linter: %v", err)
-		} else {
-			log.Printf("Linter initialized with rules from %s", lintConfigFile)
-		}
+	linter, err := createLinter(source)
+	if err != nil {
+		log.Fatalf("Failed to create linter: %v", err)
+	} else if linter != nil {
+		log.Printf("Linter initialized from %s with %d rules", store.LintFile, linter.NumRules())
 	}
 
 	var pluginRegistry *plugins.Registry
