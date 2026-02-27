@@ -28,6 +28,9 @@ type Config struct {
 	ShowMetrics bool `yaml:"showMetrics"`
 	// Names of workloads that should be excluded in all namespaces.
 	ExcludedWorkloads []string `yaml:"excludedWorkloads"`
+	// Annotation that defines a component's name as returned by the WorkloadsQuery.
+	// Default: catalog.AnnotKubeName
+	WorkloadNameAnnotation string `yaml:"workloadNameAnnotation"`
 }
 
 // ParseConfig reads a prometheus Config from YAML data.
@@ -70,6 +73,10 @@ func NewWorkloadScanner(opts ClientOptions, cfg Config) *WorkloadScanner {
 		client: NewClient(cfg.URL, opts),
 		cfg:    cfg,
 	}
+}
+
+func (s *WorkloadScanner) Config() *Config {
+	return &s.cfg
 }
 
 // ScanWorkloads runs the configured query and returns the results for rendering.

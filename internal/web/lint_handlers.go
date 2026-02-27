@@ -246,8 +246,12 @@ func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request
 
 	// Build a set of known workload names from annotations.
 	annotatedNames := make(map[string]bool)
-	for _, e := range s.finder.FindComponents(data.repo, "") {
-		if v, ok := e.GetMetadata().Annotations[catalog.AnnotKubeName]; ok {
+	annotationKey := catalog.AnnotKubeName
+	if a := s.promScanner.Config().WorkloadNameAnnotation; a != "" {
+		annotationKey = a
+	}
+	for _, e := range s.finder.FindComponents(data.repo, "annotation") {
+		if v, ok := e.GetMetadata().Annotations[annotationKey]; ok {
 			annotatedNames[v] = true
 		}
 	}
