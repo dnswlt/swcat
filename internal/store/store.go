@@ -17,11 +17,12 @@ import (
 const (
 	YAMLIndent = 2
 
-	CatalogDir  = "catalog"
-	ConfigFile  = "swcat.yml"
-	PluginsFile = "plugins.yml"
-	LintFile    = "lint.yml"
-	KubeFile    = "kube.yml"
+	CatalogDir     = "catalog"
+	ConfigFile     = "swcat.yml"
+	PluginsFile    = "plugins.yml"
+	LintFile       = "lint.yml"
+	KubeFile       = "kube.yml"
+	PrometheusFile = "prom.yml"
 )
 
 var (

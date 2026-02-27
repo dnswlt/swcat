@@ -19,6 +19,7 @@ import (
 	"github.com/dnswlt/swcat/internal/kube"
 	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
+	"github.com/dnswlt/swcat/internal/prometheus"
 	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/web"
 	"github.com/peterbourgon/ff/v3"
@@ -76,6 +77,13 @@ func gitClientAuthFromEnv() *gitclient.Auth {
 	}
 }
 
+func promClientAuthFromEnv() (opts prometheus.ClientOptions) {
+	opts.Username = os.Getenv("SWCAT_PROMETHEUS_USER")
+	opts.Password = os.Getenv("SWCAT_PROMETHEUS_PASSWORD")
+	opts.BearerToken = os.Getenv("SWCAT_PROMETHEUS_TOKEN")
+	return opts
+}
+
 func createPluginRegistry(source store.Source) (*plugins.Registry, error) {
 	st, err := source.Store("")
 	if err != nil {
@@ -113,6 +121,7 @@ type Options struct {
 	KubeKubeconfig  string
 	KubeContext     string
 	KubeInCluster   bool
+	PromTimeout     time.Duration
 }
 
 func createKubeClient(source store.Source, opts Options) (*kube.Client, error) {
@@ -135,7 +144,7 @@ func createKubeClient(source store.Source, opts Options) (*kube.Client, error) {
 		}
 		return nil, fmt.Errorf("could not load kube config: %w", err)
 	}
-	cfg, err := kube.LoadConfig(kubeData)
+	cfg, err := kube.ParseConfig(kubeData)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse kube config: %w", err)
 	}
@@ -165,6 +174,32 @@ func createLinter(source store.Source) (*lint.Linter, error) {
 	return lint.NewLinter(lintCfg, lint.KnownCustomChecks)
 }
 
+func createPrometheusScanner(source store.Source, opts Options) (*prometheus.WorkloadScanner, error) {
+	defaultStore, err := source.Store("")
+	if err != nil {
+		return nil, fmt.Errorf("could not get default store: %w", err)
+	}
+	promData, err := defaultStore.ReadFile(store.PrometheusFile)
+	if errors.Is(err, iofs.ErrNotExist) {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("could not load prometheus config: %w", err)
+	}
+	cfg, err := prometheus.ParseConfig(promData)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse prometheus config: %w", err)
+	}
+
+	if cfg.URL == "" {
+		return nil, nil
+	}
+
+	clientOpts := promClientAuthFromEnv()
+	clientOpts.Timeout = opts.PromTimeout
+	scanner := prometheus.NewWorkloadScanner(clientOpts, *cfg)
+	return scanner, nil
+}
+
 func main() {
 
 	var opts Options
@@ -186,6 +221,7 @@ func main() {
 	fs.StringVar(&opts.KubeKubeconfig, "kube-kubeconfig", "", "Path to the kubeconfig file for Kubernetes workload scanning")
 	fs.StringVar(&opts.KubeContext, "kube-context", "", "Kubernetes context to use (only with -kube-kubeconfig)")
 	fs.BoolVar(&opts.KubeInCluster, "kube-in-cluster", false, "Use in-cluster Kubernetes config (for running inside a pod)")
+	fs.DurationVar(&opts.PromTimeout, "prom-timeout", 30*time.Second, "Maximum time to wait for Prometheus queries")
 
 	err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("SWCAT"))
 	if err != nil {
@@ -279,6 +315,14 @@ func main() {
 			opts.KubeKubeconfig, opts.KubeContext, opts.KubeInCluster)
 	}
 
+	// Optionally create a Prometheus scanner.
+	promScanner, err := createPrometheusScanner(source, opts)
+	if err != nil {
+		log.Printf("Could not create prometheus scanner: %v", err)
+	} else if promScanner != nil {
+		log.Printf("Prometheus scanner initialized")
+	}
+
 	server, err := web.NewServer(
 		web.ServerOptions{
 			Addr:            opts.Addr,
@@ -295,6 +339,7 @@ func main() {
 		pluginRegistry,
 		commentsStore,
 		kubeClient,
+		promScanner,
 	)
 	if err != nil {
 		log.Fatalf("Could not create server: %v", err)

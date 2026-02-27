@@ -32,7 +32,7 @@ type Client struct {
 func NewClient(baseURL string, opts ClientOptions) *Client {
 	timeout := opts.Timeout
 	if timeout == 0 {
-		timeout = 30 * time.Second
+		timeout = 5 * time.Second
 	}
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),

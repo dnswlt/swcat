@@ -43,6 +43,37 @@
             </div>
             {{ end }}
 
+            {{ if .HasPrometheus }}
+            <div class="border rounded-lg p-3 mb-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="font-semibold text-gray-800">Prometheus Workloads</h2>
+                        <p class="text-sm text-gray-500">Check which workloads are reported by Prometheus/Thanos.</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                            <input type="checkbox" id="prom-untracked" name="untracked" checked
+                                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            Untracked only
+                        </label>
+                        <button
+                            hx-get="lint/prometheus-workloads"
+                            hx-target="#prom-workloads-result"
+                            hx-swap="innerHTML"
+                            hx-include="#prom-untracked"
+                            hx-indicator="#prom-spinner"
+                            class="px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                            Load Workloads
+                        </button>
+                    </div>
+                </div>
+                <div id="prom-spinner" class="htmx-indicator text-center py-3 hidden">
+                    <span class="text-sm text-gray-500">Loading workloads...</span>
+                </div>
+                <div id="prom-workloads-result"></div>
+            </div>
+            {{ end }}
+
             {{ if .OwnerGroups }}
             <div class="space-y-6">
                 {{ range .OwnerGroups }}

@@ -1,0 +1,16 @@
+url: https://thanos.example.com/
+workloadsQuery: |-
+  sum by (instance, namespace, label_app) (
+    kube_pod_container_status_ready{instance="stable-dev"}
+    * on (namespace, pod, instance) group_left(label_app)
+    kube_pod_labels
+  )
+nameLabel: label_app
+displayLabels:
+  - key: instance
+    label: Environment
+  - key: namespace
+    label: Namespace
+  - key: label_app
+    label: Name
+showMetrics: true

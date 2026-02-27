@@ -33,8 +33,8 @@ type Config struct {
 	ExcludedWorkloads []string `yaml:"excludedWorkloads"`
 }
 
-// LoadConfig reads a kube Config from YAML data.
-func LoadConfig(data []byte) (*Config, error) {
+// ParseConfig reads a kube Config from YAML data.
+func ParseConfig(data []byte) (*Config, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	var cfg Config

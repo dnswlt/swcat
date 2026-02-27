@@ -12,6 +12,7 @@ import (
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/kube"
 	"github.com/dnswlt/swcat/internal/lint"
+	"github.com/dnswlt/swcat/internal/prometheus"
 )
 
 type lintGroup struct {
@@ -138,8 +139,9 @@ func (s *Server) serveLintFindings(w http.ResponseWriter, r *http.Request) {
 	})
 
 	params := map[string]any{
-		"OwnerGroups": result,
-		"HasKube":     s.kubeClient != nil,
+		"OwnerGroups":   result,
+		"HasKube":       s.kubeClient != nil,
+		"HasPrometheus": s.promScanner != nil,
 	}
 
 	s.serveHTMLPage(w, r, "lint_findings.html", params)
@@ -217,4 +219,73 @@ func (s *Server) serveKubeWorkloads(w http.ResponseWriter, r *http.Request) {
 		"LabelKeys": []string{"app", "app.kubernetes.io/version"},
 	}
 	s.serveHTMLPage(w, r, "kube_workloads.html", params)
+}
+
+type prometheusWorkloadView struct {
+	prometheus.Workload
+	Tracked bool
+}
+
+func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request) {
+	if s.promScanner == nil {
+		http.Error(w, "Prometheus scanner not configured", http.StatusNotFound)
+		return
+	}
+
+	data := s.getStoreData(r)
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	result, err := s.promScanner.ScanWorkloads(ctx)
+	if err != nil {
+		log.Printf("Error scanning prometheus workloads: %v", err)
+		http.Error(w, fmt.Sprintf("Error scanning prometheus workloads: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Build a set of known workload names from annotations.
+	annotatedNames := make(map[string]bool)
+	for _, e := range s.finder.FindComponents(data.repo, "") {
+		if v, ok := e.GetMetadata().Annotations[catalog.AnnotKubeName]; ok {
+			annotatedNames[v] = true
+		}
+	}
+
+	isTracked := func(w prometheus.Workload) bool {
+		// Tracked if a Component with the same name exists in the default namespace.
+		ref := &catalog.Ref{Kind: catalog.KindComponent, Namespace: catalog.DefaultNamespace, Name: w.Name}
+		if data.repo.Component(ref) != nil {
+			return true
+		}
+		// Tracked if any entity has a matching annotation.
+		return annotatedNames[w.Name]
+	}
+
+	var workloads []prometheusWorkloadView
+	for _, w := range result.Workloads {
+		workloads = append(workloads, prometheusWorkloadView{
+			Workload: w,
+			Tracked:  isTracked(w),
+		})
+	}
+
+	// Filter to untracked workloads if requested.
+	untrackedOnly := r.URL.Query().Get("untracked") == "on"
+	if untrackedOnly {
+		workloads = slices.DeleteFunc(workloads, func(w prometheusWorkloadView) bool {
+			return w.Tracked
+		})
+	}
+
+	slices.SortFunc(workloads, func(a, b prometheusWorkloadView) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+
+	params := map[string]any{
+		"Workloads":     workloads,
+		"DisplayLabels": result.DisplayLabels,
+		"ShowMetrics":   result.ShowMetrics,
+	}
+	s.serveHTMLPage(w, r, "prometheus_workloads.html", params)
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/dnswlt/swcat/internal/kube"
 	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
+	"github.com/dnswlt/swcat/internal/prometheus"
 	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/svg"
@@ -116,11 +117,15 @@ type Server struct {
 	// If set, workloads can be queried from a remote cluster.
 	kubeClient *kube.Client
 
+	// The optional Prometheus scanner.
+	// If set, workloads can be queried from Prometheus.
+	promScanner *prometheus.WorkloadScanner
+
 	// Server startup time. Used for cache busting JS/CSS resources.
 	started time.Time
 }
 
-func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, pluginRegistry *plugins.Registry, commentsStore comments.Store, kubeClient *kube.Client) (*Server, error) {
+func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, pluginRegistry *plugins.Registry, commentsStore comments.Store, kubeClient *kube.Client, promScanner *prometheus.WorkloadScanner) (*Server, error) {
 	if opts.SVGCacheSize <= 0 {
 		opts.SVGCacheSize = 128
 	}
@@ -140,6 +145,7 @@ func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, plu
 		pluginRegistry: pluginRegistry,
 		commentsStore:  commentsStore,
 		kubeClient:     kubeClient,
+		promScanner:    promScanner,
 		finder:         repo.NewFinder(),
 		started:        time.Now(),
 	}
@@ -1921,6 +1927,9 @@ func (s *Server) uiMux() *http.ServeMux {
 	})
 	mux.HandleFunc("GET /lint/kube-workloads", func(w http.ResponseWriter, r *http.Request) {
 		s.serveKubeWorkloads(w, r)
+	})
+	mux.HandleFunc("GET /lint/prometheus-workloads", func(w http.ResponseWriter, r *http.Request) {
+		s.servePrometheusWorkloads(w, r)
 	})
 
 	mux.HandleFunc("POST /sessions", func(w http.ResponseWriter, r *http.Request) {

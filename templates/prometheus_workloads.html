@@ -1,0 +1,55 @@
+{{ if .Workloads }}
+<div class="mt-1 overflow-auto max-h-[500px]">
+    <table class="min-w-full text-sm">
+        <thead>
+            <tr class="border-b text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <th class="px-3 py-1 w-8">Status</th>
+                <th class="px-3 py-1">Name</th>
+                {{ range .DisplayLabels }}
+                <th class="px-3 py-1">{{ .Label }}</th>
+                {{ end }}
+                {{ if .ShowMetrics }}
+                <th class="px-3 py-1 text-right">Value</th>
+                {{ end }}
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {{ range .Workloads }}
+            <tr>
+                <td class="px-3 py-1">
+                    {{ if .Tracked }}
+                    <span title="Tracked in catalog">
+                        <svg class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </span>
+                    {{ else }}
+                    <span title="Untracked workload">
+                        <svg class="h-5 w-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                    </span>
+                    {{ end }}
+                </td>
+                <td class="px-3 py-1 font-medium text-gray-900">{{ .Name }}</td>
+                {{ $labelValues := .LabelValues }}
+                {{ range $.DisplayLabels }}
+                <td class="px-3 py-1 text-gray-600">
+                    {{ index $labelValues .Key }}
+                </td>
+                {{ end }}
+                {{ if $.ShowMetrics }}
+                <td class="px-3 py-1 text-right font-mono text-gray-500">
+                    {{ printf "%.2f" .Value }}
+                </td>
+                {{ end }}
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+</div>
+{{ else }}
+<div class="mt-4 text-center py-6 text-sm text-gray-500">
+    No workloads found matching the configured query.
+</div>
+{{ end }}
