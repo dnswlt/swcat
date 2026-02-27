@@ -24,6 +24,7 @@ document.body.addEventListener('htmx:configRequest', (event) => {
         newParams.delete('o');
         newParams.delete('x');
         newParams.set('o', systemRef);
+        newParams.set('c', systemRef);
     } else if (chipAction === 'toggle-detail') {
         // c=<me>: toggle detail view
         const contextSystems = newParams.getAll('c');
