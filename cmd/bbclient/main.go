@@ -17,7 +17,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/dnswlt/swcat/internal/plugins/bitbucket"
+	"github.com/dnswlt/swcat/internal/bitbucket"
 )
 
 func main() {
@@ -59,7 +59,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	client := bitbucket.NewClient(baseURL, username, password)
+	client := bitbucket.NewClient(baseURL, bitbucket.ClientOptions{
+		Username: username,
+		Password: password,
+	})
 	ctx := context.Background()
 
 	switch args[0] {

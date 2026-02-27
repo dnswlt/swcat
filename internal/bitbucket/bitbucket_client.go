@@ -11,24 +11,34 @@ import (
 	"time"
 )
 
+// ClientOptions holds optional configuration for the Client.
+type ClientOptions struct {
+	// Username and Password enable HTTP Basic Auth.
+	Username string
+	Password string
+	// Timeout for HTTP requests. Defaults to 30s.
+	Timeout time.Duration
+}
+
 // Client is a client for the Bitbucket Data Center REST API.
 type Client struct {
 	baseURL    string
-	username   string
-	password   string
+	opts       ClientOptions
 	httpClient *http.Client
 }
 
 // NewClient creates a new Bitbucket Data Center client targeting baseURL
-// (e.g. "https://bitbucket.example.com"). Pass empty strings for username
-// and password to make unauthenticated requests.
-func NewClient(baseURL, username, password string) *Client {
+// (e.g. "https://bitbucket.example.com").
+func NewClient(baseURL string, opts ClientOptions) *Client {
+	timeout := opts.Timeout
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
 	return &Client{
-		baseURL:  strings.TrimRight(baseURL, "/"),
-		username: username,
-		password: password,
+		baseURL: strings.TrimRight(baseURL, "/"),
+		opts:    opts,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: timeout,
 		},
 	}
 }
@@ -269,8 +279,8 @@ func (c *Client) GetFileContents(ctx context.Context, projectKey, repoSlug, file
 }
 
 func (c *Client) setAuth(req *http.Request) {
-	if c.username != "" {
-		req.SetBasicAuth(c.username, c.password)
+	if c.opts.Username != "" {
+		req.SetBasicAuth(c.opts.Username, c.opts.Password)
 	}
 }
 
