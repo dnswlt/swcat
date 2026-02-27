@@ -113,8 +113,10 @@ func (c *Client) doGet(ctx context.Context, u *url.URL, target any) error {
 	return nil
 }
 
-// GetCommits returns the first page of commits for the given project and
-// repository. Use GetCommitsOptions to filter by ref or set a page size.
+// GetCommits returns commits for the given project and repository, following
+// pagination. If opts.Limit > 0, at most that many commits are returned across
+// all pages. If opts.Limit == 0, only the first page is returned (commits in a
+// large repository are unbounded, so full pagination requires an explicit limit).
 //
 // API: GET /rest/api/latest/projects/{projectKey}/repos/{repositorySlug}/commits
 func (c *Client) GetCommits(ctx context.Context, projectKey, repoSlug string, opts GetCommitsOptions) ([]Commit, error) {
@@ -124,23 +126,39 @@ func (c *Client) GetCommits(ctx context.Context, projectKey, repoSlug string, op
 		return nil, fmt.Errorf("bitbucket: building commits URL: %w", err)
 	}
 
-	q := u.Query()
+	// Seed fixed query params (until/since) once; start/limit vary per page.
+	base := u.Query()
 	if opts.Until != "" {
-		q.Set("until", opts.Until)
+		base.Set("until", opts.Until)
 	}
 	if opts.Since != "" {
-		q.Set("since", opts.Since)
+		base.Set("since", opts.Since)
 	}
-	if opts.Limit > 0 {
-		q.Set("limit", fmt.Sprintf("%d", opts.Limit))
-	}
-	u.RawQuery = q.Encode()
 
-	var paged pagedResponse[Commit]
-	if err := c.doGet(ctx, u, &paged); err != nil {
-		return nil, err
+	var all []Commit
+	start := 0
+	for {
+		q := base
+		q.Set("start", fmt.Sprintf("%d", start))
+		if opts.Limit > 0 {
+			// Request only as many as we still need so the server does less work.
+			remaining := opts.Limit - len(all)
+			q.Set("limit", fmt.Sprintf("%d", remaining))
+		}
+		u.RawQuery = q.Encode()
+
+		var paged pagedResponse[Commit]
+		if err := c.doGet(ctx, u, &paged); err != nil {
+			return nil, err
+		}
+		all = append(all, paged.Values...)
+
+		if paged.IsLastPage || opts.Limit == 0 || len(all) >= opts.Limit {
+			break
+		}
+		start = paged.NextPageStart
 	}
-	return paged.Values, nil
+	return all, nil
 }
 
 // Branch represents a Bitbucket repository branch.

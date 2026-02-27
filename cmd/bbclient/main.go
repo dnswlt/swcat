@@ -38,6 +38,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Usage: bbclient -url URL -project KEY -repo SLUG <command> [args]\n\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
 		fmt.Fprintf(os.Stderr, "  branches             List all branches (marks the default)\n")
+		fmt.Fprintf(os.Stderr, "  default-branch       Print the default branch name\n")
 		fmt.Fprintf(os.Stderr, "  commits              Print recent commits\n")
 		fmt.Fprintf(os.Stderr, "  cat <file> [-at REV] Print file contents at optional revision\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
@@ -64,6 +65,8 @@ func main() {
 	switch args[0] {
 	case "branches":
 		runBranches(ctx, client, projectKey, repoSlug)
+	case "default-branch":
+		runDefaultBranch(ctx, client, projectKey, repoSlug)
 	case "commits":
 		runCommits(ctx, client, projectKey, repoSlug, args[1:])
 	case "cat":
@@ -73,6 +76,14 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
+}
+
+func runDefaultBranch(ctx context.Context, client *bitbucket.Client, projectKey, repoSlug string) {
+	b, err := client.GetDefaultBranch(ctx, projectKey, repoSlug)
+	if err != nil {
+		log.Fatalf("GetDefaultBranch: %v", err)
+	}
+	fmt.Println(b.DisplayID)
 }
 
 func runBranches(ctx context.Context, client *bitbucket.Client, projectKey, repoSlug string) {
