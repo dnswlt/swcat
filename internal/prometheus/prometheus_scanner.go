@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -15,11 +16,18 @@ type DisplayLabel struct {
 }
 
 type Config struct {
-	URL            string         `yaml:"url"`
-	WorkloadsQuery string         `yaml:"workloadsQuery"`
-	NameLabel      string         `yaml:"nameLabel"`
-	DisplayLabels  []DisplayLabel `yaml:"displayLabels"`
-	ShowMetrics    bool           `yaml:"showMetrics"`
+	// The base URL of the Prometheus or Thanos query API.
+	URL string `yaml:"url"`
+	// The PromQL instant query to run to find workloads.
+	WorkloadsQuery string `yaml:"workloadsQuery"`
+	// The name of the label that identifies the workload name (e.g. "app", "label_app").
+	NameLabel string `yaml:"nameLabel"`
+	// Labels from the query result to display in the UI.
+	DisplayLabels []DisplayLabel `yaml:"displayLabels"`
+	// Whether to show the numeric value of the metric in the UI.
+	ShowMetrics bool `yaml:"showMetrics"`
+	// Names of workloads that should be excluded in all namespaces.
+	ExcludedWorkloads []string `yaml:"excludedWorkloads"`
 }
 
 // ParseConfig reads a prometheus Config from YAML data.
@@ -73,8 +81,13 @@ func (s *WorkloadScanner) ScanWorkloads(ctx context.Context) (*WorkloadResult, e
 
 	var workloads []Workload
 	for _, sample := range samples {
+		name := sample.Labels[s.cfg.NameLabel]
+		if slices.Contains(s.cfg.ExcludedWorkloads, name) {
+			continue
+		}
+
 		w := Workload{
-			Name:        sample.Labels[s.cfg.NameLabel],
+			Name:        name,
 			LabelValues: make(map[string]string),
 			Value:       sample.Value,
 		}
