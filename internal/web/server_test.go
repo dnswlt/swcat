@@ -230,7 +230,7 @@ func TestDetail_LintFindings(t *testing.T) {
 	st := store.NewDiskStore(testDataDir)
 
 	// Initialize linter
-	lintCfg, err := lint.LoadConfig(filepath.Join(testDataDir, "lint.yml"))
+	lintCfg, err := lint.ReadConfig(filepath.Join(testDataDir, "lint.yml"))
 	if err != nil {
 		t.Fatalf("failed to load lint config: %v", err)
 	}

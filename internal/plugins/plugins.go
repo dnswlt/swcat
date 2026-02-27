@@ -100,14 +100,9 @@ func (a *PluginArgs) EmptyArgs() *PluginArgs {
 	}
 }
 
-func ReadConfig(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read plugins config: %w", err)
-	}
-
-	// Expand environment variables in the config file.
-	// This allows using ${VAR} or ${VAR:-default} in plugins.yml.
+// ParseConfig parses plugins config from YAML bytes, expanding ${VAR} and
+// ${VAR:-default} environment variable references.
+func ParseConfig(data []byte) (*Config, error) {
 	expanded := os.Expand(string(data), func(k string) string {
 		if key, def, found := strings.Cut(k, ":-"); found {
 			val := os.Getenv(key)
@@ -123,7 +118,15 @@ func ReadConfig(path string) (*Config, error) {
 	if err := yaml.Unmarshal([]byte(expanded), &config); err != nil {
 		return nil, fmt.Errorf("failed to parse plugins config: %w", err)
 	}
-	return &config, err
+	return &config, nil
+}
+
+func ReadConfig(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read plugins config: %w", err)
+	}
+	return ParseConfig(data)
 }
 
 // NewRegistry creates a new registry and registers all plugins configured in the given config.

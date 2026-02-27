@@ -15,12 +15,10 @@ import (
 	"time"
 
 	"github.com/dnswlt/swcat/internal/comments"
-	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/gitclient"
 	"github.com/dnswlt/swcat/internal/kube"
 	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
-	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/web"
 	"github.com/peterbourgon/ff/v3"
@@ -78,12 +76,21 @@ func gitClientAuthFromEnv() *gitclient.Auth {
 	}
 }
 
-func createPluginRegistry(configFile string) (*plugins.Registry, error) {
-	config, err := plugins.ReadConfig(configFile)
+func createPluginRegistry(source store.Source) (*plugins.Registry, error) {
+	st, err := source.Store("")
+	if err != nil {
+		return nil, fmt.Errorf("could not get default store: %w", err)
+	}
+	data, err := st.ReadFile(store.PluginsFile)
+	if errors.Is(err, iofs.ErrNotExist) {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to load plugins config: %w", err)
+	}
+	config, err := plugins.ParseConfig(data)
 	if err != nil {
 		return nil, err
 	}
-
 	return plugins.NewRegistry(config)
 }
 
@@ -106,42 +113,6 @@ type Options struct {
 	KubeKubeconfig  string
 	KubeContext     string
 	KubeInCluster   bool
-}
-
-func runPluginsAndUpdate(r *plugins.Registry, st store.Source) error {
-	s, err := st.Store("")
-	if err != nil {
-		log.Fatalf("Could not get default store: %v", err)
-	}
-
-	cfg := &config.Bundle{} // Default (empty) config
-	storeCfg, err := config.Load(s, store.ConfigFile)
-	if err != nil && !errors.Is(err, iofs.ErrNotExist) {
-		return err
-	}
-	if storeCfg != nil {
-		cfg = storeCfg
-	}
-
-	repository, err := repo.Load(s, cfg.Catalog)
-	if err != nil {
-		return err
-	}
-
-	finder := repo.NewFinder()
-	allEntities := finder.FindEntities(repository, "")
-	log.Printf("Running plugins on %d entities", len(allEntities))
-	for _, e := range allEntities {
-		exts, err := r.Run(context.Background(), repository, e)
-		if err != nil {
-			log.Printf("Error running plugins on %s: %v", e.GetRef(), err)
-			continue
-		}
-		if err := store.MergeExtensions(s, e.GetSourceInfo().Path, exts); err != nil {
-			log.Printf("Error updating sidecar for %s: %v", e.GetRef(), err)
-		}
-	}
-	return nil
 }
 
 func createKubeClient(source store.Source, opts Options) (*kube.Client, error) {
@@ -187,7 +158,7 @@ func createLinter(source store.Source) (*lint.Linter, error) {
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to load lint config: %w", err)
 	}
-	lintCfg, err := lint.LoadConfigFromYAML(lintYaml)
+	lintCfg, err := lint.ParseConfig(lintYaml)
 	if err != nil {
 		return nil, err
 	}
@@ -215,8 +186,6 @@ func main() {
 	fs.StringVar(&opts.KubeKubeconfig, "kube-kubeconfig", "", "Path to the kubeconfig file for Kubernetes workload scanning")
 	fs.StringVar(&opts.KubeContext, "kube-context", "", "Kubernetes context to use (only with -kube-kubeconfig)")
 	fs.BoolVar(&opts.KubeInCluster, "kube-in-cluster", false, "Use in-cluster Kubernetes config (for running inside a pod)")
-	var runPlugins bool
-	fs.BoolVar(&runPlugins, "run-plugins", false, "If true, executes plugins on all entities at startup")
 
 	err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("SWCAT"))
 	if err != nil {
@@ -278,20 +247,13 @@ func main() {
 
 	var pluginRegistry *plugins.Registry
 	if !opts.ReadOnly && !opts.DisablePlugins {
-		pluginsConfigFile := filepath.Join(opts.RootDir, store.PluginsFile)
-		r, err := createPluginRegistry(pluginsConfigFile)
-		if errors.Is(err, iofs.ErrNotExist) {
-			log.Printf("Plugins config file %s not found. Plugins will not be available.", pluginsConfigFile)
-		} else if err != nil {
+		r, err := createPluginRegistry(source)
+		if err != nil {
 			log.Fatalf("Could not create plugin registry: %v", err)
+		} else if r != nil {
+			log.Printf("%d plugins initialized from %s", len(r.Plugins()), store.PluginsFile)
 		}
 		pluginRegistry = r
-
-		if r != nil && runPlugins {
-			if err := runPluginsAndUpdate(r, source); err != nil {
-				log.Fatalf("Failed to run plugins: %v", err)
-			}
-		}
 	}
 
 	var commentsStore comments.Store
@@ -310,7 +272,11 @@ func main() {
 	// Optionally create a Kubernetes client.
 	kubeClient, err := createKubeClient(source, opts)
 	if err != nil {
+		// Do not fail here, k8s support is truly optional.
 		log.Printf("Could not create kube client: %v", err)
+	} else if kubeClient != nil {
+		log.Printf("K8s client initialized (kube-config=%s kube-context=%s in-cluster=%t)",
+			opts.KubeKubeconfig, opts.KubeContext, opts.KubeInCluster)
 	}
 
 	server, err := web.NewServer(

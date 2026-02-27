@@ -64,7 +64,7 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 	// Load linter
 	lintConfigPath := filepath.Join(exampleDir, store.LintFile)
 	var linter *lint.Linter
-	lintCfg, err := lint.LoadConfig(lintConfigPath)
+	lintCfg, err := lint.ReadConfig(lintConfigPath)
 	if err != nil && !os.IsNotExist(err) {
 		t.Fatalf("Failed to read lint config from %s: %v", lintConfigPath, err)
 	} else if lintCfg != nil {

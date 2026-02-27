@@ -81,17 +81,17 @@ type Config struct {
 	ReportedGroups []string `yaml:"reportedGroups,omitempty"`
 }
 
-// LoadConfig reads the linting configuration from the specified path.
-func LoadConfig(path string) (*Config, error) {
+// ReadConfig reads the linting configuration from the specified path.
+func ReadConfig(path string) (*Config, error) {
 	bs, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read lint config %q: %w", path, err)
 	}
-	return LoadConfigFromYAML(bs)
+	return ParseConfig(bs)
 }
 
-// LoadConfigFromYAML reads the linting configuration from the specified yamlData.
-func LoadConfigFromYAML(yamlData []byte) (*Config, error) {
+// ParseConfig parses the linting configuration from YAML bytes.
+func ParseConfig(yamlData []byte) (*Config, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(yamlData))
 	dec.KnownFields(true)
 	var config Config
