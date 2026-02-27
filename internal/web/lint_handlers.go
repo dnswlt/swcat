@@ -154,7 +154,7 @@ type kubeWorkloadView struct {
 
 func (s *Server) serveKubeWorkloads(w http.ResponseWriter, r *http.Request) {
 	if s.kubeClient == nil {
-		http.Error(w, "Kubernetes client not configured", http.StatusNotFound)
+		s.renderErrorSnippet(w, "Kubernetes client not configured")
 		return
 	}
 
@@ -166,7 +166,7 @@ func (s *Server) serveKubeWorkloads(w http.ResponseWriter, r *http.Request) {
 	allWorkloads, err := s.kubeClient.AllWorkloads(ctx)
 	if err != nil {
 		log.Printf("Error fetching workloads: %v", err)
-		http.Error(w, fmt.Sprintf("Error fetching workloads: %v", err), http.StatusInternalServerError)
+		s.renderErrorSnippet(w, fmt.Sprintf("Error fetching workloads: %v", err))
 		return
 	}
 
@@ -228,7 +228,7 @@ type prometheusWorkloadView struct {
 
 func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request) {
 	if s.promScanner == nil {
-		http.Error(w, "Prometheus scanner not configured", http.StatusNotFound)
+		s.renderErrorSnippet(w, "Prometheus scanner not configured")
 		return
 	}
 
@@ -240,7 +240,7 @@ func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request
 	result, err := s.promScanner.ScanWorkloads(ctx)
 	if err != nil {
 		log.Printf("Error scanning prometheus workloads: %v", err)
-		http.Error(w, fmt.Sprintf("Error scanning prometheus workloads: %v", err), http.StatusInternalServerError)
+		s.renderErrorSnippet(w, fmt.Sprintf("Error scanning prometheus workloads: %v", err))
 		return
 	}
 
