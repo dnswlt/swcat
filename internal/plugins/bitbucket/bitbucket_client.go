@@ -89,6 +89,30 @@ type GetCommitsOptions struct {
 	Limit int
 }
 
+// doGet performs a GET request to u, decodes the JSON response into target,
+// and returns any transport or API error.
+func (c *Client) doGet(ctx context.Context, u *url.URL, target any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return fmt.Errorf("bitbucket: creating request for %s: %w", u.Path, err)
+	}
+	c.setAuth(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("bitbucket: executing request for %s: %w", u.Path, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return c.apiError(resp)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
+		return fmt.Errorf("bitbucket: decoding response for %s: %w", u.Path, err)
+	}
+	return nil
+}
+
 // GetCommits returns the first page of commits for the given project and
 // repository. Use GetCommitsOptions to filter by ref or set a page size.
 //
@@ -112,27 +136,68 @@ func (c *Client) GetCommits(ctx context.Context, projectKey, repoSlug string, op
 	}
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("bitbucket: creating commits request: %w", err)
-	}
-	c.setAuth(req)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("bitbucket: fetching commits: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, c.apiError(resp)
-	}
-
 	var paged pagedResponse[Commit]
-	if err := json.NewDecoder(resp.Body).Decode(&paged); err != nil {
-		return nil, fmt.Errorf("bitbucket: decoding commits response: %w", err)
+	if err := c.doGet(ctx, u, &paged); err != nil {
+		return nil, err
 	}
 	return paged.Values, nil
+}
+
+// Branch represents a Bitbucket repository branch.
+type Branch struct {
+	ID           string `json:"id"`
+	DisplayID    string `json:"displayId"`
+	Type         string `json:"type"`
+	LatestCommit string `json:"latestCommit"`
+	IsDefault    bool   `json:"isDefault"`
+}
+
+// ListBranches returns all branches for the given project and repository,
+// following pagination to collect the complete list.
+//
+// API: GET /rest/api/latest/projects/{projectKey}/repos/{repositorySlug}/branches
+func (c *Client) ListBranches(ctx context.Context, projectKey, repoSlug string) ([]Branch, error) {
+	u, err := url.Parse(fmt.Sprintf("%s/rest/api/latest/projects/%s/repos/%s/branches",
+		c.baseURL, url.PathEscape(projectKey), url.PathEscape(repoSlug)))
+	if err != nil {
+		return nil, fmt.Errorf("bitbucket: building branches URL: %w", err)
+	}
+
+	var all []Branch
+	start := 0
+	for {
+		q := u.Query()
+		q.Set("start", fmt.Sprintf("%d", start))
+		u.RawQuery = q.Encode()
+
+		var paged pagedResponse[Branch]
+		if err := c.doGet(ctx, u, &paged); err != nil {
+			return nil, err
+		}
+		all = append(all, paged.Values...)
+		if paged.IsLastPage {
+			break
+		}
+		start = paged.NextPageStart
+	}
+	return all, nil
+}
+
+// GetDefaultBranch returns the default branch for the given project and repository.
+//
+// API: GET /rest/api/latest/projects/{projectKey}/repos/{repositorySlug}/branches/default
+func (c *Client) GetDefaultBranch(ctx context.Context, projectKey, repoSlug string) (*Branch, error) {
+	u, err := url.Parse(fmt.Sprintf("%s/rest/api/latest/projects/%s/repos/%s/branches/default",
+		c.baseURL, url.PathEscape(projectKey), url.PathEscape(repoSlug)))
+	if err != nil {
+		return nil, fmt.Errorf("bitbucket: building default branch URL: %w", err)
+	}
+
+	var branch Branch
+	if err := c.doGet(ctx, u, &branch); err != nil {
+		return nil, err
+	}
+	return &branch, nil
 }
 
 // GetFileContents returns the raw byte content of the file at filePath in the
@@ -161,6 +226,7 @@ func (c *Client) GetFileContents(ctx context.Context, projectKey, repoSlug, file
 		u.RawQuery = q.Encode()
 	}
 
+	// The raw endpoint returns plain bytes, not JSON, so we handle it manually.
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("bitbucket: creating file request: %w", err)

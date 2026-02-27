@@ -37,6 +37,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: bbclient -url URL -project KEY -repo SLUG <command> [args]\n\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
+		fmt.Fprintf(os.Stderr, "  branches             List all branches (marks the default)\n")
 		fmt.Fprintf(os.Stderr, "  commits              Print recent commits\n")
 		fmt.Fprintf(os.Stderr, "  cat <file> [-at REV] Print file contents at optional revision\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
@@ -52,7 +53,7 @@ func main() {
 
 	args := flag.Args()
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Error: a command is required (commits or cat)")
+		fmt.Fprintln(os.Stderr, "Error: a command is required (branches, commits, or cat)")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -61,6 +62,8 @@ func main() {
 	ctx := context.Background()
 
 	switch args[0] {
+	case "branches":
+		runBranches(ctx, client, projectKey, repoSlug)
 	case "commits":
 		runCommits(ctx, client, projectKey, repoSlug, args[1:])
 	case "cat":
@@ -69,6 +72,24 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: unknown command %q\n", args[0])
 		flag.Usage()
 		os.Exit(1)
+	}
+}
+
+func runBranches(ctx context.Context, client *bitbucket.Client, projectKey, repoSlug string) {
+	branches, err := client.ListBranches(ctx, projectKey, repoSlug)
+	if err != nil {
+		log.Fatalf("ListBranches: %v", err)
+	}
+	if len(branches) == 0 {
+		fmt.Println("No branches found.")
+		return
+	}
+	for _, b := range branches {
+		marker := "  "
+		if b.IsDefault {
+			marker = "* "
+		}
+		fmt.Printf("%s%-40s %s\n", marker, b.DisplayID, b.LatestCommit[:min(len(b.LatestCommit), 12)])
 	}
 }
 
