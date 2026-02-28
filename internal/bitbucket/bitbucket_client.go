@@ -211,6 +211,47 @@ func (c *Client) ListBranches(ctx context.Context, projectKey, repoSlug string) 
 	return all, nil
 }
 
+// Tag represents a Bitbucket repository tag.
+type Tag struct {
+	ID              string `json:"id"`
+	DisplayID       string `json:"displayId"`
+	Type            string `json:"type"`
+	LatestCommit    string `json:"latestCommit"`
+	LatestChangeset string `json:"latestChangeset"`
+	Hash            string `json:"hash"`
+}
+
+// ListTags returns all tags for the given project and repository,
+// following pagination to collect the complete list.
+//
+// API: GET /rest/api/latest/projects/{projectKey}/repos/{repositorySlug}/tags
+func (c *Client) ListTags(ctx context.Context, projectKey, repoSlug string) ([]Tag, error) {
+	u, err := url.Parse(fmt.Sprintf("%s/rest/api/latest/projects/%s/repos/%s/tags",
+		c.baseURL, url.PathEscape(projectKey), url.PathEscape(repoSlug)))
+	if err != nil {
+		return nil, fmt.Errorf("bitbucket: building tags URL: %w", err)
+	}
+
+	var all []Tag
+	start := 0
+	for {
+		q := u.Query()
+		q.Set("start", fmt.Sprintf("%d", start))
+		u.RawQuery = q.Encode()
+
+		var paged pagedResponse[Tag]
+		if err := c.doGet(ctx, u, &paged); err != nil {
+			return nil, err
+		}
+		all = append(all, paged.Values...)
+		if paged.IsLastPage {
+			break
+		}
+		start = paged.NextPageStart
+	}
+	return all, nil
+}
+
 // GetDefaultBranch returns the default branch for the given project and repository.
 //
 // API: GET /rest/api/latest/projects/{projectKey}/repos/{repositorySlug}/branches/default
