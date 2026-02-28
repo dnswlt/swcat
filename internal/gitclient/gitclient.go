@@ -178,6 +178,34 @@ func (c *Client) ListReferences() ([]string, error) {
 	return references, nil
 }
 
+func (c *Client) ListRemoteBranches() ([]string, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	var branches []string
+
+	// List all references
+	refs, err := c.repo.References()
+	if err != nil {
+		return nil, err
+	}
+
+	err = refs.ForEach(func(ref *plumbing.Reference) error {
+		name := ref.Name()
+		if name.IsRemote() {
+			// e.g. refs/remotes/origin/edit/foo -> Short() is "origin/edit/foo"
+			// We want to strip the remote name "origin/"
+			branches = append(branches, strings.TrimPrefix(name.Short(), "origin/"))
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return branches, nil
+}
+
 func (c *Client) resolveRevision(revision string) (*plumbing.Hash, error) {
 	// 1. If it's a session branch, prefer the local one (our current edit state).
 	if strings.HasPrefix(revision, "edit/") {

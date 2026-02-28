@@ -111,6 +111,7 @@ type Server struct {
 	// If set, all entities will be linted using this global linter.
 	linter *lint.Linter
 
+	// An optional comments store.
 	commentsStore comments.Store
 
 	// The optional Kubernetes client.
@@ -517,7 +518,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 
 	system := data.repo.System(systemRef)
 	if system == nil {
-		http.Error(w, "Invalid system", http.StatusNotFound)
+		http.NotFound(w, r)
 		return
 	}
 	params["System"] = system
@@ -665,7 +666,7 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 
 	component := data.repo.Component(componentRef)
 	if component == nil {
-		http.Error(w, "Invalid component", http.StatusNotFound)
+		http.NotFound(w, r)
 		return
 	}
 	params["Component"] = component
@@ -755,7 +756,7 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 
 	ap := data.repo.API(apiRef)
 	if ap == nil {
-		http.Error(w, "Invalid API", http.StatusNotFound)
+		http.NotFound(w, r)
 		return
 	}
 	params["API"] = ap
@@ -836,7 +837,7 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 	params := map[string]any{}
 	resource := data.repo.Resource(resourceRef)
 	if resource == nil {
-		http.Error(w, "Invalid resource", http.StatusNotFound)
+		http.NotFound(w, r)
 		return
 	}
 	params["Resource"] = resource
@@ -917,7 +918,7 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 
 	domain := data.repo.Domain(domainRef)
 	if domain == nil {
-		http.Error(w, "Invalid domain", http.StatusNotFound)
+		http.NotFound(w, r)
 		return
 	}
 	params["Domain"] = domain
@@ -990,7 +991,7 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 
 	group := data.repo.Group(groupRef)
 	if group == nil {
-		http.Error(w, "Invalid group", http.StatusNotFound)
+		http.NotFound(w, r)
 		return
 	}
 	params["Group"] = group
@@ -1195,7 +1196,7 @@ func (s *Server) serveEntityYAML(w http.ResponseWriter, r *http.Request, entityR
 
 	entity := data.repo.Entity(ref)
 	if entity == nil {
-		http.Error(w, "Invalid entity", http.StatusNotFound)
+		http.NotFound(w, r)
 		return
 	}
 	params["Entity"] = entity
@@ -1327,7 +1328,7 @@ func (s *Server) createEntity(w http.ResponseWriter, r *http.Request) {
 	data := s.getStoreData(r)
 	clonedEntity := data.repo.Entity(clonedRef)
 	if clonedEntity == nil {
-		http.Error(w, "Invalid entity", http.StatusNotFound)
+		http.NotFound(w, r)
 		return
 	}
 
@@ -1408,7 +1409,7 @@ func (s *Server) deleteEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	data := s.getStoreData(r)
 	entity := data.repo.Entity(ref)
 	if entity == nil {
-		http.Error(w, "Invalid entity", http.StatusNotFound)
+		http.NotFound(w, r)
 		return
 	}
 
@@ -1480,7 +1481,7 @@ func (s *Server) updateEntity(w http.ResponseWriter, r *http.Request, entityRef 
 	data := s.getStoreData(r)
 	originalEntity := data.repo.Entity(ref)
 	if originalEntity == nil {
-		http.Error(w, "Invalid entity", http.StatusNotFound)
+		http.NotFound(w, r)
 		return
 	}
 
@@ -1577,7 +1578,7 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 	data := s.getStoreData(r)
 	originalEntity := data.repo.Entity(ref)
 	if originalEntity == nil {
-		http.Error(w, "Entity not found", http.StatusNotFound)
+		http.NotFound(w, r)
 		return
 	}
 
@@ -2132,6 +2133,14 @@ func (s *Server) handleRefDataDispatch(next http.Handler) http.Handler {
 		// Retrieve data for ref.
 		rd, err := s.loadStoreData(ref)
 		if errors.Is(err, store.ErrNoSuchRef) {
+			if r.Header.Get("HX-Request") == "" {
+				// Not an HTMX request => redirect to home page
+				// This can happen when users click on old links to no longer existing branches
+				// or if their branch just got deleted, e.g. b/c they clicked on Refresh.
+				http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+				return
+			}
+
 			http.NotFound(w, r)
 			return
 		} else if err != nil {

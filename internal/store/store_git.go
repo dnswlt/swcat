@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"path"
 	"slices"
 	"strings"
@@ -50,8 +51,43 @@ func (g *GitSource) DefaultRef() string {
 }
 
 func (g *GitSource) Refresh() error {
+
+	// Get remote branches before fetch to detect deletions.
+	// We only care about branches that were already known to be on remote.
+	oldRemote, err := g.client.ListRemoteBranches()
+	if err != nil {
+		return fmt.Errorf("failed to list remote branches before fetch: %w", err)
+	}
+
+	if err := g.client.Fetch(); err != nil {
+		return err
+	}
+
+	newRemote, err := g.client.ListRemoteBranches()
+	if err != nil {
+		return err
+	}
+
+	g.mu.Lock()
+
 	g.refs = nil
-	return g.client.Fetch()
+
+	// Collect under lock for a consistent snapshot; CloseEditSession also
+	// acquires g.mu, so we must release the lock before calling it below.
+	var toPrune []string
+	for _, b := range removedBranches(oldRemote, newRemote) {
+		if g.sessions[b] {
+			toPrune = append(toPrune, b)
+		}
+	}
+	g.mu.Unlock()
+
+	for _, b := range toPrune {
+		log.Printf("Pruning session %q (deleted from remote)", b)
+		_ = g.CloseEditSession(b)
+	}
+
+	return nil
 }
 
 func (g *GitSource) Store(ref string) (Store, error) {
@@ -121,6 +157,21 @@ func (g *GitSource) CreateEditSession(baseRef string, namePrefix string) (string
 	g.sessions[branchName] = true
 	g.refs = nil // Invalidate cache so the new branch shows up.
 	return branchName, nil
+}
+
+// removedBranches returns branches present in old but absent in new.
+func removedBranches(old, new []string) []string {
+	newSet := make(map[string]bool, len(new))
+	for _, b := range new {
+		newSet[b] = true
+	}
+	var removed []string
+	for _, b := range old {
+		if !newSet[b] {
+			removed = append(removed, b)
+		}
+	}
+	return removed
 }
 
 func buildSessionBranchName(baseRef string, namePrefix string) (string, error) {
@@ -209,6 +260,9 @@ func (g *GitSource) RestoreSessions() ([]string, error) {
 }
 
 func (g *GitSource) ListReferences() ([]string, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
 	if g.refs != nil {
 		return g.refs, nil
 	}
