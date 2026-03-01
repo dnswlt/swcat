@@ -154,7 +154,6 @@ func createKubeClient(source store.Source, opts Options) (*kube.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not create Kubernetes client: %w", err)
 	}
-	log.Printf("Kubernetes client initialized (kubeconfig=%s, in-cluster=%v, namespaces=%v)", cc.Kubeconfig, cc.InCluster, cfg.Namespaces)
 	return client, nil
 }
 
@@ -189,7 +188,6 @@ func createBitbucketClient(opts Options) *bitbucket.Client {
 		Username: username,
 		Password: password,
 	})
-	log.Printf("Bitbucket client initialized (url=%s)", opts.BitbucketURL)
 	return client
 }
 
@@ -215,8 +213,7 @@ func createPrometheusScanner(source store.Source, opts Options) (*prometheus.Wor
 
 	clientOpts := promClientAuthFromEnv()
 	clientOpts.Timeout = opts.PromTimeout
-	scanner := prometheus.NewWorkloadScanner(clientOpts, *cfg)
-	return scanner, nil
+	return prometheus.NewWorkloadScanner(clientOpts, *cfg), nil
 }
 
 func main() {
@@ -331,8 +328,7 @@ func main() {
 		// Do not fail here, k8s support is truly optional.
 		log.Printf("Could not create kube client: %v", err)
 	} else if kubeClient != nil {
-		log.Printf("K8s client initialized (kube-config=%s kube-context=%s in-cluster=%t)",
-			opts.KubeKubeconfig, opts.KubeContext, opts.KubeInCluster)
+		log.Printf("Kubernetes client initialized (kubeconfig=%s, in-cluster=%v)", opts.KubeKubeconfig, opts.KubeInCluster)
 	}
 
 	// Optionally create a Prometheus scanner.
@@ -345,6 +341,9 @@ func main() {
 
 	// Optionally create a Bitbucket client.
 	bbClient := createBitbucketClient(opts)
+	if bbClient != nil {
+		log.Printf("Bitbucket client initialized (url=%s)", opts.BitbucketURL)
+	}
 
 	server, err := web.NewServer(
 		web.ServerOptions{
