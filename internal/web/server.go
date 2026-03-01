@@ -121,7 +121,7 @@ type Server struct {
 
 	// The optional Prometheus client.
 	// If set, workloads can be queried from Prometheus.
-	promClient *prometheus.Client
+	promClient prometheus.Querier
 
 	// The optional Bitbucket client.
 	// If set, code searches can be run against Bitbucket.
@@ -163,7 +163,7 @@ func WithKubeClient(client *kube.Client) ServerOption {
 }
 
 // WithPrometheusClient configures the server to use the given Prometheus client.
-func WithPrometheusClient(client *prometheus.Client) ServerOption {
+func WithPrometheusClient(client prometheus.Querier) ServerOption {
 	return func(s *Server) {
 		s.promClient = client
 	}

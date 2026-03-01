@@ -47,6 +47,11 @@ func NewClient(baseURL string, opts ClientOptions) *Client {
 	}
 }
 
+// Querier is the interface satisfied by *Client.
+type Querier interface {
+	Query(ctx context.Context, query string) ([]Sample, error)
+}
+
 // Sample represents a single measurement from an instant query result.
 // Each sample corresponds to one time series that matched the PromQL expression.
 type Sample struct {

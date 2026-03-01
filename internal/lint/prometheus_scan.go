@@ -16,7 +16,7 @@ type PromWorkload struct {
 }
 
 // ScanWorkloads runs the configured query and returns the results for rendering.
-func (l *Linter) ScanPrometheusWorkloads(ctx context.Context, client *prometheus.Client) ([]PromWorkload, error) {
+func (l *Linter) ScanPrometheusWorkloads(ctx context.Context, client prometheus.Querier) ([]PromWorkload, error) {
 	samples, err := client.Query(ctx, l.config.Prometheus.WorkloadsQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query prometheus: %w", err)
