@@ -40,7 +40,11 @@ nav:
       - 'External Plugins': 'user-guide/plugins/external.md'
       - 'gRPC Plugins': 'user-guide/plugins/grpc.md'
       - 'JFrog Xray BOM': 'user-guide/plugins/jfrog-xray.md'
-    - 'Linting': 'user-guide/linting.md'
+    - 'Linting':
+      - 'user-guide/linting/index.md'
+      - 'CEL Rules': 'user-guide/linting/cel.md'
+      - 'Prometheus Scan': 'user-guide/linting/prometheus.md'
+      - 'Bitbucket Scan': 'user-guide/linting/bitbucket.md'
     - 'Remote catalogs': 'user-guide/remote-catalog.md'
     - 'Query syntax': 'user-guide/query-syntax.md'
     - 'JSON API': 'user-guide/json-api.md'

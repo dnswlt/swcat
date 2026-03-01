@@ -1,8 +1,6 @@
-# Linting
+# CEL Entity Validation
 
-As a software catalog grows, it becomes increasingly important to maintain a high level of data quality. Missing descriptions, missing owners, or incorrect relationships can make the catalog less useful and even misleading.
-
-The `swcat` linter helps you maintain a clean and consistent catalog by automatically checking your entities against a set of rules.
+CEL rules are used to validate the metadata and specifications of your entities against a set of predefined rules. This is ideal for enforcing naming conventions, mandatory fields, and architectural standards.
 
 ## Concepts
 
@@ -14,7 +12,7 @@ A linting rule consists of:
 
 *   **Name:** A unique identifier for the rule (e.g., `has-description`).
 *   **Severity:** How critical the violation is. Can be `error`, `warn`, or `info`.
-*   **Condition:** (Optional) A CEL expression that determines if the rule should be evaluated for a given entity.
+*   **Condition:** (Optional) A CEL expression that determines if the rule should be evaluated for a given entity. Use this to restrict rules to specific kinds or lifecycles.
 *   **Check:** The CEL expression that validates the entity. If it returns `false`, the rule is considered violated.
 *   **Message:** The message shown to the user when the rule is violated.
 
@@ -27,8 +25,8 @@ Linter rules are configured in a `lint.yml` file located in your data root direc
 
 The file has the following sections:
 
-*   `commonRules`: Rules that are applied to all entities, regardless of their `kind`.
-*   `kindRules`: Rules that are applied only to entities of a specific `kind` (e.g., `Component`, `API`, `System`).
+*   `celRules`: A list of CEL-based rules.
+*   `customRules`: A list of rules that invoke registered Go functions for complex validation.
 *   `reportedGroups`: (Optional) A list of group names (e.g. `team-alpha` or `my-namespace/team-beta`). If set, the global lint findings page will only show these groups as individual cards. All other groups will be grouped under an "Others" section. This is useful for focusing on your own teams in a large catalog with many external owners.
 
 ### Example `lint.yml`
@@ -39,7 +37,7 @@ reportedGroups:
   - team-beta
   - external/partner-team
 
-commonRules:
+celRules:
   - name: has-description
     severity: warn
     check: 'metadata.description != ""'
@@ -51,19 +49,18 @@ commonRules:
     check: 'metadata.links.exists(l, l.type == "docs")'
     message: "Consider adding a link of type 'docs' for detailed documentation."
 
-kindRules:
-  API:
-    - name: api-has-provider
-      severity: error
-      # Inverse relationships are also available!
-      check: 'size(spec.providers) > 0'
-      message: "The API must have at least one provider component."
+  - name: api-has-provider
+    severity: error
+    condition: 'kind == "api"'
+    # Inverse relationships are also available!
+    check: 'size(spec.providers) > 0'
+    message: "The API must have at least one provider component."
 
-  Domain:
-    - name: domain-has-org
-      severity: error
-      check: '"company/org" in metadata.labels'
-      message: "The Domain must have a 'company/org' label to indicate ownership."
+  - name: domain-has-org
+    severity: error
+    condition: 'kind == "domain"'
+    check: '"company/org" in metadata.labels'
+    message: "The Domain must have a 'company/org' label to indicate ownership."
 ```
 
 ## Viewing Findings
