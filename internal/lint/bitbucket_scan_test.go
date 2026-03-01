@@ -1,10 +1,41 @@
 package lint
 
 import (
+	"context"
 	"testing"
 
+	"github.com/dnswlt/swcat/internal/bitbucket"
 	"github.com/dnswlt/swcat/internal/catalog"
 )
+
+// fakeBitbucketSearcher is a test double for bitbucket.Searcher.
+type fakeBitbucketSearcher struct {
+	baseURL  string
+	repos    map[string][]bitbucket.Repository // project key → repos
+	files    map[string][]string               // "projectKey/repoSlug" → file paths
+	listCalls int
+}
+
+func (f *fakeBitbucketSearcher) BaseURL() string { return f.baseURL }
+
+func (f *fakeBitbucketSearcher) ListRepositories(_ context.Context, projectKey string) ([]bitbucket.Repository, error) {
+	f.listCalls++
+	return f.repos[projectKey], nil
+}
+
+func (f *fakeBitbucketSearcher) FileExists(_ context.Context, projectKey, repoSlug, filePath, _ string) (bool, error) {
+	key := projectKey + "/" + repoSlug
+	for _, f := range f.files[key] {
+		if f == filePath {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (f *fakeBitbucketSearcher) ListFiles(_ context.Context, projectKey, repoSlug, _ string) ([]string, error) {
+	return f.files[projectKey+"/"+repoSlug], nil
+}
 
 func TestCanonicalizeBitbucketURL(t *testing.T) {
 	tests := []struct {
@@ -141,5 +172,134 @@ func TestMatchBitbucketFiles(t *testing.T) {
 		if got != wants[i] {
 			t.Errorf("Result %d (%s): got entity %q, want %q", i, res.File.Path, got, wants[i])
 		}
+	}
+}
+
+func newBitbucketLinter(t *testing.T, cfg BitbucketConfig) *Linter {
+	t.Helper()
+	l, err := NewLinter(&Config{Bitbucket: cfg}, nil)
+	if err != nil {
+		t.Fatalf("NewLinter: %v", err)
+	}
+	return l
+}
+
+func TestFindBitbucketFiles_PathQuery(t *testing.T) {
+	searcher := &fakeBitbucketSearcher{
+		baseURL: "https://bb.example.com",
+		repos: map[string][]bitbucket.Repository{
+			"PROJ": {
+				{Slug: "repo-a", Project: bitbucket.Project{Key: "PROJ"}},
+				{Slug: "repo-b", Project: bitbucket.Project{Key: "PROJ"}},
+			},
+		},
+		files: map[string][]string{
+			"PROJ/repo-a": {"catalog.yaml"},
+			// repo-b does not have the file
+		},
+	}
+	l := newBitbucketLinter(t, BitbucketConfig{
+		Projects: []string{"PROJ"},
+		Queries:  []BitbucketPathQuery{{Path: "catalog.yaml"}},
+	})
+
+	got := l.FindBitbucketFiles(context.Background(), searcher, false)
+
+	if len(got) != 1 {
+		t.Fatalf("want 1 file, got %d: %v", len(got), got)
+	}
+	if got[0].RepoSlug != "repo-a" || got[0].Path != "catalog.yaml" {
+		t.Errorf("unexpected file: %+v", got[0])
+	}
+}
+
+func TestFindBitbucketFiles_PathRegexQuery(t *testing.T) {
+	searcher := &fakeBitbucketSearcher{
+		baseURL: "https://bb.example.com",
+		repos: map[string][]bitbucket.Repository{
+			"PROJ": {{Slug: "monorepo", Project: bitbucket.Project{Key: "PROJ"}}},
+		},
+		files: map[string][]string{
+			"PROJ/monorepo": {
+				"svc-a/asyncapi.yaml",
+				"svc-b/asyncapi.yaml",
+				"svc-a/README.md",
+			},
+		},
+	}
+	l := newBitbucketLinter(t, BitbucketConfig{
+		Projects: []string{"PROJ"},
+		Queries:  []BitbucketPathQuery{{PathRegex: `^svc-.*/asyncapi\.yaml$`, Repositories: []string{"monorepo"}}},
+	})
+
+	got := l.FindBitbucketFiles(context.Background(), searcher, false)
+
+	want := []BitbucketFile{
+		{Path: "svc-a/asyncapi.yaml", RepoSlug: "monorepo", ProjectKey: "PROJ"},
+		{Path: "svc-b/asyncapi.yaml", RepoSlug: "monorepo", ProjectKey: "PROJ"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("want %d files, got %d: %v", len(want), len(got), got)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("file[%d]: got %+v, want %+v", i, got[i], w)
+		}
+	}
+}
+
+func TestFindBitbucketFiles_RepoExclusion(t *testing.T) {
+	searcher := &fakeBitbucketSearcher{
+		baseURL: "https://bb.example.com",
+		repos: map[string][]bitbucket.Repository{
+			"PROJ": {
+				{Slug: "keep-this", Project: bitbucket.Project{Key: "PROJ"}},
+				{Slug: "skip-this", Project: bitbucket.Project{Key: "PROJ"}},
+				{Slug: "also-skip", Project: bitbucket.Project{Key: "PROJ"}},
+			},
+		},
+		files: map[string][]string{
+			"PROJ/keep-this": {"catalog.yaml"},
+			"PROJ/skip-this": {"catalog.yaml"},
+			"PROJ/also-skip": {"catalog.yaml"},
+		},
+	}
+	l := newBitbucketLinter(t, BitbucketConfig{
+		Projects:      []string{"PROJ"},
+		ExcludedRepos: []string{"skip-.*", "also-skip"},
+		Queries:       []BitbucketPathQuery{{Path: "catalog.yaml"}},
+	})
+
+	got := l.FindBitbucketFiles(context.Background(), searcher, false)
+
+	if len(got) != 1 || got[0].RepoSlug != "keep-this" {
+		t.Errorf("want only keep-this, got %v", got)
+	}
+}
+
+func TestFindBitbucketFiles_CacheHit(t *testing.T) {
+	searcher := &fakeBitbucketSearcher{
+		baseURL: "https://bb.example.com",
+		repos: map[string][]bitbucket.Repository{
+			"PROJ": {{Slug: "repo-a", Project: bitbucket.Project{Key: "PROJ"}}},
+		},
+		files: map[string][]string{
+			"PROJ/repo-a": {"catalog.yaml"},
+		},
+	}
+	l := newBitbucketLinter(t, BitbucketConfig{
+		Projects: []string{"PROJ"},
+		Queries:  []BitbucketPathQuery{{Path: "catalog.yaml"}},
+	})
+
+	// First call populates the cache.
+	l.FindBitbucketFiles(context.Background(), searcher, false)
+	callsAfterFirst := searcher.listCalls
+
+	// Second call with useCache=true must not call ListRepositories again.
+	l.FindBitbucketFiles(context.Background(), searcher, true)
+	if searcher.listCalls != callsAfterFirst {
+		t.Errorf("cache hit should not call ListRepositories; calls before=%d, after=%d",
+			callsAfterFirst, searcher.listCalls)
 	}
 }

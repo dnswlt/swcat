@@ -125,7 +125,7 @@ type Server struct {
 
 	// The optional Bitbucket client.
 	// If set, code searches can be run against Bitbucket.
-	bbClient *bitbucket.Client
+	bbClient bitbucket.Searcher
 
 	// Server startup time. Used for cache busting JS/CSS resources.
 	started time.Time
@@ -170,7 +170,7 @@ func WithPrometheusClient(client prometheus.Querier) ServerOption {
 }
 
 // WithBitbucketClient configures the server to use the given Bitbucket client.
-func WithBitbucketClient(client *bitbucket.Client) ServerOption {
+func WithBitbucketClient(client bitbucket.Searcher) ServerOption {
 	return func(s *Server) {
 		s.bbClient = client
 	}

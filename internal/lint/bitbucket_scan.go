@@ -89,7 +89,7 @@ func sortedEntityLinks(entities []catalog.Entity) []entityLink {
 // FindBitbucketFiles executes the configured queries against Bitbucket to find files.
 // If useCache is true and a cached result exists for the same Bitbucket base URL, it is
 // returned immediately without hitting the API.
-func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Client, useCache bool) []BitbucketFile {
+func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient bitbucket.Searcher, useCache bool) []BitbucketFile {
 	if useCache {
 		if files, ok := l.bbCache.get(bbClient.BaseURL()); ok {
 			log.Printf("FindBitbucketFiles: returning %d cached files", len(files))

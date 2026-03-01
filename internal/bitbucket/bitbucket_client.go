@@ -54,6 +54,15 @@ func (c *Client) BaseURL() string {
 	return c.baseURL
 }
 
+// Searcher is the interface satisfied by *Client. It covers the operations
+// needed for repository and file scanning.
+type Searcher interface {
+	BaseURL() string
+	ListRepositories(ctx context.Context, projectKey string) ([]Repository, error)
+	FileExists(ctx context.Context, projectKey, repoSlug, filePath, at string) (bool, error)
+	ListFiles(ctx context.Context, projectKey, repoSlug, at string) ([]string, error)
+}
+
 // Person represents a Bitbucket user (author or committer).
 type Person struct {
 	Name         string `json:"name"`
