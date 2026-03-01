@@ -32,13 +32,6 @@ type entityLink struct {
 	Entity catalog.Entity
 }
 
-// entityIndices holds pre-built lookup structures over a set of catalog entities,
-// used by the Bitbucket scan matchers.
-type entityIndices struct {
-	// byLink maps kind → sorted list of entity links, for prefix-based matching.
-	byLink map[catalog.Kind][]entityLink
-}
-
 func sortedEntityLinks(entities []catalog.Entity) []entityLink {
 	var links []entityLink
 	for _, e := range entities {
