@@ -131,7 +131,52 @@ type Server struct {
 	started time.Time
 }
 
-func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, pluginRegistry *plugins.Registry, commentsStore comments.Store, kubeClient *kube.Client, promClient *prometheus.Client, bbClient *bitbucket.Client) (*Server, error) {
+// ServerOption is a functional option for configuring a Server.
+type ServerOption func(*Server)
+
+// WithLinter configures the server to use the given linter.
+func WithLinter(linter *lint.Linter) ServerOption {
+	return func(s *Server) {
+		s.linter = linter
+	}
+}
+
+// WithPluginRegistry configures the server to use the given plugin registry.
+func WithPluginRegistry(registry *plugins.Registry) ServerOption {
+	return func(s *Server) {
+		s.pluginRegistry = registry
+	}
+}
+
+// WithCommentsStore configures the server to use the given comments store.
+func WithCommentsStore(store comments.Store) ServerOption {
+	return func(s *Server) {
+		s.commentsStore = store
+	}
+}
+
+// WithKubeClient configures the server to use the given Kubernetes client.
+func WithKubeClient(client *kube.Client) ServerOption {
+	return func(s *Server) {
+		s.kubeClient = client
+	}
+}
+
+// WithPrometheusClient configures the server to use the given Prometheus client.
+func WithPrometheusClient(client *prometheus.Client) ServerOption {
+	return func(s *Server) {
+		s.promClient = client
+	}
+}
+
+// WithBitbucketClient configures the server to use the given Bitbucket client.
+func WithBitbucketClient(client *bitbucket.Client) ServerOption {
+	return func(s *Server) {
+		s.bbClient = client
+	}
+}
+
+func NewServer(opts ServerOptions, source store.Source, serverOpts ...ServerOption) (*Server, error) {
 	if opts.SVGCacheSize <= 0 {
 		opts.SVGCacheSize = 128
 	}
@@ -147,14 +192,12 @@ func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, plu
 		storeDataMap:   make(map[string]*storeData),
 		source:         source,
 		dotRunner:      dotRunner,
-		linter:         linter,
-		pluginRegistry: pluginRegistry,
-		commentsStore:  commentsStore,
-		kubeClient:     kubeClient,
-		promClient:     promClient,
-		bbClient:       bbClient,
 		finder:         repo.NewFinder(),
 		started:        time.Now(),
+	}
+
+	for _, opt := range serverOpts {
+		opt(s)
 	}
 
 	if s.commentsStore != nil {

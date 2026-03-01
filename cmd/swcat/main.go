@@ -338,12 +338,12 @@ func main() {
 			SVGCacheSize:    opts.SVGCacheSize,
 		},
 		source,
-		linter,
-		pluginRegistry,
-		commentsStore,
-		kubeClient,
-		promClient,
-		bbClient,
+		web.WithLinter(linter),
+		web.WithPluginRegistry(pluginRegistry),
+		web.WithCommentsStore(commentsStore),
+		web.WithKubeClient(kubeClient),
+		web.WithPrometheusClient(promClient),
+		web.WithBitbucketClient(bbClient),
 	)
 	if err != nil {
 		log.Fatalf("Could not create server: %v", err)

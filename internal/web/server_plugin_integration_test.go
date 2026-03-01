@@ -43,11 +43,11 @@ func setupPluginIntegrationServer(t *testing.T, dir string) (*httptest.Server, *
 		ReadOnly: false,
 		Version:  "integration-test",
 	}
-	server, err := NewServer(opts, st, nil, pluginRegistry, nil, nil, nil, nil)
-	server.dotRunner = &fakeRunner{}
+	server, err := NewServer(opts, st, WithPluginRegistry(pluginRegistry))
 	if err != nil {
 		t.Fatalf("Failed to create server: %v", err)
 	}
+	server.dotRunner = &fakeRunner{}
 
 	if _, err := server.ValidateCatalog(""); err != nil {
 		t.Fatalf("Failed to validate catalog: %v", err)
