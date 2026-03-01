@@ -11,11 +11,18 @@ import (
 	"time"
 )
 
+const (
+	HTTPAccessTokenUser = "x-token-auth"
+)
+
 // ClientOptions holds optional configuration for the Client.
 type ClientOptions struct {
 	// Username and Password enable HTTP Basic Auth.
 	Username string
 	Password string
+	// Bitbucket HTTP Access Tokens by project.
+	// Username is always "x-token-auth" in case these are used.
+	PerProjectTokens map[string]string
 	// Timeout for HTTP requests. Defaults to 30s.
 	Timeout time.Duration
 }
@@ -105,12 +112,12 @@ type GetCommitsOptions struct {
 
 // doGet performs a GET request to u, decodes the JSON response into target,
 // and returns any transport or API error.
-func (c *Client) doGet(ctx context.Context, u *url.URL, target any) error {
+func (c *Client) doGet(ctx context.Context, u *url.URL, target any, projectKey string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return fmt.Errorf("bitbucket: creating request for %s: %w", u.Path, err)
 	}
-	c.setAuth(req)
+	c.setAuth(req, projectKey)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -162,7 +169,7 @@ func (c *Client) GetCommits(ctx context.Context, projectKey, repoSlug string, op
 		u.RawQuery = q.Encode()
 
 		var paged pagedResponse[Commit]
-		if err := c.doGet(ctx, u, &paged); err != nil {
+		if err := c.doGet(ctx, u, &paged, projectKey); err != nil {
 			return nil, err
 		}
 		all = append(all, paged.Values...)
@@ -203,7 +210,7 @@ func (c *Client) ListBranches(ctx context.Context, projectKey, repoSlug string) 
 		u.RawQuery = q.Encode()
 
 		var paged pagedResponse[Branch]
-		if err := c.doGet(ctx, u, &paged); err != nil {
+		if err := c.doGet(ctx, u, &paged, projectKey); err != nil {
 			return nil, err
 		}
 		all = append(all, paged.Values...)
@@ -257,7 +264,7 @@ func (c *Client) ListRepositories(ctx context.Context, projectKey string) ([]Rep
 		u.RawQuery = q.Encode()
 
 		var paged pagedResponse[Repository]
-		if err := c.doGet(ctx, u, &paged); err != nil {
+		if err := c.doGet(ctx, u, &paged, projectKey); err != nil {
 			return nil, err
 		}
 		all = append(all, paged.Values...)
@@ -288,7 +295,7 @@ func (c *Client) ListTags(ctx context.Context, projectKey, repoSlug string) ([]T
 		u.RawQuery = q.Encode()
 
 		var paged pagedResponse[Tag]
-		if err := c.doGet(ctx, u, &paged); err != nil {
+		if err := c.doGet(ctx, u, &paged, projectKey); err != nil {
 			return nil, err
 		}
 		all = append(all, paged.Values...)
@@ -311,7 +318,7 @@ func (c *Client) GetDefaultBranch(ctx context.Context, projectKey, repoSlug stri
 	}
 
 	var branch Branch
-	if err := c.doGet(ctx, u, &branch); err != nil {
+	if err := c.doGet(ctx, u, &branch, projectKey); err != nil {
 		return nil, err
 	}
 	return &branch, nil
@@ -348,7 +355,7 @@ func (c *Client) GetFileContents(ctx context.Context, projectKey, repoSlug, file
 	if err != nil {
 		return nil, fmt.Errorf("bitbucket: creating file request: %w", err)
 	}
-	c.setAuth(req)
+	c.setAuth(req, projectKey)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -391,7 +398,7 @@ func (c *Client) ListFiles(ctx context.Context, projectKey, repoSlug, at string)
 		u.RawQuery = q.Encode()
 
 		var paged pagedResponse[string]
-		if err := c.doGet(ctx, u, &paged); err != nil {
+		if err := c.doGet(ctx, u, &paged, projectKey); err != nil {
 			return nil, err
 		}
 		all = append(all, paged.Values...)
@@ -428,7 +435,7 @@ func (c *Client) FileExists(ctx context.Context, projectKey, repoSlug, filePath,
 	if err != nil {
 		return false, fmt.Errorf("bitbucket: creating file head request: %w", err)
 	}
-	c.setAuth(req)
+	c.setAuth(req, projectKey)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -448,7 +455,11 @@ func (c *Client) FileExists(ctx context.Context, projectKey, repoSlug, filePath,
 	return false, c.apiError(resp)
 }
 
-func (c *Client) setAuth(req *http.Request) {
+func (c *Client) setAuth(req *http.Request, projectKey string) {
+	if token, ok := c.opts.PerProjectTokens[strings.ToLower(projectKey)]; ok {
+		req.SetBasicAuth(HTTPAccessTokenUser, token)
+		return
+	}
 	if c.opts.Username != "" {
 		req.SetBasicAuth(c.opts.Username, c.opts.Password)
 	}

@@ -176,10 +176,6 @@ func createLinter(source store.Source) (*lint.Linter, error) {
 	return lint.NewLinter(lintCfg, lint.KnownCustomChecks)
 }
 
-func bbClientAuthFromEnv() (username, password string) {
-	return os.Getenv("SWCAT_BITBUCKET_USER"), os.Getenv("SWCAT_BITBUCKET_PASSWORD")
-}
-
 func createPrometheusClient(opts Options) *prometheus.Client {
 	if opts.PrometheusURL == "" {
 		return nil
@@ -193,10 +189,21 @@ func createBitbucketClient(opts Options) *bitbucket.Client {
 	if opts.BitbucketURL == "" {
 		return nil
 	}
-	username, password := bbClientAuthFromEnv()
+	username := os.Getenv("SWCAT_BITBUCKET_USER")
+	password := os.Getenv("SWCAT_BITBUCKET_PASSWORD")
+	tokens := make(map[string]string)
+	const prefix = "SWCAT_BITBUCKET_TOKEN_"
+	for _, v := range os.Environ() {
+		if strings.HasPrefix(v, prefix) {
+			key, value, _ := strings.Cut(v, "=")
+			proj := strings.TrimPrefix(key, prefix)
+			tokens[strings.ToLower(proj)] = value
+		}
+	}
 	client := bitbucket.NewClient(opts.BitbucketURL, bitbucket.ClientOptions{
-		Username: username,
-		Password: password,
+		Username:         username,
+		Password:         password,
+		PerProjectTokens: tokens,
 	})
 	return client
 }
