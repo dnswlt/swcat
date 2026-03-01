@@ -43,6 +43,9 @@ metadata:
   labels:
     foobar.dev/language: java
     foobar.dev/deployment: k8s
+  links:
+    - url: https://bb.example.com/projects/PROJ/repos/catalog-repo
+      type: bitbucket
 spec:
   type: service
   lifecycle: production
