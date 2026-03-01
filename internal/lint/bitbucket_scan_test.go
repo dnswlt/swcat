@@ -34,7 +34,7 @@ func TestCanonicalizeBitbucketURL(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got, ok := canonicalizeBitbucketURL(tt.url)
+		got, ok := canonicalizeBitbucketURLPath(tt.url)
 		if ok != tt.wantOk {
 			t.Errorf("canonicalizeBitbucketURL(%q) ok = %v, want %v", tt.url, ok, tt.wantOk)
 		}

@@ -28,8 +28,13 @@ type BitbucketScanResult struct {
 
 // entityLink associates a catalog entity with a canonical Bitbucket URL.
 type entityLink struct {
-	URL    string // lowercased, canonicalized path
-	Entity catalog.Entity
+	// Lowercased, canonicalized repository path
+	// Examples:
+	// 	 /projects/my_project/repos/my_repo
+	// 	 /projects/my_project/repos/my_repo/browse/path/to/file.txt
+	canonicalPath string
+	// The associated entity
+	entity catalog.Entity
 }
 
 func sortedEntityLinks(entities []catalog.Entity) []entityLink {
@@ -41,14 +46,14 @@ func sortedEntityLinks(entities []catalog.Entity) []entityLink {
 			if lt != "code" && lt != "bitbucket" {
 				continue
 			}
-			if u, ok := canonicalizeBitbucketURL(link.URL); ok {
-				links = append(links, entityLink{URL: u, Entity: e})
+			if u, ok := canonicalizeBitbucketURLPath(link.URL); ok {
+				links = append(links, entityLink{canonicalPath: u, entity: e})
 			}
 		}
 	}
 	// Sort links for binary search.
 	slices.SortFunc(links, func(a, b entityLink) int {
-		return strings.Compare(a.URL, b.URL)
+		return strings.Compare(a.canonicalPath, b.canonicalPath)
 	})
 	return links
 }
@@ -165,7 +170,7 @@ func matchBitbucketFileByLinks(file BitbucketFile, links []entityLink) (catalog.
 
 	// Binary search for the insertion point.
 	i, _ := slices.BinarySearchFunc(links, targetURL, func(el entityLink, target string) int {
-		return strings.Compare(el.URL, target)
+		return strings.Compare(el.canonicalPath, target)
 	})
 
 	// i is the insertion point where links[i].URL >= targetURL.
@@ -177,11 +182,11 @@ func matchBitbucketFileByLinks(file BitbucketFile, links []entityLink) (catalog.
 		// Optimization: if we're past all URLs that could share the repo prefix, stop.
 		// URLs from repos sorting before ours are < repoPrefix; nothing earlier can match.
 		// (URLs from repos sorting after ours are > repoPrefix; we must keep scanning past them.)
-		if links[j].URL < repoPrefix {
+		if links[j].canonicalPath < repoPrefix {
 			break
 		}
-		if isURLMatch(targetURL, links[j].URL) {
-			return links[j].Entity, true
+		if isURLMatch(targetURL, links[j].canonicalPath) {
+			return links[j].entity, true
 		}
 	}
 
@@ -209,8 +214,8 @@ func buildCanonicalURL(projectKey, repoSlug, filePath string) string {
 	return "/projects/" + projectKey + "/repos/" + repoSlug + "/browse/" + strings.TrimLeft(strings.ToLower(filePath), "/")
 }
 
-// canonicalizeBitbucketURL parses a Bitbucket URL and returns its canonicalized path.
-func canonicalizeBitbucketURL(rawURL string) (string, bool) {
+// canonicalizeBitbucketURLPath parses a Bitbucket URL and returns its canonicalized path.
+func canonicalizeBitbucketURLPath(rawURL string) (string, bool) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", false

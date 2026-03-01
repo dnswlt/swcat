@@ -43,6 +43,10 @@ func NewClient(baseURL string, opts ClientOptions) *Client {
 	}
 }
 
+func (c *Client) BaseURL() string {
+	return c.baseURL
+}
+
 // Person represents a Bitbucket user (author or committer).
 type Person struct {
 	Name         string `json:"name"`

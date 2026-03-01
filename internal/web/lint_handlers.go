@@ -316,6 +316,7 @@ func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request
 type bitbucketResultView struct {
 	lint.BitbucketScanResult
 	Tracked bool
+	FileURL string
 }
 
 func (s *Server) serveBitbucketResults(w http.ResponseWriter, r *http.Request) {
@@ -342,7 +343,12 @@ func (s *Server) serveBitbucketResults(w http.ResponseWriter, r *http.Request) {
 		if untrackedOnly && tracked {
 			continue
 		}
-		views = append(views, bitbucketResultView{BitbucketScanResult: res, Tracked: tracked})
+		f := res.File
+		views = append(views, bitbucketResultView{
+			BitbucketScanResult: res,
+			Tracked:             tracked,
+			FileURL:             fmt.Sprintf("%s/projects/%s/repos/%s/browse/%s", s.bbClient.BaseURL(), f.ProjectKey, f.RepoSlug, f.Path),
+		})
 	}
 
 	slices.SortFunc(views, func(a, b bitbucketResultView) int {
