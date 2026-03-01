@@ -25,6 +25,14 @@
         font-size: 0.9em;
     }
 
+    /* --- HTMX Indicators --- */
+    .htmx-indicator {
+        display: none;
+    }
+    .htmx-request .htmx-indicator {
+        display: block;
+    }
+
     /* Swap between default icon and spinner on the run-plugins button */
     .plugin-spinner {
         display: none;

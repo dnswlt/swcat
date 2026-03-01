@@ -31,7 +31,7 @@
                     <span class="text-gray-400 mx-1">/</span>
                     <span class="font-medium text-gray-900">{{ .File.RepoSlug }}</span>
                     <span class="text-gray-400 mx-1">/</span>
-                    <a href="{{ .FileURL }}" class="text-blue-600 hover:underline">{{ .File.Path }}</a>
+                    <a target="_blank" href="{{ .FileURL }}" class="text-blue-600 hover:underline">{{ .File.Path }}</a>
                 </td>
                 <td class="px-3 py-1">
                     {{ if .Tracked }}
