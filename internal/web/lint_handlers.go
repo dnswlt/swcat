@@ -331,8 +331,9 @@ func (s *Server) serveBitbucketResults(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
 
-	log.Printf("Looking for files in Bitbucket")
-	queryResults := s.linter.FindBitbucketFiles(ctx, s.bbClient)
+	useCache := r.URL.Query().Get("rescan") != "on"
+	log.Printf("Looking for files in Bitbucket (useCache=%v)", useCache)
+	queryResults := s.linter.FindBitbucketFiles(ctx, s.bbClient, useCache)
 	log.Printf("Found %d files. Matching files against entity URLs.", len(queryResults))
 	scanResults := s.linter.MatchBitbucketFiles(queryResults, entities)
 

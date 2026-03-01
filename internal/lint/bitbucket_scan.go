@@ -7,10 +7,38 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/dnswlt/swcat/internal/bitbucket"
 	"github.com/dnswlt/swcat/internal/catalog"
 )
+
+// bbFilesCache holds the last result of FindBitbucketFiles for a single Bitbucket instance.
+type bbFilesCache struct {
+	mu      sync.Mutex
+	baseURL string
+	valid   bool
+	files   []BitbucketFile
+}
+
+// get returns the cached files if the cache is valid for the given baseURL.
+func (c *bbFilesCache) get(baseURL string) ([]BitbucketFile, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.valid && c.baseURL == baseURL {
+		return c.files, true
+	}
+	return nil, false
+}
+
+// set stores files in the cache for the given baseURL.
+func (c *bbFilesCache) set(baseURL string, files []BitbucketFile) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.baseURL = baseURL
+	c.files = files
+	c.valid = true
+}
 
 // BitbucketFile is a single file found by a Bitbucket code search.
 type BitbucketFile struct {
@@ -59,7 +87,15 @@ func sortedEntityLinks(entities []catalog.Entity) []entityLink {
 }
 
 // FindBitbucketFiles executes the configured queries against Bitbucket to find files.
-func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Client) []BitbucketFile {
+// If useCache is true and a cached result exists for the same Bitbucket base URL, it is
+// returned immediately without hitting the API.
+func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Client, useCache bool) []BitbucketFile {
+	if useCache {
+		if files, ok := l.bbCache.get(bbClient.BaseURL()); ok {
+			log.Printf("FindBitbucketFiles: returning %d cached files", len(files))
+			return files
+		}
+	}
 	config := l.Bitbucket()
 	var allRepos []bitbucket.Repository
 	excludeREs := make([]*regexp.Regexp, 0, len(l.config.Bitbucket.ExcludedRepos))
@@ -141,6 +177,7 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Cli
 		}
 	}
 
+	l.bbCache.set(bbClient.BaseURL(), allFiles)
 	return allFiles
 }
 

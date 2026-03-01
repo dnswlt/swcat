@@ -195,6 +195,7 @@ type Linter struct {
 	customRules    []compiledCustomRule
 	config         *Config
 	reportedGroups []string // parsed/validated form of config.ReportedGroups
+	bbCache        bbFilesCache
 }
 
 // NewLinter creates a new Linter from the given configuration.

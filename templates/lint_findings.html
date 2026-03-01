@@ -79,7 +79,7 @@
                 <div class="flex items-center justify-between">
                     <div>
                         <h2 class="font-semibold text-gray-800">Bitbucket Files</h2>
-                        <p class="text-sm text-gray-500">Check which files found in Bitbucket are tracked as catalog entities.</p>
+                        <p class="text-sm text-gray-500">Check whether Bitbucket files are tracked under catalog entities.</p>
                     </div>
                     <div class="flex items-center gap-4">
                         <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
@@ -87,11 +87,16 @@
                                 class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                             Untracked only
                         </label>
+                        <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                            <input type="checkbox" id="bb-rescan" name="rescan"
+                                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            Force rescan
+                        </label>
                         <button
                             hx-get="lint/bitbucket-results"
                             hx-target="#bb-results"
                             hx-swap="innerHTML"
-                            hx-include="#bb-untracked"
+                            hx-include="#bb-untracked,#bb-rescan"
                             hx-indicator="#bb-spinner"
                             class="px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
                             Scan Bitbucket
@@ -141,7 +146,7 @@
                                     </div>
                                     <div class="space-y-1">
                                         {{ range .Findings }}
-                                        <div class="flex items-start text-xs {{ if eq .Severity "error" }}text-red-700{{ else if eq .Severity "warn" }}text-yellow-700{{ else }}text-blue-700{{ end }}">
+                                        <div class='flex items-start text-xs {{ if eq .Severity "error" }}text-red-700{{ else if eq .Severity "warn" }}text-yellow-700{{ else }}text-blue-700{{ end }}'>
                                             <div class="flex-shrink-0 mt-0.5">
                                                 {{ if eq .Severity "error" }}
                                                 <svg class="h-3.5 w-3.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
