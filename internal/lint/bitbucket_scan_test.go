@@ -73,18 +73,13 @@ func TestMatchBitbucketFiles(t *testing.T) {
 		},
 	}
 
-	results := []BitbucketQueryResult{
-		{
-			Query: BitbucketPathQuery{Kind: "Component"},
-			Files: []BitbucketFile{
-				{ProjectKey: "P1", RepoSlug: "R1", Path: "other/file.go"},           // Should match comp-root
-				{ProjectKey: "P1", RepoSlug: "R1", Path: "sub1/file.go"},            // Should match comp-sub1
-				{ProjectKey: "P1", RepoSlug: "R1", Path: "sub1/deep/file.go"},       // Should match comp-sub1-deep
-				{ProjectKey: "P1", RepoSlug: "R1", Path: "sub1-extra/file.go"},      // Should match comp-root
-				{ProjectKey: "P1", RepoSlug: "R1", Path: ""},                        // Should match comp-root
-				{ProjectKey: "P2", RepoSlug: "R2", Path: "file.go"},                 // Should match nothing
-			},
-		},
+	results := []BitbucketFile{
+		{ProjectKey: "P1", RepoSlug: "R1", Path: "other/file.go"},      // Should match comp-root
+		{ProjectKey: "P1", RepoSlug: "R1", Path: "sub1/file.go"},       // Should match comp-sub1
+		{ProjectKey: "P1", RepoSlug: "R1", Path: "sub1/deep/file.go"},  // Should match comp-sub1-deep
+		{ProjectKey: "P1", RepoSlug: "R1", Path: "sub1-extra/file.go"}, // Should match comp-root
+		{ProjectKey: "P1", RepoSlug: "R1", Path: ""},                   // Should match comp-root
+		{ProjectKey: "P2", RepoSlug: "R2", Path: "file.go"},            // Should match nothing
 	}
 
 	scanResults := l.MatchBitbucketFiles(results, entities)

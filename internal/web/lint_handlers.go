@@ -344,9 +344,6 @@ func (s *Server) serveBitbucketResults(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slices.SortFunc(views, func(a, b bitbucketResultView) int {
-		if c := strings.Compare(a.Query.Kind, b.Query.Kind); c != 0 {
-			return c
-		}
 		if c := strings.Compare(a.File.ProjectKey, b.File.ProjectKey); c != 0 {
 			return c
 		}

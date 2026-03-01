@@ -19,17 +19,10 @@ type BitbucketFile struct {
 	ProjectKey string
 }
 
-// BitbucketQueryResult pairs a query config with the files it found.
-type BitbucketQueryResult struct {
-	Query BitbucketPathQuery
-	Files []BitbucketFile
-}
-
 // BitbucketScanResult represents a file found by Bitbucket and the catalog
 // entity it was matched to. Entity is nil if no match was found.
 type BitbucketScanResult struct {
 	File   BitbucketFile
-	Query  BitbucketPathQuery
 	Entity catalog.Entity
 }
 
@@ -46,33 +39,29 @@ type entityIndices struct {
 	byLink map[catalog.Kind][]entityLink
 }
 
-func buildEntityIndices(entities []catalog.Entity) entityIndices {
-	idx := entityIndices{
-		byLink: make(map[catalog.Kind][]entityLink),
-	}
+func sortedEntityLinks(entities []catalog.Entity) []entityLink {
+	var links []entityLink
 	for _, e := range entities {
-		kind := e.GetKind()
 		// Index by repo link.
 		for _, link := range e.GetMetadata().Links {
-			if link.Type != "code" && link.Type != "bitbucket" {
+			lt := strings.ToLower(link.Type)
+			if lt != "code" && lt != "bitbucket" {
 				continue
 			}
 			if u, ok := canonicalizeBitbucketURL(link.URL); ok {
-				idx.byLink[kind] = append(idx.byLink[kind], entityLink{URL: u, Entity: e})
+				links = append(links, entityLink{URL: u, Entity: e})
 			}
 		}
 	}
 	// Sort links for binary search.
-	for _, links := range idx.byLink {
-		slices.SortFunc(links, func(a, b entityLink) int {
-			return strings.Compare(a.URL, b.URL)
-		})
-	}
-	return idx
+	slices.SortFunc(links, func(a, b entityLink) int {
+		return strings.Compare(a.URL, b.URL)
+	})
+	return links
 }
 
 // FindBitbucketFiles executes the configured queries against Bitbucket to find files.
-func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Client) []BitbucketQueryResult {
+func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Client) []BitbucketFile {
 	config := l.Bitbucket()
 	var allRepos []bitbucket.Repository
 	for _, proj := range config.Projects {
@@ -88,10 +77,8 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Cli
 		}
 	}
 
-	var queryResults []BitbucketQueryResult
+	var allFiles []BitbucketFile
 	for _, q := range config.Queries {
-		qr := BitbucketQueryResult{Query: q}
-
 		var re *regexp.Regexp
 		if q.PathRegex != "" {
 			var err error
@@ -114,7 +101,7 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Cli
 					continue
 				}
 				if exists {
-					qr.Files = append(qr.Files, BitbucketFile{
+					allFiles = append(allFiles, BitbucketFile{
 						Path:       strings.TrimPrefix(q.Path, "/"),
 						RepoSlug:   repo.Slug,
 						ProjectKey: repo.Project.Key,
@@ -128,7 +115,7 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Cli
 				}
 				for _, f := range files {
 					if re.MatchString(f) {
-						qr.Files = append(qr.Files, BitbucketFile{
+						allFiles = append(allFiles, BitbucketFile{
 							Path:       f,
 							RepoSlug:   repo.Slug,
 							ProjectKey: repo.Project.Key,
@@ -137,10 +124,9 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Cli
 				}
 			}
 		}
-		queryResults = append(queryResults, qr)
 	}
 
-	return queryResults
+	return allFiles
 }
 
 // MatchBitbucketFiles matches pre-fetched Bitbucket search results against catalog entities.
@@ -148,47 +134,44 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Cli
 //
 // For each query, entities' metadata links with type "code" or "bitbucket"
 // are matched against the search results' URLs.
-func (l *Linter) MatchBitbucketFiles(results []BitbucketQueryResult, entities []catalog.Entity) []BitbucketScanResult {
-	idx := buildEntityIndices(entities)
+func (l *Linter) MatchBitbucketFiles(files []BitbucketFile, entities []catalog.Entity) []BitbucketScanResult {
+	links := sortedEntityLinks(entities)
 	var out []BitbucketScanResult
-	for _, qr := range results {
-		kind := catalog.Kind(strings.ToLower(qr.Query.Kind))
-		out = append(out, matchBitbucketByLinks(qr, idx.byLink[kind])...)
+	for _, f := range files {
+		e, _ := matchBitbucketFileByLinks(f, links)
+		out = append(out, BitbucketScanResult{
+			File:   f,
+			Entity: e,
+		})
 	}
 	return out
 }
 
-func matchBitbucketByLinks(qr BitbucketQueryResult, links []entityLink) []BitbucketScanResult {
-	var out []BitbucketScanResult
-	for _, f := range qr.Files {
-		repoPrefix := "/projects/" + strings.ToLower(f.ProjectKey) + "/repos/" + strings.ToLower(f.RepoSlug)
-		targetURL := buildCanonicalURL(f.ProjectKey, f.RepoSlug, f.Path)
-		var entity catalog.Entity
+func matchBitbucketFileByLinks(file BitbucketFile, links []entityLink) (catalog.Entity, bool) {
+	repoPrefix := "/projects/" + strings.ToLower(file.ProjectKey) + "/repos/" + strings.ToLower(file.RepoSlug)
+	targetURL := buildCanonicalURL(file.ProjectKey, file.RepoSlug, file.Path)
 
-		// Binary search for the insertion point.
-		i, _ := slices.BinarySearchFunc(links, targetURL, func(el entityLink, target string) int {
-			return strings.Compare(el.URL, target)
-		})
+	// Binary search for the insertion point.
+	i, _ := slices.BinarySearchFunc(links, targetURL, func(el entityLink, target string) int {
+		return strings.Compare(el.URL, target)
+	})
 
-		// i is the insertion point where links[i].URL >= targetURL.
-		// Potential matches (prefixes) must be at i or before.
-		if i >= len(links) {
-			i = len(links) - 1
-		}
-		for j := i; j >= 0; j-- {
-			// Optimization: if we left the repository, no further prefix match is possible.
-			if !strings.HasPrefix(links[j].URL, repoPrefix) {
-				break
-			}
-			if isURLMatch(targetURL, links[j].URL) {
-				entity = links[j].Entity
-				break
-			}
-		}
-
-		out = append(out, BitbucketScanResult{File: f, Query: qr.Query, Entity: entity})
+	// i is the insertion point where links[i].URL >= targetURL.
+	// Potential matches (prefixes) must be at i or before.
+	if i >= len(links) {
+		i = len(links) - 1
 	}
-	return out
+	for j := i; j >= 0; j-- {
+		// Optimization: if we left the repository, no further prefix match is possible.
+		if !strings.HasPrefix(links[j].URL, repoPrefix) {
+			break
+		}
+		if isURLMatch(targetURL, links[j].URL) {
+			return links[j].Entity, true
+		}
+	}
+
+	return nil, false
 }
 
 func isURLMatch(target, prefix string) bool {
