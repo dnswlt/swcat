@@ -44,6 +44,50 @@ func TestCanonicalizeBitbucketURL(t *testing.T) {
 	}
 }
 
+// TestMatchBitbucketFilesByLinks_BinarySearchBug demonstrates the bug where
+// binary search lands at a repo that sorts after the target, causing the
+// backwards scan to break immediately before reaching the actual match.
+//
+// Sorted links: [/projects/p1/repos/my-repo, /projects/p1/repos/xyz/browse/x]
+// Target:        /projects/p1/repos/my-repo/browse/catalog.yaml
+//
+// Binary search insertion point = 1 (xyz entry), because
+// "my-repo/browse/catalog.yaml" > "my-repo" but < "xyz/...".
+// The backwards scan then checks j=1: HasPrefix(xyz-url, "my-repo") = false → break.
+// j=0 is never checked, so the repo-root entity link is missed.
+func TestMatchBitbucketFilesByLinks_BinarySearchBug(t *testing.T) {
+	file := BitbucketFile{ProjectKey: "P1", RepoSlug: "my-repo", Path: "catalog.yaml"}
+	links := sortedEntityLinks([]catalog.Entity{
+		&catalog.Component{
+			Metadata: &catalog.Metadata{
+				Name: "comp-my-repo",
+				Links: []*catalog.Link{
+					// Repo-root link: sorts before the target file path.
+					{Type: "code", URL: "https://bitbucket.example.com/projects/P1/repos/my-repo"},
+				},
+			},
+		},
+		&catalog.Component{
+			Metadata: &catalog.Metadata{
+				Name: "comp-xyz",
+				Links: []*catalog.Link{
+					// A repo that sorts after "my-repo" pushes the binary search
+					// insertion point past the matching entry.
+					{Type: "code", URL: "https://bitbucket.example.com/projects/P1/repos/xyz/browse/x"},
+				},
+			},
+		},
+	})
+
+	got, ok := matchBitbucketFileByLinks(file, links)
+	if !ok {
+		t.Fatal("matchBitbucketFileByLinks returned no match, want comp-my-repo")
+	}
+	if got.GetRef().Name != "comp-my-repo" {
+		t.Errorf("got entity %q, want comp-my-repo", got.GetRef().Name)
+	}
+}
+
 func TestMatchBitbucketFiles(t *testing.T) {
 	l := &Linter{}
 	entities := []catalog.Entity{

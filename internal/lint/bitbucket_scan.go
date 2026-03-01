@@ -174,8 +174,10 @@ func matchBitbucketFileByLinks(file BitbucketFile, links []entityLink) (catalog.
 		i = len(links) - 1
 	}
 	for j := i; j >= 0; j-- {
-		// Optimization: if we left the repository, no further prefix match is possible.
-		if !strings.HasPrefix(links[j].URL, repoPrefix) {
+		// Optimization: if we're past all URLs that could share the repo prefix, stop.
+		// URLs from repos sorting before ours are < repoPrefix; nothing earlier can match.
+		// (URLs from repos sorting after ours are > repoPrefix; we must keep scanning past them.)
+		if links[j].URL < repoPrefix {
 			break
 		}
 		if isURLMatch(targetURL, links[j].URL) {
