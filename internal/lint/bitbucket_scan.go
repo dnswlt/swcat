@@ -89,10 +89,12 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Cli
 
 	for _, repo := range allRepos {
 		lenBefore := len(allFiles)
+		nQueries := 0
 		for _, q := range config.Queries {
 			if len(q.Repositories) > 0 && !slices.Contains(q.Repositories, repo.Slug) {
 				continue
 			}
+			nQueries++
 
 			if q.Path != "" {
 				exists, err := bbClient.FileExists(ctx, repo.Project.Key, repo.Slug, q.Path, "")
@@ -128,8 +130,10 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Cli
 				}
 			}
 		}
-		log.Printf("FindBitbucketFiles found %d files in repo %s/%s",
-			len(allFiles)-lenBefore, repo.Project, repo.Slug)
+		if nQueries > 0 {
+			log.Printf("FindBitbucketFiles found %d files with %d queries in repo %s/%s",
+				len(allFiles)-lenBefore, nQueries, repo.Project.Key, repo.Slug)
+		}
 	}
 
 	return allFiles
@@ -142,6 +146,8 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Cli
 // are matched against the search results' URLs.
 func (l *Linter) MatchBitbucketFiles(files []BitbucketFile, entities []catalog.Entity) []BitbucketScanResult {
 	links := sortedEntityLinks(entities)
+	log.Printf("Found %d entities with code/bitbucket links for matching", len(links))
+
 	var out []BitbucketScanResult
 	for _, f := range files {
 		e, _ := matchBitbucketFileByLinks(f, links)
