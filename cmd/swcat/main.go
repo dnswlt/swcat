@@ -181,6 +181,9 @@ func bbClientAuthFromEnv() (username, password string) {
 }
 
 func createPrometheusClient(opts Options) *prometheus.Client {
+	if opts.PrometheusURL == "" {
+		return nil
+	}
 	clientOpts := promClientAuthFromEnv()
 	clientOpts.Timeout = opts.PrometheusTimeout
 	return prometheus.NewClient(opts.PrometheusURL, clientOpts)
