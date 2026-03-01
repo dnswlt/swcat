@@ -12,7 +12,6 @@ import (
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/kube"
 	"github.com/dnswlt/swcat/internal/lint"
-	"github.com/dnswlt/swcat/internal/prometheus"
 )
 
 type lintGroup struct {
@@ -141,7 +140,7 @@ func (s *Server) serveLintFindings(w http.ResponseWriter, r *http.Request) {
 	params := map[string]any{
 		"OwnerGroups":   result,
 		"HasKube":       s.kubeClient != nil && s.linter != nil && s.linter.Kube().Enabled,
-		"HasPrometheus": s.promScanner != nil && s.linter != nil && s.linter.Prometheus().Enabled,
+		"HasPrometheus": s.promClient != nil && s.linter != nil && s.linter.Prometheus().Enabled,
 		"HasBitbucket":  s.bbClient != nil && s.linter != nil && s.linter.Bitbucket().Enabled,
 	}
 
@@ -233,12 +232,12 @@ func (s *Server) serveKubeWorkloads(w http.ResponseWriter, r *http.Request) {
 }
 
 type prometheusWorkloadView struct {
-	prometheus.Workload
+	lint.PromWorkload
 	Tracked bool
 }
 
 func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request) {
-	if s.promScanner == nil || s.linter == nil || !s.linter.Prometheus().Enabled {
+	if s.promClient == nil || s.linter == nil || !s.linter.Prometheus().Enabled {
 		s.renderErrorSnippet(w, "Prometheus workload scan not enabled")
 		return
 	}
@@ -248,7 +247,7 @@ func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	result, err := s.promScanner.ScanWorkloads(ctx)
+	promWorkloads, err := s.linter.ScanPrometheusWorkloads(ctx, s.promClient)
 	if err != nil {
 		log.Printf("Error scanning prometheus workloads: %v", err)
 		s.renderErrorSnippet(w, fmt.Sprintf("Error scanning prometheus workloads: %v", err))
@@ -267,7 +266,7 @@ func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	isTracked := func(w prometheus.Workload) bool {
+	isTracked := func(w lint.PromWorkload) bool {
 		// Tracked if a Component with the same name exists in the default namespace.
 		ref := &catalog.Ref{Kind: catalog.KindComponent, Namespace: catalog.DefaultNamespace, Name: w.Name}
 		if data.repo.Component(ref) != nil {
@@ -277,19 +276,11 @@ func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request
 		return annotatedNames[w.Name]
 	}
 
-	excludedProm := make(map[string]bool)
-	for _, name := range s.linter.Prometheus().ExcludedWorkloads {
-		excludedProm[name] = true
-	}
-
 	var workloads []prometheusWorkloadView
-	for _, w := range result.Workloads {
-		if excludedProm[w.Name] {
-			continue
-		}
+	for _, w := range promWorkloads {
 		workloads = append(workloads, prometheusWorkloadView{
-			Workload: w,
-			Tracked:  isTracked(w),
+			PromWorkload: w,
+			Tracked:      isTracked(w),
 		})
 	}
 
@@ -307,8 +298,8 @@ func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request
 
 	params := map[string]any{
 		"Workloads":     workloads,
-		"DisplayLabels": result.DisplayLabels,
-		"ShowMetrics":   result.ShowMetrics,
+		"DisplayLabels": s.linter.Prometheus().DisplayLabels,
+		"ShowMetrics":   s.linter.Prometheus().ShowMetrics,
 	}
 	s.serveHTMLPage(w, r, "prometheus_workloads.html", params)
 }

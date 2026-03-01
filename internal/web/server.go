@@ -119,9 +119,9 @@ type Server struct {
 	// If set, workloads can be queried from a remote cluster.
 	kubeClient *kube.Client
 
-	// The optional Prometheus scanner.
+	// The optional Prometheus client.
 	// If set, workloads can be queried from Prometheus.
-	promScanner *prometheus.WorkloadScanner
+	promClient *prometheus.Client
 
 	// The optional Bitbucket client.
 	// If set, code searches can be run against Bitbucket.
@@ -131,7 +131,7 @@ type Server struct {
 	started time.Time
 }
 
-func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, pluginRegistry *plugins.Registry, commentsStore comments.Store, kubeClient *kube.Client, promScanner *prometheus.WorkloadScanner, bbClient *bitbucket.Client) (*Server, error) {
+func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, pluginRegistry *plugins.Registry, commentsStore comments.Store, kubeClient *kube.Client, promClient *prometheus.Client, bbClient *bitbucket.Client) (*Server, error) {
 	if opts.SVGCacheSize <= 0 {
 		opts.SVGCacheSize = 128
 	}
@@ -151,7 +151,7 @@ func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, plu
 		pluginRegistry: pluginRegistry,
 		commentsStore:  commentsStore,
 		kubeClient:     kubeClient,
-		promScanner:    promScanner,
+		promClient:     promClient,
 		bbClient:       bbClient,
 		finder:         repo.NewFinder(),
 		started:        time.Now(),

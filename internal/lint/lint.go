@@ -91,10 +91,23 @@ type Config struct {
 	Bitbucket BitbucketConfig `yaml:"bitbucket,omitempty"`
 }
 
+type DisplayLabel struct {
+	Key   string `yaml:"key"`
+	Label string `yaml:"label"`
+}
+
 // PrometheusConfig holds lint-level configuration for Prometheus workload scanning.
 type PrometheusConfig struct {
 	// Enabled controls whether the workload scan is active. Defaults to false.
 	Enabled bool `yaml:"enabled"`
+	// The PromQL instant query to run to find workloads.
+	WorkloadsQuery string `yaml:"workloadsQuery"`
+	// The name of the label that identifies the workload name (e.g. "app", "label_app").
+	WorkloadNameLabel string `yaml:"workloadNameLabel"`
+	// Labels from the query result to display in the UI.
+	DisplayLabels []DisplayLabel `yaml:"displayLabels"`
+	// Whether to show the numeric value of the metric in the UI.
+	ShowMetrics bool `yaml:"showMetrics"`
 	// ExcludedWorkloads lists workload names to ignore.
 	ExcludedWorkloads []string `yaml:"excludedWorkloads,omitempty"`
 	// WorkloadNameAnnotation is the catalog annotation used to match workload names.
@@ -251,27 +264,36 @@ func NewLinter(config *Config, customChecks map[string]CustomCheckFunc) (*Linter
 		l.customRules = append(l.customRules, ccr)
 	}
 
-	for _, r := range config.Bitbucket.ExcludedRepos {
-		_, err := regexp.Compile(r)
-		if err != nil {
-			return nil, fmt.Errorf("invalid excludedRepos regex %q in bitbucket config: %v", r, err)
-		}
-	}
-	for i, q := range config.Bitbucket.Queries {
-		if l := strings.ToLower(q.Kind); l != "component" && l != "api" {
-			return nil, fmt.Errorf("invalid kind in bitbucket queries: %q (must be component or api)", q.Kind)
-		}
-		if q.Path == "" && q.PathRegex == "" {
-			return nil, fmt.Errorf("path and pathRegex are both empty in bitbucket.queries[%d]", i)
-		} else if q.Path != "" && q.PathRegex != "" {
-			return nil, fmt.Errorf("path and pathRegex are both set in bitbucket.queries[%d]", i)
-		} else if q.PathRegex != "" {
-			_, err := regexp.Compile(q.PathRegex)
+	if config.Bitbucket.Enabled {
+		for _, r := range config.Bitbucket.ExcludedRepos {
+			_, err := regexp.Compile(r)
 			if err != nil {
-				return nil, fmt.Errorf("invalid pathRegex in bitbucket.queries[%d]: %v", i, err)
+				return nil, fmt.Errorf("invalid excludedRepos regex %q in bitbucket config: %v", r, err)
+			}
+		}
+		for i, q := range config.Bitbucket.Queries {
+			if l := strings.ToLower(q.Kind); l != "component" && l != "api" {
+				return nil, fmt.Errorf("invalid kind in bitbucket queries: %q (must be component or api)", q.Kind)
+			}
+			if q.Path == "" && q.PathRegex == "" {
+				return nil, fmt.Errorf("path and pathRegex are both empty in bitbucket.queries[%d]", i)
+			} else if q.Path != "" && q.PathRegex != "" {
+				return nil, fmt.Errorf("path and pathRegex are both set in bitbucket.queries[%d]", i)
+			} else if q.PathRegex != "" {
+				_, err := regexp.Compile(q.PathRegex)
+				if err != nil {
+					return nil, fmt.Errorf("invalid pathRegex in bitbucket.queries[%d]: %v", i, err)
+				}
 			}
 		}
 	}
+
+	if config.Prometheus.Enabled {
+		if strings.TrimSpace(config.Prometheus.WorkloadsQuery) == "" || config.Prometheus.WorkloadNameLabel == "" {
+			return nil, fmt.Errorf("prometheus config is missing required fields [url, workloadsQuery, workloadNameLabel]")
+		}
+	}
+
 	return l, nil
 }
 

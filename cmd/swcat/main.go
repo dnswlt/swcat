@@ -105,25 +105,26 @@ func createPluginRegistry(source store.Source) (*plugins.Registry, error) {
 
 // Options contains program options that can be set via command-line flags or environment variables.
 type Options struct {
-	Addr            string
-	RootDir         string
-	GitURL          string
-	GitRef          string
-	GitRootDir      string
-	GitUserName     string
-	GitUserEmail    string
-	BaseDir         string
-	ReadOnly        bool
-	DisablePlugins  bool
-	DotTimeout      time.Duration
-	UseDotStreaming bool
-	SVGCacheSize    int
-	CommentsDir     string
-	KubeKubeconfig  string
-	KubeContext     string
-	KubeInCluster   bool
-	PromTimeout     time.Duration
-	BitbucketURL    string
+	Addr              string
+	RootDir           string
+	GitURL            string
+	GitRef            string
+	GitRootDir        string
+	GitUserName       string
+	GitUserEmail      string
+	BaseDir           string
+	ReadOnly          bool
+	DisablePlugins    bool
+	DotTimeout        time.Duration
+	UseDotStreaming   bool
+	SVGCacheSize      int
+	CommentsDir       string
+	KubeKubeconfig    string
+	KubeContext       string
+	KubeInCluster     bool
+	PrometheusURL     string
+	PrometheusTimeout time.Duration
+	BitbucketURL      string
 }
 
 func createKubeClient(source store.Source, opts Options) (*kube.Client, error) {
@@ -179,6 +180,12 @@ func bbClientAuthFromEnv() (username, password string) {
 	return os.Getenv("SWCAT_BITBUCKET_USER"), os.Getenv("SWCAT_BITBUCKET_PASSWORD")
 }
 
+func createPrometheusClient(opts Options) *prometheus.Client {
+	clientOpts := promClientAuthFromEnv()
+	clientOpts.Timeout = opts.PrometheusTimeout
+	return prometheus.NewClient(opts.PrometheusURL, clientOpts)
+}
+
 func createBitbucketClient(opts Options) *bitbucket.Client {
 	if opts.BitbucketURL == "" {
 		return nil
@@ -189,31 +196,6 @@ func createBitbucketClient(opts Options) *bitbucket.Client {
 		Password: password,
 	})
 	return client
-}
-
-func createPrometheusScanner(source store.Source, opts Options) (*prometheus.WorkloadScanner, error) {
-	defaultStore, err := source.Store("")
-	if err != nil {
-		return nil, fmt.Errorf("could not get default store: %w", err)
-	}
-	promData, err := defaultStore.ReadFile(store.PrometheusFile)
-	if errors.Is(err, iofs.ErrNotExist) {
-		return nil, nil
-	} else if err != nil {
-		return nil, fmt.Errorf("could not load prometheus config: %w", err)
-	}
-	cfg, err := prometheus.ParseConfig(promData)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse prometheus config: %w", err)
-	}
-
-	if cfg.URL == "" {
-		return nil, nil
-	}
-
-	clientOpts := promClientAuthFromEnv()
-	clientOpts.Timeout = opts.PromTimeout
-	return prometheus.NewWorkloadScanner(clientOpts, *cfg), nil
 }
 
 func main() {
@@ -237,7 +219,8 @@ func main() {
 	fs.StringVar(&opts.KubeKubeconfig, "kube-kubeconfig", "", "Path to the kubeconfig file for Kubernetes workload scanning")
 	fs.StringVar(&opts.KubeContext, "kube-context", "", "Kubernetes context to use (only with -kube-kubeconfig)")
 	fs.BoolVar(&opts.KubeInCluster, "kube-in-cluster", false, "Use in-cluster Kubernetes config (for running inside a pod)")
-	fs.DurationVar(&opts.PromTimeout, "prom-timeout", 30*time.Second, "Maximum time to wait for Prometheus queries")
+	fs.StringVar(&opts.PrometheusURL, "prometheus-url", "", "Base URL of a Prometheus or Thanos REST endpoint (for linting)")
+	fs.DurationVar(&opts.PrometheusTimeout, "prometheus-timeout", 30*time.Second, "Maximum time to wait for Prometheus queries")
 	fs.StringVar(&opts.BitbucketURL, "bitbucket-url", "", "Base URL of the Bitbucket Data Center instance (e.g. https://bitbucket.example.com)")
 
 	err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("SWCAT"))
@@ -332,11 +315,9 @@ func main() {
 	}
 
 	// Optionally create a Prometheus scanner.
-	promScanner, err := createPrometheusScanner(source, opts)
-	if err != nil {
-		log.Printf("Could not create prometheus scanner: %v", err)
-	} else if promScanner != nil {
-		log.Printf("Prometheus scanner initialized")
+	promClient := createPrometheusClient(opts)
+	if promClient != nil {
+		log.Printf("Prometheus client initialized")
 	}
 
 	// Optionally create a Bitbucket client.
@@ -361,7 +342,7 @@ func main() {
 		pluginRegistry,
 		commentsStore,
 		kubeClient,
-		promScanner,
+		promClient,
 		bbClient,
 	)
 	if err != nil {
