@@ -74,6 +74,37 @@
             </div>
             {{ end }}
 
+            {{ if .HasBitbucket }}
+            <div class="border rounded-lg p-3 mb-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="font-semibold text-gray-800">Bitbucket Files</h2>
+                        <p class="text-sm text-gray-500">Check which files found in Bitbucket are tracked as catalog entities.</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                            <input type="checkbox" id="bb-untracked" name="untracked" checked
+                                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            Untracked only
+                        </label>
+                        <button
+                            hx-get="lint/bitbucket-results"
+                            hx-target="#bb-results"
+                            hx-swap="innerHTML"
+                            hx-include="#bb-untracked"
+                            hx-indicator="#bb-spinner"
+                            class="px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                            Load Results
+                        </button>
+                    </div>
+                </div>
+                <div id="bb-spinner" class="htmx-indicator text-center py-3 hidden">
+                    <span class="text-sm text-gray-500">Loading Bitbucket results...</span>
+                </div>
+                <div id="bb-results"></div>
+            </div>
+            {{ end }}
+
             {{ if .OwnerGroups }}
             <div class="space-y-6">
                 {{ range .OwnerGroups }}

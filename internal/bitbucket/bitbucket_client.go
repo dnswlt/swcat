@@ -221,6 +221,50 @@ type Tag struct {
 	Hash            string `json:"hash"`
 }
 
+// Project represents a Bitbucket project.
+type Project struct {
+	Key  string `json:"key"`
+	Name string `json:"name"`
+}
+
+// Repository represents a Bitbucket repository.
+type Repository struct {
+	Slug    string  `json:"slug"`
+	Name    string  `json:"name"`
+	Project Project `json:"project"`
+}
+
+// ListRepositories returns all repositories for the given project,
+// following pagination to collect the complete list.
+//
+// API: GET /rest/api/latest/projects/{projectKey}/repos
+func (c *Client) ListRepositories(ctx context.Context, projectKey string) ([]Repository, error) {
+	u, err := url.Parse(fmt.Sprintf("%s/rest/api/latest/projects/%s/repos",
+		c.baseURL, url.PathEscape(projectKey)))
+	if err != nil {
+		return nil, fmt.Errorf("bitbucket: building repos URL: %w", err)
+	}
+
+	var all []Repository
+	start := 0
+	for {
+		q := u.Query()
+		q.Set("start", fmt.Sprintf("%d", start))
+		u.RawQuery = q.Encode()
+
+		var paged pagedResponse[Repository]
+		if err := c.doGet(ctx, u, &paged); err != nil {
+			return nil, err
+		}
+		all = append(all, paged.Values...)
+		if paged.IsLastPage {
+			break
+		}
+		start = paged.NextPageStart
+	}
+	return all, nil
+}
+
 // ListTags returns all tags for the given project and repository,
 // following pagination to collect the complete list.
 //
@@ -317,6 +361,87 @@ func (c *Client) GetFileContents(ctx context.Context, projectKey, repoSlug, file
 		return nil, fmt.Errorf("bitbucket: reading file contents: %w", err)
 	}
 	return data, nil
+}
+
+// ListFiles returns all file paths in the given project and repository,
+// following pagination to collect the complete list. The list is recursive
+// from the root.
+//
+// API: GET /rest/api/latest/projects/{projectKey}/repos/{repositorySlug}/files
+func (c *Client) ListFiles(ctx context.Context, projectKey, repoSlug, at string) ([]string, error) {
+	u, err := url.Parse(fmt.Sprintf("%s/rest/api/latest/projects/%s/repos/%s/files",
+		c.baseURL, url.PathEscape(projectKey), url.PathEscape(repoSlug)))
+	if err != nil {
+		return nil, fmt.Errorf("bitbucket: building files URL: %w", err)
+	}
+
+	q := u.Query()
+	if at != "" {
+		q.Set("at", at)
+	}
+
+	var all []string
+	start := 0
+	for {
+		q.Set("start", fmt.Sprintf("%d", start))
+		u.RawQuery = q.Encode()
+
+		var paged pagedResponse[string]
+		if err := c.doGet(ctx, u, &paged); err != nil {
+			return nil, err
+		}
+		all = append(all, paged.Values...)
+		if paged.IsLastPage {
+			break
+		}
+		start = paged.NextPageStart
+	}
+	return all, nil
+}
+
+// FileExists checks if a file exists at the given path in the repository.
+//
+// API: GET /rest/api/latest/projects/{projectKey}/repos/{repositorySlug}/raw/{path}?at={at}
+func (c *Client) FileExists(ctx context.Context, projectKey, repoSlug, filePath, at string) (bool, error) {
+	// filePath may contain '/' separators that must not be percent-encoded,
+	// so we construct the URL as a raw string and let url.Parse validate it.
+	rawURL := fmt.Sprintf("%s/rest/api/latest/projects/%s/repos/%s/raw/%s",
+		c.baseURL, url.PathEscape(projectKey), url.PathEscape(repoSlug),
+		strings.TrimPrefix(filePath, "/"))
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false, fmt.Errorf("bitbucket: building file URL: %w", err)
+	}
+
+	if at != "" {
+		q := u.Query()
+		q.Set("at", at)
+		u.RawQuery = q.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, u.String(), nil)
+	if err != nil {
+		return false, fmt.Errorf("bitbucket: creating file head request: %w", err)
+	}
+	c.setAuth(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("bitbucket: executing file head request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Fully consume the response body to allow connection reuse.
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode == http.StatusOK {
+		return true, nil
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	return false, c.apiError(resp)
 }
 
 func (c *Client) setAuth(req *http.Request) {

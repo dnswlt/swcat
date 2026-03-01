@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -79,6 +80,72 @@ type Config struct {
 	// If set, the lint report will only show these groups as individual cards.
 	// Findings for entities owned by other groups will be grouped under "Others".
 	ReportedGroups []string `yaml:"reportedGroups,omitempty"`
+
+	// Kube holds lint-level configuration for Kubernetes workload scanning.
+	Kube KubeConfig `yaml:"kube,omitempty"`
+
+	// Prometheus holds lint-level configuration for Prometheus workload scanning.
+	Prometheus PrometheusConfig `yaml:"prometheus,omitempty"`
+
+	// BitBucket holds lint-level configuration for BitBucket component and API scanning.
+	Bitbucket BitbucketConfig `yaml:"bitbucket,omitempty"`
+}
+
+// PrometheusConfig holds lint-level configuration for Prometheus workload scanning.
+type PrometheusConfig struct {
+	// Enabled controls whether the workload scan is active. Defaults to false.
+	Enabled bool `yaml:"enabled"`
+	// ExcludedWorkloads lists workload names to ignore.
+	ExcludedWorkloads []string `yaml:"excludedWorkloads,omitempty"`
+	// WorkloadNameAnnotation is the catalog annotation used to match workload names.
+	// Defaults to catalog.AnnotKubeName if empty.
+	WorkloadNameAnnotation string `yaml:"workloadNameAnnotation,omitempty"`
+}
+
+// KubeConfig holds lint-level configuration for Kubernetes workload scanning.
+type KubeConfig struct {
+	// Enabled controls whether the workload scan is active. Defaults to false.
+	Enabled bool `yaml:"enabled"`
+	// ExcludedWorkloads lists workload names to ignore across all namespaces.
+	ExcludedWorkloads []string `yaml:"excludedWorkloads,omitempty"`
+}
+
+// BitbucketPathQuery configures a single Bitbucket scan for a specific
+// file by full path or pattern.
+type BitbucketPathQuery struct {
+	// The kind of entity expected to find with the query.
+	// Must be one of ("Component", "API").
+	Kind string `yaml:"kind"`
+	// The full path relative to the repository root of the file to look for.
+	// Example: "/src/main/resources/asyncapi.yaml".
+	// The leading "/" is optional, the path is always interpreted as starting
+	// from the repository root.
+	Path string `yaml:"path"`
+	// A regular expression to match against *all* files in a repository.
+	// If set, files in all repos mentioned in Repositories are fully listed
+	// and matched against the regex. This is a potentially very expensive
+	// operation, so use it carefully and only on selected repos.
+	// The main use case for this is to support the scanning of monorepos.
+	// The main reason it exists is that Bitbucket does not expose its Search API
+	// publicly.
+	// If PathRegex is set, Path must be empty.
+	PathRegex string `yaml:"pathRegex"`
+
+	// The names of repositories to apply this query to.
+	// This filter should be set if PathRegex is set.
+	Repositories []string `yaml:"repositories"`
+}
+
+// BitbucketConfig holds lint-level configuration for Bitbucket component and API scanning.
+type BitbucketConfig struct {
+	// Enabled controls whether the Bitbucket scan is active. Defaults to false.
+	Enabled bool `yaml:"enabled"`
+	// The list of projects to scan for files.
+	Projects []string `yaml:"projects"`
+	// List of repository names to exclude from the scan.
+	ExcludedRepos []string `yaml:"excludedRepos"`
+	// Queries to run to find potential missing Component or API entities.
+	Queries []BitbucketPathQuery `yaml:"queries,omitempty"`
 }
 
 // ReadConfig reads the linting configuration from the specified path.
@@ -126,7 +193,8 @@ type Linter struct {
 	env            *cel.Env
 	celRules       []compiledRule
 	customRules    []compiledCustomRule
-	reportedGroups []string
+	config         *Config
+	reportedGroups []string // parsed/validated form of config.ReportedGroups
 }
 
 // NewLinter creates a new Linter from the given configuration.
@@ -152,6 +220,7 @@ func NewLinter(config *Config, customChecks map[string]CustomCheckFunc) (*Linter
 
 	l := &Linter{
 		env:            env,
+		config:         config,
 		reportedGroups: reportedGroups,
 	}
 
@@ -181,6 +250,21 @@ func NewLinter(config *Config, customChecks map[string]CustomCheckFunc) (*Linter
 		l.customRules = append(l.customRules, ccr)
 	}
 
+	for i, q := range config.Bitbucket.Queries {
+		if l := strings.ToLower(q.Kind); l != "component" && l != "api" {
+			return nil, fmt.Errorf("invalid kind in bitbucket queries: %q (must be component or api)", q.Kind)
+		}
+		if q.Path == "" && q.PathRegex == "" {
+			return nil, fmt.Errorf("path and pathRegex are both empty in bitbucket.queries[%d]", i)
+		} else if q.Path != "" && q.PathRegex != "" {
+			return nil, fmt.Errorf("path and pathRegex are both set in bitbucket.queries[%d]", i)
+		} else if q.PathRegex != "" {
+			_, err := regexp.Compile(q.PathRegex)
+			if err != nil {
+				return nil, fmt.Errorf("invalid pathRegex in bitbucket.queries[%d]: %v", i, err)
+			}
+		}
+	}
 	return l, nil
 }
 
@@ -199,6 +283,18 @@ func parseReportedGroups(groups []string) ([]string, error) {
 
 func (l *Linter) ReportedGroups() []string {
 	return l.reportedGroups
+}
+
+func (l *Linter) Kube() KubeConfig {
+	return l.config.Kube
+}
+
+func (l *Linter) Prometheus() PrometheusConfig {
+	return l.config.Prometheus
+}
+
+func (l *Linter) Bitbucket() BitbucketConfig {
+	return l.config.Bitbucket
 }
 
 func (l *Linter) NumRules() int {

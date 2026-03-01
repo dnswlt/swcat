@@ -46,24 +46,15 @@ func NewClientFromConfig(cc ConnectConfig, cfg Config) (*Client, error) {
 	return &Client{clientset: cs, config: cfg}, nil
 }
 
-// AllWorkloads returns all workloads matching the configured filter criteria from all configured namespaces.
+// AllWorkloads returns all workloads from all configured namespaces.
 func (c *Client) AllWorkloads(ctx context.Context) ([]Workload, error) {
 	var allWorkloads []Workload
-
-	excluded := make(map[string]bool)
-	for _, e := range c.config.ExcludedWorkloads {
-		excluded[e] = true
-	}
 	for _, ns := range c.config.Namespaces {
 		workloads, err := c.Workloads(ctx, ns)
 		if err != nil {
 			return nil, fmt.Errorf("get workloads for namespace %s: %w", ns, err)
 		}
-		for _, workload := range workloads {
-			if !excluded[workload.Name] {
-				allWorkloads = append(allWorkloads, workload)
-			}
-		}
+		allWorkloads = append(allWorkloads, workloads...)
 	}
 	return allWorkloads, nil
 }

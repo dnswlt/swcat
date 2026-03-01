@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -21,16 +20,11 @@ type Config struct {
 	// The PromQL instant query to run to find workloads.
 	WorkloadsQuery string `yaml:"workloadsQuery"`
 	// The name of the label that identifies the workload name (e.g. "app", "label_app").
-	NameLabel string `yaml:"nameLabel"`
+	WorkloadNameLabel string `yaml:"workloadNameLabel"`
 	// Labels from the query result to display in the UI.
 	DisplayLabels []DisplayLabel `yaml:"displayLabels"`
 	// Whether to show the numeric value of the metric in the UI.
 	ShowMetrics bool `yaml:"showMetrics"`
-	// Names of workloads that should be excluded in all namespaces.
-	ExcludedWorkloads []string `yaml:"excludedWorkloads"`
-	// Annotation that defines a component's name as returned by the WorkloadsQuery.
-	// Default: catalog.AnnotKubeName
-	WorkloadNameAnnotation string `yaml:"workloadNameAnnotation"`
 }
 
 // ParseConfig reads a prometheus Config from YAML data.
@@ -42,7 +36,7 @@ func ParseConfig(data []byte) (*Config, error) {
 		return nil, fmt.Errorf("invalid prometheus config YAML: %w", err)
 	}
 
-	if cfg.URL == "" || strings.TrimSpace(cfg.WorkloadsQuery) == "" || cfg.NameLabel == "" {
+	if cfg.URL == "" || strings.TrimSpace(cfg.WorkloadsQuery) == "" || cfg.WorkloadNameLabel == "" {
 		return nil, fmt.Errorf("prometheus config is missing required fields [url, workloadsQuery, nameLabel]")
 	}
 	return &cfg, nil
@@ -88,11 +82,7 @@ func (s *WorkloadScanner) ScanWorkloads(ctx context.Context) (*WorkloadResult, e
 
 	var workloads []Workload
 	for _, sample := range samples {
-		name := sample.Labels[s.cfg.NameLabel]
-		if slices.Contains(s.cfg.ExcludedWorkloads, name) {
-			continue
-		}
-
+		name := sample.Labels[s.cfg.WorkloadNameLabel]
 		w := Workload{
 			Name:        name,
 			LabelValues: make(map[string]string),

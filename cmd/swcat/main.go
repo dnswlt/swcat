@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dnswlt/swcat/internal/bitbucket"
 	"github.com/dnswlt/swcat/internal/comments"
 	"github.com/dnswlt/swcat/internal/gitclient"
 	"github.com/dnswlt/swcat/internal/kube"
@@ -122,6 +123,7 @@ type Options struct {
 	KubeContext     string
 	KubeInCluster   bool
 	PromTimeout     time.Duration
+	BitbucketURL    string
 }
 
 func createKubeClient(source store.Source, opts Options) (*kube.Client, error) {
@@ -174,6 +176,23 @@ func createLinter(source store.Source) (*lint.Linter, error) {
 	return lint.NewLinter(lintCfg, lint.KnownCustomChecks)
 }
 
+func bbClientAuthFromEnv() (username, password string) {
+	return os.Getenv("SWCAT_BITBUCKET_USER"), os.Getenv("SWCAT_BITBUCKET_PASSWORD")
+}
+
+func createBitbucketClient(opts Options) *bitbucket.Client {
+	if opts.BitbucketURL == "" {
+		return nil
+	}
+	username, password := bbClientAuthFromEnv()
+	client := bitbucket.NewClient(opts.BitbucketURL, bitbucket.ClientOptions{
+		Username: username,
+		Password: password,
+	})
+	log.Printf("Bitbucket client initialized (url=%s)", opts.BitbucketURL)
+	return client
+}
+
 func createPrometheusScanner(source store.Source, opts Options) (*prometheus.WorkloadScanner, error) {
 	defaultStore, err := source.Store("")
 	if err != nil {
@@ -222,6 +241,7 @@ func main() {
 	fs.StringVar(&opts.KubeContext, "kube-context", "", "Kubernetes context to use (only with -kube-kubeconfig)")
 	fs.BoolVar(&opts.KubeInCluster, "kube-in-cluster", false, "Use in-cluster Kubernetes config (for running inside a pod)")
 	fs.DurationVar(&opts.PromTimeout, "prom-timeout", 30*time.Second, "Maximum time to wait for Prometheus queries")
+	fs.StringVar(&opts.BitbucketURL, "bitbucket-url", "", "Base URL of the Bitbucket Data Center instance (e.g. https://bitbucket.example.com)")
 
 	err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("SWCAT"))
 	if err != nil {
@@ -323,6 +343,9 @@ func main() {
 		log.Printf("Prometheus scanner initialized")
 	}
 
+	// Optionally create a Bitbucket client.
+	bbClient := createBitbucketClient(opts)
+
 	server, err := web.NewServer(
 		web.ServerOptions{
 			Addr:            opts.Addr,
@@ -340,6 +363,7 @@ func main() {
 		commentsStore,
 		kubeClient,
 		promScanner,
+		bbClient,
 	)
 	if err != nil {
 		log.Fatalf("Could not create server: %v", err)

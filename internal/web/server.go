@@ -20,6 +20,7 @@ import (
 
 	"github.com/dnswlt/swcat"
 	"github.com/dnswlt/swcat/internal/api"
+	"github.com/dnswlt/swcat/internal/bitbucket"
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/comments"
 	"github.com/dnswlt/swcat/internal/config"
@@ -122,11 +123,15 @@ type Server struct {
 	// If set, workloads can be queried from Prometheus.
 	promScanner *prometheus.WorkloadScanner
 
+	// The optional Bitbucket client.
+	// If set, code searches can be run against Bitbucket.
+	bbClient *bitbucket.Client
+
 	// Server startup time. Used for cache busting JS/CSS resources.
 	started time.Time
 }
 
-func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, pluginRegistry *plugins.Registry, commentsStore comments.Store, kubeClient *kube.Client, promScanner *prometheus.WorkloadScanner) (*Server, error) {
+func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, pluginRegistry *plugins.Registry, commentsStore comments.Store, kubeClient *kube.Client, promScanner *prometheus.WorkloadScanner, bbClient *bitbucket.Client) (*Server, error) {
 	if opts.SVGCacheSize <= 0 {
 		opts.SVGCacheSize = 128
 	}
@@ -147,6 +152,7 @@ func NewServer(opts ServerOptions, source store.Source, linter *lint.Linter, plu
 		commentsStore:  commentsStore,
 		kubeClient:     kubeClient,
 		promScanner:    promScanner,
+		bbClient:       bbClient,
 		finder:         repo.NewFinder(),
 		started:        time.Now(),
 	}
@@ -1928,6 +1934,9 @@ func (s *Server) uiMux() *http.ServeMux {
 	})
 	mux.HandleFunc("GET /lint/kube-workloads", func(w http.ResponseWriter, r *http.Request) {
 		s.serveKubeWorkloads(w, r)
+	})
+	mux.HandleFunc("GET /lint/bitbucket-results", func(w http.ResponseWriter, r *http.Request) {
+		s.serveBitbucketResults(w, r)
 	})
 	mux.HandleFunc("GET /lint/prometheus-workloads", func(w http.ResponseWriter, r *http.Request) {
 		s.servePrometheusWorkloads(w, r)

@@ -29,8 +29,6 @@ type ConnectConfig struct {
 type Config struct {
 	// Namespaces to query for workloads.
 	Namespaces []string `yaml:"namespaces"`
-	// Names of workloads that should be excluded in all namespaces.
-	ExcludedWorkloads []string `yaml:"excludedWorkloads"`
 }
 
 // ParseConfig reads a kube Config from YAML data.

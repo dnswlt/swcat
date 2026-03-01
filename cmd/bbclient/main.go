@@ -2,9 +2,11 @@
 //
 // Usage:
 //
+//	bbclient -url https://bb.example.com -project PROJ repos
+//	bbclient -url https://bb.example.com -project PROJ -repo myrepo files
+//	bbclient -url https://bb.example.com -project PROJ -repo myrepo exists path/to/file.go
 //	bbclient -url https://bb.example.com -project PROJ -repo myrepo commits
 //	bbclient -url https://bb.example.com -project PROJ -repo myrepo cat path/to/file.go
-//	bbclient -url https://bb.example.com -project PROJ -repo myrepo cat path/to/file.go -at main
 //
 // Credentials can be supplied via -user / -pass flags or the BBCLIENT_USER /
 // BBCLIENT_PASS environment variables.
@@ -35,8 +37,11 @@ func main() {
 	flag.StringVar(&username, "user", os.Getenv("BBCLIENT_USER"), "Username (or set BBCLIENT_USER)")
 	flag.StringVar(&password, "pass", os.Getenv("BBCLIENT_PASS"), "Password or token (or set BBCLIENT_PASS)")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: bbclient -url URL -project KEY -repo SLUG <command> [args]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: bbclient -url URL [flags] <command> [args]\n\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
+		fmt.Fprintf(os.Stderr, "  repos                List all repositories in a project\n")
+		fmt.Fprintf(os.Stderr, "  files                List all files in a repository recursively\n")
+		fmt.Fprintf(os.Stderr, "  exists <path>        Check if a file exists in a repository\n")
 		fmt.Fprintf(os.Stderr, "  branches             List all branches (marks the default)\n")
 		fmt.Fprintf(os.Stderr, "  default-branch       Print the default branch name\n")
 		fmt.Fprintf(os.Stderr, "  commits              Print recent commits\n")
@@ -46,15 +51,15 @@ func main() {
 	}
 	flag.Parse()
 
-	if baseURL == "" || projectKey == "" || repoSlug == "" {
-		fmt.Fprintln(os.Stderr, "Error: -url, -project, and -repo are required")
+	if baseURL == "" {
+		fmt.Fprintln(os.Stderr, "Error: -url is required")
 		flag.Usage()
 		os.Exit(1)
 	}
 
 	args := flag.Args()
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Error: a command is required (branches, commits, or cat)")
+		fmt.Fprintln(os.Stderr, "Error: a command is required")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -66,17 +71,99 @@ func main() {
 	ctx := context.Background()
 
 	switch args[0] {
+	case "repos":
+		requireProject(projectKey)
+		runRepos(ctx, client, projectKey)
+	case "files":
+		requireRepo(projectKey, repoSlug)
+		runFiles(ctx, client, projectKey, repoSlug, args[1:])
+	case "exists":
+		requireRepo(projectKey, repoSlug)
+		runExists(ctx, client, projectKey, repoSlug, args[1:])
 	case "branches":
+		requireRepo(projectKey, repoSlug)
 		runBranches(ctx, client, projectKey, repoSlug)
 	case "default-branch":
+		requireRepo(projectKey, repoSlug)
 		runDefaultBranch(ctx, client, projectKey, repoSlug)
 	case "commits":
+		requireRepo(projectKey, repoSlug)
 		runCommits(ctx, client, projectKey, repoSlug, args[1:])
 	case "cat":
+		requireRepo(projectKey, repoSlug)
 		runCat(ctx, client, projectKey, repoSlug, args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "Error: unknown command %q\n", args[0])
 		flag.Usage()
+		os.Exit(1)
+	}
+}
+
+func requireProject(projectKey string) {
+	if projectKey == "" {
+		fmt.Fprintln(os.Stderr, "Error: -project is required for this command")
+		os.Exit(1)
+	}
+}
+
+func requireRepo(projectKey, repoSlug string) {
+	if projectKey == "" || repoSlug == "" {
+		fmt.Fprintln(os.Stderr, "Error: -project and -repo are required for this command")
+		os.Exit(1)
+	}
+}
+
+func runRepos(ctx context.Context, client *bitbucket.Client, projectKey string) {
+	repos, err := client.ListRepositories(ctx, projectKey)
+	if err != nil {
+		log.Fatalf("ListRepositories: %v", err)
+	}
+	if len(repos) == 0 {
+		fmt.Println("No repositories found.")
+		return
+	}
+	for _, r := range repos {
+		fmt.Printf("%-40s %s\n", r.Slug, r.Name)
+	}
+}
+
+func runFiles(ctx context.Context, client *bitbucket.Client, projectKey, repoSlug string, args []string) {
+	fs := flag.NewFlagSet("files", flag.ExitOnError)
+	at := fs.String("at", "", "Revision (branch, tag, or commit ID); defaults to default branch")
+	fs.Parse(args)
+
+	files, err := client.ListFiles(ctx, projectKey, repoSlug, *at)
+	if err != nil {
+		log.Fatalf("ListFiles: %v", err)
+	}
+	if len(files) == 0 {
+		fmt.Println("No files found.")
+		return
+	}
+	for _, f := range files {
+		fmt.Println(f)
+	}
+}
+
+func runExists(ctx context.Context, client *bitbucket.Client, projectKey, repoSlug string, args []string) {
+	fs := flag.NewFlagSet("exists", flag.ExitOnError)
+	at := fs.String("at", "", "Revision (branch, tag, or commit ID); defaults to default branch")
+	fs.Parse(args)
+
+	if fs.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "Error: exists requires a file path argument")
+		os.Exit(1)
+	}
+	filePath := fs.Arg(0)
+
+	exists, err := client.FileExists(ctx, projectKey, repoSlug, filePath, *at)
+	if err != nil {
+		log.Fatalf("FileExists: %v", err)
+	}
+	if exists {
+		fmt.Println("File exists.")
+	} else {
+		fmt.Println("File does not exist.")
 		os.Exit(1)
 	}
 }

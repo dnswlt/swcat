@@ -43,7 +43,7 @@ func setupPluginIntegrationServer(t *testing.T, dir string) (*httptest.Server, *
 		ReadOnly: false,
 		Version:  "integration-test",
 	}
-	server, err := NewServer(opts, st, nil, pluginRegistry, nil, nil, nil)
+	server, err := NewServer(opts, st, nil, pluginRegistry, nil, nil, nil, nil)
 	server.dotRunner = &fakeRunner{}
 	if err != nil {
 		t.Fatalf("Failed to create server: %v", err)

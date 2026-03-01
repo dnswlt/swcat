@@ -140,8 +140,9 @@ func (s *Server) serveLintFindings(w http.ResponseWriter, r *http.Request) {
 
 	params := map[string]any{
 		"OwnerGroups":   result,
-		"HasKube":       s.kubeClient != nil,
-		"HasPrometheus": s.promScanner != nil,
+		"HasKube":       s.kubeClient != nil && s.linter != nil && s.linter.Kube().Enabled,
+		"HasPrometheus": s.promScanner != nil && s.linter != nil && s.linter.Prometheus().Enabled,
+		"HasBitbucket":  s.bbClient != nil && s.linter != nil && s.linter.Bitbucket().Enabled,
 	}
 
 	s.serveHTMLPage(w, r, "lint_findings.html", params)
@@ -153,8 +154,8 @@ type kubeWorkloadView struct {
 }
 
 func (s *Server) serveKubeWorkloads(w http.ResponseWriter, r *http.Request) {
-	if s.kubeClient == nil {
-		s.renderErrorSnippet(w, "Kubernetes client not configured")
+	if s.kubeClient == nil || s.linter == nil || !s.linter.Kube().Enabled {
+		s.renderErrorSnippet(w, "Kubernetes workload scan not enabled")
 		return
 	}
 
@@ -188,8 +189,18 @@ func (s *Server) serveKubeWorkloads(w http.ResponseWriter, r *http.Request) {
 		return annotatedNames[w.Name]
 	}
 
+	excluded := make(map[string]bool)
+	if s.linter != nil {
+		for _, name := range s.linter.Kube().ExcludedWorkloads {
+			excluded[name] = true
+		}
+	}
+
 	var workloads []kubeWorkloadView
 	for _, w := range allWorkloads {
+		if excluded[w.Name] {
+			continue
+		}
 		workloads = append(workloads, kubeWorkloadView{
 			Workload: w,
 			Tracked:  isTracked(w),
@@ -227,8 +238,8 @@ type prometheusWorkloadView struct {
 }
 
 func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request) {
-	if s.promScanner == nil {
-		s.renderErrorSnippet(w, "Prometheus scanner not configured")
+	if s.promScanner == nil || s.linter == nil || !s.linter.Prometheus().Enabled {
+		s.renderErrorSnippet(w, "Prometheus workload scan not enabled")
 		return
 	}
 
@@ -247,10 +258,10 @@ func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request
 	// Build a set of known workload names from annotations.
 	annotatedNames := make(map[string]bool)
 	annotationKey := catalog.AnnotKubeName
-	if a := s.promScanner.Config().WorkloadNameAnnotation; a != "" {
+	if a := s.linter.Prometheus().WorkloadNameAnnotation; a != "" {
 		annotationKey = a
 	}
-	for _, e := range s.finder.FindComponents(data.repo, "annotation") {
+	for _, e := range s.finder.FindComponents(data.repo, "") {
 		if v, ok := e.GetMetadata().Annotations[annotationKey]; ok {
 			annotatedNames[v] = true
 		}
@@ -266,8 +277,16 @@ func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request
 		return annotatedNames[w.Name]
 	}
 
+	excludedProm := make(map[string]bool)
+	for _, name := range s.linter.Prometheus().ExcludedWorkloads {
+		excludedProm[name] = true
+	}
+
 	var workloads []prometheusWorkloadView
 	for _, w := range result.Workloads {
+		if excludedProm[w.Name] {
+			continue
+		}
 		workloads = append(workloads, prometheusWorkloadView{
 			Workload: w,
 			Tracked:  isTracked(w),
@@ -292,4 +311,53 @@ func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request
 		"ShowMetrics":   result.ShowMetrics,
 	}
 	s.serveHTMLPage(w, r, "prometheus_workloads.html", params)
+}
+
+type bitbucketResultView struct {
+	lint.BitbucketScanResult
+	Tracked bool
+}
+
+func (s *Server) serveBitbucketResults(w http.ResponseWriter, r *http.Request) {
+	if s.bbClient == nil || s.linter == nil || !s.linter.Bitbucket().Enabled {
+		s.renderErrorSnippet(w, "Bitbucket scan not enabled")
+		return
+	}
+
+	data := s.getStoreData(r)
+	entities := s.finder.FindEntities(data.repo, "")
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+
+	queryResults := s.linter.FindBitbucketFiles(ctx, s.bbClient)
+	scanResults := s.linter.MatchBitbucketFiles(queryResults, entities)
+
+	untrackedOnly := r.URL.Query().Get("untracked") == "on"
+	var views []bitbucketResultView
+	for _, res := range scanResults {
+		tracked := res.Entity != nil
+		if untrackedOnly && tracked {
+			continue
+		}
+		views = append(views, bitbucketResultView{BitbucketScanResult: res, Tracked: tracked})
+	}
+
+	slices.SortFunc(views, func(a, b bitbucketResultView) int {
+		if c := strings.Compare(a.Query.Kind, b.Query.Kind); c != 0 {
+			return c
+		}
+		if c := strings.Compare(a.File.ProjectKey, b.File.ProjectKey); c != 0 {
+			return c
+		}
+		if c := strings.Compare(a.File.RepoSlug, b.File.RepoSlug); c != 0 {
+			return c
+		}
+		return strings.Compare(a.File.Path, b.File.Path)
+	})
+
+	params := map[string]any{
+		"Results": views,
+	}
+	s.serveHTMLPage(w, r, "bitbucket_results.html", params)
 }
