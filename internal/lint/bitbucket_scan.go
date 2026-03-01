@@ -57,6 +57,14 @@ func sortedEntityLinks(entities []catalog.Entity) []entityLink {
 func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Client) []BitbucketFile {
 	config := l.Bitbucket()
 	var allRepos []bitbucket.Repository
+	excludeREs := make([]*regexp.Regexp, 0, len(l.config.Bitbucket.ExcludedRepos))
+	for _, pattern := range l.config.Bitbucket.ExcludedRepos {
+		r, err := regexp.Compile(`^(?:` + pattern + `)$`)
+		if err != nil {
+			continue // Shouldn't happen, we validate regexps when reading the config
+		}
+		excludeREs = append(excludeREs, r)
+	}
 	for _, proj := range config.Projects {
 		repos, err := bbClient.ListRepositories(ctx, proj)
 		if err != nil {
@@ -64,25 +72,24 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Cli
 			continue
 		}
 		for _, repo := range repos {
-			if !slices.Contains(config.ExcludedRepos, repo.Slug) {
+			exclude := false
+			for _, ex := range excludeREs {
+				if ex.MatchString(repo.Slug) {
+					exclude = true
+					break
+				}
+			}
+			if !exclude {
 				allRepos = append(allRepos, repo)
 			}
 		}
 	}
 
 	var allFiles []BitbucketFile
-	for _, q := range config.Queries {
-		var re *regexp.Regexp
-		if q.PathRegex != "" {
-			var err error
-			re, err = regexp.Compile(q.PathRegex)
-			if err != nil {
-				log.Printf("Invalid pathRegex %q: %v", q.PathRegex, err)
-				continue
-			}
-		}
 
-		for _, repo := range allRepos {
+	for _, repo := range allRepos {
+		lenBefore := len(allFiles)
+		for _, q := range config.Queries {
 			if len(q.Repositories) > 0 && !slices.Contains(q.Repositories, repo.Slug) {
 				continue
 			}
@@ -100,10 +107,14 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Cli
 						ProjectKey: repo.Project.Key,
 					})
 				}
-			} else if re != nil {
+			} else if q.PathRegex != "" {
 				files, err := bbClient.ListFiles(ctx, repo.Project.Key, repo.Slug, "")
 				if err != nil {
 					log.Printf("Error listing files in %s/%s: %v", repo.Project.Key, repo.Slug, err)
+					continue
+				}
+				re, err := regexp.Compile(q.PathRegex)
+				if err != nil {
 					continue
 				}
 				for _, f := range files {
@@ -117,6 +128,8 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient *bitbucket.Cli
 				}
 			}
 		}
+		log.Printf("FindBitbucketFiles found %d files in repo %s/%s",
+			len(allFiles)-lenBefore, repo.Project, repo.Slug)
 	}
 
 	return allFiles

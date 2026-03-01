@@ -142,7 +142,7 @@ type BitbucketConfig struct {
 	Enabled bool `yaml:"enabled"`
 	// The list of projects to scan for files.
 	Projects []string `yaml:"projects"`
-	// List of repository names to exclude from the scan.
+	// List of regex patterns of repository names to exclude from the scan.
 	ExcludedRepos []string `yaml:"excludedRepos"`
 	// Queries to run to find potential missing Component or API entities.
 	Queries []BitbucketPathQuery `yaml:"queries,omitempty"`
@@ -250,6 +250,12 @@ func NewLinter(config *Config, customChecks map[string]CustomCheckFunc) (*Linter
 		l.customRules = append(l.customRules, ccr)
 	}
 
+	for _, r := range config.Bitbucket.ExcludedRepos {
+		_, err := regexp.Compile(r)
+		if err != nil {
+			return nil, fmt.Errorf("invalid excludedRepos regex %q in bitbucket config: %v", r, err)
+		}
+	}
 	for i, q := range config.Bitbucket.Queries {
 		if l := strings.ToLower(q.Kind); l != "component" && l != "api" {
 			return nil, fmt.Errorf("invalid kind in bitbucket queries: %q (must be component or api)", q.Kind)
