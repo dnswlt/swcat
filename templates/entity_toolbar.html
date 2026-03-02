@@ -22,13 +22,9 @@
     {{ $isSystem := eq $entity.GetKind "system" }}
     {{ $matching := $entity | matchingPlugins }}
     {{ if or $matching $isSystem }}
-    <a href="#" hx-post="{{ $entity | toEntityURL }}/run-plugins" hx-target="#error-messages"
-        class="bg-orange-200 hover:bg-orange-300 py-1 px-3 rounded text-sm" aria-label="Update auto-generated data"
-        {{ if $isSystem }}
-        title="Run plugins (including child entities)"
-        {{ else }}
-        title='Run plugins: {{ strJoin $matching ", " }}'
-        {{ end }}>
+    <button type="button" id="plugin-btn" popovertarget="plugin-popover"
+        class="bg-orange-200 hover:bg-orange-300 py-1 px-3 rounded text-sm cursor-pointer"
+        aria-label="Show plugins" title="Show plugins">
         <svg class="h-4 w-4 plugin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <!-- Zap (flash/bolt) -->
@@ -39,7 +35,31 @@
             <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
             <path d="M12 2a10 10 0 0 1 10 10" stroke-opacity="0.75"></path>
         </svg>
-    </a>
+        <span class="sr-only">Show plugins</span>
+    </button>
+    <div id="plugin-popover" popover
+        class="p-0 bg-white rounded-lg shadow-xl border border-gray-200 text-sm min-w-[180px]">
+        <div class="px-3 py-2 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            Plugins
+        </div>
+        <ul class="py-1">
+            {{ range $matching }}
+            <li class="px-3 py-1.5 text-gray-700">{{ . }}</li>
+            {{ end }}
+            {{ if $isSystem }}
+            <li class="px-3 py-1.5 text-xs text-gray-400 italic">Includes child entities</li>
+            {{ end }}
+        </ul>
+        <div class="px-3 py-2 border-t border-gray-100">
+            <button type="button"
+                hx-post="{{ $entity | toEntityURL }}/run-plugins" hx-target="#error-messages"
+                hx-indicator="#plugin-btn"
+                popovertarget="plugin-popover" popovertargetaction="hide"
+                class="w-full bg-orange-200 hover:bg-orange-300 py-1 px-3 rounded text-sm font-medium cursor-pointer">
+                Run all
+            </button>
+        </div>
+    </div>
     {{ end }}
     <a href="{{ $entity | toEntityURL }}/edit" class="bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded text-sm"
         aria-label="Edit" title="Edit">

@@ -143,12 +143,28 @@ function addSVGListener() {
     });
 }
 
+// Positions the plugin popover below the plugin button when it opens.
+function initPluginPopover() {
+    const btn = document.getElementById('plugin-btn');
+    const popover = document.getElementById('plugin-popover');
+    if (!btn || !popover) return;
+
+    popover.addEventListener('beforetoggle', (e) => {
+        if (e.newState === 'open') {
+            const rect = btn.getBoundingClientRect();
+            popover.style.top = `${rect.bottom + 4}px`;
+            popover.style.left = `${rect.left}px`;
+        }
+    });
+}
+
 // Runs all initialization functions relevant for the given page identified by pageId.
 async function initPage(pageId) {
     if (['domain', 'system', 'component', 'resource', 'api', 'graph'].includes(pageId)) {
         createTooltip();
         loadSVGMetadata();
         addSVGListener();
+        initPluginPopover();
 
         // Reload the page after plugins have completed successfully.
         document.body.addEventListener("pluginsSuccess", () => {

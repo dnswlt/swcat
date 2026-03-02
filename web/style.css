@@ -25,6 +25,12 @@
         font-size: 0.9em;
     }
 
+    /* --- Plugin Popover --- */
+    #plugin-popover {
+        inset: unset;
+        margin: 0;
+    }
+
     /* --- HTMX Indicators --- */
     .htmx-indicator {
         display: none;
