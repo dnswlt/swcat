@@ -71,7 +71,7 @@ The `svg` section allows you to customize the appearance of the generated SVG di
 The `ui` section allows for customizing the user interface.
 
 * `annotationBasedContent`: Defines custom sections on entity detail pages based on annotations. See [Custom Content](custom-content.md) for details.
-* `helpLink`: An optional custom link (with `title` and `url`) displayed in the footer.
+* `helpLinks`: An optional list of custom help links (each with `title` and `url`) displayed in the footer.
 
 ## Example Configuration
 
@@ -85,6 +85,12 @@ ui:
     solace.com/topics:
       heading: Solace Topics
       style: list  # Possible values: text|list|json|table
+  # Add custom help links to the footer.
+  helpLinks:
+    - title: "Internal Documentation"
+      url: "https://wiki.example.com/swcat"
+    - title: "Support Channel"
+      url: "https://slack.com/app_redirect?channel=swcat-support"
 svg:
   # Show the (programming) language label as a <<stereotype>> on nodes.
   stereotypeLabels:

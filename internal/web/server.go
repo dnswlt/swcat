@@ -188,12 +188,12 @@ func NewServer(opts ServerOptions, source store.Source, serverOpts ...ServerOpti
 	}
 
 	s := &Server{
-		opts:           opts,
-		storeDataMap:   make(map[string]*storeData),
-		source:         source,
-		dotRunner:      dotRunner,
-		finder:         repo.NewFinder(),
-		started:        time.Now(),
+		opts:         opts,
+		storeDataMap: make(map[string]*storeData),
+		source:       source,
+		dotRunner:    dotRunner,
+		finder:       repo.NewFinder(),
+		started:      time.Now(),
 	}
 
 	for _, opt := range serverOpts {
@@ -1810,7 +1810,12 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 	// Add HelpLink from config if available
 	if v := r.Context().Value(ctxRefData); v != nil {
 		if sd, ok := v.(*storeData); ok && sd.config != nil {
-			templateParams["HelpLink"] = sd.config.UI.HelpLink
+			var helplinks []config.HelpLink
+			if hl := sd.config.UI.HelpLink; hl != nil {
+				helplinks = append(helplinks, *hl)
+			}
+			helplinks = append(helplinks, sd.config.UI.HelpLinks...)
+			templateParams["HelpLinks"] = helplinks
 		}
 	}
 

@@ -44,7 +44,10 @@ type HelpLink struct {
 type UIConfig struct {
 	AnnotationBasedContent map[string]*AnnotationBasedContent `yaml:"annotationBasedContent"`
 	// An optional custom help link shown at the bottom of the UI.
+	// DEPRECATED: Use HelpLinks instead.
 	HelpLink *HelpLink `yaml:"helpLink"`
+	// An optional list of custom help links shown at the bottom of the UI.
+	HelpLinks []HelpLink `yaml:"helpLinks"`
 }
 
 // Bundle is the umbrella struct for the serialized application configuration YAML.
