@@ -31,6 +31,12 @@
         margin: 0;
     }
 
+    /* --- Session Popover --- */
+    #session-popover {
+        inset: unset;
+        margin: 0;
+    }
+
     /* --- HTMX Indicators --- */
     .htmx-indicator {
         display: none;

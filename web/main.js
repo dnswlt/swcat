@@ -143,6 +143,29 @@ function addSVGListener() {
     });
 }
 
+// Positions the session popover above the session button when it opens.
+function initSessionPopover() {
+    const btn = document.getElementById('session-btn');
+    const popover = document.getElementById('session-popover');
+    if (!btn || !popover) return;
+
+    popover.addEventListener('beforetoggle', (e) => {
+        if (e.newState === 'open') {
+            const rect = btn.getBoundingClientRect();
+            popover.style.bottom = `${window.innerHeight - rect.top + 4}px`;
+            popover.style.top = 'unset';
+            popover.style.right = `${window.innerWidth - rect.right}px`;
+            popover.style.left = 'unset';
+        }
+    });
+
+    popover.addEventListener('toggle', (e) => {
+        if (e.newState === 'open') {
+            document.getElementById('session-prefix-input')?.focus();
+        }
+    });
+}
+
 // Positions the plugin popover below the plugin button when it opens.
 function initPluginPopover() {
     const btn = document.getElementById('plugin-btn');
@@ -160,6 +183,8 @@ function initPluginPopover() {
 
 // Runs all initialization functions relevant for the given page identified by pageId.
 async function initPage(pageId) {
+    initSessionPopover();
+
     if (['domain', 'system', 'component', 'resource', 'api', 'graph'].includes(pageId)) {
         createTooltip();
         loadSVGMetadata();

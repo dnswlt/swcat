@@ -4,9 +4,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 
 	"github.com/dnswlt/swcat/internal/store"
 )
+
+// validNamePrefix matches strings that are safe to embed in a git branch name.
+// Allows alphanumeric, hyphens, underscores, and slashes; must start with alphanumeric.
+var validNamePrefix = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{2,15}$`)
 
 func (s *Server) createEditSession(w http.ResponseWriter, r *http.Request) {
 	g, ok := s.source.(*store.GitSource)
@@ -17,9 +22,16 @@ func (s *Server) createEditSession(w http.ResponseWriter, r *http.Request) {
 
 	currentRef := s.getRef(r)
 
-	// Try to extract entity reference from Referer to use as branch name prefix.
+	// Use explicit namePrefix from form body if provided, otherwise fall back to
+	// extracting it from the Referer header.
 	var namePrefix string
-	if referer := r.Header.Get("Referer"); referer != "" {
+	if v := r.FormValue("namePrefix"); v != "" {
+		if !validNamePrefix.MatchString(v) {
+			http.Error(w, "Invalid branch name prefix: must be 3-16 alphanumeric characters, hyphens, or underscores", http.StatusBadRequest)
+			return
+		}
+		namePrefix = v
+	} else if referer := r.Header.Get("Referer"); referer != "" {
 		if ref, err := extractEntityRef(referer); err == nil {
 			namePrefix = ref.Name
 		}

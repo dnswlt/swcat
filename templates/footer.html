@@ -21,7 +21,7 @@
             </select>
             {{ end }}
             {{ if .CanStartSession }}
-            <button hx-post='{{ uiURL "sessions" }}' hx-swap="none"
+            <button type="button" id="session-btn" popovertarget="session-popover"
                 title="Start edit session"
                 class="hover:text-blue-600 transition-colors cursor-pointer font-medium flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pencil">
@@ -29,6 +29,23 @@
                     <path d="m15 5 4 4"/>
                 </svg>
             </button>
+            <div id="session-popover" popover
+                class="p-3 bg-white rounded-lg shadow-xl border border-gray-200 text-sm w-56">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">New session</p>
+                <form hx-post='{{ uiURL "sessions" }}' hx-swap="none">
+                    <div class="flex items-center mb-2">
+                        <span class="text-gray-400 text-xs mr-1 shrink-0">edit/</span>
+                        <input type="text" name="namePrefix" id="session-prefix-input"
+                            placeholder="branch-prefix"
+                            class="flex-1 min-w-0 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400">
+                    </div>
+                    <button type="submit"
+                        popovertarget="session-popover" popovertargetaction="hide"
+                        class="w-full bg-blue-100 hover:bg-blue-200 py-1 px-3 rounded text-xs font-medium cursor-pointer">
+                        Start session
+                    </button>
+                </form>
+            </div>
             {{ end }}
             {{ if .IsSession }}
             <button hx-post='{{ uiURL "sessions/push" }}' hx-swap="innerHTML" hx-target="#footer-error-messages" hx-confirm="Upload changes to the remote Git server?"
