@@ -15,7 +15,7 @@
         <p>Edit the YAML below to create a new entity. Make sure to change the metadata.name.</p>
         <div id="error-messages"></div>
 
-        <form hx-post="/ui/entities" hx-target="#error-messages" hx-swap="innerHTML">
+        <form hx-post='{{ uiURL "entities"}}' hx-target="#error-messages" hx-swap="innerHTML">
             <input type="hidden" name="cloned_from" value="{{ .Entity.GetRef }}">
             <div class="space-y-4">
                 <div>
