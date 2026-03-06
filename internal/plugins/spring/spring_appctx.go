@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -121,7 +122,8 @@ func FindStreamBindings(root string, patterns []*regexp.Regexp) (map[string][]St
 			if re.MatchString(path) {
 				props, err := ReadApplicationProperties([]string{path})
 				if err != nil {
-					return err
+					log.Printf("Could not read %s: %v", path, err)
+					break
 				}
 				if bindings := StreamBindings(props); len(bindings) > 0 {
 					result[path] = bindings
