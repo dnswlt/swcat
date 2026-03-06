@@ -118,6 +118,51 @@ func TestSystemExternalGraph_WithDot(t *testing.T) {
 
 }
 
+func TestGraph_WithDot_SystemsAsClusters(t *testing.T) {
+	repo, err := repo.Load(store.NewDiskStore("../../testdata/test2"), repo.Config{})
+	if err != nil {
+		t.Fatalf("failed to load repository: %v", err)
+	}
+
+	comp := repo.Component(&catalog.Ref{Name: "test-component"})
+	if comp == nil {
+		t.Fatalf("test-component not found in repo")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(Config{}))
+	// Pass only the component — its system should be discovered implicitly and rendered as a cluster.
+	res, err := renderer.Graph(ctx, []catalog.Entity{comp}, GraphOptions{SystemsAsClusters: true})
+	if err != nil {
+		t.Fatalf("Graph failed: %v", err)
+	}
+	if !bytes.Contains(res.SVG, []byte("<svg")) {
+		t.Fatalf("SVG output missing <svg> tag:\n%s", string(res.SVG))
+	}
+
+	// The component's system should be a cluster in the metadata.
+	if len(res.Metadata.Clusters) == 0 {
+		t.Errorf("expected at least one cluster in metadata, got none")
+	}
+
+	ids, err := testutil.ExtractSVGIDs(res.SVG)
+	if err != nil {
+		t.Fatalf("extractIDs: %v", err)
+	}
+
+	// The component must appear as a node.
+	if !slices.Contains(ids, "component:test-component") {
+		t.Errorf("expected node id %q not found; ids: %v", "component:test-component", ids)
+	}
+
+	// The system must NOT appear as a node — it is a cluster.
+	if slices.Contains(ids, "system:test-system-1") {
+		t.Errorf("system:test-system-1 should be a cluster, not a node; ids: %v", ids)
+	}
+}
+
 func TestSystemInternalGraph_WithDot(t *testing.T) {
 	repo, err := repo.Load(store.NewDiskStore("../../testdata/test1"), repo.Config{})
 	if err != nil {

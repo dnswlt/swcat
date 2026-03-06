@@ -634,7 +634,7 @@ func runDot(ctx context.Context, runner dot.Runner, ds *dot.DotSource) (*Result,
 	}, nil
 }
 
-func (r *Renderer) generateGraphDotSource(entities []catalog.Entity) *dot.DotSource {
+func (r *Renderer) generateGraphDotSource(entities []catalog.Entity, opts GraphOptions) *dot.DotSource {
 	dw := dot.NewWithConfig(dot.WriterConfig{
 		EdgeMinLen: 1, // Ad-hoc graphs can get arbitrarily large. Draw it as compactly as possible.
 	})
@@ -643,87 +643,125 @@ func (r *Renderer) generateGraphDotSource(entities []catalog.Entity) *dot.DotSou
 	included := make(map[string]bool)
 	for _, e := range entities {
 		included[e.GetRef().String()] = true
-		dw.AddNode(r.entityNode(e))
+	}
+
+	// clusters tracks System entities that are rendered as dot clusters
+	// rather than as nodes. Edges involving clustered systems are skipped, since
+	// containment is conveyed visually by the cluster boundary instead.
+	type clusterGroup struct {
+		sysRef   *catalog.Ref
+		children []catalog.Entity
+	}
+	sysClusters := make(map[string]*clusterGroup)
+
+	if opts.SystemsAsClusters {
+		// Group entities by their system cluster.
+		// - *catalog.System entities register a (possibly empty) cluster for themselves.
+		// - SystemPart entities (Component, API, Resource) are collected as children
+		//   of their system's cluster.
+		// - Everything else is treated as a standalone node.
+
+		ensureCluster := func(sysRef *catalog.Ref) *clusterGroup {
+			key := sysRef.String()
+			if g, ok := sysClusters[key]; ok {
+				return g
+			}
+			g := &clusterGroup{sysRef: sysRef}
+			sysClusters[key] = g
+			return g
+		}
+
+		for _, e := range entities {
+			if v, ok := e.(*catalog.System); ok {
+				ensureCluster(v.GetRef())
+			} else if sp, ok := e.(catalog.SystemPart); ok {
+				sysRef := sp.GetSystem()
+				ensureCluster(sysRef).children = append(ensureCluster(sysRef).children, e)
+			} else {
+				// standalone entity
+				dw.AddNode(r.entityNode(e))
+			}
+		}
+
+		for _, g := range sysClusters {
+			sys := r.repo.System(g.sysRef)
+			dw.StartCluster(sys.GetRef().QName())
+			for _, child := range g.children {
+				dw.AddNode(r.entityNode(child))
+			}
+			dw.EndCluster()
+		}
+	} else {
+		for _, e := range entities {
+			dw.AddNode(r.entityNode(e))
+		}
 	}
 
 	for _, e := range entities {
-		// Owner
-		ownerRef := e.GetOwner()
-		if ownerRef != nil && included[ownerRef.String()] {
-			owner := r.repo.Group(ownerRef)
-			if owner != nil {
+		// Clustered systems are rendered as dot subgraphs, not nodes; skip all edges.
+		if _, ok := sysClusters[e.GetRef().String()]; ok {
+			continue
+		}
+
+		// Owner edge (all entity kinds).
+		if ownerRef := e.GetOwner(); ownerRef != nil && included[ownerRef.String()] {
+			if owner := r.repo.Group(ownerRef); owner != nil {
 				dw.AddEdge(r.entityEdge(owner, e, dot.ESOwner))
 			}
 		}
 
-		// System to its Domain
-		if sys, ok := e.(*catalog.System); ok {
-			domRef := sys.Spec.Domain
-			if domRef != nil && included[domRef.String()] {
-				dom := r.repo.Domain(domRef)
-				if dom != nil {
-					dw.AddEdge(r.entityEdge(dom, e, dot.ESContains))
+		switch v := e.(type) {
+		case *catalog.System:
+			if domRef := v.Spec.Domain; domRef != nil && included[domRef.String()] {
+				if dom := r.repo.Domain(domRef); dom != nil {
+					dw.AddEdge(r.entityEdge(dom, v, dot.ESContains))
 				}
 			}
-		}
 
-		// System (for SystemParts)
-		if sp, ok := e.(catalog.SystemPart); ok {
-			sysRef := sp.GetSystem()
-			if sysRef != nil && !sysRef.Equal(e.GetRef()) && included[sysRef.String()] {
-				sys := r.repo.System(sysRef)
-				if sys != nil {
-					dw.AddEdge(r.entityEdge(sys, e, dot.ESContains))
+		case *catalog.Component:
+			if sysRef := v.GetSystem(); included[sysRef.String()] && sysClusters[sysRef.String()] == nil {
+				dw.AddEdge(r.entityEdge(r.repo.System(sysRef), v, dot.ESContains))
+			}
+			if v.Spec.SubcomponentOf != nil && included[v.Spec.SubcomponentOf.String()] {
+				if parent := r.repo.Component(v.Spec.SubcomponentOf); parent != nil {
+					dw.AddEdge(r.entityEdge(parent, v, dot.ESSubcomponent))
 				}
 			}
-		}
-
-		// Component specific relationships
-		if c, ok := e.(*catalog.Component); ok {
-			// SubcomponentOf
-			if c.Spec.SubcomponentOf != nil && included[c.Spec.SubcomponentOf.String()] {
-				parent := r.repo.Component(c.Spec.SubcomponentOf)
-				if parent != nil {
-					dw.AddEdge(r.entityEdge(parent, c, dot.ESSubcomponent))
-				}
-			}
-			// ProvidesAPIs
-			for _, ref := range c.Spec.ProvidesAPIs {
+			for _, ref := range v.Spec.ProvidesAPIs {
 				if included[ref.Ref.String()] {
-					ap := r.repo.API(ref.Ref)
-					if ap != nil {
-						dw.AddEdge(r.entityEdgeLabel(ap, c, ref, dot.ESProvidedBy))
+					if ap := r.repo.API(ref.Ref); ap != nil {
+						dw.AddEdge(r.entityEdgeLabel(ap, v, ref, dot.ESProvidedBy))
 					}
 				}
 			}
-			// ConsumesAPIs
-			for _, ref := range c.Spec.ConsumesAPIs {
+			for _, ref := range v.Spec.ConsumesAPIs {
 				if included[ref.Ref.String()] {
-					ap := r.repo.API(ref.Ref)
-					if ap != nil {
-						dw.AddEdge(r.entityEdgeLabel(c, ap, ref, dot.ESNormal))
+					if ap := r.repo.API(ref.Ref); ap != nil {
+						dw.AddEdge(r.entityEdgeLabel(v, ap, ref, dot.ESNormal))
 					}
 				}
 			}
-			// DependsOn
-			for _, ref := range c.Spec.DependsOn {
+			for _, ref := range v.Spec.DependsOn {
 				if included[ref.Ref.String()] {
-					target := r.repo.Entity(ref.Ref)
-					if target != nil {
-						dw.AddEdge(r.entityEdgeLabel(c, target, ref, dot.ESDependsOn))
+					if target := r.repo.Entity(ref.Ref); target != nil {
+						dw.AddEdge(r.entityEdgeLabel(v, target, ref, dot.ESDependsOn))
 					}
 				}
 			}
-		}
 
-		// Resource specific relationships
-		if res, ok := e.(*catalog.Resource); ok {
-			// DependsOn
-			for _, ref := range res.Spec.DependsOn {
+		case *catalog.API:
+			if sysRef := v.GetSystem(); included[sysRef.String()] && sysClusters[sysRef.String()] == nil {
+				dw.AddEdge(r.entityEdge(r.repo.System(sysRef), v, dot.ESContains))
+			}
+
+		case *catalog.Resource:
+			if sysRef := v.GetSystem(); included[sysRef.String()] && sysClusters[sysRef.String()] == nil {
+				dw.AddEdge(r.entityEdge(r.repo.System(sysRef), v, dot.ESContains))
+			}
+			for _, ref := range v.Spec.DependsOn {
 				if included[ref.Ref.String()] {
-					target := r.repo.Entity(ref.Ref)
-					if target != nil {
-						dw.AddEdge(r.entityEdgeLabel(res, target, ref, dot.ESDependsOn))
+					if target := r.repo.Entity(ref.Ref); target != nil {
+						dw.AddEdge(r.entityEdgeLabel(v, target, ref, dot.ESDependsOn))
 					}
 				}
 			}
@@ -734,8 +772,13 @@ func (r *Renderer) generateGraphDotSource(entities []catalog.Entity) *dot.DotSou
 	return dw.Result()
 }
 
+type GraphOptions struct {
+	// If true, draws System entities as dot clusters instead of as simple nodes.
+	SystemsAsClusters bool
+}
+
 // Graph generates an SVG for the given list of entities.
-func (r *Renderer) Graph(ctx context.Context, entities []catalog.Entity) (*Result, error) {
-	dotSource := r.generateGraphDotSource(entities)
+func (r *Renderer) Graph(ctx context.Context, entities []catalog.Entity, opts GraphOptions) (*Result, error) {
+	dotSource := r.generateGraphDotSource(entities, opts)
 	return runDot(ctx, r.runner, dotSource)
 }

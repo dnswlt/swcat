@@ -220,7 +220,7 @@ func TestGraph_Topology(t *testing.T) {
 
 	entities := []catalog.Entity{domA, sysA, compA, apiB}
 
-	_, err := renderer.Graph(context.Background(), entities)
+	_, err := renderer.Graph(context.Background(), entities, GraphOptions{})
 	if err != nil {
 		t.Fatalf("Graph failed: %v", err)
 	}

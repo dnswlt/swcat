@@ -1,23 +1,36 @@
 <div id="graph-container" class="space-y-4" hx-swap-oob="true">
     {{ if .SVG }}
-    <!-- Selected Entities -->
-    {{ if .SelectedEntities }}
-    <div id="selected-entities" class="flex flex-wrap gap-2">
-        {{ range .SelectedEntities }}
-        <div class="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
-            <span>{{ .GetQName }}</span>
-            <button
-                hx-get="{{ $.GraphURL }}"
-                hx-target="#entities-tbody"
-                hx-swap="innerHTML"
-                hx-push-url="true"
-                data-graph-action="remove-entity"
-                data-entity-ref="{{ .GetRef }}"
-                class="hover:text-blue-900 font-bold ml-1">&times;</button>
+    <!-- Selected Entities + Graph options -->
+    <div class="space-y-1">
+        {{ if .SelectedEntities }}
+        <div id="selected-entities" class="flex flex-wrap gap-2">
+            {{ range .SelectedEntities }}
+            <div class="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
+                <span>{{ .GetQName }}</span>
+                <button
+                    hx-get="{{ $.GraphURL }}"
+                    hx-target="#entities-tbody"
+                    hx-swap="innerHTML"
+                    hx-push-url="true"
+                    data-graph-action="remove-entity"
+                    data-entity-ref="{{ .GetRef }}"
+                    class="hover:text-blue-900 font-bold ml-1">&times;</button>
+            </div>
+            {{ end }}
         </div>
         {{ end }}
+        <label class="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none">
+            <input type="checkbox"
+                {{ if .SystemsAsClusters }}checked{{ end }}
+                hx-get="{{ .GraphURL }}"
+                hx-target="#entities-tbody"
+                hx-swap="innerHTML"
+                hx-trigger="change"
+                hx-push-url="true"
+                data-graph-action="toggle-clusters">
+            System boundaries
+        </label>
     </div>
-    {{ end }}
 
     <!-- SVG and its metadata JSON. -->
     <div id="relationships-svg">

@@ -1067,13 +1067,15 @@ func (s *Server) renderGraphSVG(r *http.Request, data *storeData, selectedEntiti
 		return params
 	}
 
+	systemsAsClusters := r.URL.Query().Get("clusters") == "1"
+
 	// Build cache key from sorted entity IDs
 	cacheKeyIDs := make([]string, len(selectedEntities))
 	for i, e := range selectedEntities {
 		cacheKeyIDs[i] = e.GetRef().String()
 	}
 	slices.Sort(cacheKeyIDs)
-	cacheKey := fmt.Sprintf("graph?ids=%s", strings.Join(cacheKeyIDs, ","))
+	cacheKey := fmt.Sprintf("graph?ids=%s&clusters=%v", strings.Join(cacheKeyIDs, ","), systemsAsClusters)
 
 	// Get or render SVG
 	svgResult, ok := data.lookupSVG(cacheKey)
@@ -1081,7 +1083,9 @@ func (s *Server) renderGraphSVG(r *http.Request, data *storeData, selectedEntiti
 		ctx, cancel := s.withDotTimeout(r.Context())
 		defer cancel()
 		var err error
-		svgResult, err = s.svgRenderer(data).Graph(ctx, selectedEntities)
+		svgResult, err = s.svgRenderer(data).Graph(ctx, selectedEntities, svg.GraphOptions{
+			SystemsAsClusters: systemsAsClusters,
+		})
 		if err != nil {
 			log.Printf("Failed to render SVG: %v", err)
 			return params
@@ -1090,6 +1094,7 @@ func (s *Server) renderGraphSVG(r *http.Request, data *storeData, selectedEntiti
 	}
 
 	params["SVG"] = template.HTML(svgResult.SVG)
+	params["SystemsAsClusters"] = systemsAsClusters
 	svgMeta, err := s.svgMetadataJSON(r, svgResult.Metadata)
 	if err != nil {
 		log.Printf("Failed to create metadata JSON: %v", err)
@@ -1139,6 +1144,9 @@ func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	slices.SortFunc(selectedEntities, func(a, b catalog.Entity) int {
+		return a.GetRef().Compare(b.GetRef())
+	})
 
 	// Retrieve entities matching query q=, filtering out already selected ones
 	var entities []catalog.Entity

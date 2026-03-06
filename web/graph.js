@@ -20,6 +20,15 @@ function getSearchQuery() {
 }
 
 /**
+ * Gets current clusters setting from URL
+ * @returns {string} '1' if clusters enabled, '' otherwise
+ */
+function getClusters() {
+    const url = new URL(window.location);
+    return url.searchParams.get('clusters') || '';
+}
+
+/**
  * Configures htmx requests to dynamically build query params based on current URL state
  * and the action being performed (add/remove entity).
  *
@@ -42,6 +51,7 @@ document.body.addEventListener('htmx:configRequest', (event) => {
     // Get current state from URL
     let selectedEntities = getSelectedEntities();
     let query = getSearchQuery();
+    let clusters = getClusters();
 
     // Apply action (if any)
     if (action === 'add-entity' && entityRef) {
@@ -52,6 +62,8 @@ document.body.addEventListener('htmx:configRequest', (event) => {
     } else if (action === 'remove-entity' && entityRef) {
         // Remove entity
         selectedEntities = selectedEntities.filter(e => e !== entityRef);
+    } else if (action === 'toggle-clusters') {
+        clusters = elt.checked ? '1' : '';
     } else if (!action) {
         // This is a search request - read query from the form input
         const form = elt.closest('form');
@@ -76,8 +88,12 @@ document.body.addEventListener('htmx:configRequest', (event) => {
         event.detail.parameters['e'] = selectedEntities;
     }
 
+    if (clusters) {
+        event.detail.parameters['clusters'] = clusters;
+    }
+
     // Signal to backend that this is an entity change operation (not just search)
-    if (action === 'add-entity' || action === 'remove-entity') {
+    if (action === 'add-entity' || action === 'remove-entity' || action === 'toggle-clusters') {
         event.detail.parameters['refresh'] = 'full';
     }
 });
