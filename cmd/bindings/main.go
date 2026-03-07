@@ -41,9 +41,50 @@ func main() {
 		log.Fatalf("FindStreamBindings: %v", err)
 	}
 
+	// build dependency graph
+	// A depends on B if A has an "in" binding that matches an "out" binding of B
+	graph := make(map[string][]string)
+
+	for consumerApp, consumerBindings := range result {
+		// use a map to deduplicate dependencies
+		deps := make(map[string]bool)
+
+		for _, consumB := range consumerBindings {
+			if consumB.Direction != spring.BindingIn {
+				continue
+			}
+
+			for producerApp, producerBindings := range result {
+				if consumerApp == producerApp {
+					continue
+				}
+
+				for _, prodB := range producerBindings {
+					if prodB.Direction != spring.BindingOut {
+						continue
+					}
+
+					if spring.MatchTopics(consumB.Destination, prodB.Destination) {
+						deps[producerApp] = true
+						break // matched one out-binding from this producerApp, that's enough for a dependency
+					}
+				}
+			}
+		}
+
+		var sortedDeps []string
+		for dep := range deps {
+			sortedDeps = append(sortedDeps, dep)
+		}
+
+		if len(sortedDeps) > 0 {
+			graph[consumerApp] = sortedDeps
+		}
+	}
+
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(result); err != nil {
+	if err := enc.Encode(graph); err != nil {
 		log.Fatalf("JSON encode: %v", err)
 	}
 }
