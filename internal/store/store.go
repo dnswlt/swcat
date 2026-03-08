@@ -216,6 +216,34 @@ func MergeExtensions(st Store, path string, newExts *api.CatalogExtensions) erro
 	return nil
 }
 
+// SetExtensionAnnotation sets a single annotation key/value for the given entity ref
+// in the sidecar extension file for path. Other annotations and entities in the
+// sidecar are preserved.
+func SetExtensionAnnotation(st Store, path string, entityRef string, key string, value any) error {
+	extPath := ExtensionFile(path)
+	exts, err := ReadExtensions(st, extPath)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("read extensions: %w", err)
+	}
+	if exts == nil {
+		exts = api.NewCatalogExtensions()
+	}
+	entityExts := exts.Entities[entityRef]
+	if entityExts == nil {
+		entityExts = &api.MetadataExtensions{Annotations: map[string]any{}}
+		exts.Entities[entityRef] = entityExts
+	}
+	if value == nil {
+		delete(entityExts.Annotations, key)
+	} else {
+		if entityExts.Annotations == nil {
+			entityExts.Annotations = map[string]any{}
+		}
+		entityExts.Annotations[key] = value
+	}
+	return WriteExtensions(st, extPath, exts)
+}
+
 // CatalogFiles lists all *.yml files under the default catalog directory.
 func CatalogFiles(st Store) ([]string, error) {
 	allFiles, err := st.ListFiles(CatalogDir)

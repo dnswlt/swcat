@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"io"
 	"io/fs"
 	"log"
 	"maps"
@@ -1610,16 +1609,15 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 		return
 	}
 
-	// Read the new value from the request body.
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+	// Parse the new value from the request body as JSON.
+	var newValue any
+	if err := json.NewDecoder(r.Body).Decode(&newValue); err != nil {
+		http.Error(w, "Failed to parse request body as JSON", http.StatusBadRequest)
 		return
 	}
-	newValue := string(body)
 
 	// Only proceed if this is a valid annotation
-	if !catalog.IsValidAnnotation(annotationKey, newValue) {
+	if !catalog.IsValidAnnotation(annotationKey, "true") {
 		http.Error(w, "Invalid annotation key/value", http.StatusBadRequest)
 		return
 	}
@@ -1633,34 +1631,9 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 
 	// Look up the entity in the repository
 	data := s.getStoreData(r)
-	originalEntity := data.repo.Entity(ref)
-	if originalEntity == nil {
+	entity := data.repo.Entity(ref)
+	if entity == nil {
 		http.NotFound(w, r)
-		return
-	}
-
-	// Create new API entity with updated annotation
-	originalNode := originalEntity.GetSourceInfo().Node
-	newAPIEntity, err := api.NewEntityFromNodeWithAnnotation(originalNode, annotationKey, newValue)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to create api.Entity from source node: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Create a new catalog.Entity for repo update
-	newEntity, err := catalog.NewEntityFromAPI(newAPIEntity)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Invalid entity after modification: %v", err), http.StatusInternalServerError)
-		return
-	}
-	// Copy over path information for re-editing later.
-	path := originalEntity.GetSourceInfo().Path
-	newEntity.GetSourceInfo().Path = path
-
-	// Update the repo
-	newRepo, err := data.repo.InsertOrUpdateEntity(newEntity)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to update entity in repo: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -1668,22 +1641,20 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Update repository in server's cache
-	s.updateStoreData(data, newRepo)
-
-	// Update the YAML file.
 	st, err := s.source.Store(data.ref)
 	if err != nil {
 		http.Error(w, "Failed to obtain store", http.StatusInternalServerError)
 		log.Printf("Failed to obtain store for ref %q: %v", data.ref, err)
 		return
 	}
-	err = store.InsertOrReplaceEntity(st, path, newAPIEntity)
-	if err != nil {
+	if err := store.SetExtensionAnnotation(st, entity.GetSourceInfo().Path, ref.String(), annotationKey, newValue); err != nil {
 		http.Error(w, "Failed to update store", http.StatusInternalServerError)
 		log.Printf("Error updating store: %v", err)
 		return
 	}
+
+	// Force reload on next request.
+	s.storeDataMap = make(map[string]*storeData)
 
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w, "OK")

@@ -37,8 +37,8 @@ func (c *CatalogExtensions) Get(ref string) *MetadataExtensions {
 	return c.Entities[ref]
 }
 
-// Merge merges other into c.
-// It overwrites the MetadataExtensions for any entity present in 'other'.
+// Merge merges other into c at the annotation key level.
+// A nil annotation value deletes the key; absent keys are preserved.
 func (c *CatalogExtensions) Merge(other *CatalogExtensions) {
 	if other == nil || len(other.Entities) == 0 {
 		return
@@ -47,6 +47,20 @@ func (c *CatalogExtensions) Merge(other *CatalogExtensions) {
 		c.Entities = make(map[string]*MetadataExtensions)
 	}
 	for ref, otherMeta := range other.Entities {
-		c.Entities[ref] = otherMeta
+		existing := c.Entities[ref]
+		if existing == nil {
+			existing = &MetadataExtensions{}
+			c.Entities[ref] = existing
+		}
+		if existing.Annotations == nil {
+			existing.Annotations = make(map[string]any)
+		}
+		for k, v := range otherMeta.Annotations {
+			if v == nil {
+				delete(existing.Annotations, k)
+			} else {
+				existing.Annotations[k] = v
+			}
+		}
 	}
 }

@@ -855,60 +855,162 @@ func TestDeleteEntity_NotFound(t *testing.T) {
 	}
 }
 
+// annotationURL builds the annotation endpoint URL for use in tests.
+func annotationURL(entityRef, annotationKey string) string {
+	return "/catalog/entities/" + url.PathEscape(entityRef) + "/annotations/" + url.PathEscape(annotationKey)
+}
+
 func TestUpdateAnnotationValue_OK(t *testing.T) {
-	// Create a temporary copy of the catalog file
 	st, tmpfile := testCopyCatalog(t)
 	s := newTestServer(t, st)
 	h := s.Handler()
 
 	entityRef := "component:default/test-component"
 	annotationKey := "swcat.io/test-annotation"
-	newValue := "new-value"
 
-	req := httptest.NewRequest(http.MethodPost, "/catalog/entities/"+url.PathEscape(entityRef)+"/annotations/"+url.PathEscape(annotationKey), strings.NewReader(newValue))
+	// Body must be valid JSON. A JSON string like `"new-value"` is decoded by
+	// the handler into the Go string "new-value".
+	req := httptest.NewRequest(http.MethodPost, annotationURL(entityRef, annotationKey), strings.NewReader(`"new-value"`))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+		t.Fatalf("status = %d, want %d\nbody: %s", rr.Code, http.StatusOK, rr.Body.String())
 	}
 
-	// Check if the entity was actually updated in the repo
+	// Annotation is written to the .ext.json sidecar, not to the .yml file.
+	extFile := store.ExtensionFile(tmpfile)
+	extContent, err := os.ReadFile(extFile)
+	if err != nil {
+		t.Fatalf("ext.json not created: %v", err)
+	}
+	if !strings.Contains(string(extContent), `"swcat.io/test-annotation"`) {
+		t.Fatalf("ext.json missing annotation key; content:\n%s", extContent)
+	}
+	if !strings.Contains(string(extContent), `"new-value"`) {
+		t.Fatalf("ext.json missing annotation value; content:\n%s", extContent)
+	}
+
+	// After storeDataMap is cleared, the next loadStoreData merges ext annotations
+	// into entity metadata via json.Marshal, so the string "new-value" becomes
+	// the JSON-encoded string `"new-value"` (with surrounding quotes) in the map.
 	ref, _ := catalog.ParseRef(entityRef)
 	rd, err := s.loadStoreData("")
 	if err != nil {
-		t.Fatalf("no data for default ref in store?")
+		t.Fatalf("loadStoreData: %v", err)
 	}
 	entity := rd.repo.Entity(ref)
 	if entity == nil {
-		t.Fatalf("entity not found in the repository")
+		t.Fatalf("entity not found after reload")
 	}
-	if val, ok := entity.GetMetadata().Annotations[annotationKey]; !ok || val != newValue {
-		t.Fatalf("annotation was not updated in the repository, got %q", val)
+	wantAnnotation := `"new-value"` // JSON-encoded by mergeMetadataExtensions
+	if got := entity.GetMetadata().Annotations[annotationKey]; got != wantAnnotation {
+		t.Fatalf("annotation = %q, want %q", got, wantAnnotation)
 	}
 
-	// Check if the file was updated
-	updatedContent, err := os.ReadFile(tmpfile)
+	// The .yml file must NOT have been modified.
+	ymlContent, err := os.ReadFile(tmpfile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedInFile := "swcat.io/test-annotation: new-value"
-	if !strings.Contains(string(updatedContent), expectedInFile) {
-		t.Fatalf("updated annotation was not written to the catalog file")
+	if strings.Contains(string(ymlContent), "swcat.io/test-annotation") {
+		t.Fatalf("annotation was unexpectedly written to the .yml file")
+	}
+}
+
+func TestUpdateAnnotationValue_PreservesOtherAnnotations(t *testing.T) {
+	st, _ := testCopyCatalog(t)
+	s := newTestServer(t, st)
+	h := s.Handler()
+
+	entityRef := "component:default/test-component"
+	key1 := "swcat.io/first"
+	key2 := "swcat.io/second"
+
+	doPost := func(key, jsonBody string) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, annotationURL(entityRef, key), strings.NewReader(jsonBody))
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("POST %s: status = %d, want %d\nbody: %s", key, rr.Code, http.StatusOK, rr.Body.String())
+		}
+	}
+
+	doPost(key1, `"alpha"`)
+	doPost(key2, `"beta"`)
+
+	rd, err := s.loadStoreData("")
+	if err != nil {
+		t.Fatalf("loadStoreData: %v", err)
+	}
+	entity := rd.repo.Entity(func() *catalog.Ref { r, _ := catalog.ParseRef(entityRef); return r }())
+	if entity == nil {
+		t.Fatalf("entity not found after reload")
+	}
+	annots := entity.GetMetadata().Annotations
+	if _, ok := annots[key1]; !ok {
+		t.Errorf("first annotation %q missing after setting second", key1)
+	}
+	if _, ok := annots[key2]; !ok {
+		t.Errorf("second annotation %q missing", key2)
+	}
+}
+
+func TestUpdateAnnotationValue_JSONTypes(t *testing.T) {
+	// Demonstrates that the body is parsed as arbitrary JSON (any), not just strings.
+	st, _ := testCopyCatalog(t)
+	s := newTestServer(t, st)
+	h := s.Handler()
+
+	entityRef := "component:default/test-component"
+
+	cases := []struct {
+		key      string
+		body     string
+		wantInExt string // substring expected in the raw ext.json
+	}{
+		{"swcat.io/num", `42`, `42`},
+		{"swcat.io/bool", `true`, `true`},
+		{"swcat.io/obj", `{"score":3}`, `"score"`},
+	}
+
+	for _, tc := range cases {
+		req := httptest.NewRequest(http.MethodPost, annotationURL(entityRef, tc.key), strings.NewReader(tc.body))
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("[%s] status = %d, want %d\nbody: %s", tc.key, rr.Code, http.StatusOK, rr.Body.String())
+		}
+	}
+}
+
+func TestUpdateAnnotationValue_InvalidJSON(t *testing.T) {
+	st := store.NewDiskStore("../../testdata/test1")
+	s := newTestServer(t, st)
+	h := s.Handler()
+
+	req := httptest.NewRequest(http.MethodPost,
+		annotationURL("component:default/test-component", "swcat.io/test-annotation"),
+		strings.NewReader("not-json"))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusBadRequest)
 	}
 }
 
 func TestUpdateAnnotationValue_ReadOnly(t *testing.T) {
 	st := store.NewDiskStore("../../testdata/test1")
 	s := newTestServer(t, st)
-	s.opts.ReadOnly = true // Set read-only mode
+	s.opts.ReadOnly = true
 	h := s.Handler()
 
-	entityRef := "component:default/test-component"
-	annotationKey := "swcat.io/test-annotation"
-	newValue := "new-value"
-
-	req := httptest.NewRequest(http.MethodPost, "/catalog/entities/"+url.PathEscape(entityRef)+"/annotations/"+url.PathEscape(annotationKey), strings.NewReader(newValue))
+	// ReadOnly check fires before body parsing, so body content doesn't matter.
+	req := httptest.NewRequest(http.MethodPost,
+		annotationURL("component:default/test-component", "swcat.io/test-annotation"),
+		strings.NewReader(`"new-value"`))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
@@ -922,11 +1024,10 @@ func TestUpdateAnnotationValue_NotFound(t *testing.T) {
 	s := newTestServer(t, st)
 	h := s.Handler()
 
-	entityRef := "component:default/not-found-component"
-	annotationKey := "swcat.io/test-annotation"
-	newValue := "new-value"
-
-	req := httptest.NewRequest(http.MethodPost, "/catalog/entities/"+url.PathEscape(entityRef)+"/annotations/"+url.PathEscape(annotationKey), strings.NewReader(newValue))
+	// Entity lookup happens after body parsing, so body must be valid JSON.
+	req := httptest.NewRequest(http.MethodPost,
+		annotationURL("component:default/not-found-component", "swcat.io/test-annotation"),
+		strings.NewReader(`"new-value"`))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
@@ -940,11 +1041,10 @@ func TestUpdateAnnotationValue_InvalidAnnotation(t *testing.T) {
 	s := newTestServer(t, st)
 	h := s.Handler()
 
-	entityRef := "component:default/test-component"
-	annotationKey := "invalid key with spaces"
-	newValue := "new-value"
-
-	req := httptest.NewRequest(http.MethodPost, "/catalog/entities/"+url.PathEscape(entityRef)+"/annotations/"+url.PathEscape(annotationKey), strings.NewReader(newValue))
+	// Key validation happens after body parsing, so body must be valid JSON.
+	req := httptest.NewRequest(http.MethodPost,
+		annotationURL("component:default/test-component", "invalid key with spaces"),
+		strings.NewReader(`"new-value"`))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 

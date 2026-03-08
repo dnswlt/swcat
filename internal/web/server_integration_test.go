@@ -124,7 +124,7 @@ func TestIntegration_ServerSmoke(t *testing.T) {
 		{`/ui/graph?q=rel%3D%27component%3Aflights-routes%27&e=component%3Aflights-search-backend&e=api%3Aflights-cache-api&e=component%3Aflights-routes`,
 			[]string{"routes-database", "flights-routes", "<svg"}},
 		{`/ui/graph?e=component%3Aflights-search-backend&e=component%3Aflights-routes&clusters=1`,
-			[]string{"<svg", "Group by system", "checked"}},
+			[]string{"<svg", "System boundaries", "checked"}},
 		// Plugins should trigger for this entity (asyncApiImporter matches kind:API type~kafka/)
 		{`/ui/apis/analytics-events-api`, []string{"asyncApiImporter"}},
 		{"/status", []string{"options", "cachedRefs", "storeSourceType", "started", "registeredPlugins", "asyncApiImporter"}},

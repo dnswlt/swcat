@@ -39,10 +39,10 @@ func TestCatalogExtensions_Merge(t *testing.T) {
 			},
 		},
 		{
-			name: "overwrite existing entity",
+			name: "update and add keys, preserve untouched keys",
 			base: &CatalogExtensions{
 				Entities: map[string]*MetadataExtensions{
-					"a": {Annotations: map[string]any{"k1": "v1"}},
+					"a": {Annotations: map[string]any{"k1": "v1", "preserved": "yes"}},
 				},
 			},
 			other: &CatalogExtensions{
@@ -52,7 +52,25 @@ func TestCatalogExtensions_Merge(t *testing.T) {
 			},
 			want: &CatalogExtensions{
 				Entities: map[string]*MetadataExtensions{
-					"a": {Annotations: map[string]any{"k1": "v2", "k2": "v3"}},
+					"a": {Annotations: map[string]any{"k1": "v2", "k2": "v3", "preserved": "yes"}},
+				},
+			},
+		},
+		{
+			name: "nil value deletes key",
+			base: &CatalogExtensions{
+				Entities: map[string]*MetadataExtensions{
+					"a": {Annotations: map[string]any{"k1": "v1", "k2": "v2"}},
+				},
+			},
+			other: &CatalogExtensions{
+				Entities: map[string]*MetadataExtensions{
+					"a": {Annotations: map[string]any{"k1": nil}},
+				},
+			},
+			want: &CatalogExtensions{
+				Entities: map[string]*MetadataExtensions{
+					"a": {Annotations: map[string]any{"k2": "v2"}},
 				},
 			},
 		},
