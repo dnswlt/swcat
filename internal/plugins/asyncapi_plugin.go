@@ -3,6 +3,7 @@ package plugins
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/plugins/asyncapi"
@@ -69,9 +70,15 @@ func (m *AsyncAPIImporterPlugin) Execute(ctx context.Context, entity catalog.Ent
 		return nil, fmt.Errorf("failed to parse AsyncAPI spec: %w", err)
 	}
 
+	now := time.Now()
 	return &PluginResult{
 		Annotations: map[string]any{
-			m.spec.TargetAnnotation: spec.SimpleChannels(),
+			m.spec.TargetAnnotation: map[string]any{
+				"$data": spec.SimpleChannels(),
+				"$meta": map[string]string{
+					"createTime": now.Format("2006-01-02 15:04:05"),
+				},
+			},
 		},
 	}, nil
 }

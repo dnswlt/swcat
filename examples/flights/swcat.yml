@@ -13,6 +13,7 @@ ui:
     solace.com/topics:
       heading: Solace Topics
       style: list  # Possible values: text|list|attrs|table|json
+      open: true  # Whether the card should be open by default.
     swcat/custom-fields:
       heading: Deployment Details
       style: json

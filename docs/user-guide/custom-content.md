@@ -48,10 +48,8 @@ spec:
 
 !!! note
     From the YAML parser's perspective, the annotation value is just a string.
-    If you use a structured style like `list`, `json`, `attrs` or `table`, `swcat` will
-    attempt to parse that string as JSON. This approach ensures compatibility
-    with Kubernetes CRDs and the Backstage software catalog format, where
-    annotations are strictly key-value pairs of strings.
+    `swcat` always parses that string as JSON when interpreting
+    it for custom content.
 
 ## Supported Styles
 
@@ -59,13 +57,55 @@ The `style` property determines how the annotation value is parsed and displayed
 
 | Style | Description | Expected Value Format |
 | :--- | :--- | :--- |
-| `text` | Renders the value as plain text. | Any string. |
+| `text` | Renders the value as plain text. | A JSON string: `"some text"` |
 | `list` | Renders a bulleted list. | A JSON array of strings: `["item1", "item2"]` |
-| `json` | Renders a formatted code block with syntax highlighting. | Any valid JSON object or array. |
+| `json` | Renders a formatted code block with syntax highlighting. | Any valid JSON value. |
 | `attrs` | Renders a key-value table. | A simple JSON object: `{"key": "value"}` |
 | `table` | Renders a table with custom columns. | A JSON array of objects: `[{"a": 1}, {"a": 2}]` |
 
-### Custom Tables
+## Adding Metadata to Annotations
+
+Any annotation value can be wrapped in a `$data`/`$meta` envelope to attach
+metadata — such as a timestamp or version — that is displayed at the bottom of
+the card independently of the main content style:
+
+```json
+{
+  "$data": <the actual annotation value>,
+  "$meta": {
+    "key": "value"
+  }
+}
+```
+
+`$data` holds the payload that would otherwise be the full annotation value.
+`$meta` is a flat JSON object whose key-value pairs are rendered as a footer row
+beneath the main content.
+
+**Example:** an `attrs`-style annotation written by an automation pipeline that
+records when it last ran:
+
+```yaml
+metadata:
+  annotations:
+    my-org.com/data: |
+      {
+        "$data": {
+          "team": "Alpha",
+          "cost-center": "12345",
+          "criticality": "high"
+        },
+        "$meta": {
+          "updatedAt": "2025-03-07T14:32:00Z",
+          "source": "pipeline/nightly"
+        }
+      }
+```
+
+The card will render the `$data` object as a key-value table (because `style: attrs`)
+and show `updatedAt` and `source` in a small footer line.
+
+## Custom Tables
 
 The `table` style allows you to define a custom table structure.
 You must provide a `columns` list in the configuration,

@@ -303,15 +303,21 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 	}
 	idx := p.newCatalogIndexFromEntities(args.Repository.AllEntities())
 
+	now := time.Now()
 	annotations := map[string]any{
-		p.spec.TargetAnnotation: bom,
+		p.spec.TargetAnnotation: map[string]any{
+			"$data": bom,
+			"$meta": map[string]string{
+				"createTime": now.Format("2006-01-02 15:04:05"),
+			},
+		},
 	}
 
 	if p.spec.LintFindingAnnotation != "" {
 		missing, _ := p.detectDependencyMismatches(bom, entity, idx, args.Repository)
 		if len(missing) > 0 {
 			annotations[p.spec.LintFindingAnnotation] = api.LintFinding{
-				CreateTime: time.Now(),
+				CreateTime: now,
 				Message:    fmt.Sprintf("Dependencies found in BOM, but missing in entity: %s", strings.Join(missing, ",")),
 			}
 		}

@@ -27,9 +27,11 @@ func (c *CustomColumn) DataTemplate() *template.Template {
 // AnnotationBasedContent specifies how annotation-based content should be rendered in the UI.
 type AnnotationBasedContent struct {
 	Heading string          `yaml:"heading"` // The heading under which to display the content.
-	Style   string          `yaml:"style"`   // The style in which to render the content. One of "text", "list", "json", "table", "custom".
+	Style   string          `yaml:"style"`   // The style in which to render the content. One of "text", "list", "json", "table".
 	Rank    int             `yaml:"rank"`    // Used to order multiple content blocks on the same page.
-	Columns []*CustomColumn `yaml:"columns"` // For style "custom", the columns to be rendered from the JSON list of objects.
+	Open    bool            `yaml:"open"`    // If true, the custom content <details> are open on load.
+	Fields  []string        `yaml:"fields"`  // For style "attrs", the attributes to display. If empty, all fields are displayed.
+	Columns []*CustomColumn `yaml:"columns"` // For style "table", the columns to be rendered from the JSON list of objects.
 }
 
 // HelpLink is a custom link shown in the footer.

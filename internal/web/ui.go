@@ -572,7 +572,9 @@ type CustomContent struct {
 	Attrs   []ccAttr // Items to be rendered as a key-value <table>.
 	Table   *ccTable // Items to be rendered in a custom <table>.
 	Code    string   // Preformatted code (typically JSON)
+	Meta    []ccAttr // Optional metadata fields rendered at the bottom (from $meta wrapper).
 	Rank    int      // Used to order multiple custom content items.
+	Open    bool     // If true, the custom content will be open (expanded).
 }
 
 func customContentFromAnnotations(meta *catalog.Metadata, configMap map[string]*config.AnnotationBasedContent) ([]*CustomContent, error) {
@@ -602,43 +604,119 @@ func customContentFromAnnotations(meta *catalog.Metadata, configMap map[string]*
 	return result, nil
 }
 
+// nestedGet retrieves a value from a nested map[string]any using a dot-separated path.
+// For example, "foo.bar.baz" returns dict["foo"]["bar"]["baz"].
+// Returns an empty string if any key is missing or an intermediate value is not a map.
+func nestedGet(dict map[string]any, path string) string {
+	key, rest, nested := strings.Cut(path, ".")
+	val, ok := dict[key]
+	if !ok {
+		return ""
+	}
+	if !nested {
+		return fmt.Sprintf("%v", val)
+	}
+	child, ok := val.(map[string]any)
+	if !ok {
+		return ""
+	}
+	return nestedGet(child, rest)
+}
+
+// unwrapMeta detects the optional meta-wrapper format {"$data": <payload>, "$meta": {"k": "v", ...}}.
+// If found, it returns the inner payload and the sorted meta fields.
+// Otherwise it returns parsed unchanged with nil meta.
+func unwrapMeta(parsed any) (any, []ccAttr) {
+	m, ok := parsed.(map[string]any)
+	if !ok {
+		return parsed, nil
+	}
+	metaRaw, hasMeta := m["$meta"]
+	valueRaw, hasValue := m["$data"]
+	if !hasMeta || !hasValue {
+		return parsed, nil
+	}
+	metaMap, ok := metaRaw.(map[string]any)
+	if !ok {
+		return valueRaw, nil
+	}
+	keys := make([]string, 0, len(metaMap))
+	for k := range metaMap {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	meta := make([]ccAttr, len(keys))
+	for i, k := range keys {
+		meta[i] = ccAttr{Name: k, Value: fmt.Sprintf("%v", metaMap[k])}
+	}
+	return valueRaw, meta
+}
+
 func newCustomContent(abc *config.AnnotationBasedContent, annotationValue string) (*CustomContent, error) {
 	cc := &CustomContent{
 		Heading: abc.Heading,
+		Open:    abc.Open,
 	}
+
+	var parsed any
+	if err := json.Unmarshal([]byte(annotationValue), &parsed); err != nil {
+		return nil, fmt.Errorf("annotation value is not valid JSON: %v", err)
+	}
+
+	// Detect the optional meta-wrapper format: {"$data": <payload>, "$meta": {"k": "v", ...}}
+	// If found, replace parsed with the inner payload and populate cc.Meta.
+	parsed, cc.Meta = unwrapMeta(parsed)
+
 	switch abc.Style {
 	case "text", "":
-		cc.Text = annotationValue
+		str, ok := parsed.(string)
+		if !ok {
+			return nil, fmt.Errorf("text style requires a JSON string, got %T", parsed)
+		}
+		cc.Text = str
 	case "list":
-		var items []string
-		if err := json.Unmarshal([]byte(annotationValue), &items); err != nil {
-			return nil, fmt.Errorf("not a valid list of strings: %v", err)
+		arr, ok := parsed.([]any)
+		if !ok {
+			return nil, fmt.Errorf("list style requires a JSON array, got %T", parsed)
+		}
+		items := make([]string, len(arr))
+		for i, v := range arr {
+			s, ok := v.(string)
+			if !ok {
+				return nil, fmt.Errorf("not a valid list of strings: element %d is not a string", i)
+			}
+			items[i] = s
 		}
 		cc.Items = items
 	case "attrs":
-		var dict map[string]any
-		if err := json.Unmarshal([]byte(annotationValue), &dict); err != nil {
-			return nil, fmt.Errorf("not a valid JSON object: %v", err)
+		dict, ok := parsed.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("attrs style requires a JSON object, got %T", parsed)
 		}
-		keys := make([]string, 0, len(dict))
-		for k := range dict {
-			keys = append(keys, k)
+		var keys []string
+		if abc.Fields != nil {
+			keys = abc.Fields
+		} else {
+			keys = make([]string, 0, len(dict))
+			for k := range dict {
+				keys = append(keys, k)
+			}
+			slices.Sort(keys)
 		}
-		slices.Sort(keys)
 		for _, k := range keys {
 			cc.Attrs = append(cc.Attrs, ccAttr{
 				Name:  k,
-				Value: fmt.Sprintf("%v", dict[k]),
+				Value: nestedGet(dict, k),
 			})
 		}
 	case "table":
-		var items []map[string]any
-		if err := json.Unmarshal([]byte(annotationValue), &items); err != nil {
-			return nil, fmt.Errorf("not a valid list of objects: %v", err)
+		arr, ok := parsed.([]any)
+		if !ok {
+			return nil, fmt.Errorf("table style requires a JSON array, got %T", parsed)
 		}
 		t := &ccTable{
 			Headers: make([]string, len(abc.Columns)),
-			Rows:    make([]*ccRow, len(items)),
+			Rows:    make([]*ccRow, len(arr)),
 		}
 		hasHeaders := false
 		for i, c := range abc.Columns {
@@ -650,13 +728,17 @@ func newCustomContent(abc *config.AnnotationBasedContent, annotationValue string
 		if !hasHeaders {
 			t.Headers = nil
 		}
-		for i, item := range items {
+		for i, item := range arr {
+			m, ok := item.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("not a valid list of objects: element %d is not an object", i)
+			}
 			r := &ccRow{
 				Columns: make([]string, len(abc.Columns)),
 			}
 			for j, c := range abc.Columns {
 				var buf bytes.Buffer
-				if err := c.DataTemplate().Execute(&buf, item); err != nil {
+				if err := c.DataTemplate().Execute(&buf, m); err != nil {
 					r.Columns[j] = fmt.Sprintf("template error: %v", err)
 				} else {
 					r.Columns[j] = buf.String()
@@ -666,11 +748,7 @@ func newCustomContent(abc *config.AnnotationBasedContent, annotationValue string
 		}
 		cc.Table = t
 	case "json":
-		var raw any
-		if err := json.Unmarshal([]byte(annotationValue), &raw); err != nil {
-			return nil, fmt.Errorf("not a valid JSON object: %v", err)
-		}
-		indentedJSON, err := json.MarshalIndent(raw, "", "  ")
+		indentedJSON, err := json.MarshalIndent(parsed, "", "  ")
 		if err != nil {
 			return nil, fmt.Errorf("failed to indent JSON: %v", err)
 		}

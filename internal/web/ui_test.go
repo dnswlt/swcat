@@ -275,7 +275,7 @@ func TestNewCustomContent(t *testing.T) {
 		{
 			name:    "text style",
 			heading: "My Text",
-			content: "Hello World",
+			content: `"Hello World"`,
 			style:   "text",
 			want: &CustomContent{
 				Heading: "My Text",

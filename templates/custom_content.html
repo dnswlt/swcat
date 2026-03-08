@@ -1,7 +1,7 @@
 <!-- Custom content based on entity annotations -->
 {{ range $index, $cc := . }}
-<div class="border rounded-lg">
-    <h3 class="font-semibold bg-gray-100 px-3 py-1 rounded-t-lg">{{ $cc.Heading }}</h3>
+<details class="border rounded-lg" {{if $cc.Open }}open{{end}}>
+    <summary class="font-semibold bg-gray-100 px-3 py-1 rounded-t-lg cursor-pointer">{{ $cc.Heading }}</summary>
     {{ if $cc.Code }}
     <div class="max-h-32 overflow-y-auto">
         <textarea id="custom-content-{{$index}}" class="json-viewer">{{ $cc.Code }}</textarea>
@@ -53,5 +53,15 @@
         </table>
     </div>
     {{ end }}
-</div>
+    {{ if $cc.Meta }}
+    <dl class="px-3 py-1.5 border-t flex flex-wrap gap-x-5 gap-y-0.5 text-xs text-gray-500">
+        {{ range $cc.Meta }}
+        <div class="flex gap-1">
+            <dt>{{ .Name }}</dt>
+            <dd>{{ .Value }}</dd>
+        </div>
+        {{ end }}
+    </dl>
+    {{ end }}
+</details>
 {{ end }}
