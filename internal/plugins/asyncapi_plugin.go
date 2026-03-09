@@ -76,7 +76,7 @@ func (m *AsyncAPIImporterPlugin) Execute(ctx context.Context, entity catalog.Ent
 			m.spec.TargetAnnotation: map[string]any{
 				"$data": spec.SimpleChannels(),
 				"$meta": map[string]string{
-					"createTime": now.Format("2006-01-02 15:04:05"),
+					"updateTime": now.Format("2006-01-02 15:04:05"),
 				},
 			},
 		},
