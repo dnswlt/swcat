@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/plugins/asyncapi"
 	"gopkg.in/yaml.v3"
@@ -73,12 +74,7 @@ func (m *AsyncAPIImporterPlugin) Execute(ctx context.Context, entity catalog.Ent
 	now := time.Now()
 	return &PluginResult{
 		Annotations: map[string]any{
-			m.spec.TargetAnnotation: map[string]any{
-				"$data": spec.SimpleChannels(),
-				"$meta": map[string]string{
-					"updateTime": now.Format("2006-01-02 15:04:05"),
-				},
-			},
+			m.spec.TargetAnnotation: api.WrapAnnotation(spec.SimpleChannels(), now),
 		},
 	}, nil
 }

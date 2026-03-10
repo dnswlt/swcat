@@ -2,6 +2,8 @@ package lint
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"net/url"
 	"regexp"
@@ -89,11 +91,11 @@ func sortedEntityLinks(entities []catalog.Entity) []entityLink {
 // FindBitbucketFiles executes the configured queries against Bitbucket to find files.
 // If useCache is true and a cached result exists for the same Bitbucket base URL, it is
 // returned immediately without hitting the API.
-func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient bitbucket.Searcher, useCache bool) []BitbucketFile {
+func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient bitbucket.Searcher, useCache bool) ([]BitbucketFile, error) {
 	if useCache {
 		if files, ok := l.bbCache.get(bbClient.BaseURL()); ok {
 			log.Printf("FindBitbucketFiles: returning %d cached files", len(files))
-			return files
+			return files, nil
 		}
 	}
 	config := l.Bitbucket()
@@ -102,14 +104,16 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient bitbucket.Sear
 	for _, pattern := range l.config.Bitbucket.ExcludedRepos {
 		r, err := regexp.Compile(`^(?:` + pattern + `)$`)
 		if err != nil {
-			continue // Shouldn't happen, we validate regexps when reading the config
+			// Shouldn't happen, we validate regexps when reading the config
+			return nil, fmt.Errorf("invalid regex for excludedRepos %q: %v", pattern, err)
 		}
 		excludeREs = append(excludeREs, r)
 	}
+	var errs []error
 	for _, proj := range config.Projects {
 		repos, err := bbClient.ListRepositories(ctx, proj)
 		if err != nil {
-			log.Printf("Error listing repositories for project %q: %v", proj, err)
+			errs = append(errs, fmt.Errorf("list repositories for project %q: %v", proj, err))
 			continue
 		}
 		for _, repo := range repos {
@@ -140,7 +144,7 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient bitbucket.Sear
 			if q.Path != "" {
 				exists, err := bbClient.FileExists(ctx, repo.Project.Key, repo.Slug, q.Path, "")
 				if err != nil {
-					log.Printf("Error checking existence of %q in %s/%s: %v", q.Path, repo.Project.Key, repo.Slug, err)
+					errs = append(errs, fmt.Errorf("check existence of %q in %s/%s: %v", q.Path, repo.Project.Key, repo.Slug, err))
 					continue
 				}
 				if exists {
@@ -153,12 +157,13 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient bitbucket.Sear
 			} else if q.PathRegex != "" {
 				files, err := bbClient.ListFiles(ctx, repo.Project.Key, repo.Slug, "")
 				if err != nil {
-					log.Printf("Error listing files in %s/%s: %v", repo.Project.Key, repo.Slug, err)
+					errs = append(errs, fmt.Errorf("list files in %s/%s: %v", repo.Project.Key, repo.Slug, err))
 					continue
 				}
 				re, err := regexp.Compile(q.PathRegex)
 				if err != nil {
-					continue
+					// Shouldn't happen, we validate regexps when reading the config
+					return nil, fmt.Errorf("invalid regex for pathRegex %q: %v", q.PathRegex, err)
 				}
 				for _, f := range files {
 					if re.MatchString(f) {
@@ -177,8 +182,10 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient bitbucket.Sear
 		}
 	}
 
-	l.bbCache.set(bbClient.BaseURL(), allFiles)
-	return allFiles
+	if len(errs) == 0 {
+		l.bbCache.set(bbClient.BaseURL(), allFiles)
+	}
+	return allFiles, errors.Join(errs...)
 }
 
 // MatchBitbucketFiles matches pre-fetched Bitbucket search results against catalog entities.

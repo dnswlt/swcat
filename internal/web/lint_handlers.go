@@ -324,7 +324,12 @@ func (s *Server) serveBitbucketResults(w http.ResponseWriter, r *http.Request) {
 
 	useCache := r.URL.Query().Get("rescan") != "on"
 	log.Printf("Looking for files in Bitbucket (useCache=%v)", useCache)
-	queryResults := s.linter.FindBitbucketFiles(ctx, s.bbClient, useCache)
+	queryResults, err := s.linter.FindBitbucketFiles(ctx, s.bbClient, useCache)
+	if err != nil {
+		log.Printf("Error scanning Bitbucket files: %v", err)
+		s.renderErrorSnippet(w, fmt.Sprintf("Error scanning Bitbucket files: %v", err))
+		return
+	}
 	log.Printf("Found %d files. Matching files against entity URLs.", len(queryResults))
 	scanResults := s.linter.MatchBitbucketFiles(queryResults, entities)
 

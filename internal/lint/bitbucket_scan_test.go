@@ -203,8 +203,10 @@ func TestFindBitbucketFiles_PathQuery(t *testing.T) {
 		Queries:  []BitbucketPathQuery{{Path: "catalog.yaml"}},
 	})
 
-	got := l.FindBitbucketFiles(context.Background(), searcher, false)
-
+	got, err := l.FindBitbucketFiles(context.Background(), searcher, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(got) != 1 {
 		t.Fatalf("want 1 file, got %d: %v", len(got), got)
 	}
@@ -232,7 +234,10 @@ func TestFindBitbucketFiles_PathRegexQuery(t *testing.T) {
 		Queries:  []BitbucketPathQuery{{PathRegex: `^svc-.*/asyncapi\.yaml$`, Repositories: []string{"monorepo"}}},
 	})
 
-	got := l.FindBitbucketFiles(context.Background(), searcher, false)
+	got, err := l.FindBitbucketFiles(context.Background(), searcher, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	want := []BitbucketFile{
 		{Path: "svc-a/asyncapi.yaml", RepoSlug: "monorepo", ProjectKey: "PROJ"},
@@ -270,8 +275,10 @@ func TestFindBitbucketFiles_RepoExclusion(t *testing.T) {
 		Queries:       []BitbucketPathQuery{{Path: "catalog.yaml"}},
 	})
 
-	got := l.FindBitbucketFiles(context.Background(), searcher, false)
-
+	got, err := l.FindBitbucketFiles(context.Background(), searcher, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(got) != 1 || got[0].RepoSlug != "keep-this" {
 		t.Errorf("want only keep-this, got %v", got)
 	}
@@ -293,11 +300,15 @@ func TestFindBitbucketFiles_CacheHit(t *testing.T) {
 	})
 
 	// First call populates the cache.
-	l.FindBitbucketFiles(context.Background(), searcher, false)
+	if _, err := l.FindBitbucketFiles(context.Background(), searcher, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	callsAfterFirst := searcher.listCalls
 
 	// Second call with useCache=true must not call ListRepositories again.
-	l.FindBitbucketFiles(context.Background(), searcher, true)
+	if _, err := l.FindBitbucketFiles(context.Background(), searcher, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if searcher.listCalls != callsAfterFirst {
 		t.Errorf("cache hit should not call ListRepositories; calls before=%d, after=%d",
 			callsAfterFirst, searcher.listCalls)

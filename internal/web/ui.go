@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/repo"
@@ -627,18 +628,9 @@ func nestedGet(dict map[string]any, path string) string {
 // If found, it returns the inner payload and the sorted meta fields.
 // Otherwise it returns parsed unchanged with nil meta.
 func unwrapMeta(parsed any) (any, []ccAttr) {
-	m, ok := parsed.(map[string]any)
-	if !ok {
+	data, metaMap, found := api.UnwrapAnnotation(parsed)
+	if !found {
 		return parsed, nil
-	}
-	metaRaw, hasMeta := m["$meta"]
-	valueRaw, hasValue := m["$data"]
-	if !hasMeta || !hasValue {
-		return parsed, nil
-	}
-	metaMap, ok := metaRaw.(map[string]any)
-	if !ok {
-		return valueRaw, nil
 	}
 	keys := make([]string, 0, len(metaMap))
 	for k := range metaMap {
@@ -649,7 +641,7 @@ func unwrapMeta(parsed any) (any, []ccAttr) {
 	for i, k := range keys {
 		meta[i] = ccAttr{Name: k, Value: fmt.Sprintf("%v", metaMap[k])}
 	}
-	return valueRaw, meta
+	return data, meta
 }
 
 func newCustomContent(abc *config.AnnotationBasedContent, annotationValue string) (*CustomContent, error) {

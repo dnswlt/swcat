@@ -305,12 +305,7 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 
 	now := time.Now()
 	annotations := map[string]any{
-		p.spec.TargetAnnotation: map[string]any{
-			"$data": bom,
-			"$meta": map[string]string{
-				"updateTime": now.Format("2006-01-02 15:04:05"),
-			},
-		},
+		p.spec.TargetAnnotation: api.WrapAnnotation(bom, now),
 	}
 
 	if p.spec.LintFindingAnnotation != "" {
