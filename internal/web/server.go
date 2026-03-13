@@ -116,7 +116,7 @@ type Server struct {
 
 	// The optional Kubernetes client.
 	// If set, workloads can be queried from a remote cluster.
-	kubeClient *kube.Client
+	kubeClient kube.Client
 
 	// The optional Prometheus client.
 	// If set, workloads can be queried from Prometheus.
@@ -155,7 +155,7 @@ func WithCommentsStore(store comments.Store) ServerOption {
 }
 
 // WithKubeClient configures the server to use the given Kubernetes client.
-func WithKubeClient(client *kube.Client) ServerOption {
+func WithKubeClient(client kube.Client) ServerOption {
 	return func(s *Server) {
 		s.kubeClient = client
 	}

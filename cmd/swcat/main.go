@@ -127,7 +127,7 @@ type Options struct {
 	BitbucketURL      string
 }
 
-func createKubeClient(source store.Source, opts Options) (*kube.Client, error) {
+func createKubeClient(source store.Source, opts Options) (kube.Client, error) {
 	cc := kube.ConnectConfig{
 		Kubeconfig: opts.KubeKubeconfig,
 		Context:    opts.KubeContext,

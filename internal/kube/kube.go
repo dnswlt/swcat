@@ -2,10 +2,19 @@ package kube
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"gopkg.in/yaml.v3"
 )
+
+// Client queries a Kubernetes cluster for workloads.
+type Client interface {
+	// AllWorkloads returns all workloads from all configured namespaces.
+	AllWorkloads(ctx context.Context) ([]Workload, error)
+	// Workloads returns all workloads in the given namespace.
+	Workloads(ctx context.Context, namespace string) ([]Workload, error)
+}
 
 // DefaultLabels are shown when no labels are explicitly configured.
 var DefaultLabels = []string{

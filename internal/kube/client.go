@@ -1,3 +1,5 @@
+//go:build kube
+
 package kube
 
 import (
@@ -10,14 +12,14 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// Client queries a Kubernetes cluster for workloads.
-type Client struct {
+// k8sClient queries a Kubernetes cluster for workloads.
+type k8sClient struct {
 	clientset kubernetes.Interface
 	config    Config
 }
 
 // NewClientFromConfig creates a Client from a ConnectConfig and a Config.
-func NewClientFromConfig(cc ConnectConfig, cfg Config) (*Client, error) {
+func NewClientFromConfig(cc ConnectConfig, cfg Config) (Client, error) {
 	var restConfig *rest.Config
 	var err error
 	if cc.Kubeconfig != "" {
@@ -43,11 +45,11 @@ func NewClientFromConfig(cc ConnectConfig, cfg Config) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create kubernetes client: %w", err)
 	}
-	return &Client{clientset: cs, config: cfg}, nil
+	return &k8sClient{clientset: cs, config: cfg}, nil
 }
 
 // AllWorkloads returns all workloads from all configured namespaces.
-func (c *Client) AllWorkloads(ctx context.Context) ([]Workload, error) {
+func (c *k8sClient) AllWorkloads(ctx context.Context) ([]Workload, error) {
 	var allWorkloads []Workload
 	for _, ns := range c.config.Namespaces {
 		workloads, err := c.Workloads(ctx, ns)
@@ -60,7 +62,7 @@ func (c *Client) AllWorkloads(ctx context.Context) ([]Workload, error) {
 }
 
 // Workloads returns all workloads in the given namespace.
-func (c *Client) Workloads(ctx context.Context, namespace string) ([]Workload, error) {
+func (c *k8sClient) Workloads(ctx context.Context, namespace string) ([]Workload, error) {
 	var result []Workload
 
 	// Deployments
