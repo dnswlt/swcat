@@ -147,8 +147,11 @@ func TestJFrogXrayPlugin_Execute(t *testing.T) {
 	if !ok {
 		t.Fatalf("swcat/bom $data missing or wrong type: %v", wrapper)
 	}
-	if want := "myimage:" + latestVersion; bom.Name != want {
+	if want := "myimage"; bom.Name != want {
 		t.Errorf("bom.Name = %q, want %q", bom.Name, want)
+	}
+	if bom.Version != latestVersion {
+		t.Errorf("bom.Version = %q, want %q", bom.Version, latestVersion)
 	}
 	wantComponents := []string{"com.example:alpha:1.0.0", "org.acme:beta:2.5.0"}
 	if len(bom.Components) != len(wantComponents) {
@@ -209,7 +212,10 @@ func TestJFrogXrayPlugin_Execute_Fallback(t *testing.T) {
 	if !ok {
 		t.Fatalf("swcat/bom $data missing or wrong type: %v", wrapper)
 	}
-	if want := "myimage:" + fallbackVersion; bom.Name != want {
-		t.Errorf("bom.Name = %q, want %q (fallback)", bom.Name, want)
+	if want := "myimage"; bom.Name != want {
+		t.Errorf("bom.Name = %q, want %q", bom.Name, want)
+	}
+	if bom.Version != fallbackVersion {
+		t.Errorf("bom.Version = %q, want %q (fallback)", bom.Version, fallbackVersion)
 	}
 }

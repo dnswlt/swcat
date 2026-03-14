@@ -2,6 +2,7 @@ package api
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 )
@@ -81,6 +82,61 @@ func TestCatalogExtensions_Merge(t *testing.T) {
 			tt.base.Merge(tt.other)
 			if diff := cmp.Diff(tt.want, tt.base); diff != "" {
 				t.Errorf("Merge() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestWrapUnwrapAnnotation(t *testing.T) {
+	now := time.Date(2023, 10, 27, 10, 0, 0, 0, time.UTC)
+	formattedTime := "2023-10-27 10:00:00"
+	value := "some-data"
+
+	tests := []struct {
+		name     string
+		meta     map[string]any
+		wantMeta map[string]any
+	}{
+		{
+			name: "no extra meta",
+			meta: nil,
+			wantMeta: map[string]any{
+				"updateTime": formattedTime,
+			},
+		},
+		{
+			name: "one field",
+			meta: map[string]any{"version": "v1"},
+			wantMeta: map[string]any{
+				"updateTime": formattedTime,
+				"version":    "v1",
+			},
+		},
+		{
+			name: "mixed types",
+			meta: map[string]any{"version": "v1", "retryCount": 3},
+			wantMeta: map[string]any{
+				"updateTime": formattedTime,
+				"version":    "v1",
+				"retryCount": 3,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wrapped := WrapAnnotation(value, now, tt.meta)
+			gotData, gotMeta, found := UnwrapAnnotation(wrapped)
+
+			if !found {
+				t.Errorf("UnwrapAnnotation() found = false, want true")
+				return
+			}
+			if gotData != value {
+				t.Errorf("UnwrapAnnotation() data = %v, want %v", gotData, value)
+			}
+			if diff := cmp.Diff(tt.wantMeta, gotMeta); diff != "" {
+				t.Errorf("UnwrapAnnotation() meta mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

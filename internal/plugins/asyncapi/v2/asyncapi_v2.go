@@ -31,8 +31,14 @@ type Components struct {
 	Messages map[string]*Message `yaml:"messages,omitempty"`
 }
 
+type Info struct {
+	Title   string `yaml:"title"`
+	Version string `yaml:"version"`
+}
+
 type Spec struct {
 	AsyncAPI   string                  `yaml:"asyncapi"`
+	Info       *Info                   `yaml:"info"`
 	Channels   map[string]*ChannelItem `yaml:"channels"`
 	Components *Components             `yaml:"components"`
 }

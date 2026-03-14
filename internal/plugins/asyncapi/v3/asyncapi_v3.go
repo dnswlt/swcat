@@ -44,8 +44,14 @@ type Components struct {
 	Schemas    map[string]*yaml.Node `yaml:"schemas,omitempty"`
 }
 
+type Info struct {
+	Title   string `yaml:"title"`
+	Version string `yaml:"version"`
+}
+
 type Spec struct {
 	AsyncAPI   string                `yaml:"asyncapi"`
+	Info       *Info                 `yaml:"info"`
 	Channels   map[string]*Channel   `yaml:"channels"`
 	Operations map[string]*Operation `yaml:"operations"`
 	Components *Components           `yaml:"components"`

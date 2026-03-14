@@ -15,6 +15,7 @@ type ComponentsFilter struct {
 
 type MiniBOM struct {
 	Name       string   `json:"name"`
+	Version    string   `json:"version"`
 	Components []string `json:"components"`
 }
 
@@ -63,7 +64,8 @@ func FilterComponents(bom *cdx.BOM, filter ComponentsFilter) (*MiniBOM, error) {
 	}
 
 	return &MiniBOM{
-		Name:       name + ":" + version,
+		Name:       name,
+		Version:    version,
 		Components: components,
 	}, nil
 }

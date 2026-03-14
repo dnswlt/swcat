@@ -74,7 +74,7 @@ func (m *AsyncAPIImporterPlugin) Execute(ctx context.Context, entity catalog.Ent
 	now := time.Now()
 	return &PluginResult{
 		Annotations: map[string]any{
-			m.spec.TargetAnnotation: api.WrapAnnotation(spec.SimpleChannels(), now),
+			m.spec.TargetAnnotation: api.WrapAnnotation(spec.SimpleChannels(), now, map[string]any{"version": spec.Version()}),
 		},
 	}, nil
 }

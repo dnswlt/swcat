@@ -11,6 +11,9 @@ import (
 func TestParseDispatchV3(t *testing.T) {
 	yamlContent := `
 asyncapi: '3.0.0'
+info:
+  title: Test V3 API
+  version: 1.2.3
 channels:
   ch1:
     address: addr1
@@ -38,6 +41,10 @@ components:
 		t.Fatal("Parse() returned nil spec")
 	}
 
+	if parsedSpec.Version() != "1.2.3" {
+		t.Errorf("Expected version '1.2.3', got '%s'", parsedSpec.Version())
+	}
+
 	simple := parsedSpec.SimpleChannels()
 	if len(simple) != 1 {
 		t.Fatalf("Expected 1 simple channel, got %d", len(simple))
@@ -62,6 +69,9 @@ components:
 func TestParseDispatchV2(t *testing.T) {
 	yamlContent := `
 asyncapi: '2.6.0'
+info:
+  title: Test V2 API
+  version: 2.3.4
 channels:
   user/signedup:
     publish:
@@ -83,6 +93,10 @@ channels:
 	}
 	if parsedSpec == nil {
 		t.Fatal("Parse() returned nil spec")
+	}
+
+	if parsedSpec.Version() != "2.3.4" {
+		t.Errorf("Expected version '2.3.4', got '%s'", parsedSpec.Version())
 	}
 
 	simple := parsedSpec.SimpleChannels()
@@ -110,6 +124,9 @@ channels:
 func TestParseAsyncAPIV2Adapter(t *testing.T) {
 	yamlContent := `
 asyncapi: '2.6.0'
+info:
+  title: Test V2 API
+  version: 3.4.5
 channels:
   user/signedup:
     publish:
@@ -130,6 +147,10 @@ channels:
 		t.Fatalf("Parse() error = %v", err)
 	}
 	
+	if parsedSpec.Version() != "3.4.5" {
+		t.Errorf("Expected version '3.4.5', got '%s'", parsedSpec.Version())
+	}
+
 	simple := parsedSpec.SimpleChannels()
 	if len(simple) != 1 {
 		t.Fatalf("Expected 1 simple channel, got %d", len(simple))

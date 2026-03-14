@@ -23,12 +23,20 @@ type SimpleChannel struct {
 
 // ParsedSpec is the common interface implemented by all version-specific spec adapters.
 type ParsedSpec interface {
+	Version() string
 	SimpleChannels() []*SimpleChannel
 }
 
 // v2Adapter maps an AsyncAPI v2.x spec to the unified ParsedSpec interface.
 type v2Adapter struct {
 	spec *v2.Spec
+}
+
+func (a *v2Adapter) Version() string {
+	if a.spec.Info == nil {
+		return ""
+	}
+	return a.spec.Info.Version
 }
 
 func (a *v2Adapter) SimpleChannels() []*SimpleChannel {
@@ -65,6 +73,13 @@ func (a *v2Adapter) SimpleChannels() []*SimpleChannel {
 // v3Adapter maps an AsyncAPI v3.x spec to the unified ParsedSpec interface.
 type v3Adapter struct {
 	spec *v3.Spec
+}
+
+func (a *v3Adapter) Version() string {
+	if a.spec.Info == nil {
+		return ""
+	}
+	return a.spec.Info.Version
 }
 
 func (a *v3Adapter) SimpleChannels() []*SimpleChannel {
