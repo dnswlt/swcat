@@ -44,33 +44,38 @@ Releases are only created from tags.
 
 ```bash
 TAG="v0.4.0"
-git tag -a "$TAG" -m "Release version $TAG: 
-
-- Add page to generate custom, ad hoc entity diagrams.
-"
+git tag "$TAG"
 git push origin "$TAG"
 ```
 
-### 2. Create the Windows release bundle
+### 2. Create the release
 
-To create a release bundle (`.zip`) for Windows:
+Use the GitHub CLI (`gh`) to create the release from the tag. 
+GitHub will automatically generate release notes based on the commit history.
+
+```bash
+gh release create "$TAG" --generate-notes
+```
+
+(You might have to run `gh auth login` beforehand.)
+
+#### Optional: Attach a Windows release bundle
+
+If you want to include the legacy Windows release bundle (`.zip`), build it first:
 
 ```bash
 make release-windows
 ```
 
-### 3. Create the release
-
-Use the GitHub CLI (`gh`) to create the release from the tag and upload
-the generated `.zip` archive:
+And append the generated archive to the `gh release create` command:
 
 ```bash
-gh release create "$TAG" --notes-from-tag "swcat-$TAG-windows-amd64.zip"
+gh release create "$TAG" --generate-notes "swcat-$TAG-windows-amd64.zip"
 ```
 
-(You might have to run `gh auth login` beforehand.)
+### 3. Verification
 
-Check that the release look as expected on
+Check that the release and its auto-generated notes look as expected on
 <https://github.com/dnswlt/swcat/releases>.
 
 Done!
