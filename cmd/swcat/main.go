@@ -125,6 +125,7 @@ type Options struct {
 	PrometheusURL     string
 	PrometheusTimeout time.Duration
 	BitbucketURL      string
+	DocumentsDir      string
 }
 
 func createKubeClient(source store.Source, opts Options) (kube.Client, error) {
@@ -232,6 +233,7 @@ func main() {
 	fs.StringVar(&opts.PrometheusURL, "prometheus-url", "", "Base URL of a Prometheus or Thanos REST endpoint (for linting)")
 	fs.DurationVar(&opts.PrometheusTimeout, "prometheus-timeout", 30*time.Second, "Maximum time to wait for Prometheus queries")
 	fs.StringVar(&opts.BitbucketURL, "bitbucket-url", "", "Base URL of the Bitbucket Data Center instance (e.g. https://bitbucket.example.com)")
+	fs.StringVar(&opts.DocumentsDir, "documents-dir", "", "Local path to serve HTML documents from, bypassing the catalog store (e.g. for sidecar sync)")
 
 	err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("SWCAT"))
 	if err != nil {
@@ -346,6 +348,7 @@ func main() {
 			ReadOnly:        opts.ReadOnly,
 			Version:         Version,
 			SVGCacheSize:    opts.SVGCacheSize,
+			DocumentsDir:    opts.DocumentsDir,
 		},
 		source,
 		web.WithLinter(linter),

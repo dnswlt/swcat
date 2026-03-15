@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"path"
-	"strings"
+	"os"
+	"path/filepath"
 
-	"github.com/dnswlt/swcat/internal/store"
 	"gopkg.in/yaml.v3"
 )
 
@@ -25,9 +24,12 @@ type DocumentIndex struct {
 	Documents []Document `yaml:"documents"`
 }
 
-// readDocumentIndex reads the "documents/index.yml" file from the store.
-func readDocumentIndex(st store.Store) (*DocumentIndex, error) {
-	bs, err := st.ReadFile(path.Join(store.DocumentsDir, "index.yml"))
+// readDocumentIndex reads the "index.yml" file from the local docs disk directory.
+func readDocumentIndex(dir string) (*DocumentIndex, error) {
+	if dir == "" {
+		return &DocumentIndex{}, nil
+	}
+	bs, err := os.ReadFile(filepath.Join(dir, "index.yml"))
 	if err != nil {
 		return nil, err
 	}
@@ -43,29 +45,21 @@ func readDocumentIndex(st store.Store) (*DocumentIndex, error) {
 	return &index, nil
 }
 
-func (s *Server) hasDocuments(r *http.Request) bool {
-	data := s.getStoreData(r)
-	st, err := s.source.Store(data.ref)
-	if err != nil {
+func (s *Server) hasDocuments() bool {
+	if s.opts.DocumentsDir == "" {
 		return false
 	}
-
-	bs, err := st.ReadFile(path.Join(store.DocumentsDir, "index.yml"))
-	if err != nil {
-		return false
-	}
-	return len(bs) > 0
+	info, err := os.Stat(filepath.Join(s.opts.DocumentsDir, "index.yml"))
+	return err == nil && info.Size() > 0
 }
 
 func (s *Server) serveDocuments(w http.ResponseWriter, r *http.Request, docID string) {
-	data := s.getStoreData(r)
-	st, err := s.source.Store(data.ref)
-	if err != nil {
-		http.Error(w, "Failed to get store", http.StatusInternalServerError)
+	if s.opts.DocumentsDir == "" {
+		http.Error(w, "Documents directory not configured", http.StatusNotFound)
 		return
 	}
 
-	index, err := readDocumentIndex(st)
+	index, err := readDocumentIndex(s.opts.DocumentsDir)
 	if err != nil {
 		// Log but do not fail hard, we can redirect or show an empty page.
 		log.Printf("Failed to read document index: %v", err)
@@ -88,7 +82,7 @@ func (s *Server) serveDocuments(w http.ResponseWriter, r *http.Request, docID st
 
 	for _, doc := range index.Documents {
 		if doc.ID == docID {
-			params["DocumentViewURL"] = uiURLWithContext(r.Context(), "documents/raw/"+doc.Path)
+			params["DocumentViewURL"] = "/documents/raw/" + doc.Path
 			break
 		}
 	}
@@ -96,51 +90,3 @@ func (s *Server) serveDocuments(w http.ResponseWriter, r *http.Request, docID st
 	s.serveHTMLPage(w, r, "documents.html", params)
 }
 
-func (s *Server) serveRawDocument(w http.ResponseWriter, r *http.Request, docPath string) {
-	data := s.getStoreData(r)
-	st, err := s.source.Store(data.ref)
-	if err != nil {
-		http.Error(w, "Failed to get store", http.StatusInternalServerError)
-		return
-	}
-
-	// Validate path to avoid directory traversal escaping
-	cleanPath := path.Clean("/" + docPath)
-	if strings.Contains(cleanPath, "..") {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-
-	fullPath := path.Join("documents", cleanPath)
-
-	bs, err := st.ReadFile(fullPath)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-
-	// Basic content-type detection based on extension
-	ext := path.Ext(fullPath)
-	contentType := "application/octet-stream"
-	switch ext {
-	case ".html", ".htm":
-		contentType = "text/html; charset=UTF-8"
-	case ".css":
-		contentType = "text/css; charset=UTF-8"
-	case ".js":
-		contentType = "application/javascript; charset=UTF-8"
-	case ".json":
-		contentType = "application/json; charset=UTF-8"
-	case ".png":
-		contentType = "image/png"
-	case ".jpg", ".jpeg":
-		contentType = "image/jpeg"
-	case ".svg":
-		contentType = "image/svg+xml"
-	case ".txt":
-		contentType = "text/plain; charset=UTF-8"
-	}
-
-	w.Header().Set("Content-Type", contentType)
-	w.Write(bs)
-}

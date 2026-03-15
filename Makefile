@@ -37,7 +37,8 @@ release-windows:
 run-examples:
 	$(GO) run $(LDFLAGS) ./cmd/swcat \
 		-addr localhost:9191 \
-		-root-dir ./examples/flights
+		-root-dir ./examples/flights \
+		-documents-dir ./examples/flights/documents
 
 # Run swcat using the remote git repo's ./examples/flights catalog.
 run-examples-git:

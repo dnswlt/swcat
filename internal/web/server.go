@@ -44,6 +44,7 @@ type ServerOptions struct {
 	ReadOnly        bool          // If true, no Edit/Clone/Delete operations will be supported.
 	Version         string        // App version
 	SVGCacheSize    int           // Size of the LRU cache for rendered SVGs
+	DocumentsDir    string        // Directory from which HTML documents are served (bypasses store)
 }
 
 const (
@@ -1756,7 +1757,7 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		NavIcon(uiURLWithContext(r.Context(), "graph"), "Graph", "Graph builder"),
 	}
 
-	if s.hasDocuments(r) {
+	if s.hasDocuments() {
 		navItems = append(navItems, NavIcon(uiURLWithContext(r.Context(), "documents"), "Document", "Embedded documents"))
 	}
 
@@ -1964,11 +1965,6 @@ func (s *Server) uiMux() *http.ServeMux {
 		docID := r.PathValue("docID")
 		s.serveDocuments(w, r, docID)
 	})
-	mux.HandleFunc("GET /documents/raw/{path...}", func(w http.ResponseWriter, r *http.Request) {
-		path := r.PathValue("path")
-		s.serveRawDocument(w, r, path)
-	})
-
 	mux.HandleFunc("GET /graph", func(w http.ResponseWriter, r *http.Request) {
 		s.serveGraph(w, r)
 	})
@@ -2289,6 +2285,12 @@ func (s *Server) routes() *http.ServeMux {
 	} else {
 		staticFS := http.Dir(path.Join(s.opts.BaseDir, "static"))
 		root.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(staticFS)))
+	}
+
+	// Raw document assets server.
+	if s.opts.DocumentsDir != "" {
+		fs := http.FileServer(http.Dir(s.opts.DocumentsDir))
+		root.Handle("GET /documents/raw/", http.StripPrefix("/documents/raw/", fs))
 	}
 
 	// Default route (all other paths): redirect to the UI home page

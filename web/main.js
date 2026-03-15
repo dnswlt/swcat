@@ -181,24 +181,19 @@ function initPluginPopover() {
     });
 }
 
-function initDocumentsSidebar() {
-    const sidebar = document.getElementById('docs-sidebar');
-    const title = document.getElementById('docs-sidebar-title');
-    const content = document.getElementById('docs-sidebar-content');
-    const btn = document.getElementById('sidebar-toggle');
-    const iconLeft = document.getElementById('toggle-icon-left');
-    const iconRight = document.getElementById('toggle-icon-right');
+// Positions the documents popover below the docs button when it opens.
+function initDocsPopover() {
+    const btn = document.getElementById('docs-btn');
+    const popover = document.getElementById('docs-popover');
+    if (!btn || !popover) return;
 
-    if (btn && sidebar) {
-        btn.addEventListener('click', () => {
-            sidebar.classList.toggle('lg:w-64');
-            sidebar.classList.toggle('lg:w-12');
-            title.classList.toggle('hidden');
-            content.classList.toggle('hidden');
-            iconLeft.classList.toggle('hidden');
-            iconRight.classList.toggle('hidden');
-        });
-    }
+    popover.addEventListener('beforetoggle', (e) => {
+        if (e.newState === 'open') {
+            const rect = btn.getBoundingClientRect();
+            popover.style.top = `${rect.bottom + 4}px`;
+            popover.style.left = `${rect.left}px`;
+        }
+    });
 }
 
 // Runs all initialization functions relevant for the given page identified by pageId.
@@ -265,7 +260,7 @@ async function initPage(pageId) {
     }
 
     if (pageId === 'documents') {
-        initDocumentsSidebar();
+        initDocsPopover();
     }
 }
 

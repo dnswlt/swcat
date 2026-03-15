@@ -74,13 +74,13 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 		}
 	}
 
-	// Create Server
 	opts := ServerOptions{
-		Addr:     "localhost:0", // Random port
-		BaseDir:  projectRoot,   // Use templates/static from source
-		DotPath:  dotPath,
-		ReadOnly: false, // Set to false to enable plugins
-		Version:  "integration-test",
+		Addr:         "localhost:0", // Random port
+		BaseDir:      projectRoot,   // Use templates/static from source
+		DotPath:      dotPath,
+		ReadOnly:     false, // Set to false to enable plugins
+		Version:      "integration-test",
+		DocumentsDir: filepath.Join(exampleDir, "documents"),
 	}
 
 	server, err := NewServer(opts, st, WithLinter(linter), WithPluginRegistry(pluginRegistry))
@@ -132,7 +132,7 @@ func TestIntegration_ServerSmoke(t *testing.T) {
 		{"/static/dist/main.css", []string{"clickable-node"}},
 		{"/ui/documents", []string{"Documents", "architecture"}},
 		{"/ui/documents/guide", []string{"Documents", "guide"}},
-		{"/ui/documents/raw/html/architecture.html", []string{"<html"}},
+		{"/documents/raw/html/architecture.html", []string{"<html"}},
 	}
 
 	client := ts.Client()
