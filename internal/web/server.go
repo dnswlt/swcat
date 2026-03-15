@@ -1752,11 +1752,16 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		NavItem(toListURLWithContext(r.Context(), catalog.KindResource), "Resources"),
 		NavItem(toListURLWithContext(r.Context(), catalog.KindAPI), "APIs"),
 		NavItem(toListURLWithContext(r.Context(), catalog.KindGroup), "Groups"),
-		NavIcon(uiURLWithContext(r.Context(), "graph"), "Graph"),
-		NavIcon(uiURLWithContext(r.Context(), "entities"), "Search"),
+		NavIcon(uiURLWithContext(r.Context(), "entities"), "Search", "Search entities"),
+		NavIcon(uiURLWithContext(r.Context(), "graph"), "Graph", "Graph builder"),
 	}
+
+	if s.hasDocuments(r) {
+		navItems = append(navItems, NavIcon(uiURLWithContext(r.Context(), "documents"), "Document", "Embedded documents"))
+	}
+
 	if s.linter != nil {
-		navItems = append(navItems, NavIcon(uiURLWithContext(r.Context(), "lint"), "Bug"))
+		navItems = append(navItems, NavIcon(uiURLWithContext(r.Context(), "lint"), "Bug", "Lint findings"))
 	}
 
 	nav := NewNavBar(navItems...).SetActive(r.RequestURI)
@@ -1950,6 +1955,18 @@ func (s *Server) uiMux() *http.ServeMux {
 	mux.HandleFunc("GET /groups/{groupID...}", func(w http.ResponseWriter, r *http.Request) {
 		groupID := r.PathValue("groupID")
 		s.serveGroup(w, r, groupID)
+	})
+
+	mux.HandleFunc("GET /documents", func(w http.ResponseWriter, r *http.Request) {
+		s.serveDocuments(w, r, "")
+	})
+	mux.HandleFunc("GET /documents/{docID}", func(w http.ResponseWriter, r *http.Request) {
+		docID := r.PathValue("docID")
+		s.serveDocuments(w, r, docID)
+	})
+	mux.HandleFunc("GET /documents/raw/{path...}", func(w http.ResponseWriter, r *http.Request) {
+		path := r.PathValue("path")
+		s.serveRawDocument(w, r, path)
 	})
 
 	mux.HandleFunc("GET /graph", func(w http.ResponseWriter, r *http.Request) {

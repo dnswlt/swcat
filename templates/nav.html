@@ -1,12 +1,14 @@
 <nav class="bg-white shadow max-w-screen-lg mx-auto rounded-t-xl">
     <div class="px-4">
-        <div id="navbar-links" class="flex space-x-4">
-            {{range .NavBar.Items}}
+		<div id="navbar-links" class="flex">
+			{{range .NavBar.Items}}
             {{if .Active }}
             <a href="{{.Path}}"
+                title="{{.Tooltip}}"
                 class="py-2 px-4 text-blue-600 font-semibold border-b-2 border-blue-600">{{.Display}}</a>
             {{else}}
             <a href="{{.Path}}"
+                title="{{.Tooltip}}"
                 class="py-2 px-4 text-gray-700 hover:text-blue-600 font-medium">{{.Display}}</a>
             {{end}}
             {{end}}

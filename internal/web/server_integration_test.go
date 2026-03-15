@@ -130,6 +130,9 @@ func TestIntegration_ServerSmoke(t *testing.T) {
 		{"/status", []string{"options", "cachedRefs", "storeSourceType", "started", "registeredPlugins", "asyncApiImporter"}},
 		{"/static/dist/main.js", []string{"function"}},
 		{"/static/dist/main.css", []string{"clickable-node"}},
+		{"/ui/documents", []string{"Documents", "architecture"}},
+		{"/ui/documents/guide", []string{"Documents", "guide"}},
+		{"/ui/documents/raw/html/architecture.html", []string{"<html"}},
 	}
 
 	client := ts.Client()

@@ -181,6 +181,26 @@ function initPluginPopover() {
     });
 }
 
+function initDocumentsSidebar() {
+    const sidebar = document.getElementById('docs-sidebar');
+    const title = document.getElementById('docs-sidebar-title');
+    const content = document.getElementById('docs-sidebar-content');
+    const btn = document.getElementById('sidebar-toggle');
+    const iconLeft = document.getElementById('toggle-icon-left');
+    const iconRight = document.getElementById('toggle-icon-right');
+
+    if (btn && sidebar) {
+        btn.addEventListener('click', () => {
+            sidebar.classList.toggle('lg:w-64');
+            sidebar.classList.toggle('lg:w-12');
+            title.classList.toggle('hidden');
+            content.classList.toggle('hidden');
+            iconLeft.classList.toggle('hidden');
+            iconRight.classList.toggle('hidden');
+        });
+    }
+}
+
 // Runs all initialization functions relevant for the given page identified by pageId.
 async function initPage(pageId) {
     initSessionPopover();
@@ -242,6 +262,10 @@ async function initPage(pageId) {
         jsonViewers.forEach(viewer => {
             initJsonViewer(viewer.id);
         });
+    }
+
+    if (pageId === 'documents') {
+        initDocumentsSidebar();
     }
 }
 

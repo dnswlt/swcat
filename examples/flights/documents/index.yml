@@ -1,0 +1,9 @@
+documents:
+  - id: architecture-overview
+    title: Architecture Overview
+    description: A high level overview of the system architecture
+    path: html/architecture.html
+  - id: user-guide
+    title: User Guide
+    description: Guide on how to use the system
+    path: html/guide.html
