@@ -138,6 +138,7 @@ func (s *Server) serveLintFindings(w http.ResponseWriter, r *http.Request) {
 	})
 
 	params := map[string]any{
+		"PageTitle":     "Lint",
 		"OwnerGroups":   result,
 		"HasKube":       s.kubeClient != nil && s.linter != nil && s.linter.Kube().Enabled,
 		"HasPrometheus": s.promClient != nil && s.linter != nil && s.linter.Prometheus().Enabled,

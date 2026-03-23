@@ -283,7 +283,7 @@ func TestDetail_LintFindings(t *testing.T) {
 		{
 			"Lint findings page",
 			"/ui/lint",
-			[]string{"Lint Findings", "Owner: test-group", "System", "lint-test-system", "providerless-api", "[api-has-provider]"},
+			[]string{"Lint findings", "Owner: test-group", "System", "lint-test-system", "providerless-api", "[api-has-provider]"},
 		},
 	}
 
@@ -966,8 +966,8 @@ func TestUpdateAnnotationValue_JSONTypes(t *testing.T) {
 	entityRef := "component:default/test-component"
 
 	cases := []struct {
-		key      string
-		body     string
+		key       string
+		body      string
 		wantInExt string // substring expected in the raw ext.json
 	}{
 		{"swcat.io/num", `42`, `42`},

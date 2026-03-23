@@ -459,6 +459,7 @@ func (s *Server) serveComponents(w http.ResponseWriter, r *http.Request) {
 	data := s.getStoreData(r)
 	components := s.finder.FindComponents(data.repo, query)
 	params := map[string]any{
+		"PageTitle":     "Components",
 		"Components":    components,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindComponent),
 		"EntitiesLabel": "components",
@@ -481,6 +482,7 @@ func (s *Server) serveSystems(w http.ResponseWriter, r *http.Request) {
 
 	systems := s.finder.FindSystems(data.repo, query)
 	params := map[string]any{
+		"PageTitle":     "Systems",
 		"Systems":       systems,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindSystem),
 		"EntitiesLabel": "systems",
@@ -562,7 +564,6 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		http.Error(w, "Invalid systemID", http.StatusBadRequest)
 		return
 	}
-	params := map[string]any{}
 	data := s.getStoreData(r)
 
 	system := data.repo.System(systemRef)
@@ -570,7 +571,10 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		http.NotFound(w, r)
 		return
 	}
-	params["System"] = system
+	params := map[string]any{
+		"System":    system,
+		"PageTitle": system.GetQName(),
+	}
 	systemURL, err := toURLWithContext(r.Context(), system)
 	if err != nil {
 		http.Error(w, "Failed to build system URL", http.StatusInternalServerError)
@@ -710,7 +714,6 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		http.Error(w, "Invalid componentID", http.StatusBadRequest)
 		return
 	}
-	params := map[string]any{}
 	data := s.getStoreData(r)
 
 	component := data.repo.Component(componentRef)
@@ -718,7 +721,10 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		http.NotFound(w, r)
 		return
 	}
-	params["Component"] = component
+	params := map[string]any{
+		"Component": component,
+		"PageTitle": component.GetQName(),
+	}
 
 	cacheKey := component.GetRef().String()
 	svgResult, ok := data.lookupSVG(cacheKey)
@@ -770,6 +776,7 @@ func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
 
 	apis := s.finder.FindAPIs(data.repo, query)
 	params := map[string]any{
+		"PageTitle":     "APIs",
 		"APIs":          apis,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindAPI),
 		"EntitiesLabel": "apis",
@@ -800,7 +807,6 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 		http.Error(w, "Invalid apiID", http.StatusBadRequest)
 		return
 	}
-	params := map[string]any{}
 	data := s.getStoreData(r)
 
 	ap := data.repo.API(apiRef)
@@ -808,7 +814,10 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, apiID string) 
 		http.NotFound(w, r)
 		return
 	}
-	params["API"] = ap
+	params := map[string]any{
+		"PageTitle": ap.GetQName(),
+		"API":       ap,
+	}
 
 	cacheKey := ap.GetRef().String()
 	svgResult, ok := data.lookupSVG(cacheKey)
@@ -860,6 +869,7 @@ func (s *Server) serveResources(w http.ResponseWriter, r *http.Request) {
 
 	resources := s.finder.FindResources(data.repo, query)
 	params := map[string]any{
+		"PageTitle":     "Resources",
 		"Resources":     resources,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindResource),
 		"EntitiesLabel": "resources",
@@ -883,13 +893,15 @@ func (s *Server) serveResource(w http.ResponseWriter, r *http.Request, resourceI
 	}
 	data := s.getStoreData(r)
 
-	params := map[string]any{}
 	resource := data.repo.Resource(resourceRef)
 	if resource == nil {
 		http.NotFound(w, r)
 		return
 	}
-	params["Resource"] = resource
+	params := map[string]any{
+		"PageTitle": resource.GetQName(),
+		"Resource":  resource,
+	}
 
 	cacheKey := resource.GetRef().String()
 	svgResult, ok := data.lookupSVG(cacheKey)
@@ -941,6 +953,7 @@ func (s *Server) serveDomains(w http.ResponseWriter, r *http.Request) {
 
 	domains := s.finder.FindDomains(data.repo, query)
 	params := map[string]any{
+		"PageTitle":     "Domains",
 		"Domains":       domains,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindDomain),
 		"EntitiesLabel": "domains",
@@ -962,7 +975,6 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 		http.Error(w, "Invalid domainID", http.StatusBadRequest)
 		return
 	}
-	params := map[string]any{}
 	data := s.getStoreData(r)
 
 	domain := data.repo.Domain(domainRef)
@@ -970,7 +982,10 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 		http.NotFound(w, r)
 		return
 	}
-	params["Domain"] = domain
+	params := map[string]any{
+		"PageTitle": domain.GetQName(),
+		"Domain":    domain,
+	}
 
 	cacheKey := domain.GetRef().String()
 	svgResult, ok := data.lookupSVG(cacheKey)
@@ -1014,6 +1029,7 @@ func (s *Server) serveGroups(w http.ResponseWriter, r *http.Request) {
 
 	groups := s.finder.FindGroups(data.repo, query)
 	params := map[string]any{
+		"PageTitle":     "Groups",
 		"Groups":        groups,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindGroup),
 		"EntitiesLabel": "groups",
@@ -1035,7 +1051,6 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 		http.Error(w, "Invalid groupID", http.StatusBadRequest)
 		return
 	}
-	params := map[string]any{}
 	data := s.getStoreData(r)
 
 	group := data.repo.Group(groupRef)
@@ -1043,7 +1058,10 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 		http.NotFound(w, r)
 		return
 	}
-	params["Group"] = group
+	params := map[string]any{
+		"PageTitle": group.GetQName(),
+		"Group":     group,
+	}
 
 	activeComments, err := s.getActiveComments(group.GetRef())
 	if err != nil {
@@ -1205,6 +1223,7 @@ func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
 	// Full page render
 	graphURL := uiURLWithContext(r.Context(), "graph")
 	params := map[string]any{
+		"PageTitle":        "Graph builder",
 		"Entities":         entities,
 		"SelectedEntities": selectedEntities,
 		"SearchPath":       graphURL,
@@ -1227,6 +1246,7 @@ func (s *Server) serveEntities(w http.ResponseWriter, r *http.Request) {
 
 	entities := s.finder.FindEntities(data.repo, query)
 	params := map[string]any{
+		"PageTitle":     "Search",
 		"Entities":      entities,
 		"SearchPath":    uiURLWithContext(r.Context(), "entities"),
 		"EntitiesLabel": "entities",
@@ -1248,15 +1268,29 @@ func (s *Server) serveEntityYAML(w http.ResponseWriter, r *http.Request, entityR
 		http.Error(w, "Invalid entity ref", http.StatusBadRequest)
 		return
 	}
-	params := map[string]any{}
 	data := s.getStoreData(r)
-
 	entity := data.repo.Entity(ref)
 	if entity == nil {
 		http.NotFound(w, r)
 		return
 	}
-	params["Entity"] = entity
+
+	var prefix string
+	switch templateFile {
+	case "entity_edit.html":
+		prefix = "Edit"
+	case "entity_clone.html":
+		prefix = "Clone"
+	case "entity_source.html":
+		prefix = "Source"
+	case "entity_delete.html":
+		prefix = "Delete"
+	}
+
+	params := map[string]any{
+		"PageTitle": fmt.Sprintf("%s %s", prefix, entity.GetQName()),
+		"Entity":    entity,
+	}
 
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)

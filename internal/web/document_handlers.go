@@ -76,6 +76,7 @@ func (s *Server) serveDocuments(w http.ResponseWriter, r *http.Request, docID st
 	}
 
 	params := map[string]any{
+		"PageTitle": "Documents",
 		"Documents": index.Documents,
 		"ActiveDoc": docID,
 	}
