@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"maps"
 	"net/url"
 	"regexp"
 	"slices"
@@ -887,30 +888,157 @@ var templateFuncs = template.FuncMap{
 	},
 }
 
-type linkTemplates struct {
+// linkGenerator holds compiled templates and metadata for one auto-generated link rule.
+// Exactly one of annotation or eval is set, determining when the rule fires.
+type linkGenerator struct {
 	url        *template.Template
 	title      *template.Template
-	hasVersion bool // Indicates whether a {{ Version[.*] }} annotation is present in url or title.
+	icon       string
+	typ        string
+	hasVersion bool             // if true, generates per-version links for versioned APIs
+	multiLinks []MultiLinkEntry // if non-empty, generates per-entry links
+	annotation string           // annotation-based: fire when entity has this annotation
+	eval       *query.Evaluator // automatic: fire when entity matches this filter
 }
 
-type autoLinkTemplates struct {
-	eval  *query.Evaluator
-	url   *template.Template
-	title *template.Template
-	icon  string
-	typ   string
+// renderURL executes the URL template and validates the result.
+func (g *linkGenerator) renderURL(data map[string]any, errCtx string) (string, error) {
+	var sb strings.Builder
+	if err := g.url.Execute(&sb, data); err != nil {
+		return "", fmt.Errorf("failed to execute URL template in %s: %v", errCtx, err)
+	}
+	u := sb.String()
+	if !isValidAbsoluteURL(u) {
+		return "", fmt.Errorf("invalid URL in %s: %q", errCtx, u)
+	}
+	return u, nil
 }
 
-type preparedTemplates struct {
-	annotationBased map[string]linkTemplates
-	automatic       []autoLinkTemplates
+// renderTitle executes the title template.
+func (g *linkGenerator) renderTitle(data map[string]any, errCtx string) (string, error) {
+	var sb strings.Builder
+	if err := g.title.Execute(&sb, data); err != nil {
+		return "", fmt.Errorf("failed to execute title template in %s: %v", errCtx, err)
+	}
+	return sb.String(), nil
+}
+
+// generateLinks produces all links for entity e.
+// annotValue is the resolved annotation value for annotation-based generators, empty for filter-based ones.
+func (g *linkGenerator) generateLinks(e catalog.Entity, annotValue string) ([]*catalog.Link, error) {
+	errCtx := fmt.Sprintf("entity %v", e.GetRef())
+	baseData := map[string]any{"Metadata": e.GetMetadata()}
+	if g.annotation != "" {
+		baseData["Annotation"] = map[string]string{"Key": g.annotation, "Value": annotValue}
+	}
+
+	if len(g.multiLinks) > 0 {
+		// Collect versions to iterate over. For non-versioned entities (or when
+		// hasVersion is false) we use a single nil entry to run the loop once.
+		var versions []*catalog.Version
+		if g.hasVersion {
+			if ap, ok := e.(*catalog.API); ok {
+				for i := range ap.Spec.Versions {
+					versions = append(versions, &ap.Spec.Versions[i].Version)
+				}
+			}
+		}
+		if len(versions) == 0 {
+			versions = []*catalog.Version{nil}
+		}
+		links := make([]*catalog.Link, 0, len(versions)*len(g.multiLinks))
+		for _, ver := range versions {
+			// Build per-version data (without MultiLink) to render the group title.
+			verData := maps.Clone(baseData)
+			if ver != nil {
+				verData["Version"] = ver
+			}
+			groupTitle, err := g.renderTitle(verData, errCtx)
+			if err != nil {
+				return nil, err
+			}
+			for _, ml := range g.multiLinks {
+				data := maps.Clone(verData)
+				data["MultiLink"] = ml
+				u, err := g.renderURL(data, errCtx)
+				if err != nil {
+					return nil, err
+				}
+				links = append(links, &catalog.Link{
+					Title:       groupTitle + " (" + ml.Label + ")",
+					URL:         u,
+					Icon:        g.icon,
+					Type:        g.typ,
+					IsGenerated: true,
+					GroupInfo:   &catalog.LinkGroupInfo{Group: groupTitle, Label: ml.Label},
+				})
+			}
+		}
+		return links, nil
+	}
+
+	if g.hasVersion {
+		if ap, ok := e.(*catalog.API); ok && len(ap.Spec.Versions) > 0 {
+			links := make([]*catalog.Link, 0, len(ap.Spec.Versions))
+			for _, ver := range ap.Spec.Versions {
+				data := maps.Clone(baseData)
+				data["Version"] = &ver.Version
+				u, err := g.renderURL(data, errCtx)
+				if err != nil {
+					return nil, err
+				}
+				title, err := g.renderTitle(data, errCtx)
+				if err != nil {
+					return nil, err
+				}
+				links = append(links, &catalog.Link{
+					Title:       title,
+					URL:         u,
+					Icon:        g.icon,
+					Type:        g.typ,
+					IsGenerated: true,
+				})
+			}
+			return links, nil
+		}
+	}
+
+	// Single link (no multi-links, no multiple versions).
+	u, err := g.renderURL(baseData, errCtx)
+	if err != nil {
+		return nil, err
+	}
+	title, err := g.renderTitle(baseData, errCtx)
+	if err != nil {
+		return nil, err
+	}
+	return []*catalog.Link{{
+		Title:       title,
+		URL:         u,
+		Icon:        g.icon,
+		Type:        g.typ,
+		IsGenerated: true,
+	}}, nil
+}
+
+// compileLinkTemplates compiles a URL+title template pair, applying missingkey=error.
+func compileLinkTemplates(urlStr, titleStr, errContext string) (*template.Template, *template.Template, error) {
+	urlTmpl, err := template.New("url").Funcs(templateFuncs).Parse(urlStr)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid URL template for %s: %v", errContext, err)
+	}
+	urlTmpl.Option("missingkey=error")
+	titleTmpl, err := template.New("title").Funcs(templateFuncs).Parse(titleStr)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid title template for %s: %v", errContext, err)
+	}
+	titleTmpl.Option("missingkey=error")
+	return urlTmpl, titleTmpl, nil
 }
 
 // prepareLinkTemplates compiles all url and title templates found in the config.
-func (r *Repository) prepareLinkTemplates() (*preparedTemplates, error) {
-	res := &preparedTemplates{
-		annotationBased: make(map[string]linkTemplates),
-	}
+func (r *Repository) prepareLinkTemplates() ([]linkGenerator, error) {
+	var generators []linkGenerator
 	versionPlaceholderRE := regexp.MustCompile(`\{\{\s*\.Version\b`)
 
 	for annot, abl := range r.config.AnnotationBasedLinks {
@@ -920,19 +1048,19 @@ func (r *Repository) prepareLinkTemplates() (*preparedTemplates, error) {
 		if strings.TrimSpace(abl.URL) == "" {
 			return nil, fmt.Errorf("annotation-based label for %q has an empty URL", annot)
 		}
-		urlTmpl, err := template.New("url").Funcs(templateFuncs).Parse(abl.URL)
+		urlTmpl, titleTmpl, err := compileLinkTemplates(abl.URL, abl.Title, fmt.Sprintf("annotation %q", annot))
 		if err != nil {
-			return nil, fmt.Errorf("invalid URL template for annotation %q: %v", annot, err)
+			return nil, err
 		}
-		urlTmpl.Option("missingkey=error")
-		titleTmpl, err := template.New("title").Funcs(templateFuncs).Parse(abl.Title)
-		if err != nil {
-			return nil, fmt.Errorf("invalid title template for annotation %q: %v", annot, err)
-		}
-		titleTmpl.Option("missingkey=error")
-		// If either template references .Version, make this a per-version template.
-		hasVersion := versionPlaceholderRE.MatchString(abl.URL + " " + abl.Title)
-		res.annotationBased[annot] = linkTemplates{url: urlTmpl, title: titleTmpl, hasVersion: hasVersion}
+		generators = append(generators, linkGenerator{
+			url:        urlTmpl,
+			title:      titleTmpl,
+			icon:       abl.Icon,
+			typ:        abl.Type,
+			hasVersion: versionPlaceholderRE.MatchString(abl.URL + " " + abl.Title),
+			multiLinks: abl.MultiLinks,
+			annotation: annot,
+		})
 	}
 
 	for _, al := range r.config.AutomaticLinks {
@@ -949,27 +1077,21 @@ func (r *Repository) prepareLinkTemplates() (*preparedTemplates, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid filter expression %q: %v", al.Filter, err)
 		}
-		urlTmpl, err := template.New("url").Funcs(templateFuncs).Parse(al.URL)
+		urlTmpl, titleTmpl, err := compileLinkTemplates(al.URL, al.Title, "automatic link")
 		if err != nil {
-			return nil, fmt.Errorf("invalid URL template for automatic link: %v", err)
+			return nil, err
 		}
-		urlTmpl.Option("missingkey=error")
-		titleTmpl, err := template.New("title").Funcs(templateFuncs).Parse(al.Title)
-		if err != nil {
-			return nil, fmt.Errorf("invalid title template for automatic link: %v", err)
-		}
-		titleTmpl.Option("missingkey=error")
-
-		res.automatic = append(res.automatic, autoLinkTemplates{
-			eval:  query.NewEvaluator(expr),
-			url:   urlTmpl,
-			title: titleTmpl,
-			icon:  al.Icon,
-			typ:   al.Type,
+		generators = append(generators, linkGenerator{
+			url:        urlTmpl,
+			title:      titleTmpl,
+			icon:       al.Icon,
+			typ:        al.Type,
+			multiLinks: al.MultiLinks,
+			eval:       query.NewEvaluator(expr),
 		})
 	}
 
-	return res, nil
+	return generators, nil
 }
 
 func (r *Repository) addGeneratedLinks() error {
@@ -978,7 +1100,6 @@ func (r *Repository) addGeneratedLinks() error {
 		return err
 	}
 
-	// Process entities
 	for _, e := range r.allEntities {
 		meta := e.GetMetadata()
 		// Check that no generated links already exist (that would be a programming error)
@@ -987,92 +1108,30 @@ func (r *Repository) addGeneratedLinks() error {
 		}) {
 			panic(fmt.Sprintf("addGeneratedLinks called on entity %s that already has generated links", e.GetRef()))
 		}
-		// Generate new links
 		var links []*catalog.Link
-		for annot, t := range tmpls.annotationBased {
-			if value, ok := meta.Annotations[annot]; ok && value != "" {
-				makeLink := func(version *catalog.Version) (*catalog.Link, error) {
-					data := map[string]any{
-						"Annotation": map[string]string{
-							"Key":   annot,
-							"Value": value,
-						},
-						"Metadata": meta,
-					}
-					if version != nil {
-						data["Version"] = version
-					}
-					var urlSb strings.Builder
-					if err := t.url.Execute(&urlSb, data); err != nil {
-						return nil, fmt.Errorf("failed to execute URL template for annotation %v in entity %v: %v", annot, e.GetRef(), err)
-					}
-					url := urlSb.String()
-					if !isValidAbsoluteURL(url) {
-						return nil, fmt.Errorf("invalid url for annotation %v in entity %v: %q", annot, e.GetRef(), url)
-					}
-					var titleSb strings.Builder
-					if err := t.title.Execute(&titleSb, data); err != nil {
-						return nil, fmt.Errorf("failed to execute title template for annotation %v in entity %v: %v", annot, e.GetRef(), err)
-					}
-					return &catalog.Link{
-						Title:       titleSb.String(),
-						URL:         url,
-						Type:        r.config.AnnotationBasedLinks[annot].Type,
-						Icon:        r.config.AnnotationBasedLinks[annot].Icon,
-						IsGenerated: true,
-					}, nil
+		for i := range tmpls {
+			g := &tmpls[i]
+			var annotValue string
+			if g.annotation != "" {
+				value, ok := meta.Annotations[g.annotation]
+				if !ok || value == "" {
+					continue
 				}
-				// For versioned APIs and templates referencing a version, generate links for each version.
-				if ap, ok := e.(*catalog.API); ok && t.hasVersion && len(ap.Spec.Versions) > 0 {
-					for _, ver := range ap.Spec.Versions {
-						link, err := makeLink(&ver.Version)
-						if err != nil {
-							return err
-						}
-						links = append(links, link)
-					}
-				} else {
-					// No {{ .Version }} placeholder or no versions, generate a single link.
-					link, err := makeLink(nil)
-					if err != nil {
-						return err
-					}
-					links = append(links, link)
+				annotValue = value
+			} else {
+				matches, err := g.eval.Matches(e)
+				if err != nil {
+					return fmt.Errorf("failed to evaluate filter for entity %v: %v", e.GetRef(), err)
+				}
+				if !matches {
+					continue
 				}
 			}
-		}
-
-		// Generate automatic links
-		for _, t := range tmpls.automatic {
-			matches, err := t.eval.Matches(e)
+			newLinks, err := g.generateLinks(e, annotValue)
 			if err != nil {
-				return fmt.Errorf("failed to evaluate filter for entity %v: %v", e.GetRef(), err)
+				return err
 			}
-			if !matches {
-				continue
-			}
-			data := map[string]any{
-				"Metadata": meta,
-			}
-			var urlSb strings.Builder
-			if err := t.url.Execute(&urlSb, data); err != nil {
-				return fmt.Errorf("failed to execute URL template for automatic link in entity %v: %v", e.GetRef(), err)
-			}
-			url := urlSb.String()
-			if !isValidAbsoluteURL(url) {
-				return fmt.Errorf("invalid url for automatic link in entity %v: %q", e.GetRef(), url)
-			}
-			var titleSb strings.Builder
-			if err := t.title.Execute(&titleSb, data); err != nil {
-				return fmt.Errorf("failed to execute title template for automatic link in entity %v: %v", e.GetRef(), err)
-			}
-			links = append(links, &catalog.Link{
-				Title:       titleSb.String(),
-				URL:         url,
-				Type:        t.typ,
-				Icon:        t.icon,
-				IsGenerated: true,
-			})
+			links = append(links, newLinks...)
 		}
 
 		meta.Links = append(meta.Links, links...)

@@ -422,6 +422,7 @@ func (s *Server) reloadTemplates() error {
 		"parentSystem":  parentSystem,
 		"dict":          dictFunc,
 		"linkIcon":      linkIcon,
+		"groupLinks":    groupLinks,
 		"strJoin": func(elems []string, sep string) string {
 			return strings.Join(elems, sep)
 		},

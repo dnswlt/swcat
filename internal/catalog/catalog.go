@@ -93,6 +93,13 @@ type SystemPart interface {
 
 // Metadata
 
+// LinkGroupInfo is a swcat extension for rendering grouped multi-environment links.
+// A nil value means the link is standalone and rendered as a plain link.
+type LinkGroupInfo struct {
+	Group string `json:"group"` // shared display title for the group, e.g. "Monitoring"
+	Label string `json:"label"` // per-link label within the group, e.g. "dev", "prod"
+}
+
 type Link struct {
 	// A url in a standard uri format.
 	// [required]
@@ -109,6 +116,9 @@ type Link struct {
 
 	// Whether the link was auto-generated. False for user-provided links.
 	IsGenerated bool `json:"isGenerated,omitempty"`
+	// GroupInfo is set for auto-generated multi-environment links. Non-nil links
+	// with the same GroupInfo.Group are rendered together in the UI.
+	GroupInfo *LinkGroupInfo `json:"groupInfo,omitempty"`
 }
 
 type Metadata struct {

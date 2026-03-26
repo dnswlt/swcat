@@ -431,6 +431,51 @@ func linkIcon(icon string) template.HTML {
 	return template.HTML(linkIconSVGs[""])
 }
 
+// LinkGroup groups one or more catalog.Links for rendering.
+// Ungrouped links have a single entry in Links; grouped multi-env links share a Title.
+type LinkGroup struct {
+	Title string
+	Icon  string
+	Type  string
+	Links []*catalog.Link
+}
+
+// groupLinks partitions links into LinkGroups. Links with a non-empty GroupInfo.Group
+// are collected into a shared group (preserving first-occurrence order). All other
+// links each become their own single-entry group.
+func groupLinks(links []*catalog.Link) []LinkGroup {
+	var groups []LinkGroup
+	groupIndex := map[string]int{} // group title → index in groups
+
+	for _, l := range links {
+		if l.GroupInfo != nil && l.GroupInfo.Group != "" {
+			idx, seen := groupIndex[l.GroupInfo.Group]
+			if !seen {
+				idx = len(groups)
+				groupIndex[l.GroupInfo.Group] = idx
+				groups = append(groups, LinkGroup{
+					Title: l.GroupInfo.Group,
+					Icon:  l.Icon,
+					Type:  l.Type,
+				})
+			}
+			groups[idx].Links = append(groups[idx].Links, l)
+		} else {
+			title := l.Title
+			if title == "" {
+				title = l.URL
+			}
+			groups = append(groups, LinkGroup{
+				Title: title,
+				Icon:  l.Icon,
+				Type:  l.Type,
+				Links: []*catalog.Link{l},
+			})
+		}
+	}
+	return groups
+}
+
 //
 // Navigation bar utilities
 //

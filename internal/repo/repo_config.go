@@ -61,6 +61,18 @@ type AnnotationBasedLink struct {
 	// An optional value to categorize links into specific groups.
 	// [optional]
 	Type string `yaml:"type,omitempty"`
+	// An optional list of name/value pairs to generate multiple links
+	// for the same parameterized URL. Useful e.g. to generate links
+	// for multiple environments.
+	MultiLinks []MultiLinkEntry `yaml:"multiLinks,omitempty"`
+}
+
+// MultiLinkEntry defines a single named value used in multiLinks expansion.
+// The Label is the per-link label (e.g. "dev") and Value is substituted into
+// URL/title templates via {{ .MultiLink.Value }}.
+type MultiLinkEntry struct {
+	Label string `yaml:"label"`
+	Value string `yaml:"value"`
 }
 
 type AutomaticLink struct {
@@ -80,6 +92,10 @@ type AutomaticLink struct {
 	// An optional value to categorize links into specific groups.
 	// [optional]
 	Type string `yaml:"type,omitempty"`
+	// An optional list of name/value pairs to generate multiple links
+	// for the same parameterized URL. Useful e.g. to generate links
+	// for multiple environments.
+	MultiLinks []MultiLinkEntry `yaml:"multiLinks,omitempty"`
 }
 
 // Config holds repository-specific application configuration.

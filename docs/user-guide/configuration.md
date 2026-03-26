@@ -21,8 +21,7 @@ for the Go struct that holds all available configuration options.
 The `catalog` section allows you to configure repository-specific settings.
 
 * `annotationBasedLinks`: An optional map from annotation keys to links.
-    The `url` and `title` fields of these links support the following
-    template annotations:
+    The `url` and `title` fields support the following template placeholders:
     * `{{ .Metadata.<Field> }}` for any `<Field>` in the entity's metadata
         (e.g., `Name`).
     * `{{ .Annotation.Key }}` and `{{ .Annotation.Value }}` for the key and value
@@ -33,24 +32,55 @@ The `catalog` section allows you to configure repository-specific settings.
         The version part fields are only populated if the version string matches a
         common pattern (e.g. *v1*, *1.2.3*, or *v1alpha*).
 
-* `automaticLinks`: A list of link templates that are automatically added to
-    entities matching a filter expression. Each entry has the following fields:
+    Supports `multiLinks` for generating per-environment link groups.
+    See [Multi-environment Links](#multi-environment-links) below.
+
+* `automaticLinks`: A list of link templates automatically added to entities
+    matching a filter expression. Each entry has the following fields:
     * `filter`: A query expression (see [Query Syntax](query-syntax.md)) that
         determines which entities the link applies to.
-    * `url`: The URL template for the link.
+    * `url`: The URL template for the link (supports `{{ .Metadata.<Field> }}`).
     * `title`: The title template for the link.
 
-    The `url` and `title` fields support the `{{ .Metadata.<Field> }}` template
-    placeholders.
-
-Both `annotationBasedLinks` and `automaticLinks` support custom template functions:
-* `{{ first <val1> <val2> ... }}` returns the first non-empty string. This is
-    useful to provide fallback values, e.g. `{{ first (index .Metadata.Annotations "my/annot") .Metadata.Name }}`.
+    Supports `multiLinks` for generating per-environment link groups.
+    See [Multi-environment Links](#multi-environment-links) below.
 
 * `validation`: Defines validation rules for entity specifications.
   You can define rules for domains, systems, components, resources, and APIs.
     * `values`: A list of allowed values for a field.
     * `matches`: A list of regular expressions that the value must match.
+
+### Custom template functions
+
+Both `annotationBasedLinks` and `automaticLinks` support custom template functions:
+
+* `{{ first <val1> <val2> ... }}` returns the first non-empty string. This is
+    useful to provide fallback values, e.g. `{{ first (index .Metadata.Annotations "my/annot") .Metadata.Name }}`.
+
+
+### Multi-environment Links
+
+Both `annotationBasedLinks` and `automaticLinks` support an optional `multiLinks`
+field that generates one link per entry instead of a single link. This is useful
+for linking to the same resource across multiple environments or stages.
+
+Each entry in `multiLinks` has two fields:
+
+* `label`: The short display label shown as a pill in the UI (e.g. `dev`).
+* `value`: Substituted into the `url` template via `{{ .MultiLink.Value }}`.
+
+The `title` template serves as the shared group title (e.g. `Monitoring`) and
+is rendered without `{{ .MultiLink.* }}` data. Individual link titles are derived
+automatically as `<group title> (<label>)` (e.g. `Monitoring (dev)`).
+
+In the UI, grouped links are displayed as a labelled row of clickable pills:
+
+```text
+Monitoring  [dev]  [staging]  [prod]
+```
+
+See the [Example Configuration](#example-configuration) below for a complete
+`multiLinks` example.
 
 ## SVG Configuration
 
@@ -119,6 +149,19 @@ catalog:
       # The annotation value is the "project" name, the repo is named after the entity.
       url: https://example.com/projects/{{ .Annotation.Value }}/repos/{{ .Metadata.Name }}
       title: Source code
+    # Auto-generates per-environment monitoring links for annotated entities.
+    # Rendered as a grouped pill row: "Monitoring  [dev]  [staging]  [prod]"
+    hexz.me/app-name:
+      url: https://grafana.{{ .MultiLink.Value }}.example.com/d/{{ .Annotation.Value }}
+      title: Monitoring
+      icon: dashboard
+      multiLinks:
+        - label: dev
+          value: dev.example.com
+        - label: staging
+          value: staging.example.com
+        - label: prod
+          value: prod.example.com
   validation:
     api:
       type:

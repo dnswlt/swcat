@@ -343,17 +343,17 @@ func TestPrepareLinkTemplates(t *testing.T) {
 			if tt.wantErr {
 				return
 			}
-			if l := len(tmpls.annotationBased); l != 1 {
-				t.Errorf("Wrong number of templates: want 1, got %d", l)
+			if l := len(tmpls); l != 1 {
+				t.Errorf("Wrong number of generators: want 1, got %d", l)
 			}
-			tmpl, ok := tmpls.annotationBased["test"]
-			if !ok {
-				t.Fatal("Expected template with key 'test' was not prepared")
+			gen := tmpls[0]
+			if gen.annotation != "test" {
+				t.Fatalf("Expected generator with annotation 'test', got %q", gen.annotation)
 			}
-			if tmpl.url == nil {
+			if gen.url == nil {
 				t.Errorf("url template is nil")
 			}
-			if tmpl.title == nil {
+			if gen.title == nil {
 				t.Errorf("title template is nil")
 			}
 		})
@@ -573,6 +573,206 @@ func TestAddGeneratedLinks_AutomaticLinks_FirstFunc(t *testing.T) {
 	link2 := c2.Metadata.Links[0]
 	if link2.URL != "https://grafana.example.com/service-2" {
 		t.Errorf("link2.URL = %q, want %q", link2.URL, "https://grafana.example.com/service-2")
+	}
+}
+
+func TestAddGeneratedLinks_AnnotationBasedMultiLinks(t *testing.T) {
+	repo := NewRepositoryWithConfig(Config{
+		AnnotationBasedLinks: map[string]*AnnotationBasedLink{
+			"example.com/app-name": {
+				URL:   "https://{{ .MultiLink.Value }}.example.com/apps/{{ .Annotation.Value }}",
+				Title: "Monitoring",
+				Icon:  "dashboard",
+				MultiLinks: []MultiLinkEntry{
+					{Label: "dev", Value: "dev"},
+					{Label: "staging", Value: "staging"},
+					{Label: "prod", Value: "prod"},
+				},
+			},
+		},
+	})
+	c := &catalog.Component{
+		Metadata: &catalog.Metadata{
+			Name: "my-service",
+			Annotations: map[string]string{
+				"example.com/app-name": "my-service",
+			},
+		},
+		Spec: &catalog.ComponentSpec{},
+	}
+	repo.AddEntity(c)
+
+	if err := repo.addGeneratedLinks(); err != nil {
+		t.Fatalf("addGeneratedLinks() error = %v", err)
+	}
+
+	if len(c.Metadata.Links) != 3 {
+		t.Fatalf("len(links) = %d, want 3", len(c.Metadata.Links))
+	}
+
+	// Links are sorted by title; all share the same group title so the sort
+	// falls through to URL: dev < prod < staging alphabetically.
+	want := []struct {
+		name  string
+		url   string
+		title string
+	}{
+		{"dev", "https://dev.example.com/apps/my-service", "Monitoring (dev)"},
+		{"prod", "https://prod.example.com/apps/my-service", "Monitoring (prod)"},
+		{"staging", "https://staging.example.com/apps/my-service", "Monitoring (staging)"},
+	}
+	for i, w := range want {
+		l := c.Metadata.Links[i]
+		if !l.IsGenerated {
+			t.Errorf("links[%d].IsGenerated = false, want true", i)
+		}
+		if l.URL != w.url {
+			t.Errorf("links[%d].URL = %q, want %q", i, l.URL, w.url)
+		}
+		if l.Title != w.title {
+			t.Errorf("links[%d].Title = %q, want %q", i, l.Title, w.title)
+		}
+		if l.Icon != "dashboard" {
+			t.Errorf("links[%d].Icon = %q, want %q", i, l.Icon, "dashboard")
+		}
+		if l.GroupInfo == nil {
+			t.Fatalf("links[%d].GroupInfo is nil", i)
+		}
+		if l.GroupInfo.Group != "Monitoring" {
+			t.Errorf("links[%d].GroupInfo.Group = %q, want %q", i, l.GroupInfo.Group, "Monitoring")
+		}
+		if l.GroupInfo.Label != w.name {
+			t.Errorf("links[%d].GroupInfo.Name = %q, want %q", i, l.GroupInfo.Label, w.name)
+		}
+	}
+}
+
+func TestAddGeneratedLinks_AutomaticMultiLinks(t *testing.T) {
+	repo := NewRepositoryWithConfig(Config{
+		AutomaticLinks: []*AutomaticLink{
+			{
+				Filter: "kind=component",
+				URL:    "https://{{ .MultiLink.Value }}.example.com/apps/{{ .Metadata.Name }}",
+				Title:  "Monitoring",
+				MultiLinks: []MultiLinkEntry{
+					{Label: "dev", Value: "dev"},
+					{Label: "prod", Value: "prod"},
+				},
+			},
+		},
+	})
+	c := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "my-service"},
+		Spec:     &catalog.ComponentSpec{},
+	}
+	repo.AddEntity(c)
+
+	if err := repo.addGeneratedLinks(); err != nil {
+		t.Fatalf("addGeneratedLinks() error = %v", err)
+	}
+
+	if len(c.Metadata.Links) != 2 {
+		t.Fatalf("len(links) = %d, want 2", len(c.Metadata.Links))
+	}
+
+	// Sorted by title then URL: "Monitoring (dev)" < "Monitoring (prod)"
+	want := []struct {
+		name  string
+		url   string
+		title string
+	}{
+		{"dev", "https://dev.example.com/apps/my-service", "Monitoring (dev)"},
+		{"prod", "https://prod.example.com/apps/my-service", "Monitoring (prod)"},
+	}
+	for i, w := range want {
+		l := c.Metadata.Links[i]
+		if !l.IsGenerated {
+			t.Errorf("links[%d].IsGenerated = false, want true", i)
+		}
+		if l.URL != w.url {
+			t.Errorf("links[%d].URL = %q, want %q", i, l.URL, w.url)
+		}
+		if l.Title != w.title {
+			t.Errorf("links[%d].Title = %q, want %q", i, l.Title, w.title)
+		}
+		if l.GroupInfo == nil {
+			t.Fatalf("links[%d].GroupInfo is nil", i)
+		}
+		if l.GroupInfo.Group != "Monitoring" {
+			t.Errorf("links[%d].GroupInfo.Group = %q, want %q", i, l.GroupInfo.Group, "Monitoring")
+		}
+		if l.GroupInfo.Label != w.name {
+			t.Errorf("links[%d].GroupInfo.Name = %q, want %q", i, l.GroupInfo.Label, w.name)
+		}
+	}
+}
+
+func TestAddGeneratedLinks_VersionedMultiLinks(t *testing.T) {
+	repo := NewRepositoryWithConfig(Config{
+		AnnotationBasedLinks: map[string]*AnnotationBasedLink{
+			"example.com/app-name": {
+				URL:   "https://{{ .MultiLink.Value }}.example.com/{{ .Annotation.Value }}/{{ .Version.RawVersion }}",
+				Title: "Docs ({{ .Version.RawVersion }})",
+				MultiLinks: []MultiLinkEntry{
+					{Label: "dev", Value: "dev"},
+					{Label: "prod", Value: "prod"},
+				},
+			},
+		},
+	})
+	api := &catalog.API{
+		Metadata: &catalog.Metadata{
+			Name: "my-api",
+			Annotations: map[string]string{
+				"example.com/app-name": "my-api",
+			},
+		},
+		Spec: &catalog.APISpec{
+			Versions: []*catalog.APISpecVersion{
+				{Version: catalog.Version{RawVersion: "v1"}},
+				{Version: catalog.Version{RawVersion: "v2"}},
+			},
+		},
+	}
+	repo.AddEntity(api)
+
+	if err := repo.addGeneratedLinks(); err != nil {
+		t.Fatalf("addGeneratedLinks() error = %v", err)
+	}
+
+	// 2 versions × 2 multiLinks = 4 links, sorted by title then URL.
+	// Titles: "Docs (v1) (dev)", "Docs (v1) (prod)", "Docs (v2) (dev)", "Docs (v2) (prod)"
+	if len(api.Metadata.Links) != 4 {
+		t.Fatalf("len(links) = %d, want 4", len(api.Metadata.Links))
+	}
+	want := []struct {
+		title string
+		url   string
+		group string
+		label string
+	}{
+		{"Docs (v1) (dev)", "https://dev.example.com/my-api/v1", "Docs (v1)", "dev"},
+		{"Docs (v1) (prod)", "https://prod.example.com/my-api/v1", "Docs (v1)", "prod"},
+		{"Docs (v2) (dev)", "https://dev.example.com/my-api/v2", "Docs (v2)", "dev"},
+		{"Docs (v2) (prod)", "https://prod.example.com/my-api/v2", "Docs (v2)", "prod"},
+	}
+	for i, w := range want {
+		l := api.Metadata.Links[i]
+		if l.Title != w.title {
+			t.Errorf("links[%d].Title = %q, want %q", i, l.Title, w.title)
+		}
+		if l.URL != w.url {
+			t.Errorf("links[%d].URL = %q, want %q", i, l.URL, w.url)
+		}
+		if l.GroupInfo == nil {
+			t.Fatalf("links[%d].GroupInfo is nil", i)
+		}
+		if l.GroupInfo.Group != w.group {
+			t.Errorf("links[%d].GroupInfo.Group = %q, want %q", i, l.GroupInfo.Group, w.group)
+		}
+		if l.GroupInfo.Label != w.label {
+			t.Errorf("links[%d].GroupInfo.Label = %q, want %q", i, l.GroupInfo.Label, w.label)
+		}
 	}
 }
 
