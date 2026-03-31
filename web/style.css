@@ -25,14 +25,8 @@
         font-size: 0.9em;
     }
 
-    /* --- Plugin Popover --- */
-    #plugin-popover {
-        inset: unset;
-        margin: 0;
-    }
-
-    /* --- Session Popover --- */
-    #session-popover {
+    /* --- Popovers --- */
+    .ui-popover {
         inset: unset;
         margin: 0;
     }
