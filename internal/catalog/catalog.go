@@ -73,6 +73,9 @@ type Entity interface {
 	GetOwner() *Ref
 	// Returns the spec.type of the entity, if one exists and is set.
 	GetType() string
+	// Returns the parent entity that contains this entity (e.g. System of a Component).
+	// Returns nil if the entity has no parent
+	GetParent() *Ref
 
 	// GetSourceInfo returns internal bookkeeping data, e.g. for error logging
 	// and reconstructing YAML files (retaining the exact structure including comments).
@@ -500,14 +503,21 @@ func (v Version) String() string {
 	return v.RawVersion
 }
 
-func (c *Component) GetKind() Kind              { return KindComponent }
-func (c *Component) GetMetadata() *Metadata     { return c.Metadata }
-func (c *Component) GetRef() *Ref               { return newRef(KindComponent, c.Metadata) }
-func (c *Component) GetQName() string           { return c.Metadata.QName() }
-func (c *Component) GetType() string            { return c.Spec.Type }
-func (c *Component) GetOwner() *Ref             { return c.Spec.Owner }
-func (c *Component) GetLifecycle() string       { return c.Spec.Lifecycle }
-func (c *Component) GetSystem() *Ref            { return c.Spec.System }
+func (c *Component) GetKind() Kind          { return KindComponent }
+func (c *Component) GetMetadata() *Metadata { return c.Metadata }
+func (c *Component) GetRef() *Ref           { return newRef(KindComponent, c.Metadata) }
+func (c *Component) GetQName() string       { return c.Metadata.QName() }
+func (c *Component) GetType() string        { return c.Spec.Type }
+func (c *Component) GetOwner() *Ref         { return c.Spec.Owner }
+func (c *Component) GetLifecycle() string   { return c.Spec.Lifecycle }
+func (c *Component) GetSystem() *Ref        { return c.Spec.System }
+func (c *Component) GetParent() *Ref {
+	if c.Spec.SubcomponentOf != nil {
+		return c.Spec.SubcomponentOf
+	}
+	return c.Spec.System
+}
+
 func (c *Component) GetDependents() []*LabelRef { return c.Spec.inv.dependents }
 func (c *Component) AddDependent(d *LabelRef) {
 	c.Spec.inv.dependents = append(c.Spec.inv.dependents, d)
@@ -551,6 +561,7 @@ func (s *System) GetComponents() []*Ref            { return s.Spec.inv.component
 func (s *System) GetAPIs() []*Ref                  { return s.Spec.inv.apis }
 func (s *System) GetResources() []*Ref             { return s.Spec.inv.resources }
 func (s *System) GetSystem() *Ref                  { return s.GetRef() }
+func (c *System) GetParent() *Ref                  { return c.Spec.Domain }
 func (s *System) AddAPI(a *Ref)                    { s.Spec.inv.apis = append(s.Spec.inv.apis, a) }
 func (s *System) AddComponent(c *Ref)              { s.Spec.inv.components = append(s.Spec.inv.components, c) }
 func (s *System) AddResource(r *Ref)               { s.Spec.inv.resources = append(s.Spec.inv.resources, r) }
@@ -575,6 +586,7 @@ func (d *Domain) GetRef() *Ref                     { return newRef(KindDomain, d
 func (d *Domain) GetQName() string                 { return d.Metadata.QName() }
 func (d *Domain) GetType() string                  { return d.Spec.Type }
 func (d *Domain) GetOwner() *Ref                   { return d.Spec.Owner }
+func (d *Domain) GetParent() *Ref                  { return d.Spec.SubdomainOf }
 func (d *Domain) GetSystems() []*Ref               { return d.Spec.inv.systems }
 func (d *Domain) AddSystem(s *Ref)                 { d.Spec.inv.systems = append(d.Spec.inv.systems, s) }
 func (d *Domain) GetSourceInfo() *api.SourceInfo   { return d.sourceInfo }
@@ -600,6 +612,7 @@ func (a *API) GetOwner() *Ref                   { return a.Spec.Owner }
 func (a *API) GetProviders() []*LabelRef        { return a.Spec.inv.providers }
 func (a *API) GetConsumers() []*LabelRef        { return a.Spec.inv.consumers }
 func (a *API) GetSystem() *Ref                  { return a.Spec.System }
+func (a *API) GetParent() *Ref                  { return a.Spec.System }
 func (a *API) AddProvider(p *LabelRef)          { a.Spec.inv.providers = append(a.Spec.inv.providers, p) }
 func (a *API) AddConsumer(c *LabelRef)          { a.Spec.inv.consumers = append(a.Spec.inv.consumers, c) }
 func (a *API) GetSourceInfo() *api.SourceInfo   { return a.sourceInfo }
@@ -624,6 +637,7 @@ func (r *Resource) GetType() string            { return r.Spec.Type }
 func (r *Resource) GetOwner() *Ref             { return r.Spec.Owner }
 func (r *Resource) GetDependents() []*LabelRef { return r.Spec.inv.dependents }
 func (r *Resource) GetSystem() *Ref            { return r.Spec.System }
+func (r *Resource) GetParent() *Ref            { return r.Spec.System }
 func (r *Resource) AddDependent(d *LabelRef) {
 	r.Spec.inv.dependents = append(r.Spec.inv.dependents, d)
 }
@@ -647,6 +661,7 @@ func (g *Group) GetRef() *Ref                     { return newRef(KindGroup, g.M
 func (g *Group) GetQName() string                 { return g.Metadata.QName() }
 func (g *Group) GetType() string                  { return g.Spec.Type }
 func (g *Group) GetOwner() *Ref                   { return g.Spec.Parent }
+func (g *Group) GetParent() *Ref                  { return g.Spec.Parent }
 func (g *Group) GetDisplayName() string           { return g.Spec.Profile.DisplayName }
 func (g *Group) GetSourceInfo() *api.SourceInfo   { return g.sourceInfo }
 func (g *Group) SetSourceInfo(si *api.SourceInfo) { g.sourceInfo = si }

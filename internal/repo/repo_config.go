@@ -65,14 +65,20 @@ type AnnotationBasedLink struct {
 	// for the same parameterized URL. Useful e.g. to generate links
 	// for multiple environments.
 	MultiLinks []MultiLinkEntry `yaml:"multiLinks,omitempty"`
+	// An optional reference to a multi-link annotation. If present,
+	// MultiLinkEntry items are read from the entity annotation
+	// swcat/data-{MultiLinkData}
+	// which has to be a valid JSON list of MultiLinkEntry items, e.g.
+	// [{"label": "dev", "value": "development.cloud.net"}].
+	MultiLinkData string `yaml:"multiLinkData,omitempty"`
 }
 
 // MultiLinkEntry defines a single named value used in multiLinks expansion.
 // The Label is the per-link label (e.g. "dev") and Value is substituted into
 // URL/title templates via {{ .MultiLink.Value }}.
 type MultiLinkEntry struct {
-	Label string `yaml:"label"`
-	Value string `yaml:"value"`
+	Label string `yaml:"label" json:"label"`
+	Value string `yaml:"value" json:"value"`
 }
 
 type AutomaticLink struct {
@@ -96,6 +102,12 @@ type AutomaticLink struct {
 	// for the same parameterized URL. Useful e.g. to generate links
 	// for multiple environments.
 	MultiLinks []MultiLinkEntry `yaml:"multiLinks,omitempty"`
+	// An optional reference to a multi-link annotation. If present,
+	// MultiLinkEntry items are read from the entity annotation
+	// swcat/data-{MultiLinkData}
+	// which has to be a valid JSON list of MultiLinkEntry items, e.g.
+	// [{"label": "dev", "value": "development.cloud.net"}].
+	MultiLinkData string `yaml:"multiLinkData,omitempty"`
 }
 
 // Config holds repository-specific application configuration.

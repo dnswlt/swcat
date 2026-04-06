@@ -6,13 +6,13 @@
             {{ range groupLinks .Metadata.Links }}
             <li class="flex items-center gap-1.5 text-gray-400">
                 {{ linkIcon (index .Links 0).Icon }}
-                {{ if eq (len .Links) 1 }}
+                {{ if .IsGroup }}
+                    <span class="text-gray-600 font-medium">{{ .Title }}</span>{{range .Links}}<a href="{{ .URL }}" class="rounded px-1.5 py-0.5 text-sm bg-blue-50 text-blue-700 hover:bg-blue-100" target="_blank">{{.GroupInfo.Label}}</a>{{end}}
+                {{ else }}
                     {{- $l := index .Links 0 }}
                     <a href="{{ $l.URL }}" class="text-blue-600 hover:underline" target="_blank">
                         {{ if $l.Title }}{{ $l.Title }}{{ else }}{{ $l.URL }}{{ end }}
                     </a>
-                {{ else }}
-                    <span class="text-gray-600 font-medium">{{ .Title }}</span>{{range .Links}}<a href="{{ .URL }}" class="rounded px-1.5 py-0.5 text-sm bg-blue-50 text-blue-700 hover:bg-blue-100" target="_blank">{{.GroupInfo.Label}}</a>{{end}}
                 {{ end }}
             </li>
             {{ end }}

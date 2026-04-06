@@ -63,6 +63,14 @@ catalog:
           value: dev
         - label: prod
           value: prod
+    hexz.me/logging:
+      url: https://example.com/logs/{{ .MultiLink.Value }}/{{ .Metadata.Name }}
+      title: Logs
+      icon: logs
+      multiLinkData: environments
+      multiLinks:
+        - label: main
+          value: main
     hexz.me/asyncapi:
       url: https://example.com/repos/apis/{{.MultiLink.Value}}/{{ .Annotation.Value }}_{{ .Version.Major }}
       title: API Schema ({{ .Version }})
@@ -75,7 +83,7 @@ catalog:
   automaticLinks:
       - filter: |
           kind=component AND (system=flights-search OR system=flights-tickets)
-        url: https://grafana.example.com/dashboards/prod/{{ first (index .Metadata.Annotations "hexz.me/monitoring") .Metadata.Name }}
+        url: https://grafana.example.com/dashboards/prod/{{ first (.IAnnotation "hexz.me/monitoring") .Metadata.Name }}
         title: Monitoring
   validation:
     api:

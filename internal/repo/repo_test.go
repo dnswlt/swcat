@@ -776,6 +776,150 @@ func TestAddGeneratedLinks_VersionedMultiLinks(t *testing.T) {
 	}
 }
 
+func TestAddGeneratedLinks_AnnotationBasedMultiLinkData(t *testing.T) {
+	repo := NewRepositoryWithConfig(Config{
+		AnnotationBasedLinks: map[string]*AnnotationBasedLink{
+			"example.com/logging": {
+				URL:           "https://logs.example.com/{{ .MultiLink.Value }}/{{ .Metadata.Name }}",
+				Title:         "Logs",
+				Icon:          "logs",
+				MultiLinkData: "environments",
+			},
+		},
+	})
+	c := &catalog.Component{
+		Metadata: &catalog.Metadata{
+			Name: "my-service",
+			Annotations: map[string]string{
+				"example.com/logging": "true",
+				"swcat/data-environments": `[
+					{"label": "dev", "value": "development"},
+					{"label": "prod", "value": "production"}
+				]`,
+			},
+		},
+		Spec: &catalog.ComponentSpec{},
+	}
+	repo.AddEntity(c)
+
+	if err := repo.addGeneratedLinks(); err != nil {
+		t.Fatalf("addGeneratedLinks() error = %v", err)
+	}
+
+	if len(c.Metadata.Links) != 2 {
+		t.Fatalf("len(links) = %d, want 2", len(c.Metadata.Links))
+	}
+
+	// Sorted by title then URL: "Logs (dev)" < "Logs (prod)"
+	want := []struct {
+		label string
+		url   string
+		title string
+	}{
+		{"dev", "https://logs.example.com/development/my-service", "Logs (dev)"},
+		{"prod", "https://logs.example.com/production/my-service", "Logs (prod)"},
+	}
+	for i, w := range want {
+		l := c.Metadata.Links[i]
+		if !l.IsGenerated {
+			t.Errorf("links[%d].IsGenerated = false, want true", i)
+		}
+		if l.URL != w.url {
+			t.Errorf("links[%d].URL = %q, want %q", i, l.URL, w.url)
+		}
+		if l.Title != w.title {
+			t.Errorf("links[%d].Title = %q, want %q", i, l.Title, w.title)
+		}
+		if l.Icon != "logs" {
+			t.Errorf("links[%d].Icon = %q, want %q", i, l.Icon, "logs")
+		}
+		if l.GroupInfo == nil {
+			t.Fatalf("links[%d].GroupInfo is nil", i)
+		}
+		if l.GroupInfo.Group != "Logs" {
+			t.Errorf("links[%d].GroupInfo.Group = %q, want %q", i, l.GroupInfo.Group, "Logs")
+		}
+		if l.GroupInfo.Label != w.label {
+			t.Errorf("links[%d].GroupInfo.Label = %q, want %q", i, l.GroupInfo.Label, w.label)
+		}
+	}
+}
+
+func TestAddGeneratedLinks_AutomaticMultiLinkData(t *testing.T) {
+	// The multiLinkData annotation is on the parent system, not the component itself.
+	// IAnnotation should traverse upward to find it.
+	repo := NewRepositoryWithConfig(Config{
+		AutomaticLinks: []*AutomaticLink{
+			{
+				Filter:        "kind=component",
+				URL:           "https://logs.example.com/{{ .MultiLink.Value }}/{{ .Metadata.Name }}",
+				Title:         "Logs",
+				Icon:          "logs",
+				MultiLinkData: "environments",
+			},
+		},
+	})
+	sys := &catalog.System{
+		Metadata: &catalog.Metadata{
+			Name: "my-system",
+			Annotations: map[string]string{
+				"swcat/data-environments": `[
+					{"label": "dev", "value": "development"},
+					{"label": "prod", "value": "production"}
+				]`,
+			},
+		},
+		Spec: &catalog.SystemSpec{},
+	}
+	c := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "my-service"},
+		Spec: &catalog.ComponentSpec{
+			System: &catalog.Ref{Kind: catalog.KindSystem, Name: "my-system"},
+		},
+	}
+	repo.AddEntity(sys)
+	repo.AddEntity(c)
+
+	if err := repo.addGeneratedLinks(); err != nil {
+		t.Fatalf("addGeneratedLinks() error = %v", err)
+	}
+
+	if len(c.Metadata.Links) != 2 {
+		t.Fatalf("len(links) = %d, want 2", len(c.Metadata.Links))
+	}
+
+	// Sorted by title then URL: "Logs (dev)" < "Logs (prod)"
+	want := []struct {
+		label string
+		url   string
+		title string
+	}{
+		{"dev", "https://logs.example.com/development/my-service", "Logs (dev)"},
+		{"prod", "https://logs.example.com/production/my-service", "Logs (prod)"},
+	}
+	for i, w := range want {
+		l := c.Metadata.Links[i]
+		if !l.IsGenerated {
+			t.Errorf("links[%d].IsGenerated = false, want true", i)
+		}
+		if l.URL != w.url {
+			t.Errorf("links[%d].URL = %q, want %q", i, l.URL, w.url)
+		}
+		if l.Title != w.title {
+			t.Errorf("links[%d].Title = %q, want %q", i, l.Title, w.title)
+		}
+		if l.GroupInfo == nil {
+			t.Fatalf("links[%d].GroupInfo is nil", i)
+		}
+		if l.GroupInfo.Group != "Logs" {
+			t.Errorf("links[%d].GroupInfo.Group = %q, want %q", i, l.GroupInfo.Group, "Logs")
+		}
+		if l.GroupInfo.Label != w.label {
+			t.Errorf("links[%d].GroupInfo.Label = %q, want %q", i, l.GroupInfo.Label, w.label)
+		}
+	}
+}
+
 func TestRepository_SpecFieldValues(t *testing.T) {
 	repo := NewRepository()
 

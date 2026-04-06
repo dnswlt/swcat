@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
-	"maps"
 	"net/url"
 	"regexp"
 	"slices"
@@ -888,51 +887,128 @@ var templateFuncs = template.FuncMap{
 	},
 }
 
+type nameval struct {
+	Name  string
+	Value string
+}
+
+// linkTemplateContext holds the values and provides the methods that
+// are available in the context of URL and title generating templates.
+type linkTemplateContext struct {
+	// repo and entity are used by this type's methods to retrieve data.
+	repo   *Repository
+	entity catalog.Entity
+
+	// Fields containing specific contextual data relevant to the link generation.
+	Annotation nameval
+	Version    *catalog.Version
+	MultiLink  MultiLinkEntry
+}
+
+func (c *linkTemplateContext) Metadata() *catalog.Metadata {
+	return c.entity.GetMetadata()
+}
+
+func (c *linkTemplateContext) GetAnnotation(key string) string {
+	return c.entity.GetMetadata().Annotations[key]
+}
+
+func (c *linkTemplateContext) IAnnotation(key string) string {
+	e := c.entity
+	for e != nil {
+		if v, ok := e.GetMetadata().Annotations[key]; ok {
+			return v
+		}
+		r := e.GetParent()
+		if r == nil {
+			break
+		}
+		e = c.repo.Entity(r)
+	}
+	return ""
+}
+
+func (c *linkTemplateContext) Label(key string) string {
+	return c.entity.GetMetadata().Labels[key]
+}
+
+func (c *linkTemplateContext) ILabel(key string) string {
+	e := c.entity
+	for e != nil {
+		if v, ok := e.GetMetadata().Labels[key]; ok {
+			return v
+		}
+		r := e.GetParent()
+		if r == nil {
+			break
+		}
+		e = c.repo.Entity(r)
+	}
+	return ""
+}
+
 // linkGenerator holds compiled templates and metadata for one auto-generated link rule.
 // Exactly one of annotation or eval is set, determining when the rule fires.
 type linkGenerator struct {
-	url        *template.Template
-	title      *template.Template
-	icon       string
-	typ        string
-	hasVersion bool             // if true, generates per-version links for versioned APIs
-	multiLinks []MultiLinkEntry // if non-empty, generates per-entry links
-	annotation string           // annotation-based: fire when entity has this annotation
-	eval       *query.Evaluator // automatic: fire when entity matches this filter
+	url           *template.Template
+	title         *template.Template
+	icon          string
+	typ           string
+	hasVersion    bool             // if true, generates per-version links for versioned APIs
+	multiLinks    []MultiLinkEntry // if non-empty, generates per-entry links
+	multiLinkData string           // if non-empty, generates per-entry links from the swcat/data-{multiLinkData} annotation.
+	annotation    string           // annotation-based: fire when entity has this annotation
+	eval          *query.Evaluator // automatic: fire when entity matches this filter
 }
 
 // renderURL executes the URL template and validates the result.
-func (g *linkGenerator) renderURL(data map[string]any, errCtx string) (string, error) {
+func (g *linkGenerator) renderURL(data linkTemplateContext) (string, error) {
 	var sb strings.Builder
-	if err := g.url.Execute(&sb, data); err != nil {
-		return "", fmt.Errorf("failed to execute URL template in %s: %v", errCtx, err)
+	// Need to pass &data here so the pointer receiver methods are available.
+	if err := g.url.Execute(&sb, &data); err != nil {
+		return "", fmt.Errorf("failed to execute URL template for %v: %v", data.entity.GetRef(), err)
 	}
 	u := sb.String()
 	if !isValidAbsoluteURL(u) {
-		return "", fmt.Errorf("invalid URL in %s: %q", errCtx, u)
+		return "", fmt.Errorf("invalid URL for %v: %q", data.entity.GetRef(), u)
 	}
 	return u, nil
 }
 
 // renderTitle executes the title template.
-func (g *linkGenerator) renderTitle(data map[string]any, errCtx string) (string, error) {
+func (g *linkGenerator) renderTitle(data linkTemplateContext) (string, error) {
 	var sb strings.Builder
-	if err := g.title.Execute(&sb, data); err != nil {
-		return "", fmt.Errorf("failed to execute title template in %s: %v", errCtx, err)
+	// Need to pass &data here so the pointer receiver methods are available.
+	if err := g.title.Execute(&sb, &data); err != nil {
+		return "", fmt.Errorf("failed to execute title template in entity %v: %v", data.entity.GetRef(), err)
 	}
 	return sb.String(), nil
 }
 
 // generateLinks produces all links for entity e.
-// annotValue is the resolved annotation value for annotation-based generators, empty for filter-based ones.
-func (g *linkGenerator) generateLinks(e catalog.Entity, annotValue string) ([]*catalog.Link, error) {
-	errCtx := fmt.Sprintf("entity %v", e.GetRef())
-	baseData := map[string]any{"Metadata": e.GetMetadata()}
+func (g *linkGenerator) generateLinks(r *Repository, e catalog.Entity) ([]*catalog.Link, error) {
+	baseCtx := linkTemplateContext{repo: r, entity: e}
 	if g.annotation != "" {
-		baseData["Annotation"] = map[string]string{"Key": g.annotation, "Value": annotValue}
+		if annotValue, ok := e.GetMetadata().Annotations[g.annotation]; ok {
+			baseCtx.Annotation = nameval{g.annotation, annotValue}
+		}
 	}
 
-	if len(g.multiLinks) > 0 {
+	multiLinks := g.multiLinks
+	if g.multiLinkData != "" {
+		// Find multi-links via annotation reference.
+		v := baseCtx.IAnnotation("swcat/data-" + g.multiLinkData)
+		if v != "" {
+			var entries []MultiLinkEntry
+			if err := json.Unmarshal([]byte(v), &entries); err != nil {
+				return nil, fmt.Errorf("invalid JSON in annotation swcat/data-%s for %v: %v",
+					g.multiLinkData, e.GetRef(), err)
+			}
+			multiLinks = entries
+		}
+	}
+
+	if len(multiLinks) > 0 {
 		// Collect versions to iterate over. For non-versioned entities (or when
 		// hasVersion is false) we use a single nil entry to run the loop once.
 		var versions []*catalog.Version
@@ -946,21 +1022,21 @@ func (g *linkGenerator) generateLinks(e catalog.Entity, annotValue string) ([]*c
 		if len(versions) == 0 {
 			versions = []*catalog.Version{nil}
 		}
-		links := make([]*catalog.Link, 0, len(versions)*len(g.multiLinks))
+		links := make([]*catalog.Link, 0, len(versions)*len(multiLinks))
 		for _, ver := range versions {
 			// Build per-version data (without MultiLink) to render the group title.
-			verData := maps.Clone(baseData)
+			verCtx := baseCtx
 			if ver != nil {
-				verData["Version"] = ver
+				verCtx.Version = ver
 			}
-			groupTitle, err := g.renderTitle(verData, errCtx)
+			groupTitle, err := g.renderTitle(verCtx)
 			if err != nil {
 				return nil, err
 			}
-			for _, ml := range g.multiLinks {
-				data := maps.Clone(verData)
-				data["MultiLink"] = ml
-				u, err := g.renderURL(data, errCtx)
+			for _, ml := range multiLinks {
+				mlCtx := verCtx
+				mlCtx.MultiLink = ml
+				u, err := g.renderURL(mlCtx)
 				if err != nil {
 					return nil, err
 				}
@@ -981,13 +1057,13 @@ func (g *linkGenerator) generateLinks(e catalog.Entity, annotValue string) ([]*c
 		if ap, ok := e.(*catalog.API); ok && len(ap.Spec.Versions) > 0 {
 			links := make([]*catalog.Link, 0, len(ap.Spec.Versions))
 			for _, ver := range ap.Spec.Versions {
-				data := maps.Clone(baseData)
-				data["Version"] = &ver.Version
-				u, err := g.renderURL(data, errCtx)
+				verCtx := baseCtx
+				verCtx.Version = &ver.Version
+				u, err := g.renderURL(verCtx)
 				if err != nil {
 					return nil, err
 				}
-				title, err := g.renderTitle(data, errCtx)
+				title, err := g.renderTitle(verCtx)
 				if err != nil {
 					return nil, err
 				}
@@ -1004,11 +1080,11 @@ func (g *linkGenerator) generateLinks(e catalog.Entity, annotValue string) ([]*c
 	}
 
 	// Single link (no multi-links, no multiple versions).
-	u, err := g.renderURL(baseData, errCtx)
+	u, err := g.renderURL(baseCtx)
 	if err != nil {
 		return nil, err
 	}
-	title, err := g.renderTitle(baseData, errCtx)
+	title, err := g.renderTitle(baseCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -1053,13 +1129,14 @@ func (r *Repository) prepareLinkTemplates() ([]linkGenerator, error) {
 			return nil, err
 		}
 		generators = append(generators, linkGenerator{
-			url:        urlTmpl,
-			title:      titleTmpl,
-			icon:       abl.Icon,
-			typ:        abl.Type,
-			hasVersion: versionPlaceholderRE.MatchString(abl.URL + " " + abl.Title),
-			multiLinks: abl.MultiLinks,
-			annotation: annot,
+			url:           urlTmpl,
+			title:         titleTmpl,
+			icon:          abl.Icon,
+			typ:           abl.Type,
+			hasVersion:    versionPlaceholderRE.MatchString(abl.URL + " " + abl.Title),
+			multiLinks:    abl.MultiLinks,
+			multiLinkData: abl.MultiLinkData,
+			annotation:    annot,
 		})
 	}
 
@@ -1082,12 +1159,13 @@ func (r *Repository) prepareLinkTemplates() ([]linkGenerator, error) {
 			return nil, err
 		}
 		generators = append(generators, linkGenerator{
-			url:        urlTmpl,
-			title:      titleTmpl,
-			icon:       al.Icon,
-			typ:        al.Type,
-			multiLinks: al.MultiLinks,
-			eval:       query.NewEvaluator(expr),
+			url:           urlTmpl,
+			title:         titleTmpl,
+			icon:          al.Icon,
+			typ:           al.Type,
+			multiLinks:    al.MultiLinks,
+			multiLinkData: al.MultiLinkData,
+			eval:          query.NewEvaluator(expr),
 		})
 	}
 
@@ -1111,13 +1189,11 @@ func (r *Repository) addGeneratedLinks() error {
 		var links []*catalog.Link
 		for i := range tmpls {
 			g := &tmpls[i]
-			var annotValue string
 			if g.annotation != "" {
 				value, ok := meta.Annotations[g.annotation]
 				if !ok || value == "" {
 					continue
 				}
-				annotValue = value
 			} else {
 				matches, err := g.eval.Matches(e)
 				if err != nil {
@@ -1127,7 +1203,7 @@ func (r *Repository) addGeneratedLinks() error {
 					continue
 				}
 			}
-			newLinks, err := g.generateLinks(e, annotValue)
+			newLinks, err := g.generateLinks(r, e)
 			if err != nil {
 				return err
 			}

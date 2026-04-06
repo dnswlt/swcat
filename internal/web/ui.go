@@ -434,10 +434,11 @@ func linkIcon(icon string) template.HTML {
 // LinkGroup groups one or more catalog.Links for rendering.
 // Ungrouped links have a single entry in Links; grouped multi-env links share a Title.
 type LinkGroup struct {
-	Title string
-	Icon  string
-	Type  string
-	Links []*catalog.Link
+	Title   string
+	Icon    string
+	Type    string
+	IsGroup bool // true if this group represents a named group (size >= 1).
+	Links   []*catalog.Link
 }
 
 // groupLinks partitions links into LinkGroups. Links with a non-empty GroupInfo.Group
@@ -454,9 +455,10 @@ func groupLinks(links []*catalog.Link) []LinkGroup {
 				idx = len(groups)
 				groupIndex[l.GroupInfo.Group] = idx
 				groups = append(groups, LinkGroup{
-					Title: l.GroupInfo.Group,
-					Icon:  l.Icon,
-					Type:  l.Type,
+					Title:   l.GroupInfo.Group,
+					Icon:    l.Icon,
+					Type:    l.Type,
+					IsGroup: true,
 				})
 			}
 			groups[idx].Links = append(groups[idx].Links, l)

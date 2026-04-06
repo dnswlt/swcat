@@ -58,6 +58,13 @@ metadata:
   name: flights-tickets
   title: Flights Tickets
   description: Handles flight ticket purchases.
+  annotations:
+    swcat/data-environments: |
+      [
+        {"label": "dev1", "value": "dev1"},
+        {"label": "dev2", "value": "dev2"},
+        {"label": "prod", "value": "production"}
+      ]
 spec:
   owner: flights-owner
   domain: flights
@@ -126,6 +133,8 @@ kind: Component
 metadata:
   name: cache-loader
   description: Populates the flight cache.
+  annotations:
+    hexz.me/logging: true
 spec:
   type: job
   lifecycle: production
@@ -283,6 +292,8 @@ metadata:
   description: >
     Handles internal payments and sends payment data to Vendor Alpha. This is a special case for Vendor Alpha, which lets us handle the payment.
 
+  annotations:
+    hexz.me/logging: true
 spec:
   type: service
   lifecycle: production
