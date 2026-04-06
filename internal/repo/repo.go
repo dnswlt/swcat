@@ -874,8 +874,8 @@ func isValidAbsoluteURL(s string) bool {
 	return u.Scheme != "" && u.Host != ""
 }
 
-// templateFuncs defines custom template functions available in link templates.
-var templateFuncs = template.FuncMap{
+// linkTemplateFuncs defines custom template functions available in link templates.
+var linkTemplateFuncs = template.FuncMap{
 	// first returns the first non-empty string from the given arguments.
 	"first": func(args ...string) string {
 		for _, arg := range args {
@@ -884,6 +884,34 @@ var templateFuncs = template.FuncMap{
 			}
 		}
 		return ""
+	},
+	// pathEscape percent-encodes a string for use in URL path segments.
+	"pathEscape": url.PathEscape,
+	// queryParams builds url.Values from an even-numbered list of key-value pairs.
+	"queryParams": func(kvs ...string) (url.Values, error) {
+		if len(kvs)%2 != 0 {
+			return nil, fmt.Errorf("queryParams: requires even number of arguments, got %d", len(kvs))
+		}
+		v := url.Values{}
+		for i := 0; i < len(kvs); i += 2 {
+			v.Add(kvs[i], kvs[i+1])
+		}
+		return v, nil
+	},
+	// addQueryParams appends query parameters to a base URL, merging with any existing ones.
+	"addQueryParams": func(base string, params url.Values) (string, error) {
+		u, err := url.Parse(base)
+		if err != nil {
+			return "", fmt.Errorf("addQueryParams: invalid base URL: %w", err)
+		}
+		q := u.Query()
+		for k, vs := range params {
+			for _, val := range vs {
+				q.Add(k, val)
+			}
+		}
+		u.RawQuery = q.Encode()
+		return u.String(), nil
 	},
 }
 
@@ -1099,12 +1127,12 @@ func (g *linkGenerator) generateLinks(r *Repository, e catalog.Entity) ([]*catal
 
 // compileLinkTemplates compiles a URL+title template pair, applying missingkey=error.
 func compileLinkTemplates(urlStr, titleStr, errContext string) (*template.Template, *template.Template, error) {
-	urlTmpl, err := template.New("url").Funcs(templateFuncs).Parse(urlStr)
+	urlTmpl, err := template.New("url").Funcs(linkTemplateFuncs).Parse(urlStr)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid URL template for %s: %v", errContext, err)
 	}
 	urlTmpl.Option("missingkey=error")
-	titleTmpl, err := template.New("title").Funcs(templateFuncs).Parse(titleStr)
+	titleTmpl, err := template.New("title").Funcs(linkTemplateFuncs).Parse(titleStr)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid title template for %s: %v", errContext, err)
 	}

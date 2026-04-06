@@ -55,14 +55,13 @@ catalog:
   # Create links for entities with certain annotations.
   annotationBasedLinks:
     hexz.me/repo:
-      url: https://example.com/projects/{{ .Annotation.Value }}/repos/{{ .Metadata.Name }}/{{ .MultiLink.Value }}
+      url: |-
+        {{ addQueryParams (printf "https://code.example.com/projects/%s/repos/%s" .Annotation.Value .Metadata.Name)
+             (queryParams 
+                "branch" "main" 
+                "ns" .Metadata.Namespace ) }}
       title: Source code
       icon: code
-      multiLinks:
-        - label: dev
-          value: dev
-        - label: prod
-          value: prod
     hexz.me/logging:
       url: https://example.com/logs/{{ .MultiLink.Value }}/{{ .Metadata.Name }}
       title: Logs
