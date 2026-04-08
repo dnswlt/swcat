@@ -78,7 +78,7 @@ type AnnotationBasedLink struct {
 // URL/title templates via {{ .MultiLink.Value }}.
 type MultiLinkEntry struct {
 	Label string `yaml:"label" json:"label"`
-	Value string `yaml:"value" json:"value"`
+	Value any    `yaml:"value" json:"value"`
 }
 
 type AutomaticLink struct {

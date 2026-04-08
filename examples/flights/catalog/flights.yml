@@ -61,9 +61,9 @@ metadata:
   annotations:
     swcat/data-environments: |
       [
-        {"label": "dev1", "value": "dev1"},
-        {"label": "dev2", "value": "dev2"},
-        {"label": "prod", "value": "production"}
+        {"label": "dev1", "value": { "logName": "dev1" } },
+        {"label": "dev2", "value": { "logName": "dev2" } },
+        {"label": "prod", "value": { "logName": "production" } }
       ]
 spec:
   owner: flights-owner

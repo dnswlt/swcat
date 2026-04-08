@@ -63,13 +63,14 @@ catalog:
       title: Source code
       icon: code
     hexz.me/logging:
-      url: https://example.com/logs/{{ .MultiLink.Value }}/{{ .Metadata.Name }}
+      url: https://example.com/logs/{{ .MultiLink.Value.logName }}/{{ .Metadata.Name }}
       title: Logs
       icon: logs
       multiLinkData: environments
       multiLinks:
         - label: main
-          value: main
+          value: 
+            logName: main
     hexz.me/asyncapi:
       url: https://example.com/repos/apis/{{.MultiLink.Value}}/{{ .Annotation.Value }}_{{ .Version.Major }}
       title: API Schema ({{ .Version }})
