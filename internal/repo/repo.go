@@ -937,6 +937,28 @@ func (c *linkTemplateContext) Metadata() *catalog.Metadata {
 	return c.entity.GetMetadata()
 }
 
+func (c *linkTemplateContext) System() *catalog.System {
+	switch x := c.entity.(type) {
+	case *catalog.System:
+		return x
+	case catalog.SystemPart:
+		return c.repo.System(x.GetSystem())
+	default:
+		return nil
+	}
+}
+
+func (c *linkTemplateContext) Domain() *catalog.Domain {
+	if d, ok := c.entity.(*catalog.Domain); ok {
+		return d
+	}
+	sys := c.System()
+	if sys == nil {
+		return nil
+	}
+	return c.repo.Domain(sys.Spec.Domain)
+}
+
 func (c *linkTemplateContext) GetAnnotation(key string) string {
 	return c.entity.GetMetadata().Annotations[key]
 }
