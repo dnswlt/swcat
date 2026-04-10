@@ -795,6 +795,7 @@ func (r *Repository) populateRelationships() {
 		if s := c.Spec.System; s != nil {
 			system := r.System(s)
 			system.AddComponent(ref)
+			c.Spec.Domain = system.GetDomain()
 		}
 		// Register in parent component
 		if p := c.Spec.SubcomponentOf; p != nil {
@@ -813,6 +814,7 @@ func (r *Repository) populateRelationships() {
 		if s := res.Spec.System; s != nil {
 			system := r.System(s)
 			system.AddResource(ref)
+			res.Spec.Domain = system.GetDomain()
 		}
 		// Register in "DependsOn" dependencies.
 		for _, d := range res.Spec.DependsOn {
@@ -826,6 +828,7 @@ func (r *Repository) populateRelationships() {
 		if s := ap.Spec.System; s != nil {
 			system := r.System(s)
 			system.AddAPI(ref)
+			ap.Spec.Domain = system.GetDomain()
 		}
 	}
 

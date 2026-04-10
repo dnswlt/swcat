@@ -1071,3 +1071,49 @@ func TestRepository_SurroundingSystems(t *testing.T) {
 		t.Errorf("surrounding systems = %v, want %v", names, want)
 	}
 }
+
+func TestRepository_PopulateDomain(t *testing.T) {
+	r := NewRepository()
+
+	owner := &catalog.Ref{Kind: catalog.KindGroup, Name: "o"}
+	domainRef := &catalog.Ref{Kind: catalog.KindDomain, Name: "d"}
+	systemRef := &catalog.Ref{Kind: catalog.KindSystem, Name: "s"}
+
+	g := &catalog.Group{Metadata: &catalog.Metadata{Name: "o"}, Spec: &catalog.GroupSpec{Type: "team"}}
+	d := &catalog.Domain{Metadata: &catalog.Metadata{Name: "d"}, Spec: &catalog.DomainSpec{Owner: owner}}
+	s := &catalog.System{Metadata: &catalog.Metadata{Name: "s"}, Spec: &catalog.SystemSpec{Owner: owner, Domain: domainRef}}
+
+	c := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "c"},
+		Spec:     &catalog.ComponentSpec{Type: "service", Lifecycle: "prod", Owner: owner, System: systemRef},
+	}
+	res := &catalog.Resource{
+		Metadata: &catalog.Metadata{Name: "r"},
+		Spec:     &catalog.ResourceSpec{Type: "database", Owner: owner, System: systemRef},
+	}
+	a := &catalog.API{
+		Metadata: &catalog.Metadata{Name: "a"},
+		Spec:     &catalog.APISpec{Type: "openapi", Lifecycle: "stable", Owner: owner, System: systemRef},
+	}
+
+	entities := []catalog.Entity{g, d, s, c, res, a}
+	for _, e := range entities {
+		if err := r.AddEntity(e); err != nil {
+			t.Fatalf("AddEntity(%s): %v", e.GetRef(), err)
+		}
+	}
+
+	if err := r.Validate(); err != nil {
+		t.Fatalf("Validate(): %v", err)
+	}
+
+	if !c.Spec.Domain.Equal(domainRef) {
+		t.Errorf("Component.Spec.Domain = %v, want %v", c.Spec.Domain, domainRef)
+	}
+	if !res.Spec.Domain.Equal(domainRef) {
+		t.Errorf("Resource.Spec.Domain = %v, want %v", res.Spec.Domain, domainRef)
+	}
+	if !a.Spec.Domain.Equal(domainRef) {
+		t.Errorf("API.Spec.Domain = %v, want %v", a.Spec.Domain, domainRef)
+	}
+}

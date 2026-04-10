@@ -38,6 +38,7 @@ The following attributes are available for filtering:
 * `annotation`: An annotation associated with the entity (searches in `key=value`).
 * `owner`: The owner of the entity.
 * `system`: The system that the entity is a part of (for components, apis, resources).
+* `domain`: The domain that the entity is a part of (for systems, components, apis, resources).
 * `type`: The type of the entity (e.g., for components, apis, groups).
 * `lifecycle`: The lifecycle state of the entity (e.g., for components and apis).
 * `consumesApis`: An API listed in the `consumesApis` spec of a component.

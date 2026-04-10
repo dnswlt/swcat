@@ -100,6 +100,7 @@ message ComponentSpec {
   string lifecycle = 2;
   Ref owner = 3;
   Ref system = 4;
+  Ref domain = 11;
   Ref subcomponent_of = 5;
   repeated LabelRef provides_apis = 6;
   repeated LabelRef consumes_apis = 7;
@@ -116,6 +117,7 @@ message ResourceSpec {
   string type = 1;
   Ref owner = 2;
   Ref system = 3;
+  Ref domain = 6;
   repeated LabelRef depends_on = 4;
 
   // Inverse relationships
@@ -129,6 +131,7 @@ message ApiSpec {
   string lifecycle = 2;
   Ref owner = 3;
   Ref system = 4;
+  Ref domain = 9;
   string definition = 5;
   repeated ApiSpecVersion versions = 6;
 

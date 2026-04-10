@@ -727,6 +727,7 @@ type ComponentSpec struct {
 	Lifecycle      string                 `protobuf:"bytes,2,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
 	Owner          *Ref                   `protobuf:"bytes,3,opt,name=owner,proto3" json:"owner,omitempty"`
 	System         *Ref                   `protobuf:"bytes,4,opt,name=system,proto3" json:"system,omitempty"`
+	Domain         *Ref                   `protobuf:"bytes,11,opt,name=domain,proto3" json:"domain,omitempty"`
 	SubcomponentOf *Ref                   `protobuf:"bytes,5,opt,name=subcomponent_of,json=subcomponentOf,proto3" json:"subcomponent_of,omitempty"`
 	ProvidesApis   []*LabelRef            `protobuf:"bytes,6,rep,name=provides_apis,json=providesApis,proto3" json:"provides_apis,omitempty"`
 	ConsumesApis   []*LabelRef            `protobuf:"bytes,7,rep,name=consumes_apis,json=consumesApis,proto3" json:"consumes_apis,omitempty"`
@@ -796,6 +797,13 @@ func (x *ComponentSpec) GetSystem() *Ref {
 	return nil
 }
 
+func (x *ComponentSpec) GetDomain() *Ref {
+	if x != nil {
+		return x.Domain
+	}
+	return nil
+}
+
 func (x *ComponentSpec) GetSubcomponentOf() *Ref {
 	if x != nil {
 		return x.SubcomponentOf
@@ -843,6 +851,7 @@ type ResourceSpec struct {
 	Type      string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
 	Owner     *Ref                   `protobuf:"bytes,2,opt,name=owner,proto3" json:"owner,omitempty"`
 	System    *Ref                   `protobuf:"bytes,3,opt,name=system,proto3" json:"system,omitempty"`
+	Domain    *Ref                   `protobuf:"bytes,6,opt,name=domain,proto3" json:"domain,omitempty"`
 	DependsOn []*LabelRef            `protobuf:"bytes,4,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
 	// Inverse relationships
 	Dependents    []*LabelRef `protobuf:"bytes,5,rep,name=dependents,proto3" json:"dependents,omitempty"`
@@ -901,6 +910,13 @@ func (x *ResourceSpec) GetSystem() *Ref {
 	return nil
 }
 
+func (x *ResourceSpec) GetDomain() *Ref {
+	if x != nil {
+		return x.Domain
+	}
+	return nil
+}
+
 func (x *ResourceSpec) GetDependsOn() []*LabelRef {
 	if x != nil {
 		return x.DependsOn
@@ -921,6 +937,7 @@ type ApiSpec struct {
 	Lifecycle  string                 `protobuf:"bytes,2,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
 	Owner      *Ref                   `protobuf:"bytes,3,opt,name=owner,proto3" json:"owner,omitempty"`
 	System     *Ref                   `protobuf:"bytes,4,opt,name=system,proto3" json:"system,omitempty"`
+	Domain     *Ref                   `protobuf:"bytes,9,opt,name=domain,proto3" json:"domain,omitempty"`
 	Definition string                 `protobuf:"bytes,5,opt,name=definition,proto3" json:"definition,omitempty"`
 	Versions   []*ApiSpecVersion      `protobuf:"bytes,6,rep,name=versions,proto3" json:"versions,omitempty"`
 	// Inverse relationships
@@ -984,6 +1001,13 @@ func (x *ApiSpec) GetOwner() *Ref {
 func (x *ApiSpec) GetSystem() *Ref {
 	if x != nil {
 		return x.System
+	}
+	return nil
+}
+
+func (x *ApiSpec) GetDomain() *Ref {
+	if x != nil {
+		return x.Domain
 	}
 	return nil
 }
@@ -1277,12 +1301,13 @@ const file_swcat_catalog_v1_catalog_proto_rawDesc = "" +
 	"components\x18\x04 \x03(\v2\x15.swcat.catalog.v1.RefR\n" +
 	"components\x12)\n" +
 	"\x04apis\x18\x05 \x03(\v2\x15.swcat.catalog.v1.RefR\x04apis\x123\n" +
-	"\tresources\x18\x06 \x03(\v2\x15.swcat.catalog.v1.RefR\tresources\"\x93\x04\n" +
+	"\tresources\x18\x06 \x03(\v2\x15.swcat.catalog.v1.RefR\tresources\"\xc2\x04\n" +
 	"\rComponentSpec\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1c\n" +
 	"\tlifecycle\x18\x02 \x01(\tR\tlifecycle\x12+\n" +
 	"\x05owner\x18\x03 \x01(\v2\x15.swcat.catalog.v1.RefR\x05owner\x12-\n" +
-	"\x06system\x18\x04 \x01(\v2\x15.swcat.catalog.v1.RefR\x06system\x12>\n" +
+	"\x06system\x18\x04 \x01(\v2\x15.swcat.catalog.v1.RefR\x06system\x12-\n" +
+	"\x06domain\x18\v \x01(\v2\x15.swcat.catalog.v1.RefR\x06domain\x12>\n" +
 	"\x0fsubcomponent_of\x18\x05 \x01(\v2\x15.swcat.catalog.v1.RefR\x0esubcomponentOf\x12?\n" +
 	"\rprovides_apis\x18\x06 \x03(\v2\x1a.swcat.catalog.v1.LabelRefR\fprovidesApis\x12?\n" +
 	"\rconsumes_apis\x18\a \x03(\v2\x1a.swcat.catalog.v1.LabelRefR\fconsumesApis\x129\n" +
@@ -1292,21 +1317,23 @@ const file_swcat_catalog_v1_catalog_proto_rawDesc = "" +
 	"dependents\x18\t \x03(\v2\x1a.swcat.catalog.v1.LabelRefR\n" +
 	"dependents\x12;\n" +
 	"\rsubcomponents\x18\n" +
-	" \x03(\v2\x15.swcat.catalog.v1.RefR\rsubcomponents\"\xf5\x01\n" +
+	" \x03(\v2\x15.swcat.catalog.v1.RefR\rsubcomponents\"\xa4\x02\n" +
 	"\fResourceSpec\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12+\n" +
 	"\x05owner\x18\x02 \x01(\v2\x15.swcat.catalog.v1.RefR\x05owner\x12-\n" +
-	"\x06system\x18\x03 \x01(\v2\x15.swcat.catalog.v1.RefR\x06system\x129\n" +
+	"\x06system\x18\x03 \x01(\v2\x15.swcat.catalog.v1.RefR\x06system\x12-\n" +
+	"\x06domain\x18\x06 \x01(\v2\x15.swcat.catalog.v1.RefR\x06domain\x129\n" +
 	"\n" +
 	"depends_on\x18\x04 \x03(\v2\x1a.swcat.catalog.v1.LabelRefR\tdependsOn\x12:\n" +
 	"\n" +
 	"dependents\x18\x05 \x03(\v2\x1a.swcat.catalog.v1.LabelRefR\n" +
-	"dependents\"\xe9\x02\n" +
+	"dependents\"\x98\x03\n" +
 	"\aApiSpec\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1c\n" +
 	"\tlifecycle\x18\x02 \x01(\tR\tlifecycle\x12+\n" +
 	"\x05owner\x18\x03 \x01(\v2\x15.swcat.catalog.v1.RefR\x05owner\x12-\n" +
-	"\x06system\x18\x04 \x01(\v2\x15.swcat.catalog.v1.RefR\x06system\x12\x1e\n" +
+	"\x06system\x18\x04 \x01(\v2\x15.swcat.catalog.v1.RefR\x06system\x12-\n" +
+	"\x06domain\x18\t \x01(\v2\x15.swcat.catalog.v1.RefR\x06domain\x12\x1e\n" +
 	"\n" +
 	"definition\x18\x05 \x01(\tR\n" +
 	"definition\x12<\n" +
@@ -1382,30 +1409,33 @@ var file_swcat_catalog_v1_catalog_proto_depIdxs = []int32{
 	2,  // 19: swcat.catalog.v1.SystemSpec.resources:type_name -> swcat.catalog.v1.Ref
 	2,  // 20: swcat.catalog.v1.ComponentSpec.owner:type_name -> swcat.catalog.v1.Ref
 	2,  // 21: swcat.catalog.v1.ComponentSpec.system:type_name -> swcat.catalog.v1.Ref
-	2,  // 22: swcat.catalog.v1.ComponentSpec.subcomponent_of:type_name -> swcat.catalog.v1.Ref
-	3,  // 23: swcat.catalog.v1.ComponentSpec.provides_apis:type_name -> swcat.catalog.v1.LabelRef
-	3,  // 24: swcat.catalog.v1.ComponentSpec.consumes_apis:type_name -> swcat.catalog.v1.LabelRef
-	3,  // 25: swcat.catalog.v1.ComponentSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
-	3,  // 26: swcat.catalog.v1.ComponentSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
-	2,  // 27: swcat.catalog.v1.ComponentSpec.subcomponents:type_name -> swcat.catalog.v1.Ref
-	2,  // 28: swcat.catalog.v1.ResourceSpec.owner:type_name -> swcat.catalog.v1.Ref
-	2,  // 29: swcat.catalog.v1.ResourceSpec.system:type_name -> swcat.catalog.v1.Ref
-	3,  // 30: swcat.catalog.v1.ResourceSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
-	3,  // 31: swcat.catalog.v1.ResourceSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
-	2,  // 32: swcat.catalog.v1.ApiSpec.owner:type_name -> swcat.catalog.v1.Ref
-	2,  // 33: swcat.catalog.v1.ApiSpec.system:type_name -> swcat.catalog.v1.Ref
-	11, // 34: swcat.catalog.v1.ApiSpec.versions:type_name -> swcat.catalog.v1.ApiSpecVersion
-	3,  // 35: swcat.catalog.v1.ApiSpec.providers:type_name -> swcat.catalog.v1.LabelRef
-	3,  // 36: swcat.catalog.v1.ApiSpec.consumers:type_name -> swcat.catalog.v1.LabelRef
-	4,  // 37: swcat.catalog.v1.ApiSpecVersion.version:type_name -> swcat.catalog.v1.Version
-	13, // 38: swcat.catalog.v1.GroupSpec.profile:type_name -> swcat.catalog.v1.GroupSpecProfile
-	2,  // 39: swcat.catalog.v1.GroupSpec.parent:type_name -> swcat.catalog.v1.Ref
-	2,  // 40: swcat.catalog.v1.GroupSpec.children:type_name -> swcat.catalog.v1.Ref
-	41, // [41:41] is the sub-list for method output_type
-	41, // [41:41] is the sub-list for method input_type
-	41, // [41:41] is the sub-list for extension type_name
-	41, // [41:41] is the sub-list for extension extendee
-	0,  // [0:41] is the sub-list for field type_name
+	2,  // 22: swcat.catalog.v1.ComponentSpec.domain:type_name -> swcat.catalog.v1.Ref
+	2,  // 23: swcat.catalog.v1.ComponentSpec.subcomponent_of:type_name -> swcat.catalog.v1.Ref
+	3,  // 24: swcat.catalog.v1.ComponentSpec.provides_apis:type_name -> swcat.catalog.v1.LabelRef
+	3,  // 25: swcat.catalog.v1.ComponentSpec.consumes_apis:type_name -> swcat.catalog.v1.LabelRef
+	3,  // 26: swcat.catalog.v1.ComponentSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
+	3,  // 27: swcat.catalog.v1.ComponentSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
+	2,  // 28: swcat.catalog.v1.ComponentSpec.subcomponents:type_name -> swcat.catalog.v1.Ref
+	2,  // 29: swcat.catalog.v1.ResourceSpec.owner:type_name -> swcat.catalog.v1.Ref
+	2,  // 30: swcat.catalog.v1.ResourceSpec.system:type_name -> swcat.catalog.v1.Ref
+	2,  // 31: swcat.catalog.v1.ResourceSpec.domain:type_name -> swcat.catalog.v1.Ref
+	3,  // 32: swcat.catalog.v1.ResourceSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
+	3,  // 33: swcat.catalog.v1.ResourceSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
+	2,  // 34: swcat.catalog.v1.ApiSpec.owner:type_name -> swcat.catalog.v1.Ref
+	2,  // 35: swcat.catalog.v1.ApiSpec.system:type_name -> swcat.catalog.v1.Ref
+	2,  // 36: swcat.catalog.v1.ApiSpec.domain:type_name -> swcat.catalog.v1.Ref
+	11, // 37: swcat.catalog.v1.ApiSpec.versions:type_name -> swcat.catalog.v1.ApiSpecVersion
+	3,  // 38: swcat.catalog.v1.ApiSpec.providers:type_name -> swcat.catalog.v1.LabelRef
+	3,  // 39: swcat.catalog.v1.ApiSpec.consumers:type_name -> swcat.catalog.v1.LabelRef
+	4,  // 40: swcat.catalog.v1.ApiSpecVersion.version:type_name -> swcat.catalog.v1.Version
+	13, // 41: swcat.catalog.v1.GroupSpec.profile:type_name -> swcat.catalog.v1.GroupSpecProfile
+	2,  // 42: swcat.catalog.v1.GroupSpec.parent:type_name -> swcat.catalog.v1.Ref
+	2,  // 43: swcat.catalog.v1.GroupSpec.children:type_name -> swcat.catalog.v1.Ref
+	44, // [44:44] is the sub-list for method output_type
+	44, // [44:44] is the sub-list for method input_type
+	44, // [44:44] is the sub-list for extension type_name
+	44, // [44:44] is the sub-list for extension extendee
+	0,  // [0:44] is the sub-list for field type_name
 }
 
 func init() { file_swcat_catalog_v1_catalog_proto_init() }

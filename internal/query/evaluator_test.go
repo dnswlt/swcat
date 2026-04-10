@@ -12,6 +12,11 @@ func TestEvaluator_Matches(t *testing.T) {
 			Name: "my-api",
 		},
 	}
+	dom1 := &catalog.Domain{
+		Metadata: &catalog.Metadata{
+			Name: "my-domain",
+		},
+	}
 	sys1 := &catalog.System{
 		Metadata: &catalog.Metadata{
 			Name:      "my-system",
@@ -21,8 +26,9 @@ func TestEvaluator_Matches(t *testing.T) {
 			Labels:    map[string]string{"env": "prod", "critical": "true"},
 		},
 		Spec: &catalog.SystemSpec{
-			Type:  "workflow",
-			Owner: &catalog.Ref{Name: "team-b"},
+			Type:   "workflow",
+			Owner:  &catalog.Ref{Name: "team-b"},
+			Domain: dom1.GetRef(),
 		},
 	}
 	comp1 := &catalog.Component{
@@ -39,6 +45,7 @@ func TestEvaluator_Matches(t *testing.T) {
 			Lifecycle: "experimental",
 			Owner:     &catalog.Ref{Name: "team-a"},
 			System:    sys1.GetRef(),
+			Domain:    dom1.GetRef(),
 			ProvidesAPIs: []*catalog.LabelRef{
 				{Ref: api1.GetRef()},
 			},
@@ -137,6 +144,20 @@ func TestEvaluator_Matches(t *testing.T) {
 			name:      "system attribute match",
 			query:     "system:my-system",
 			entity:    comp1,
+			wantMatch: true,
+			wantErr:   false,
+		},
+		{
+			name:      "domain attribute match",
+			query:     "domain:my-domain",
+			entity:    comp1,
+			wantMatch: true,
+			wantErr:   false,
+		},
+		{
+			name:      "domain attribute match (system)",
+			query:     "domain:my-domain",
+			entity:    sys1,
 			wantMatch: true,
 			wantErr:   false,
 		},

@@ -94,6 +94,11 @@ type SystemPart interface {
 	GetSystem() *Ref
 }
 
+type DomainPart interface {
+	Entity
+	GetDomain() *Ref
+}
+
 // Metadata
 
 // LinkGroupInfo is a swcat extension for rendering grouped multi-environment links.
@@ -255,7 +260,8 @@ type ComponentSpec struct {
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
-	inv componentInvRel
+	inv    componentInvRel
+	Domain *Ref `json:"domain"`
 }
 
 type Component struct {
@@ -286,8 +292,9 @@ type ResourceSpec struct {
 	System *Ref `json:"system"`
 
 	// These fields are not part of the Backstage API.
-	// They are populated on demand to make "reverse navigation" easier.
-	inv resourceInvRel
+	// They are populated on demand to make "(reverse) navigation" easier.
+	inv    resourceInvRel
+	Domain *Ref `json:"domain"`
 }
 
 type Resource struct {
@@ -336,7 +343,8 @@ type APISpec struct {
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
-	inv apiInvRel
+	inv    apiInvRel
+	Domain *Ref `json:"domain"`
 }
 
 type API struct {
@@ -511,6 +519,7 @@ func (c *Component) GetType() string        { return c.Spec.Type }
 func (c *Component) GetOwner() *Ref         { return c.Spec.Owner }
 func (c *Component) GetLifecycle() string   { return c.Spec.Lifecycle }
 func (c *Component) GetSystem() *Ref        { return c.Spec.System }
+func (c *Component) GetDomain() *Ref        { return c.Spec.Domain }
 func (c *Component) GetParent() *Ref {
 	if c.Spec.SubcomponentOf != nil {
 		return c.Spec.SubcomponentOf
@@ -561,6 +570,7 @@ func (s *System) GetComponents() []*Ref            { return s.Spec.inv.component
 func (s *System) GetAPIs() []*Ref                  { return s.Spec.inv.apis }
 func (s *System) GetResources() []*Ref             { return s.Spec.inv.resources }
 func (s *System) GetSystem() *Ref                  { return s.GetRef() }
+func (s *System) GetDomain() *Ref                  { return s.Spec.Domain }
 func (c *System) GetParent() *Ref                  { return c.Spec.Domain }
 func (s *System) AddAPI(a *Ref)                    { s.Spec.inv.apis = append(s.Spec.inv.apis, a) }
 func (s *System) AddComponent(c *Ref)              { s.Spec.inv.components = append(s.Spec.inv.components, c) }
@@ -587,6 +597,7 @@ func (d *Domain) GetQName() string                 { return d.Metadata.QName() }
 func (d *Domain) GetType() string                  { return d.Spec.Type }
 func (d *Domain) GetOwner() *Ref                   { return d.Spec.Owner }
 func (d *Domain) GetParent() *Ref                  { return d.Spec.SubdomainOf }
+func (d *Domain) GetDomain() *Ref                  { return d.GetRef() }
 func (d *Domain) GetSystems() []*Ref               { return d.Spec.inv.systems }
 func (d *Domain) AddSystem(s *Ref)                 { d.Spec.inv.systems = append(d.Spec.inv.systems, s) }
 func (d *Domain) GetSourceInfo() *api.SourceInfo   { return d.sourceInfo }
@@ -612,6 +623,7 @@ func (a *API) GetOwner() *Ref                   { return a.Spec.Owner }
 func (a *API) GetProviders() []*LabelRef        { return a.Spec.inv.providers }
 func (a *API) GetConsumers() []*LabelRef        { return a.Spec.inv.consumers }
 func (a *API) GetSystem() *Ref                  { return a.Spec.System }
+func (a *API) GetDomain() *Ref                  { return a.Spec.Domain }
 func (a *API) GetParent() *Ref                  { return a.Spec.System }
 func (a *API) AddProvider(p *LabelRef)          { a.Spec.inv.providers = append(a.Spec.inv.providers, p) }
 func (a *API) AddConsumer(c *LabelRef)          { a.Spec.inv.consumers = append(a.Spec.inv.consumers, c) }
@@ -637,6 +649,7 @@ func (r *Resource) GetType() string            { return r.Spec.Type }
 func (r *Resource) GetOwner() *Ref             { return r.Spec.Owner }
 func (r *Resource) GetDependents() []*LabelRef { return r.Spec.inv.dependents }
 func (r *Resource) GetSystem() *Ref            { return r.Spec.System }
+func (r *Resource) GetDomain() *Ref            { return r.Spec.Domain }
 func (r *Resource) GetParent() *Ref            { return r.Spec.System }
 func (r *Resource) AddDependent(d *LabelRef) {
 	r.Spec.inv.dependents = append(r.Spec.inv.dependents, d)

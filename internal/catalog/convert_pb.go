@@ -99,6 +99,7 @@ func componentToPB(c *Component) *catalog_pb.Entity {
 		Lifecycle:      c.Spec.Lifecycle,
 		Owner:          refToPB(c.Spec.Owner),
 		System:         refToPB(c.Spec.System),
+		Domain:         refToPB(c.Spec.Domain),
 		SubcomponentOf: refToPB(c.Spec.SubcomponentOf),
 	}
 	for _, r := range c.Spec.ProvidesAPIs {
@@ -175,6 +176,7 @@ func resourceToPB(r *Resource) *catalog_pb.Entity {
 		Type:   r.Spec.Type,
 		Owner:  refToPB(r.Spec.Owner),
 		System: refToPB(r.Spec.System),
+		Domain: refToPB(r.Spec.Domain),
 	}
 	for _, d := range r.Spec.DependsOn {
 		spec.DependsOn = append(spec.DependsOn, labelRefToPB(d))
@@ -198,6 +200,7 @@ func apiToPB(a *API) *catalog_pb.Entity {
 		Lifecycle:  a.Spec.Lifecycle,
 		Owner:      refToPB(a.Spec.Owner),
 		System:     refToPB(a.Spec.System),
+		Domain:     refToPB(a.Spec.Domain),
 		Definition: a.Spec.Definition,
 	}
 	for _, v := range a.Spec.Versions {

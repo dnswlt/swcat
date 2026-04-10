@@ -136,6 +136,13 @@ var attributeAccessors = map[string]attributeAccessor{
 		}
 		return []string{sp.GetSystem().QName()}, true
 	},
+	"domain": func(e catalog.Entity) ([]string, bool) {
+		dp, ok := e.(catalog.DomainPart)
+		if !ok {
+			return nil, false
+		}
+		return []string{dp.GetDomain().QName()}, true
+	},
 	"type": func(e catalog.Entity) ([]string, bool) {
 		if t := e.GetType(); t != "" {
 			return []string{t}, true
