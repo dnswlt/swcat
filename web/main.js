@@ -196,6 +196,23 @@ function initDocsPopover() {
     });
 }
 
+// Positions all links-popover-* elements below their corresponding trigger buttons.
+function initLinksPopover() {
+    const popovers = document.querySelectorAll('[id^="links-popover-"]');
+    popovers.forEach(popover => {
+        const btn = document.querySelector(`[popovertarget="${popover.id}"]`);
+        if (!btn) return;
+
+        popover.addEventListener('beforetoggle', (e) => {
+            if (e.newState === 'open') {
+                const rect = btn.getBoundingClientRect();
+                popover.style.top = `${rect.bottom + 4}px`;
+                popover.style.left = `${rect.left}px`;
+            }
+        });
+    });
+}
+
 // Runs all initialization functions relevant for the given page identified by pageId.
 async function initPage(pageId) {
     initSessionPopover();
@@ -205,6 +222,7 @@ async function initPage(pageId) {
         loadSVGMetadata();
         addSVGListener();
         initPluginPopover();
+        initLinksPopover();
 
         // Reload the page after plugins have completed successfully.
         document.body.addEventListener("pluginsSuccess", () => {

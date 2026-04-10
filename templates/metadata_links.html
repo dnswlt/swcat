@@ -3,11 +3,27 @@
     <h3 class="font-semibold bg-gray-100 px-3 py-1 rounded-t-lg">Links</h3>
     <div class="p-3">
         <ul class="space-y-1">
-            {{ range groupLinks .Metadata.Links }}
+            {{ range $idx, $g := groupLinks .Metadata.Links }}
             <li class="flex items-center gap-1.5 text-gray-400">
                 {{ linkIcon (index .Links 0).Icon }}
                 {{ if .IsGroup }}
-                    <span class="text-gray-600 font-medium">{{ .Title }}</span>{{range .Links}}<a href="{{ .URL }}" class="rounded px-1.5 py-0.5 text-sm bg-blue-50 text-blue-700 hover:bg-blue-100" target="_blank">{{.GroupInfo.Label}}</a>{{end}}
+                    <span class="text-gray-600">{{ .Title }}</span>
+                    {{ if le (len .Links) 3 }}
+                        {{range .Links}}
+                        <a href="{{ .URL }}" class="rounded px-1.5 py-0.5 text-sm bg-blue-50 text-blue-700 hover:bg-blue-100" target="_blank">{{.GroupInfo.Label}}</a>
+                        {{end}}
+                    {{ else }}
+                        <button popovertarget="links-popover-{{ $idx }}" class="rounded px-1.5 py-0.5 text-sm bg-blue-50 text-blue-700 hover:bg-blue-100 flex items-center gap-1">
+                            {{ (index .Links 0).GroupInfo.Label }} (+{{ len (slice .Links 1) }})
+                        </button>
+                        <div id="links-popover-{{ $idx }}" popover class="ui-popover p-1 bg-white rounded-lg shadow-xl border border-gray-200 text-sm">
+                            <div class="flex flex-col gap-0.5">
+                                {{ range .Links }}
+                                <a href="{{ .URL }}" class="block rounded px-2 py-1 text-blue-700 hover:bg-blue-50 whitespace-nowrap" target="_blank">{{ .GroupInfo.Label }}</a>
+                                {{ end }}
+                            </div>
+                        </div>
+                    {{ end }}
                 {{ else }}
                     {{- $l := index .Links 0 }}
                     <a href="{{ $l.URL }}" class="text-blue-600 hover:underline" target="_blank">

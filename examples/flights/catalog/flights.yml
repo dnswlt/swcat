@@ -63,6 +63,7 @@ metadata:
       [
         {"label": "dev1", "value": { "logName": "dev1" } },
         {"label": "dev2", "value": { "logName": "dev2" } },
+        {"label": "int", "value": { "logName": "integration" } },
         {"label": "prod", "value": { "logName": "production" } }
       ]
 spec:
