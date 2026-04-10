@@ -641,3 +641,41 @@ func TestAddGeneratedLinks_AutomaticMultiLinkData(t *testing.T) {
 		}
 	}
 }
+
+func TestAddGeneratedLinks_AddQueryParams(t *testing.T) {
+	repo := NewRepositoryWithConfig(Config{
+		AnnotationBasedLinks: map[string]*AnnotationBasedLink{
+			"example.com/link": {
+				URL:   `{{ addQueryParams "https://example.com" (queryParams "q" .Annotation.Value "foo" "bar baz") }}`,
+				Title: "Link",
+			},
+		},
+	})
+	c := &catalog.Component{
+		Metadata: &catalog.Metadata{
+			Name: "my-service",
+			Annotations: map[string]string{
+				"example.com/link": "hello world",
+			},
+		},
+		Spec: &catalog.ComponentSpec{},
+	}
+	repo.AddEntity(c)
+
+	if err := repo.addGeneratedLinks(); err != nil {
+		t.Fatalf("addGeneratedLinks() error = %v", err)
+	}
+
+	if len(c.Metadata.Links) != 1 {
+		t.Fatalf("len(links) = %d, want 1", len(c.Metadata.Links))
+	}
+
+	link := c.Metadata.Links[0]
+	// Expected URL should have query params correctly encoded.
+	// Space in "hello world" -> "hello+world" or "%20" (url.Values.Encode uses "+")
+	// Space in "bar baz" -> "bar+baz"
+	wantURL := "https://example.com?foo=bar+baz&q=hello+world"
+	if link.URL != wantURL {
+		t.Errorf("link.URL = %q, want %q", link.URL, wantURL)
+	}
+}

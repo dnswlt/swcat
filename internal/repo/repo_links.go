@@ -4,11 +4,11 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"net/url"
 	"regexp"
 	"slices"
 	"strings"
+	"text/template"
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/query"
