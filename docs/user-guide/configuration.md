@@ -32,8 +32,8 @@ The `catalog` section allows you to configure repository-specific settings.
         The version part fields are only populated if the version string matches a
         common pattern (e.g. *v1*, *1.2.3*, or *v1alpha*).
 
-    Supports `multiLinks` for generating per-environment link groups.
-    See [Multi-environment Links](#multi-environment-links) below.
+    Supports `multiLinks` and `multiLinkData` for generating per-environment link
+    groups. See [Multi-environment Links](#multi-environment-links) below.
 
 * `automaticLinks`: A list of link templates automatically added to entities
     matching a filter expression. Each entry has the following fields:
@@ -42,8 +42,8 @@ The `catalog` section allows you to configure repository-specific settings.
     * `url`: The URL template for the link (supports `{{ .Metadata.<Field> }}`).
     * `title`: The title template for the link.
 
-    Supports `multiLinks` for generating per-environment link groups.
-    See [Multi-environment Links](#multi-environment-links) below.
+    Supports `multiLinks` and `multiLinkData` for generating per-environment link
+    groups. See [Multi-environment Links](#multi-environment-links) below.
 
 * `validation`: Defines validation rules for entity specifications.
   You can define rules for domains, systems, components, resources, and APIs.
@@ -56,18 +56,40 @@ Both `annotationBasedLinks` and `automaticLinks` support custom template functio
 
 * `{{ first <val1> <val2> ... }}` returns the first non-empty string. This is
     useful to provide fallback values, e.g. `{{ first (index .Metadata.Annotations "my/annot") .Metadata.Name }}`.
+* `{{ pathEscape <string> }}` percent-encodes a string for use in URL path
+    segments (e.g. `{{ pathEscape .Metadata.Name }}`).
+* `{{ queryParams <key1> <val1> <key2> <val2> ... }}` builds a set of query
+    parameters from an even-numbered list of key-value pairs.
+* `{{ addQueryParams <baseUrl> <queryParams> }}` appends query parameters to a
+    base URL, merging with any existing ones.
+    Example: `{{ addQueryParams "https://example.com" (queryParams "id" .Metadata.Name "env" .MultiLink.Value) }}`.
 
 
 ### Multi-environment Links
 
-Both `annotationBasedLinks` and `automaticLinks` support an optional `multiLinks`
-field that generates one link per entry instead of a single link. This is useful
-for linking to the same resource across multiple environments or stages.
+Both `annotationBasedLinks` and `automaticLinks` support generating multiple
+links from a single template. This is useful for linking to the same resource
+across multiple environments or stages.
 
-Each entry in `multiLinks` has two fields:
+You can either provide a static list of links via `multiLinks`, or dynamic
+entries via `multiLinkData`.
+
+#### Static Multi-links
+
+The `multiLinks` field takes a list of entries, each with two fields:
 
 * `label`: The short display label shown as a pill in the UI (e.g. `dev`).
 * `value`: Substituted into the `url` template via `{{ .MultiLink.Value }}`.
+
+#### Dynamic Multi-links
+
+The `multiLinkData` field allows you to fetch the link entries from an entity
+annotation. If `multiLinkData: <name>` is set, `swcat` reads the entries from the
+`swcat/data-<name>` annotation of the entity (or its parent system/domain).
+
+The annotation value must be a valid JSON list of objects with `label` and
+`value` fields, e.g.:
+`[{"label": "dev", "value": "development"}, {"label": "prod", "value": "production"}]`.
 
 The `title` template serves as the shared group title (e.g. `Monitoring`) and
 is rendered without `{{ .MultiLink.* }}` data. Individual link titles are derived
@@ -80,7 +102,7 @@ Monitoring  [dev]  [staging]  [prod]
 ```
 
 See the [Example Configuration](#example-configuration) below for a complete
-`multiLinks` example.
+example.
 
 ## SVG Configuration
 
@@ -162,6 +184,14 @@ catalog:
           value: staging.example.com
         - label: prod
           value: prod.example.com
+    # Auto-generates per-environment monitoring links for annotated entities.
+    # The list of environments is fetched from the swcat/data-environments annotation.
+    # Rendered as a grouped pill row: "Logs  [dev]  [staging]  [prod]"
+    hexz.me/app-logs:
+      url: https://logs.{{ .MultiLink.Value }}.example.com/s/{{ .Metadata.Name }}
+      title: Logs
+      icon: list
+      multiLinkData: environments
   validation:
     api:
       type:
