@@ -5,6 +5,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/api"
@@ -137,6 +138,50 @@ spec:
 		domain := findEntity(entities, "Domain", "test-domain")
 		if domain == nil {
 			t.Error("Original domain entity is missing")
+		}
+	})
+
+	t.Run("Normalization", func(t *testing.T) {
+		// Test that multi-line description is normalized (trailing whitespace trimmed, LiteralStyle forced)
+		normEntityYAML := `
+apiVersion: swcat/v1alpha1
+kind: Component
+metadata:
+  name: norm-component
+  description: "line1\nline2 \nline3"
+spec:
+  type: service
+  owner: test-group
+  system: test-system
+  lifecycle: experimental
+`
+		normEntity, err := api.NewEntityFromString(normEntityYAML)
+		if err != nil {
+			t.Fatalf("Failed to parse entity: %v", err)
+		}
+
+		if err := InsertOrReplaceEntity(store, filename, normEntity); err != nil {
+			t.Fatalf("InsertOrReplaceEntity failed: %v", err)
+		}
+
+		// Verify raw file content
+		data, err := store.ReadFile(filename)
+		if err != nil {
+			t.Fatalf("ReadFile failed: %v", err)
+		}
+
+		// We expect a block scalar description with trimmed lines.
+		// We just check for the presence of the block scalar header and the lines.
+		s := string(data)
+		if !strings.Contains(s, "description: |-") && !strings.Contains(s, "description: |") {
+			t.Errorf("Expected block scalar header not found in YAML. Got:\n%s", s)
+		}
+		if !strings.Contains(s, "line1") || !strings.Contains(s, "line2") || !strings.Contains(s, "line3") {
+			t.Errorf("Expected lines not found in YAML. Got:\n%s", s)
+		}
+		// Also verify line2 trailing space is gone
+		if strings.Contains(s, "line2 ") {
+			t.Errorf("Line 2 still contains trailing whitespace. Got:\n%s", s)
 		}
 	})
 }

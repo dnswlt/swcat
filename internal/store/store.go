@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/api"
@@ -119,7 +120,9 @@ func writeEntities(st Store, path string, entities []api.Entity) error {
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(YAMLIndent)
 	for _, e := range entities {
-		if err := enc.Encode(e.GetSourceInfo().Node); err != nil {
+		node := e.GetSourceInfo().Node
+		normalizeNode(node, []string{"description"})
+		if err := enc.Encode(node); err != nil {
 			return fmt.Errorf("failed to encode node from line %d: %w", e.GetSourceInfo().Line, err)
 		}
 	}
@@ -127,6 +130,50 @@ func writeEntities(st Store, path string, entities []api.Entity) error {
 		return fmt.Errorf("failed to close encoder: %w", err)
 	}
 	return st.WriteFile(path, buf.Bytes())
+}
+
+// normalizeNode recurses through the YAML node tree and performs cleanup
+// on select "safe" fields.
+// Specifically, it trims trailing whitespace from multi-line scalar strings
+// and ensures they use LiteralStyle to avoid forced double-quoting by yaml.v3.
+func normalizeNode(n *yaml.Node, keys []string) {
+	if n.Kind == yaml.MappingNode {
+		for i := 0; i < len(n.Content); i += 2 {
+			k, v := n.Content[i], n.Content[i+1]
+			if k.Kind == yaml.ScalarNode && slices.Contains(keys, k.Value) {
+				normalizeScalar(v)
+			}
+			normalizeNode(v, keys)
+		}
+	} else {
+		for _, child := range n.Content {
+			normalizeNode(child, keys)
+		}
+	}
+}
+
+func normalizeScalar(n *yaml.Node) {
+	if !(n.Kind == yaml.ScalarNode && n.Tag == "!!str" && strings.Contains(n.Value, "\n")) {
+		return
+	}
+	// Trim trailing whitespace from each line to avoid forced double-quoting by yaml.v3
+	lines := strings.Split(n.Value, "\n")
+	changed := false
+	for i, line := range lines {
+		trimmed := strings.TrimRight(line, " \t")
+		if trimmed != line {
+			lines[i] = trimmed
+			changed = true
+		}
+	}
+	if changed {
+		n.Value = strings.Join(lines, "\n")
+	}
+	// If it's a multi-line string, we almost certainly want a block scalar style.
+	// If it has no style set (0) or is explicitly quoted, we force LiteralStyle.
+	if n.Style == 0 || n.Style == yaml.DoubleQuotedStyle || n.Style == yaml.SingleQuotedStyle {
+		n.Style = yaml.LiteralStyle
+	}
 }
 
 func ReadEntities(st Store, path string) ([]api.Entity, error) {
