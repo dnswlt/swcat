@@ -10,7 +10,13 @@
     {{template "nav.html" .}}
 
     <main class="w-full max-w-screen-lg mx-auto space-y-6 bg-white shadow rounded-xl p-6">
-        <h1 class="text-2xl font-semibold text-center">Edit {{ .Entity.GetQName }}</h1>
+        <div class="flex justify-between items-start">
+            <h1 class="text-2xl font-semibold">Edit {{ .Entity.GetQName }}</h1>
+            <div class="text-right">
+                <div class="text-xs text-gray-400">Source File</div>
+                <div class="text-sm text-gray-600 font-mono">{{ .Entity.GetSourceInfo.Path }}</div>
+            </div>
+        </div>
 
         <div id="error-messages"></div>
 
