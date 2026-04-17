@@ -422,6 +422,7 @@ type Observation struct {
 	Value     json.RawMessage `json:"value"`    // immutable
 	Producer  string          `json:"producer"` // which plugin wrote this
 	UpdatedAt time.Time       `json:"updatedAt"`
+	Version   string          `json:"version"` // Optional: the entity version at which this observation was made.
 }
 
 // Clone returns a deep copy of this Status.

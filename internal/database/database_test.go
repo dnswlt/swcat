@@ -55,11 +55,13 @@ func TestStoreAndLoadObservations_Roundtrip(t *testing.T) {
 			Value:     mustJSON(t, "hello"),
 			Producer:  "FooPlugin",
 			UpdatedAt: now,
+			Version:   "v1.0",
 		},
 		"swcat/bar": {
 			Value:     mustJSON(t, map[string]int{"n": 42}),
 			Producer:  "BarPlugin",
 			UpdatedAt: now.Add(-time.Minute),
+			// No version
 		},
 	}
 	c := newTestComponent("comp", obs)
@@ -217,4 +219,3 @@ func TestStoreObservations_Isolation(t *testing.T) {
 		t.Errorf("c2: expected 1, got %d", len(got2))
 	}
 }
-

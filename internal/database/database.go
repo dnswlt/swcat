@@ -82,7 +82,7 @@ func New(dsn string) *sql.DB {
 
 // LoadObservations reads all status observations for entityRef from db.
 func LoadObservations(ctx context.Context, db *sql.DB, entityRef string) (map[string]catalog.Observation, error) {
-	const q = `SELECT key, value, producer, updated_at
+	const q = `SELECT key, value, producer, updated_at, version
 		FROM status_observations
 		WHERE entity_id = ?`
 	rows, err := db.QueryContext(ctx, q, entityRef)
@@ -93,8 +93,8 @@ func LoadObservations(ctx context.Context, db *sql.DB, entityRef string) (map[st
 
 	observations := make(map[string]catalog.Observation)
 	for rows.Next() {
-		var key, value, producer, updatedAtStr string
-		if err := rows.Scan(&key, &value, &producer, &updatedAtStr); err != nil {
+		var key, value, producer, updatedAtStr, version string
+		if err := rows.Scan(&key, &value, &producer, &updatedAtStr, &version); err != nil {
 			return nil, fmt.Errorf("scan observation: %w", err)
 		}
 		updatedAt, err := time.Parse(time.RFC3339Nano, updatedAtStr)
@@ -105,6 +105,7 @@ func LoadObservations(ctx context.Context, db *sql.DB, entityRef string) (map[st
 			Value:     json.RawMessage(value),
 			Producer:  producer,
 			UpdatedAt: updatedAt,
+			Version:   version,
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -137,7 +138,7 @@ func StoreObservations(ctx context.Context, db *sql.DB, e catalog.Entity) error 
 
 	if len(obs) > 0 {
 		const insert = `INSERT INTO status_observations
-			(entity_id, key, value, producer, updated_at) VALUES (?, ?, ?, ?, ?)`
+			(entity_id, key, value, producer, updated_at, version) VALUES (?, ?, ?, ?, ?, ?)`
 		stmt, err := tx.PrepareContext(ctx, insert)
 		if err != nil {
 			return fmt.Errorf("prepare insert: %w", err)
@@ -148,6 +149,7 @@ func StoreObservations(ctx context.Context, db *sql.DB, e catalog.Entity) error 
 			if _, err := stmt.ExecContext(ctx,
 				entityRef, key, string(o.Value), o.Producer,
 				o.UpdatedAt.UTC().Format(time.RFC3339Nano),
+				o.Version,
 			); err != nil {
 				return fmt.Errorf("insert observation %q: %w", key, err)
 			}
@@ -172,9 +174,10 @@ func RecreateTables(ctx context.Context, db *sql.DB, dropAll bool) error {
 	_, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS status_observations (
 		entity_id  TEXT NOT NULL,
 		key        TEXT NOT NULL,
-		value      TEXT NOT NULL,
+		value      TEXT,
 		producer   TEXT NOT NULL,
 		updated_at TEXT NOT NULL,
+		version    TEXT,
 		PRIMARY KEY (entity_id, key)
 	)`)
 	if err != nil {
