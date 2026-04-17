@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/query"
 	"github.com/dnswlt/swcat/internal/repo"
@@ -49,8 +48,25 @@ type PluginResult struct {
 	// annotations downstream.
 	Annotations map[string]any
 
+	// Observations about the current status of an entity.
+	// These get added to the entity's .Status field and represent
+	// "live" data.
+	Observations map[string]catalog.Observation
+
 	// An optional additional return value that the plugin returns to its caller.
 	ReturnValue any
+}
+
+// RunResult is the aggregated result of running all matching plugins for a single entity.
+type RunResult struct {
+	// Annotations aggregated from all plugins.
+	// The value type can be anything, but must be JSON marshallable,
+	// since they are persisted as sidecar extensions.
+	Annotations map[string]any
+
+	// Observations aggregated from all plugins, to be applied to the
+	// entity's Status field.
+	Observations map[string]catalog.Observation
 }
 
 // PluginArgs contains the arguments passed to any plugin execution.
@@ -190,7 +206,7 @@ func (r *Registry) Plugins() []string {
 	return keys
 }
 
-func (r *Registry) Run(ctx context.Context, repository *repo.Repository, e catalog.Entity) (*api.CatalogExtensions, error) {
+func (r *Registry) Run(ctx context.Context, repository *repo.Repository, e catalog.Entity) (*RunResult, error) {
 	tempDir, err := os.MkdirTemp("", "swcat-plugins")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp dir for plugin runs: %w", err)
@@ -203,6 +219,7 @@ func (r *Registry) Run(ctx context.Context, repository *repo.Repository, e catal
 	}()
 
 	annotations := make(map[string]any)
+	observations := make(map[string]catalog.Observation)
 	execFunc := func(name string, p Plugin) error {
 		log.Printf("Executing plugin %s for %s", name, e.GetRef().String())
 		res, err := p.Execute(ctx, e, &PluginArgs{
@@ -215,6 +232,9 @@ func (r *Registry) Run(ctx context.Context, repository *repo.Repository, e catal
 		}
 		if len(res.Annotations) > 0 {
 			maps.Copy(annotations, res.Annotations)
+		}
+		if len(res.Observations) > 0 {
+			maps.Copy(observations, res.Observations)
 		}
 		return nil
 	}
@@ -232,19 +252,16 @@ func (r *Registry) Run(ctx context.Context, repository *repo.Repository, e catal
 		}
 	}
 	if len(annotations) > 0 {
-		// Execute the timestamp plugin to add an annotation indicating when they were last updated.
-		if err := execFunc("timestampPlugin", TimestampPlugin{}); err != nil {
-			return nil, err
-		}
 		keys := slices.Sorted(maps.Keys(annotations))
 		log.Printf("Collected annotations for entity %s: %v", e.GetRef().String(), keys)
 	}
-	return &api.CatalogExtensions{
-		Entities: map[string]*api.MetadataExtensions{
-			e.GetRef().String(): {
-				Annotations: annotations,
-			},
-		},
+	if len(observations) > 0 {
+		keys := slices.Sorted(maps.Keys(observations))
+		log.Printf("Collected observations for entity %s: %v", e.GetRef().String(), keys)
+	}
+	return &RunResult{
+		Annotations:  annotations,
+		Observations: observations,
 	}, nil
 }
 
@@ -276,9 +293,12 @@ func (r *Registry) registerPlugin(name string, def *Definition) error {
 	}
 	switch def.Kind {
 	case "TimestampPlugin":
-		// Configuring TimestampPlugin explicitly is mostly useful for plugin testing:
-		// a timestamp gets added whenever any other plugin runs anyway.
-		trigger.plugin = TimestampPlugin{}
+		// Configuring TimestampPlugin explicitly is mostly useful for plugin testing
+		p, err := newTimestampPlugin(name, &def.Spec)
+		if err != nil {
+			return fmt.Errorf("failed to create TimestampPlugin %s: %w", name, err)
+		}
+		trigger.plugin = p
 	case "AsyncAPIImporterPlugin":
 		p, err := newAsyncAPIImporterPlugin(name, &def.Spec)
 		if err != nil {

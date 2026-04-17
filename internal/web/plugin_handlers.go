@@ -8,6 +8,7 @@ import (
 
 	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
 )
@@ -45,13 +46,13 @@ func (s *Server) runPlugins(w http.ResponseWriter, r *http.Request, entityRef st
 	// This can take a while if there are many entities or slow plugins.
 	type pluginResult struct {
 		entity catalog.Entity
-		exts   *api.CatalogExtensions
+		result *plugins.RunResult
 		err    error
 	}
 	results := make([]pluginResult, 0, len(entities))
 	for _, e := range entities {
-		exts, err := s.pluginRegistry.Run(r.Context(), data.repo, e)
-		results = append(results, pluginResult{entity: e, exts: exts, err: err})
+		res, err := s.pluginRegistry.Run(r.Context(), data.repo, e)
+		results = append(results, pluginResult{entity: e, result: res, err: err})
 	}
 
 	// 2. Acquire write lock for store access and update.
@@ -64,7 +65,7 @@ func (s *Server) runPlugins(w http.ResponseWriter, r *http.Request, entityRef st
 		return
 	}
 
-	// 3. Save plugin results to the store.
+	// 3. Save plugin results to the store and apply observations to entities.
 	var errs []string
 	var nSuccess int
 	for _, res := range results {
@@ -73,12 +74,19 @@ func (s *Server) runPlugins(w http.ResponseWriter, r *http.Request, entityRef st
 			continue
 		}
 
-		err := store.MergeExtensions(st, res.entity.GetSourceInfo().Path, res.exts)
-		if err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", res.entity.GetRef(), err))
-		} else {
-			nSuccess++
+		exts := &api.CatalogExtensions{
+			Entities: map[string]*api.MetadataExtensions{
+				res.entity.GetRef().String(): {
+					Annotations: res.result.Annotations,
+				},
+			},
 		}
+		if err := store.MergeExtensions(st, res.entity.GetSourceInfo().Path, exts); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", res.entity.GetRef(), err))
+			continue
+		}
+		catalog.MergeObservations(res.entity, res.result.Observations)
+		nSuccess++
 	}
 
 	// Clear data, which forces a reload on the next request.

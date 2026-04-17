@@ -4,9 +4,13 @@ package catalog
 
 import (
 	"cmp"
+	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/dnswlt/swcat/internal/api"
 )
@@ -217,6 +221,9 @@ type SystemSpec struct {
 type System struct {
 	Metadata *Metadata   `json:"metadata"`
 	Spec     *SystemSpec `json:"spec"`
+	// An optional status containing "live" information about the entity.
+	// The status is not persisted in the repository, but updated at runtime, e.g. by plugins.
+	Status atomic.Pointer[Status]
 
 	sourceInfo *api.SourceInfo
 }
@@ -267,6 +274,9 @@ type ComponentSpec struct {
 type Component struct {
 	Metadata *Metadata      `json:"metadata"`
 	Spec     *ComponentSpec `json:"spec"`
+	// An optional status containing "live" information about the entity.
+	// The status is not persisted in the repository, but updated at runtime, e.g. by plugins.
+	Status atomic.Pointer[Status]
 
 	sourceInfo *api.SourceInfo
 }
@@ -300,6 +310,9 @@ type ResourceSpec struct {
 type Resource struct {
 	Metadata *Metadata     `json:"metadata"`
 	Spec     *ResourceSpec `json:"spec"`
+	// An optional status containing "live" information about the entity.
+	// The status is not persisted in the repository, but updated at runtime, e.g. by plugins.
+	Status atomic.Pointer[Status]
 
 	sourceInfo *api.SourceInfo
 }
@@ -350,6 +363,9 @@ type APISpec struct {
 type API struct {
 	Metadata *Metadata `json:"metadata"`
 	Spec     *APISpec  `json:"spec"`
+	// An optional status containing "live" information about the entity.
+	// The status is not persisted in the repository, but updated at runtime, e.g. by plugins.
+	Status atomic.Pointer[Status]
 
 	sourceInfo *api.SourceInfo
 }
@@ -390,6 +406,81 @@ type Group struct {
 	Spec     *GroupSpec `json:"spec"`
 
 	sourceInfo *api.SourceInfo
+}
+
+type Status struct {
+	// A map from observation name, which follows the naming conventions
+	// for annotations, to status observations.
+	Observations map[string]Observation `json:"observations,omitempty"`
+}
+
+type Observation struct {
+	Value     json.RawMessage `json:"value"`    // immutable
+	Producer  string          `json:"producer"` // which plugin wrote this
+	UpdatedAt time.Time       `json:"updatedAt"`
+}
+
+// Clone returns a deep copy of this Status.
+// Used for Copy-on-Write status updates in entities.
+// Assumes that Observation.Value is immutable, so makes shallow copies of those.
+// A nil receiver yields an empty Status.
+func (s *Status) Clone() *Status {
+	if s == nil {
+		return &Status{}
+	}
+	return &Status{
+		Observations: maps.Clone(s.Observations),
+	}
+}
+
+// UpdateStatus atomically updates the status behind p using copy-on-write.
+// The mutate function receives a fresh clone of the current status and may
+// freely write to it. It may be called more than once if a concurrent update
+// is detected, so it must be free of side effects.
+func UpdateStatus(p *atomic.Pointer[Status], mutate func(*Status)) {
+	for {
+		old := p.Load()
+		next := old.Clone()
+		mutate(next)
+		if p.CompareAndSwap(old, next) {
+			return
+		}
+	}
+}
+
+// entityStatusPtr returns the atomic.Pointer[Status] of e, or nil if
+// the entity kind does not carry a mutable Status.
+func entityStatusPtr(e Entity) *atomic.Pointer[Status] {
+	switch x := e.(type) {
+	case *System:
+		return &x.Status
+	case *Component:
+		return &x.Status
+	case *Resource:
+		return &x.Status
+	case *API:
+		return &x.Status
+	}
+	return nil
+}
+
+// MergeObservations atomically merges obs into e's Status.Observations.
+// Returns false if e's kind has no Status field.
+func MergeObservations(e Entity, obs map[string]Observation) bool {
+	p := entityStatusPtr(e)
+	if p == nil {
+		return false
+	}
+	if len(obs) == 0 {
+		return true
+	}
+	UpdateStatus(p, func(s *Status) {
+		if s.Observations == nil {
+			s.Observations = make(map[string]Observation, len(obs))
+		}
+		maps.Copy(s.Observations, obs)
+	})
+	return true
 }
 
 // Interface implementations and helpers.

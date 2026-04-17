@@ -18,6 +18,12 @@ var commonOpts = []cmp.Option{
 		Resource{}, ResourceSpec{}, resourceInvRel{},
 		Group{}, GroupSpec{},
 	),
+	// Status holds "live" runtime data (atomic.Pointer with unexported
+	// fields) that is not set by conversion, so ignore it for comparisons.
+	cmpopts.IgnoreFields(Component{}, "Status"),
+	cmpopts.IgnoreFields(System{}, "Status"),
+	cmpopts.IgnoreFields(API{}, "Status"),
+	cmpopts.IgnoreFields(Resource{}, "Status"),
 	cmpopts.EquateEmpty(),
 }
 
