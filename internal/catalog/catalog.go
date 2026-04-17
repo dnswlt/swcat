@@ -86,6 +86,10 @@ type Entity interface {
 	GetSourceInfo() *api.SourceInfo
 	SetSourceInfo(si *api.SourceInfo)
 
+	// GetStatus returns a snapshot of the entity's runtime status, or nil
+	// if the entity kind carries no Status or none has been set yet.
+	GetStatus() *Status
+
 	// Reset creates a shallow copy of the entity with computed values (inv. relations) removed.
 	Reset() Entity
 }
@@ -628,6 +632,7 @@ func (c *Component) AddSubcomponent(sub *Ref) {
 }
 func (c *Component) GetSourceInfo() *api.SourceInfo   { return c.sourceInfo }
 func (c *Component) SetSourceInfo(si *api.SourceInfo) { c.sourceInfo = si }
+func (c *Component) GetStatus() *Status               { return c.Status.Load() }
 func (c *Component) Reset() Entity {
 	cpy, err := cloneEntityFromAPI[*api.Component](c)
 	if err != nil {
@@ -668,6 +673,7 @@ func (s *System) AddComponent(c *Ref)              { s.Spec.inv.components = app
 func (s *System) AddResource(r *Ref)               { s.Spec.inv.resources = append(s.Spec.inv.resources, r) }
 func (s *System) GetSourceInfo() *api.SourceInfo   { return s.sourceInfo }
 func (s *System) SetSourceInfo(si *api.SourceInfo) { s.sourceInfo = si }
+func (s *System) GetStatus() *Status               { return s.Status.Load() }
 func (s *System) Reset() Entity {
 	cpy, err := cloneEntityFromAPI[*api.System](s)
 	if err != nil {
@@ -693,6 +699,7 @@ func (d *Domain) GetSystems() []*Ref               { return d.Spec.inv.systems }
 func (d *Domain) AddSystem(s *Ref)                 { d.Spec.inv.systems = append(d.Spec.inv.systems, s) }
 func (d *Domain) GetSourceInfo() *api.SourceInfo   { return d.sourceInfo }
 func (d *Domain) SetSourceInfo(si *api.SourceInfo) { d.sourceInfo = si }
+func (d *Domain) GetStatus() *Status               { return nil }
 func (d *Domain) Reset() Entity {
 	cpy, err := cloneEntityFromAPI[*api.Domain](d)
 	if err != nil {
@@ -720,6 +727,7 @@ func (a *API) AddProvider(p *LabelRef)          { a.Spec.inv.providers = append(
 func (a *API) AddConsumer(c *LabelRef)          { a.Spec.inv.consumers = append(a.Spec.inv.consumers, c) }
 func (a *API) GetSourceInfo() *api.SourceInfo   { return a.sourceInfo }
 func (a *API) SetSourceInfo(si *api.SourceInfo) { a.sourceInfo = si }
+func (a *API) GetStatus() *Status               { return a.Status.Load() }
 func (a *API) Reset() Entity {
 	cpy, err := cloneEntityFromAPI[*api.API](a)
 	if err != nil {
@@ -747,6 +755,7 @@ func (r *Resource) AddDependent(d *LabelRef) {
 }
 func (r *Resource) GetSourceInfo() *api.SourceInfo   { return r.sourceInfo }
 func (r *Resource) SetSourceInfo(si *api.SourceInfo) { r.sourceInfo = si }
+func (r *Resource) GetStatus() *Status               { return r.Status.Load() }
 func (r *Resource) Reset() Entity {
 	cpy, err := cloneEntityFromAPI[*api.Resource](r)
 	if err != nil {
@@ -769,6 +778,7 @@ func (g *Group) GetParent() *Ref                  { return g.Spec.Parent }
 func (g *Group) GetDisplayName() string           { return g.Spec.Profile.DisplayName }
 func (g *Group) GetSourceInfo() *api.SourceInfo   { return g.sourceInfo }
 func (g *Group) SetSourceInfo(si *api.SourceInfo) { g.sourceInfo = si }
+func (g *Group) GetStatus() *Status               { return nil }
 func (g *Group) Reset() Entity {
 	cpy, err := cloneEntityFromAPI[*api.Group](g)
 	if err != nil {
