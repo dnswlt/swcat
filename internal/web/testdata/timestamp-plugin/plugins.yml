@@ -1,4 +1,11 @@
 plugins:
-  timestamp:
+  timestampAnnotation:
     kind: TimestampPlugin
     trigger: "kind:Component"
+    spec:
+      target: annotation
+  timestampObservation:
+    kind: TimestampPlugin
+    trigger: "kind:Resource"
+    spec:
+      target: observation

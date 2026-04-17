@@ -1,4 +1,11 @@
 plugins:
+
+  timestampStatus:
+    kind: TimestampPlugin
+    trigger: |-
+      kind:Domain
+    spec:
+      target: observation
   asyncApiImporter:
     # Showcases the importer plugin for 3.0.0 AsyncAPI specs.
     kind: AsyncAPIImporterPlugin

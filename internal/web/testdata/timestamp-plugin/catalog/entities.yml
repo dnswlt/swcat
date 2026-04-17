@@ -33,3 +33,13 @@ spec:
   lifecycle: production
   owner: test-owner
   system: test-system
+---
+apiVersion: swcat/v1
+kind: Resource
+metadata:
+  name: test-resource
+  description: A minimal test resource for plugin integration tests.
+spec:
+  type: database
+  owner: test-owner
+  system: test-system

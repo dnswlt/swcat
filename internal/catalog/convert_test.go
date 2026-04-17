@@ -22,6 +22,7 @@ var commonOpts = []cmp.Option{
 	// fields) that is not set by conversion, so ignore it for comparisons.
 	cmpopts.IgnoreFields(Component{}, "Status"),
 	cmpopts.IgnoreFields(System{}, "Status"),
+	cmpopts.IgnoreFields(Domain{}, "Status"),
 	cmpopts.IgnoreFields(API{}, "Status"),
 	cmpopts.IgnoreFields(Resource{}, "Status"),
 	cmpopts.EquateEmpty(),
@@ -120,10 +121,10 @@ func TestNewComponentFromAPI(t *testing.T) {
 			},
 		},
 		Spec: &ComponentSpec{
-			Type:      "service",
-			Lifecycle: "prod",
-			Owner:     &Ref{Name: "owner", Namespace: "default", Kind: KindGroup},
-			System:    &Ref{Name: "sys", Namespace: "default", Kind: KindSystem},
+			Type:           "service",
+			Lifecycle:      "prod",
+			Owner:          &Ref{Name: "owner", Namespace: "default", Kind: KindGroup},
+			System:         &Ref{Name: "sys", Namespace: "default", Kind: KindSystem},
 			SubcomponentOf: &Ref{Name: "parent", Namespace: "default", Kind: KindComponent},
 			ProvidesAPIs: []*LabelRef{
 				{Ref: &Ref{Name: "p1", Namespace: "default", Kind: KindAPI}, Label: "lbl1", Attrs: map[string]string{}},

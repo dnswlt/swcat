@@ -38,6 +38,7 @@ run-examples:
 	$(GO) run $(LDFLAGS) ./cmd/swcat \
 		-addr localhost:9191 \
 		-root-dir ./examples/flights \
+		-database-dsn "file:./data/swcat.db" \
 		-documents-dir ./examples/flights/documents
 
 # Run swcat using the remote git repo's ./examples/flights catalog.

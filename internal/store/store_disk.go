@@ -23,6 +23,10 @@ func NewDiskStore(rootDir string) *DiskStore {
 	}
 }
 
+func (d *DiskStore) IsDefaultRef() bool {
+	return true
+}
+
 func (d *DiskStore) Refresh() error {
 	// Nothing to do for a disk-based store.
 	return nil

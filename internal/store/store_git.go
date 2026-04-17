@@ -27,10 +27,9 @@ type GitSource struct {
 
 // gitStore is a "view" over a single revision in a GitSource.
 type gitStore struct {
-	client  *gitclient.Client
-	ref     string
-	rootDir string
-	author  *gitclient.Author // nil = read-only
+	source    *GitSource
+	ref       string
+	isSession bool
 }
 
 var _ Source = (*GitSource)(nil)
@@ -105,15 +104,10 @@ func (g *GitSource) Store(ref string) (Store, error) {
 	g.mu.Lock()
 	isSession := g.sessions[ref]
 	g.mu.Unlock()
-	var author *gitclient.Author
-	if isSession {
-		author = &g.author
-	}
 	return &gitStore{
-		client:  g.client,
-		ref:     ref,
-		rootDir: g.rootDir,
-		author:  author,
+		source:    g,
+		ref:       ref,
+		isSession: isSession,
 	}, nil
 }
 
@@ -278,8 +272,8 @@ func (g *GitSource) ListReferences() ([]string, error) {
 }
 
 func (g *gitStore) ListFiles(dir string) ([]string, error) {
-	fullDir := path.Join(g.rootDir, dir)
-	files, err := g.client.ListFilesRecursive(g.ref, fullDir)
+	fullDir := path.Join(g.source.rootDir, dir)
+	files, err := g.source.client.ListFilesRecursive(g.ref, fullDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list files: %v", err)
 	}
@@ -294,14 +288,18 @@ func (g *gitStore) ListFiles(dir string) ([]string, error) {
 }
 
 func (g *gitStore) ReadFile(filePath string) ([]byte, error) {
-	fullPath := path.Join(g.rootDir, filePath)
-	return g.client.ReadFile(g.ref, fullPath)
+	fullPath := path.Join(g.source.rootDir, filePath)
+	return g.source.client.ReadFile(g.ref, fullPath)
 }
 
 func (g *gitStore) WriteFile(filePath string, contents []byte) error {
-	if g.author == nil {
+	if !g.isSession {
 		return ErrReadOnly
 	}
-	fullPath := path.Join(g.rootDir, filePath)
-	return g.client.CommitFile(g.ref, fullPath, contents, *g.author, "Update "+filePath)
+	fullPath := path.Join(g.source.rootDir, filePath)
+	return g.source.client.CommitFile(g.ref, fullPath, contents, g.source.author, "Update "+filePath)
+}
+
+func (g *gitStore) IsDefaultRef() bool {
+	return g.ref == g.source.defaultRef
 }

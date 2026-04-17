@@ -192,6 +192,9 @@ type DomainSpec struct {
 type Domain struct {
 	Metadata *Metadata   `json:"metadata"`
 	Spec     *DomainSpec `json:"spec"`
+	// An optional status containing "live" information about the entity.
+	// The status is not persisted in the repository, but updated at runtime, e.g. by plugins.
+	Status atomic.Pointer[Status]
 
 	sourceInfo *api.SourceInfo
 }
@@ -457,6 +460,8 @@ func UpdateStatus(p *atomic.Pointer[Status], mutate func(*Status)) {
 // the entity kind does not carry a mutable Status.
 func entityStatusPtr(e Entity) *atomic.Pointer[Status] {
 	switch x := e.(type) {
+	case *Domain:
+		return &x.Status
 	case *System:
 		return &x.Status
 	case *Component:
@@ -700,7 +705,7 @@ func (d *Domain) GetSystems() []*Ref               { return d.Spec.inv.systems }
 func (d *Domain) AddSystem(s *Ref)                 { d.Spec.inv.systems = append(d.Spec.inv.systems, s) }
 func (d *Domain) GetSourceInfo() *api.SourceInfo   { return d.sourceInfo }
 func (d *Domain) SetSourceInfo(si *api.SourceInfo) { d.sourceInfo = si }
-func (d *Domain) GetStatus() *Status               { return nil }
+func (d *Domain) GetStatus() *Status               { return d.Status.Load() }
 func (d *Domain) Reset() Entity {
 	cpy, err := cloneEntityFromAPI[*api.Domain](d)
 	if err != nil {

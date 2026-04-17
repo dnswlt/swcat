@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -127,12 +128,23 @@ type Server struct {
 	// If set, code searches can be run against Bitbucket.
 	bbClient bitbucket.Searcher
 
+	// The optional SQLite database.
+	// If set, entity status observations can be persisted.
+	db *sql.DB
+
 	// Server startup time. Used for cache busting JS/CSS resources.
 	started time.Time
 }
 
 // ServerOption is a functional option for configuring a Server.
 type ServerOption func(*Server)
+
+// WithDatabase configures the server to use the given database.
+func WithDatabase(db *sql.DB) ServerOption {
+	return func(s *Server) {
+		s.db = db
+	}
+}
 
 // WithLinter configures the server to use the given linter.
 func WithLinter(linter *lint.Linter) ServerOption {
@@ -294,7 +306,7 @@ func (s *Server) loadStoreData(ref string) (*storeData, error) {
 		cfg = storeCfg
 	}
 
-	repoInstance, err := repo.Load(st, cfg.Catalog)
+	repoInstance, err := repo.Load(st, s.db, cfg.Catalog)
 	if err != nil {
 		return nil, err
 	}

@@ -1,13 +1,16 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/database"
 	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
@@ -86,6 +89,15 @@ func (s *Server) runPlugins(w http.ResponseWriter, r *http.Request, entityRef st
 			continue
 		}
 		catalog.MergeObservations(res.entity, res.result.Observations)
+		if s.db != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			err := database.StoreObservations(ctx, s.db, res.entity)
+			cancel()
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", res.entity.GetRef(), err))
+				continue
+			}
+		}
 		nSuccess++
 	}
 

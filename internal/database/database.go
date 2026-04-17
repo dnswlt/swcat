@@ -66,8 +66,8 @@ func (c *sqliteConnector) Connect(ctx context.Context) (driver.Conn, error) {
 
 func (c *sqliteConnector) Driver() driver.Driver { return sqliteDrv }
 
-// New creates a new sqlite DB connected to dsn (a file path, or ":memory:" for an in-mem DB).
-func New(dsn string) *sql.DB {
+// NewSqlite creates a new sqlite DB connected to dsn (a file path, or ":memory:" for an in-mem DB).
+func NewSqlite(dsn string) *sql.DB {
 	// Use a custom connector so every pooled connection gets the pragmas,
 	// not just whichever one happens to run the first Exec.
 	return sql.OpenDB(&sqliteConnector{
@@ -165,7 +165,7 @@ func StoreObservations(ctx context.Context, db *sql.DB, e catalog.Entity) error 
 func RecreateTables(ctx context.Context, db *sql.DB, dropAll bool) error {
 
 	if dropAll {
-		_, err := db.ExecContext(ctx, `DROP TABLE status_observations`)
+		_, err := db.ExecContext(ctx, `DROP TABLE IF EXISTS status_observations`)
 		if err != nil {
 			return fmt.Errorf("drop table: %w", err)
 		}

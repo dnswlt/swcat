@@ -12,7 +12,7 @@ import (
 
 func newTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db := New(":memory:")
+	db := NewSqlite(":memory:")
 	t.Cleanup(func() { db.Close() })
 	if err := RecreateTables(context.Background(), db, false); err != nil {
 		t.Fatalf("RecreateTables: %v", err)

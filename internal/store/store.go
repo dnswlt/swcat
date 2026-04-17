@@ -55,6 +55,8 @@ type Store interface {
 	// WriteFile write the given contents to path in the store.
 	// Stores that do not support writing should return ErrReadOnly.
 	WriteFile(path string, contents []byte) error
+	// IsDefaultRef returns true if the store's ref (e.g. git branch) is the source's default ref.
+	IsDefaultRef() bool
 }
 
 func DeleteEntity(st Store, path string, ref *api.Ref) error {

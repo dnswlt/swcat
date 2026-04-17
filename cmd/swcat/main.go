@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/dnswlt/swcat/internal/bitbucket"
 	"github.com/dnswlt/swcat/internal/comments"
+	"github.com/dnswlt/swcat/internal/database"
 	"github.com/dnswlt/swcat/internal/gitclient"
 	"github.com/dnswlt/swcat/internal/kube"
 	"github.com/dnswlt/swcat/internal/lint"
@@ -126,6 +128,7 @@ type Options struct {
 	PrometheusTimeout time.Duration
 	BitbucketURL      string
 	DocumentsDir      string
+	DatabaseDSN       string
 }
 
 func createKubeClient(source store.Source, opts Options) (kube.Client, error) {
@@ -209,6 +212,23 @@ func createBitbucketClient(opts Options) *bitbucket.Client {
 	return client
 }
 
+func ensureSqliteDir(dsn string) error {
+	// Strip query parameters and remove the standard SQLite URI scheme.
+	p := dsn
+	p, _, _ = strings.Cut(p, "?")
+	p = strings.TrimPrefix(p, "file:")
+
+	// Create directory if necessary.
+	if p == ":memory:" || p == "" {
+		return nil
+	}
+	dir := filepath.Dir(p)
+	if dir == "." {
+		return nil
+	}
+	return os.MkdirAll(dir, 0755)
+}
+
 func main() {
 
 	var opts Options
@@ -234,6 +254,7 @@ func main() {
 	fs.DurationVar(&opts.PrometheusTimeout, "prometheus-timeout", 30*time.Second, "Maximum time to wait for Prometheus queries")
 	fs.StringVar(&opts.BitbucketURL, "bitbucket-url", "", "Base URL of the Bitbucket Data Center instance (e.g. https://bitbucket.example.com)")
 	fs.StringVar(&opts.DocumentsDir, "documents-dir", "", "Local path to serve HTML documents from, bypassing the catalog store (e.g. for sidecar sync)")
+	fs.StringVar(&opts.DatabaseDSN, "database-dsn", "", "SQLite DSN for entity status observations (e.g. data.db)")
 
 	err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("SWCAT"))
 	if err != nil {
@@ -338,6 +359,23 @@ func main() {
 		log.Printf("Bitbucket client initialized (url=%s)", opts.BitbucketURL)
 	}
 
+	// Optionally initialize SQLite database
+	var db *sql.DB
+	if opts.DatabaseDSN != "" {
+		if err := ensureSqliteDir(opts.DatabaseDSN); err != nil {
+			log.Fatalf("Failed to create directory for database: %v", err)
+		}
+
+		db = database.NewSqlite(opts.DatabaseDSN)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := database.RecreateTables(ctx, db, false)
+		cancel()
+		if err != nil {
+			log.Fatalf("Failed to initialize database tables in %s: %v", opts.DatabaseDSN, err)
+		}
+		log.Printf("Database initialized from %s", opts.DatabaseDSN)
+	}
+
 	server, err := web.NewServer(
 		web.ServerOptions{
 			Addr:            opts.Addr,
@@ -357,6 +395,7 @@ func main() {
 		web.WithKubeClient(kubeClient),
 		web.WithPrometheusClient(promClient),
 		web.WithBitbucketClient(bbClient),
+		web.WithDatabase(db),
 	)
 	if err != nil {
 		log.Fatalf("Could not create server: %v", err)

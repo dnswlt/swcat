@@ -1,6 +1,8 @@
 package repo
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,9 +10,11 @@ import (
 	"log"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/database"
 	"github.com/dnswlt/swcat/internal/store"
 )
 
@@ -865,9 +869,9 @@ func (r *Repository) sortReferences() {
 // Load reads entities from the given catalog paths
 // and returns a validated repository.
 // Elements in catalogPaths must be .yml file paths.
-func Load(st store.Store, config Config) (*Repository, error) {
+func Load(st store.Store, db *sql.DB, config Config) (*Repository, error) {
 	repo := NewRepositoryWithConfig(config)
-	err := repo.initialize(st)
+	err := repo.initialize(st, db)
 	if err != nil {
 		return nil, err
 	}
@@ -895,7 +899,7 @@ func mergeMetadataExtensions(exts *api.CatalogExtensions, entity catalog.Entity)
 	return nil
 }
 
-func (r *Repository) initialize(st store.Store) error {
+func (r *Repository) initialize(st store.Store, db *sql.DB) error {
 	if r.Size() != 0 {
 		return fmt.Errorf("initialize called on a non-empty repo (size: %d)", r.Size())
 	}
@@ -937,5 +941,27 @@ func (r *Repository) initialize(st store.Store) error {
 		return fmt.Errorf("repository validation failed: %v", err)
 	}
 
+	// Add status data from database.
+	if db != nil && st.IsDefaultRef() {
+		for _, e := range r.allEntities {
+			err := addObservations(db, e)
+			if err != nil {
+				// Ignore errors; observations are optional for now.
+				log.Print(err.Error())
+				continue
+			}
+		}
+	}
+	return nil
+}
+
+func addObservations(db *sql.DB, e catalog.Entity) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	obs, err := database.LoadObservations(ctx, db, e.GetRef().String())
+	if err != nil {
+		return fmt.Errorf("error reading observations for %v: %s", e.GetRef().String(), err.Error())
+	}
+	catalog.MergeObservations(e, obs)
 	return nil
 }
