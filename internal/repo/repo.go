@@ -202,7 +202,7 @@ func (r *Repository) DeleteEntity(ref *catalog.Ref) (*Repository, error) {
 	return r2, nil
 }
 
-// AddEntity adds an entity to the repository *during construction*.
+// AddEntity adds an entity to the repository **during construction**.
 // This method is intended to be used while a repository is constructed,
 // but before it is validated and back-references etc. are built.
 // See InsertOrUpdateEntity for operations on an "active" repository.
@@ -822,7 +822,7 @@ func (r *Repository) populateRelationships() {
 		if s := c.Spec.System; s != nil {
 			system := r.System(s)
 			system.AddComponent(ref)
-			c.Spec.Domain = system.GetDomain()
+			c.SetDomain(system.GetDomain())
 		}
 		// Register in parent component
 		if p := c.Spec.SubcomponentOf; p != nil {
@@ -841,7 +841,7 @@ func (r *Repository) populateRelationships() {
 		if s := res.Spec.System; s != nil {
 			system := r.System(s)
 			system.AddResource(ref)
-			res.Spec.Domain = system.GetDomain()
+			res.SetDomain(system.GetDomain())
 		}
 		// Register in "DependsOn" dependencies.
 		for _, d := range res.Spec.DependsOn {
@@ -855,7 +855,7 @@ func (r *Repository) populateRelationships() {
 		if s := ap.Spec.System; s != nil {
 			system := r.System(s)
 			system.AddAPI(ref)
-			ap.Spec.Domain = system.GetDomain()
+			ap.SetDomain(system.GetDomain())
 		}
 	}
 

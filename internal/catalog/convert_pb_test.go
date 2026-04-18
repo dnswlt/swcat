@@ -27,7 +27,7 @@ func TestToPB_DomainField(t *testing.T) {
 					Lifecycle: "prod",
 					Owner:     ownerRef,
 					System:    systemRef,
-					Domain:    domainRef,
+					inv:       componentInvRel{domain: domainRef},
 				},
 			},
 			wantSpec: &catalog_pb.ComponentSpec{
@@ -47,7 +47,7 @@ func TestToPB_DomainField(t *testing.T) {
 					Lifecycle: "stable",
 					Owner:     ownerRef,
 					System:    systemRef,
-					Domain:    domainRef,
+					inv:       apiInvRel{domain: domainRef},
 				},
 			},
 			wantSpec: &catalog_pb.ApiSpec{
@@ -66,7 +66,7 @@ func TestToPB_DomainField(t *testing.T) {
 					Type:   "database",
 					Owner:  ownerRef,
 					System: systemRef,
-					Domain: domainRef,
+					inv:    resourceInvRel{domain: domainRef},
 				},
 			},
 			wantSpec: &catalog_pb.ResourceSpec{

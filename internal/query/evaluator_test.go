@@ -45,12 +45,12 @@ func TestEvaluator_Matches(t *testing.T) {
 			Lifecycle: "experimental",
 			Owner:     &catalog.Ref{Name: "team-a"},
 			System:    sys1.GetRef(),
-			Domain:    dom1.GetRef(),
 			ProvidesAPIs: []*catalog.LabelRef{
 				{Ref: api1.GetRef()},
 			},
 		},
 	}
+	comp1.SetDomain(dom1.GetRef())
 
 	tests := []struct {
 		name      string

@@ -471,13 +471,13 @@ func TestRepository_PopulateDomain(t *testing.T) {
 		t.Fatalf("Validate(): %v", err)
 	}
 
-	if !c.Spec.Domain.Equal(domainRef) {
-		t.Errorf("Component.Spec.Domain = %v, want %v", c.Spec.Domain, domainRef)
+	if !c.GetDomain().Equal(domainRef) {
+		t.Errorf("Component.GetDomain() = %v, want %v", c.GetDomain(), domainRef)
 	}
-	if !res.Spec.Domain.Equal(domainRef) {
-		t.Errorf("Resource.Spec.Domain = %v, want %v", res.Spec.Domain, domainRef)
+	if !res.GetDomain().Equal(domainRef) {
+		t.Errorf("Resource.GetDomain() = %v, want %v", res.GetDomain(), domainRef)
 	}
-	if !a.Spec.Domain.Equal(domainRef) {
-		t.Errorf("API.Spec.Domain = %v, want %v", a.Spec.Domain, domainRef)
+	if !a.GetDomain().Equal(domainRef) {
+		t.Errorf("API.GetDomain() = %v, want %v", a.GetDomain(), domainRef)
 	}
 }

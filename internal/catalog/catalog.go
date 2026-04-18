@@ -245,6 +245,7 @@ type System struct {
 type componentInvRel struct {
 	dependents    []*LabelRef
 	subcomponents []*Ref
+	domain        *Ref
 }
 
 type ComponentSpec struct {
@@ -279,8 +280,7 @@ type ComponentSpec struct {
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
-	inv    componentInvRel
-	Domain *Ref `json:"domain"`
+	inv componentInvRel
 }
 
 type Component struct {
@@ -297,6 +297,7 @@ type Component struct {
 
 type resourceInvRel struct {
 	dependents []*LabelRef
+	domain     *Ref
 }
 
 type ResourceSpec struct {
@@ -315,8 +316,7 @@ type ResourceSpec struct {
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "(reverse) navigation" easier.
-	inv    resourceInvRel
-	Domain *Ref `json:"domain"`
+	inv resourceInvRel
 }
 
 type Resource struct {
@@ -333,6 +333,7 @@ type Resource struct {
 type apiInvRel struct {
 	providers []*LabelRef
 	consumers []*LabelRef
+	domain    *Ref
 }
 
 type APISpecVersion struct {
@@ -368,8 +369,7 @@ type APISpec struct {
 
 	// These fields are not part of the Backstage API.
 	// They are populated on demand to make "reverse navigation" easier.
-	inv    apiInvRel
-	Domain *Ref `json:"domain"`
+	inv apiInvRel
 }
 
 type API struct {
@@ -639,7 +639,8 @@ func (c *Component) GetType() string        { return c.Spec.Type }
 func (c *Component) GetOwner() *Ref         { return c.Spec.Owner }
 func (c *Component) GetLifecycle() string   { return c.Spec.Lifecycle }
 func (c *Component) GetSystem() *Ref        { return c.Spec.System }
-func (c *Component) GetDomain() *Ref        { return c.Spec.Domain }
+func (c *Component) GetDomain() *Ref        { return c.Spec.inv.domain }
+func (c *Component) SetDomain(d *Ref)       { c.Spec.inv.domain = d }
 func (c *Component) GetParent() *Ref {
 	if c.Spec.SubcomponentOf != nil {
 		return c.Spec.SubcomponentOf
@@ -692,6 +693,7 @@ func (s *System) GetAPIs() []*Ref                  { return s.Spec.inv.apis }
 func (s *System) GetResources() []*Ref             { return s.Spec.inv.resources }
 func (s *System) GetSystem() *Ref                  { return s.GetRef() }
 func (s *System) GetDomain() *Ref                  { return s.Spec.Domain }
+func (s *System) SetDomain(d *Ref)                 { s.Spec.Domain = d }
 func (c *System) GetParent() *Ref                  { return c.Spec.Domain }
 func (s *System) AddAPI(a *Ref)                    { s.Spec.inv.apis = append(s.Spec.inv.apis, a) }
 func (s *System) AddComponent(c *Ref)              { s.Spec.inv.components = append(s.Spec.inv.components, c) }
@@ -746,7 +748,8 @@ func (a *API) GetOwner() *Ref                   { return a.Spec.Owner }
 func (a *API) GetProviders() []*LabelRef        { return a.Spec.inv.providers }
 func (a *API) GetConsumers() []*LabelRef        { return a.Spec.inv.consumers }
 func (a *API) GetSystem() *Ref                  { return a.Spec.System }
-func (a *API) GetDomain() *Ref                  { return a.Spec.Domain }
+func (a *API) GetDomain() *Ref                  { return a.Spec.inv.domain }
+func (a *API) SetDomain(d *Ref)                 { a.Spec.inv.domain = d }
 func (a *API) GetParent() *Ref                  { return a.Spec.System }
 func (a *API) AddProvider(p *LabelRef)          { a.Spec.inv.providers = append(a.Spec.inv.providers, p) }
 func (a *API) AddConsumer(c *LabelRef)          { a.Spec.inv.consumers = append(a.Spec.inv.consumers, c) }
@@ -773,7 +776,8 @@ func (r *Resource) GetType() string            { return r.Spec.Type }
 func (r *Resource) GetOwner() *Ref             { return r.Spec.Owner }
 func (r *Resource) GetDependents() []*LabelRef { return r.Spec.inv.dependents }
 func (r *Resource) GetSystem() *Ref            { return r.Spec.System }
-func (r *Resource) GetDomain() *Ref            { return r.Spec.Domain }
+func (r *Resource) GetDomain() *Ref            { return r.Spec.inv.domain }
+func (r *Resource) SetDomain(d *Ref)           { r.Spec.inv.domain = d }
 func (r *Resource) GetParent() *Ref            { return r.Spec.System }
 func (r *Resource) AddDependent(d *LabelRef) {
 	r.Spec.inv.dependents = append(r.Spec.inv.dependents, d)
