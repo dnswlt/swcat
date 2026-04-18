@@ -77,17 +77,20 @@ func (s *Server) runPlugins(w http.ResponseWriter, r *http.Request, entityRef st
 			continue
 		}
 
-		exts := &api.CatalogExtensions{
-			Entities: map[string]*api.MetadataExtensions{
-				res.entity.GetRef().String(): {
-					Annotations: res.result.Annotations,
+		if len(res.result.Annotations) > 0 {
+			exts := &api.CatalogExtensions{
+				Entities: map[string]*api.MetadataExtensions{
+					res.entity.GetRef().String(): {
+						Annotations: res.result.Annotations,
+					},
 				},
-			},
+			}
+			if err := store.MergeExtensions(st, res.entity.GetSourceInfo().Path, exts); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", res.entity.GetRef(), err))
+				continue
+			}
 		}
-		if err := store.MergeExtensions(st, res.entity.GetSourceInfo().Path, exts); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", res.entity.GetRef(), err))
-			continue
-		}
+
 		catalog.MergeObservations(res.entity, res.result.Observations)
 		if s.db != nil {
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)

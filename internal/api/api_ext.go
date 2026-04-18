@@ -42,14 +42,20 @@ func (c *CatalogExtensions) Get(ref string) *MetadataExtensions {
 
 // Merge merges other into c at the annotation key level.
 // A nil annotation value deletes the key; absent keys are preserved.
-func (c *CatalogExtensions) Merge(other *CatalogExtensions) {
+// Returns true if any updates were made.
+func (c *CatalogExtensions) Merge(other *CatalogExtensions) bool {
 	if other == nil || len(other.Entities) == 0 {
-		return
+		return false
 	}
 	if c.Entities == nil {
 		c.Entities = make(map[string]*MetadataExtensions)
 	}
+	updated := false
 	for ref, otherMeta := range other.Entities {
+		if len(otherMeta.Annotations) == 0 {
+			continue
+		}
+		updated = true
 		existing := c.Entities[ref]
 		if existing == nil {
 			existing = &MetadataExtensions{}
@@ -66,4 +72,5 @@ func (c *CatalogExtensions) Merge(other *CatalogExtensions) {
 			}
 		}
 	}
+	return updated
 }

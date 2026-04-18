@@ -258,7 +258,11 @@ func MergeExtensions(st Store, path string, newExts *api.CatalogExtensions) erro
 	if existingExts == nil {
 		existingExts = &api.CatalogExtensions{}
 	}
-	existingExts.Merge(newExts)
+
+	updated := existingExts.Merge(newExts)
+	if !updated {
+		return nil
+	}
 
 	if err := WriteExtensions(st, extPath, existingExts); err != nil {
 		return fmt.Errorf("write extensions: %w", err)
