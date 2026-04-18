@@ -35,7 +35,6 @@ func TestCELDemo(t *testing.T) {
 			System:    catalog.MustParseRef("system:payment-platform"),
 		},
 	}
-	pb := catalog.ToPB(demoComponent)
 
 	// All expressions in this list evaluate to true when evaluated on demoComponent.
 	// See https://github.com/google/cel-spec/blob/master/doc/langdef.md for a detailed
@@ -90,12 +89,12 @@ func TestCELDemo(t *testing.T) {
 					},
 				},
 			}
-			linter, err := NewLinter(config, nil)
+			linter, err := NewLinter(config)
 			if err != nil {
 				t.Fatalf("NewLinter: %v", err)
 			}
 
-			findings := linter.Lint(pb)
+			findings := linter.Lint(demoComponent)
 			if len(findings) > 0 {
 				t.Errorf("CEL expression %q failed: %v", expr, findings[0].Message)
 			}

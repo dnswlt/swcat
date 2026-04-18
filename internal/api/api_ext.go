@@ -24,6 +24,7 @@ type CatalogExtensions struct {
 type LintFinding struct {
 	CreateTime time.Time `json:"createTime"`
 	Message    string    `json:"message"`
+	Severity   string    `json:"severity"`
 }
 
 func NewCatalogExtensions() *CatalogExtensions {

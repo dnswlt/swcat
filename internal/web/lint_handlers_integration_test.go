@@ -44,7 +44,7 @@ func newPrometheusTestServer(t *testing.T, querier prometheus.Querier) *Server {
 				},
 			},
 		},
-	}, nil)
+	})
 	if err != nil {
 		t.Fatalf("NewLinter: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestServePrometheusWorkloads_OK(t *testing.T) {
 func TestServePrometheusWorkloads_NotEnabled(t *testing.T) {
 	st := store.NewDiskStore("../../testdata/test1")
 
-	linter, err := lint.NewLinter(&lint.Config{}, nil)
+	linter, err := lint.NewLinter(&lint.Config{})
 	if err != nil {
 		t.Fatalf("NewLinter: %v", err)
 	}
@@ -165,7 +165,7 @@ func newBitbucketTestServer(t *testing.T, searcher bitbucket.Searcher) *Server {
 			Projects: []string{"PROJ"},
 			Queries:  []lint.BitbucketPathQuery{{Kind: "component", Path: "catalog.yaml"}},
 		},
-	}, nil)
+	})
 	if err != nil {
 		t.Fatalf("NewLinter: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestServeBitbucketResults_UntrackedFilter(t *testing.T) {
 func TestServeBitbucketResults_NotEnabled(t *testing.T) {
 	st := store.NewDiskStore("../../testdata/test1")
 
-	linter, err := lint.NewLinter(&lint.Config{}, nil)
+	linter, err := lint.NewLinter(&lint.Config{})
 	if err != nil {
 		t.Fatalf("NewLinter: %v", err)
 	}

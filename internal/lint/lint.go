@@ -2,12 +2,13 @@ package lint
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
-	"slices"
 	"strings"
 
+	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
 	catalog_pb "github.com/dnswlt/swcat/internal/catalog/pb"
 	"github.com/google/cel-go/cel"
@@ -72,9 +73,9 @@ type Config struct {
 	// condition to restrict to specific kinds).
 	CELRules []Rule `yaml:"celRules,omitempty"`
 
-	// CustomRules invoke registered Go functions for complex validation that
-	// cannot be expressed cleanly in CEL.
-	CustomRules []CustomRule `yaml:"customRules,omitempty"`
+	// If true, the linter will check the status of all entities for
+	// "swcat-lint/finding-*" observations and report those as findings.
+	CheckStatus bool `yaml:"checkStatus"`
 
 	// ReportedGroups is an optional list of group names (qualified names).
 	// If set, the lint report will only show these groups as individual cards.
@@ -195,17 +196,10 @@ type compiledRule struct {
 	check     cel.Program
 }
 
-type compiledCustomRule struct {
-	rule      CustomRule
-	condition cel.Program
-	fn        CustomCheckFunc
-}
-
 // Linter provides efficient evaluation of rules against multiple entities.
 type Linter struct {
 	env            *cel.Env
 	celRules       []compiledRule
-	customRules    []compiledCustomRule
 	config         *Config
 	reportedGroups []string // parsed/validated form of config.ReportedGroups
 	bbCache        bbFilesCache
@@ -213,10 +207,7 @@ type Linter struct {
 
 // NewLinter creates a new Linter from the given configuration.
 // CEL expressions are compiled once and cached for subsequent evaluations.
-// customChecks maps function names to their implementations; it may be nil
-// if the config contains no customRules. NewLinter returns an error if any
-// customRule references a name not present in customChecks.
-func NewLinter(config *Config, customChecks map[string]CustomCheckFunc) (*Linter, error) {
+func NewLinter(config *Config) (*Linter, error) {
 	env, err := cel.NewEnv(
 		cel.Types(&catalog_pb.Entity{}),
 		cel.Variable("kind", cel.StringType),
@@ -244,24 +235,6 @@ func NewLinter(config *Config, customChecks map[string]CustomCheckFunc) (*Linter
 			return nil, err
 		}
 		l.celRules = append(l.celRules, cr)
-	}
-
-	for _, cr := range config.CustomRules {
-		fn, ok := customChecks[cr.Func]
-		if !ok {
-			// Invalid function. Add existing ones to error message for simpler debugging.
-			knownFunctions := make([]string, 0, len(customChecks))
-			for k := range customChecks {
-				knownFunctions = append(knownFunctions, k)
-			}
-			slices.Sort(knownFunctions)
-			return nil, fmt.Errorf("custom rule %q references unknown function %q (available: %s)", cr.Name, cr.Func, strings.Join(knownFunctions, ", "))
-		}
-		ccr, err := l.compileCustomRule(cr, fn)
-		if err != nil {
-			return nil, err
-		}
-		l.customRules = append(l.customRules, ccr)
 	}
 
 	if config.Bitbucket.Enabled {
@@ -327,7 +300,7 @@ func (l *Linter) Bitbucket() BitbucketConfig {
 }
 
 func (l *Linter) NumRules() int {
-	return len(l.celRules) + len(l.customRules)
+	return len(l.celRules)
 }
 
 func (l *Linter) compileCondition(name, condition string) (cel.Program, error) {
@@ -367,47 +340,28 @@ func (l *Linter) compileRule(r Rule) (compiledRule, error) {
 	}, nil
 }
 
-func (l *Linter) compileCustomRule(cr CustomRule, fn CustomCheckFunc) (compiledCustomRule, error) {
-	condition, err := l.compileCondition(cr.Name, cr.Condition)
-	if err != nil {
-		return compiledCustomRule{}, err
-	}
-	return compiledCustomRule{
-		rule:      cr,
-		condition: condition,
-		fn:        fn,
-	}, nil
-}
-
 // Lint evaluates all applicable rules against the given entity.
-func (l *Linter) Lint(e *catalog_pb.Entity) []Finding {
+func (l *Linter) Lint(e catalog.Entity) []Finding {
 	var findings []Finding
 
-	args := map[string]any{
-		"kind":     e.Kind,
-		"metadata": e.Metadata,
-		"spec":     extractSpec(e),
-	}
-
-	for _, cr := range l.celRules {
-		if !l.shouldEvaluate(cr.condition, args) {
-			continue
+	if len(l.celRules) > 0 {
+		pbe := catalog.ToPB(e)
+		args := map[string]any{
+			"kind":     pbe.Kind,
+			"metadata": pbe.Metadata,
+			"spec":     extractSpec(pbe),
 		}
-		findings = append(findings, l.evaluate(cr, args)...)
-	}
 
-	for _, cr := range l.customRules {
-		if !l.shouldEvaluate(cr.condition, args) {
-			continue
-		}
-		customFindings := cr.fn(cr.rule, e)
-		if cr.rule.Severity != "" {
-			// Overwrite severity with configured value
-			for i := range customFindings {
-				customFindings[i].Severity = cr.rule.Severity
+		for _, cr := range l.celRules {
+			if !l.shouldEvaluate(cr.condition, args) {
+				continue
 			}
+			findings = append(findings, l.evaluate(cr, args)...)
 		}
-		findings = append(findings, customFindings...)
+	}
+
+	if l.config.CheckStatus {
+		findings = append(findings, CheckStatusLintFindings(e)...)
 	}
 
 	return findings
@@ -471,4 +425,41 @@ func extractSpec(e *catalog_pb.Entity) any {
 		return s.GroupSpec
 	}
 	return nil
+}
+
+// CheckStatusLintFindings is a built-in lint rule that checks for the existence of
+// annotations whose name starts with "swcat-lint/finding-" and returns their contents as lint findings.
+// If the annotation's value is a JSON-encoded api.LintFinding, its message is used;
+// otherwise, the raw annotation value is returned as the finding message.
+func CheckStatusLintFindings(e catalog.Entity) []Finding {
+	status := e.GetStatus()
+	if status == nil {
+		return nil
+	}
+
+	var findings []Finding
+	for name, obs := range status.Observations {
+		if !strings.HasPrefix(name, "swcat-lint/finding-") {
+			continue
+		}
+		f := Finding{
+			RuleName: name,
+			Severity: SeverityInfo,
+		}
+		// Try to parse observation value as a LintFinding.
+		var finding api.LintFinding
+		dec := json.NewDecoder(bytes.NewReader(obs.Value))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&finding); err == nil {
+			f.Message = finding.Message
+			if finding.Severity != "" {
+				f.Severity = Severity(finding.Severity)
+			}
+		} else {
+			// Not a structured finding message: use the whole text as message.
+			f.Message = string(obs.Value)
+		}
+		findings = append(findings, f)
+	}
+	return findings
 }

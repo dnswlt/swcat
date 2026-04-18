@@ -1,13 +1,16 @@
 package lint
 
 import (
+	"cmp"
 	"encoding/json"
 	"log"
+	"slices"
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	catalog_pb "github.com/dnswlt/swcat/internal/catalog/pb"
 	"github.com/google/cel-go/cel"
+	gocmp "github.com/google/go-cmp/cmp"
 )
 
 func TestCELProtoEntityUX(t *testing.T) {
@@ -164,7 +167,7 @@ func TestLinter(t *testing.T) {
 		},
 	}
 
-	linter, err := NewLinter(config, nil)
+	linter, err := NewLinter(config)
 	if err != nil {
 		t.Fatalf("NewLinter: %v", err)
 	}
@@ -218,8 +221,7 @@ func TestLinter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pb := catalog.ToPB(tt.entity)
-			findings := linter.Lint(pb)
+			findings := linter.Lint(tt.entity)
 
 			if len(findings) != len(tt.wantRule) {
 				t.Errorf("got %d findings, want %d", len(findings), len(tt.wantRule))
@@ -238,107 +240,119 @@ func TestLinter(t *testing.T) {
 	}
 }
 
-func TestCustomRuleWithCondition(t *testing.T) {
-	customCheck := func(rule CustomRule, e *catalog_pb.Entity) []Finding {
-		return []Finding{
-			{
-				RuleName: "custom-check",
-				Severity: SeverityError,
-				Message:  "Custom check failed",
-			},
-		}
+func componentWithStatus(obs map[string]catalog.Observation) *catalog.Component {
+	c := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "test"},
+		Spec:     &catalog.ComponentSpec{Type: "service"},
 	}
-
-	config := &Config{
-		CustomRules: []CustomRule{
-			{
-				Name:      "custom-on-component",
-				Condition: "kind == 'component'",
-				Func:      "my-custom-check",
-			},
-		},
+	if obs != nil {
+		catalog.MergeObservations(c, obs)
 	}
+	return c
+}
 
-	linter, err := NewLinter(config, map[string]CustomCheckFunc{
-		"my-custom-check": customCheck,
-	})
-	if err != nil {
-		t.Fatalf("NewLinter: %v", err)
-	}
-
+func TestCheckStatusLintFindings(t *testing.T) {
 	tests := []struct {
-		name         string
-		entity       catalog.Entity
-		wantFindings int
+		name   string
+		obs    map[string]catalog.Observation
+		useObs bool // when true, set status with (possibly empty) obs map
+		want   []Finding
 	}{
 		{
-			"component matches condition",
-			&catalog.Component{
-				Metadata: &catalog.Metadata{Name: "my-service"},
-				Spec:     &catalog.ComponentSpec{Type: "service"},
-			},
-			1,
+			name: "nil status returns nil",
+			want: nil,
 		},
 		{
-			"system does not match condition",
-			&catalog.System{
-				Metadata: &catalog.Metadata{Name: "my-system"},
-				Spec:     &catalog.SystemSpec{},
+			name:   "no matching observation prefix",
+			useObs: true,
+			obs: map[string]catalog.Observation{
+				"some-plugin/thing":   {Value: json.RawMessage(`"ignored"`)},
+				"another/observation": {Value: json.RawMessage(`{"x":1}`)},
 			},
-			0,
+			want: nil,
+		},
+		{
+			name:   "structured finding with severity",
+			useObs: true,
+			obs: map[string]catalog.Observation{
+				"swcat-lint/finding-x": {
+					Value: json.RawMessage(`{"createTime":"2024-01-01T00:00:00Z","message":"bad thing","severity":"warn"}`),
+				},
+			},
+			want: []Finding{
+				{RuleName: "swcat-lint/finding-x", Severity: SeverityWarn, Message: "bad thing"},
+			},
+		},
+		{
+			name:   "structured finding without severity defaults to info",
+			useObs: true,
+			obs: map[string]catalog.Observation{
+				"swcat-lint/finding-y": {
+					Value: json.RawMessage(`{"createTime":"2024-01-01T00:00:00Z","message":"soft note","severity":""}`),
+				},
+			},
+			want: []Finding{
+				{RuleName: "swcat-lint/finding-y", Severity: SeverityInfo, Message: "soft note"},
+			},
+		},
+		{
+			name:   "non-JSON value uses raw bytes as message",
+			useObs: true,
+			obs: map[string]catalog.Observation{
+				"swcat-lint/finding-raw": {Value: json.RawMessage(`not json at all`)},
+			},
+			want: []Finding{
+				{RuleName: "swcat-lint/finding-raw", Severity: SeverityInfo, Message: "not json at all"},
+			},
+		},
+		{
+			name:   "JSON with unknown fields falls back to raw bytes",
+			useObs: true,
+			obs: map[string]catalog.Observation{
+				"swcat-lint/finding-unk": {Value: json.RawMessage(`{"foo":"bar"}`)},
+			},
+			want: []Finding{
+				{RuleName: "swcat-lint/finding-unk", Severity: SeverityInfo, Message: `{"foo":"bar"}`},
+			},
+		},
+		{
+			name:   "only matching observations produce findings",
+			useObs: true,
+			obs: map[string]catalog.Observation{
+				"swcat-lint/finding-a": {
+					Value: json.RawMessage(`{"createTime":"2024-01-01T00:00:00Z","message":"msg a","severity":"error"}`),
+				},
+				"swcat-lint/finding-b": {
+					Value: json.RawMessage(`plain b`),
+				},
+				"other/annotation": {Value: json.RawMessage(`"ignored"`)},
+			},
+			want: []Finding{
+				{RuleName: "swcat-lint/finding-a", Severity: SeverityError, Message: "msg a"},
+				{RuleName: "swcat-lint/finding-b", Severity: SeverityInfo, Message: "plain b"},
+			},
 		},
 	}
+
+	byRuleName := func(a, b Finding) int { return cmp.Compare(a.RuleName, b.RuleName) }
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pb := catalog.ToPB(tt.entity)
-			findings := linter.Lint(pb)
-			if len(findings) != tt.wantFindings {
-				t.Errorf("got %d findings, want %d", len(findings), tt.wantFindings)
+			var entity catalog.Entity
+			if tt.useObs {
+				entity = componentWithStatus(tt.obs)
+			} else {
+				entity = componentWithStatus(nil)
+			}
+
+			got := CheckStatusLintFindings(entity)
+			slices.SortFunc(got, byRuleName)
+			want := slices.Clone(tt.want)
+			slices.SortFunc(want, byRuleName)
+
+			if diff := gocmp.Diff(want, got); diff != "" {
+				t.Errorf("CheckStatusLintFindings() mismatch (-want +got):\n%s", diff)
 			}
 		})
-	}
-}
-
-func TestCustomRuleWithSeverityOverride(t *testing.T) {
-	customCheck := func(rule CustomRule, e *catalog_pb.Entity) []Finding {
-		return []Finding{
-			{
-				RuleName: "custom-check",
-				Severity: SeverityError,
-				Message:  "Custom check failed",
-			},
-		}
-	}
-
-	config := &Config{
-		CustomRules: []CustomRule{
-			{
-				Name:     "custom-on-component",
-				Severity: SeverityInfo,
-				Func:     "my-custom-check",
-			},
-		},
-	}
-
-	linter, err := NewLinter(config, map[string]CustomCheckFunc{
-		"my-custom-check": customCheck,
-	})
-	if err != nil {
-		t.Fatalf("NewLinter: %v", err)
-	}
-
-	comp := &catalog.Component{
-		Metadata: &catalog.Metadata{Name: "my-service"},
-		Spec:     &catalog.ComponentSpec{Type: "service"},
-	}
-	pb := catalog.ToPB(comp)
-	findings := linter.Lint(pb)
-
-	if len(findings) != 1 {
-		t.Fatalf("got %d findings, want 1", len(findings))
-	}
-	if findings[0].Severity != SeverityInfo {
-		t.Errorf("got severity %q, want %q", findings[0].Severity, SeverityInfo)
 	}
 }

@@ -236,7 +236,7 @@ func NewServer(opts ServerOptions, source store.Source, serverOpts ...ServerOpti
 			if prop != "lint" {
 				return nil, false
 			}
-			findings := s.linter.Lint(catalog.ToPB(e))
+			findings := s.linter.Lint(e)
 			var values []string
 			for _, f := range findings {
 				values = append(values, string(f.Severity), f.RuleName)
@@ -272,7 +272,7 @@ func (s *Server) getFindings(data *storeData, e catalog.Entity) []lint.Finding {
 		return findings
 	}
 
-	findings := s.linter.Lint(catalog.ToPB(e))
+	findings := s.linter.Lint(e)
 	data.findingsCache.Add(ref, findings)
 	return findings
 }

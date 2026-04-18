@@ -10,9 +10,9 @@ import (
 
 // fakeBitbucketSearcher is a test double for bitbucket.Searcher.
 type fakeBitbucketSearcher struct {
-	baseURL  string
-	repos    map[string][]bitbucket.Repository // project key → repos
-	files    map[string][]string               // "projectKey/repoSlug" → file paths
+	baseURL   string
+	repos     map[string][]bitbucket.Repository // project key → repos
+	files     map[string][]string               // "projectKey/repoSlug" → file paths
 	listCalls int
 }
 
@@ -177,7 +177,7 @@ func TestMatchBitbucketFiles(t *testing.T) {
 
 func newBitbucketLinter(t *testing.T, cfg BitbucketConfig) *Linter {
 	t.Helper()
-	l, err := NewLinter(&Config{Bitbucket: cfg}, nil)
+	l, err := NewLinter(&Config{Bitbucket: cfg})
 	if err != nil {
 		t.Fatalf("NewLinter: %v", err)
 	}

@@ -498,6 +498,20 @@ func MergeObservations(e Entity, obs map[string]Observation) bool {
 	return true
 }
 
+// ReplaceObservations atomically replaces e's Status.Observations with obs.
+// A nil or empty obs clears all observations.
+// Returns false if e's kind has no Status field.
+func ReplaceObservations(e Entity, obs map[string]Observation) bool {
+	p := entityStatusPtr(e)
+	if p == nil {
+		return false
+	}
+	UpdateStatus(p, func(s *Status) {
+		s.Observations = maps.Clone(obs)
+	})
+	return true
+}
+
 // Interface implementations and helpers.
 func (m *Metadata) QName() string {
 	if m.Namespace != "" && m.Namespace != DefaultNamespace {

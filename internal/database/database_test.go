@@ -31,7 +31,7 @@ func newTestComponent(name string, obs map[string]catalog.Observation) *catalog.
 		},
 	}
 	if obs != nil {
-		c.Status.Store(&catalog.Status{Observations: obs})
+		catalog.MergeObservations(c, obs)
 	}
 	return c
 }
@@ -109,11 +109,9 @@ func TestStoreObservations_ReplaceSemantics(t *testing.T) {
 	}
 
 	// Replace with a different set: "a" updated, "b" removed, "c" added.
-	c.Status.Store(&catalog.Status{
-		Observations: map[string]catalog.Observation{
-			"a": {Value: mustJSON(t, 10), Producer: "p2", UpdatedAt: now},
-			"c": {Value: mustJSON(t, 3), Producer: "p", UpdatedAt: now},
-		},
+	catalog.ReplaceObservations(c, map[string]catalog.Observation{
+		"a": {Value: mustJSON(t, 10), Producer: "p2", UpdatedAt: now},
+		"c": {Value: mustJSON(t, 3), Producer: "p", UpdatedAt: now},
 	})
 	if err := StoreObservations(ctx, db, c); err != nil {
 		t.Fatalf("StoreObservations (replace): %v", err)
@@ -150,7 +148,7 @@ func TestStoreObservations_EmptyClears(t *testing.T) {
 	}
 
 	// Clear Status entirely — should wipe the rows.
-	c.Status.Store(&catalog.Status{})
+	catalog.ReplaceObservations(c, nil)
 	if err := StoreObservations(ctx, db, c); err != nil {
 		t.Fatalf("StoreObservations (empty): %v", err)
 	}
@@ -205,7 +203,7 @@ func TestStoreObservations_Isolation(t *testing.T) {
 	}
 
 	// Clear c1's observations; c2's must stay.
-	c1.Status.Store(&catalog.Status{})
+	catalog.ReplaceObservations(c1, nil)
 	if err := StoreObservations(ctx, db, c1); err != nil {
 		t.Fatalf("StoreObservations clear c1: %v", err)
 	}

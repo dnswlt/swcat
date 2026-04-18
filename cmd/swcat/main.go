@@ -177,7 +177,7 @@ func createLinter(source store.Source) (*lint.Linter, error) {
 	if err != nil {
 		return nil, err
 	}
-	return lint.NewLinter(lintCfg, lint.KnownCustomChecks)
+	return lint.NewLinter(lintCfg)
 }
 
 func createPrometheusClient(opts Options) *prometheus.Client {
