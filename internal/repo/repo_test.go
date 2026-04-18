@@ -1,9 +1,11 @@
 package repo
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/dnswlt/swcat/internal/catalog"
 )
@@ -479,5 +481,242 @@ func TestRepository_PopulateDomain(t *testing.T) {
 	}
 	if !a.GetDomain().Equal(domainRef) {
 		t.Errorf("API.GetDomain() = %v, want %v", a.GetDomain(), domainRef)
+	}
+}
+
+// seedRepoWithComponent builds a minimal valid repository populated with
+// Group g1, Domain d1, System s1 and Component c1. Entities are loaded
+// from YAML so each one has the SourceInfo required by Reset().
+func seedRepoWithComponent(t *testing.T) (r *Repository, c1 *catalog.Component) {
+	t.Helper()
+	r = NewRepository()
+	add := func(y string) catalog.Entity {
+		e := mustNewEntityFromString(t, y)
+		if err := r.AddEntity(e); err != nil {
+			t.Fatalf("AddEntity(%s): %v", e.GetRef(), err)
+		}
+		return e
+	}
+	add(`
+apiVersion: swcat/v1alpha1
+kind: Group
+metadata:
+  name: g1
+spec:
+  type: team
+  profile:
+    displayName: Group One
+`)
+	add(`
+apiVersion: swcat/v1alpha1
+kind: Domain
+metadata:
+  name: d1
+spec:
+  owner: group:default/g1
+`)
+	add(`
+apiVersion: swcat/v1alpha1
+kind: System
+metadata:
+  name: s1
+spec:
+  owner: group:default/g1
+  domain: domain:default/d1
+`)
+	e := add(`
+apiVersion: swcat/v1alpha1
+kind: Component
+metadata:
+  name: c1
+spec:
+  type: service
+  lifecycle: production
+  owner: group:default/g1
+  system: system:default/s1
+`)
+	if err := r.Validate(); err != nil {
+		t.Fatalf("Validate(): %v", err)
+	}
+	return r, e.(*catalog.Component)
+}
+
+func TestRepository_InsertOrUpdateEntity_Insert(t *testing.T) {
+	r, c1 := seedRepoWithComponent(t)
+
+	// Give c1 some status that must survive the repo rebuild.
+	catalog.MergeObservations(c1, map[string]catalog.Observation{
+		"health": {
+			Value:     json.RawMessage(`"green"`),
+			Producer:  "p",
+			UpdatedAt: time.Now().UTC(),
+		},
+	})
+
+	// Insert a brand-new component c2 that doesn't exist yet.
+	c2 := mustNewEntityFromString(t, `
+apiVersion: swcat/v1alpha1
+kind: Component
+metadata:
+  name: c2
+spec:
+  type: service
+  lifecycle: production
+  owner: group:default/g1
+  system: system:default/s1
+`)
+
+	r2, err := r.InsertOrUpdateEntity(c2)
+	if err != nil {
+		t.Fatalf("InsertOrUpdateEntity: %v", err)
+	}
+
+	// New entity is present in the new repo.
+	if got := r2.Component(c2.GetRef()); got == nil {
+		t.Fatalf("c2 missing in new repo after insert")
+	}
+	// Original repo is untouched.
+	if got := r.Component(c2.GetRef()); got != nil {
+		t.Errorf("original repo mutated: c2 unexpectedly present")
+	}
+
+	// c1 is still there and retains its status via the rebuild.
+	got1 := r2.Component(c1.GetRef())
+	if got1 == nil {
+		t.Fatalf("c1 missing in new repo after insert")
+	}
+	status := got1.GetStatus()
+	if status == nil || len(status.Observations) != 1 {
+		t.Fatalf("c1 status not preserved: %+v", status)
+	}
+	if _, ok := status.Observations["health"]; !ok {
+		t.Errorf("c1 observation %q missing after insert", "health")
+	}
+
+	// The carried-over status is a clone, not a shared reference: mutating
+	// the new repo's copy must not leak into the original c1.
+	catalog.MergeObservations(got1, map[string]catalog.Observation{
+		"extra": {Value: json.RawMessage(`"x"`), Producer: "p"},
+	})
+	if _, ok := c1.GetStatus().Observations["extra"]; ok {
+		t.Errorf("status not cloned: mutation on new repo leaked into original c1")
+	}
+}
+
+func TestRepository_InsertOrUpdateEntity_Update(t *testing.T) {
+	r, c1 := seedRepoWithComponent(t)
+
+	// Attach status to the original c1.
+	catalog.MergeObservations(c1, map[string]catalog.Observation{
+		"health": {
+			Value:     json.RawMessage(`"green"`),
+			Producer:  "p",
+			UpdatedAt: time.Now().UTC(),
+		},
+	})
+
+	// Build an updated version with the same ref but a changed description and no status.
+	c1New := mustNewEntityFromString(t, `
+apiVersion: swcat/v1alpha1
+kind: Component
+metadata:
+  name: c1
+  description: updated
+spec:
+  type: service
+  lifecycle: production
+  owner: group:default/g1
+  system: system:default/s1
+`)
+	if c1New.GetStatus() != nil {
+		t.Fatalf("c1New should start without status")
+	}
+
+	r2, err := r.InsertOrUpdateEntity(c1New)
+	if err != nil {
+		t.Fatalf("InsertOrUpdateEntity: %v", err)
+	}
+
+	got := r2.Component(c1.GetRef())
+	if got == nil {
+		t.Fatalf("c1 missing in new repo after update")
+	}
+	if got.GetMetadata().Description != "updated" {
+		t.Errorf("description = %q, want %q", got.GetMetadata().Description, "updated")
+	}
+
+	// Status was copied over from the old entity.
+	status := got.GetStatus()
+	if status == nil || len(status.Observations) != 1 {
+		t.Fatalf("status not copied on update: %+v", status)
+	}
+	if _, ok := status.Observations["health"]; !ok {
+		t.Errorf("observation %q missing after update", "health")
+	}
+
+	// The copy is independent: mutating the new entity's status must not
+	// leak into the original c1 (which lives in the old repo r).
+	catalog.MergeObservations(got, map[string]catalog.Observation{
+		"extra": {Value: json.RawMessage(`"x"`), Producer: "p"},
+	})
+	if _, ok := c1.GetStatus().Observations["extra"]; ok {
+		t.Errorf("status not cloned: mutation on new repo leaked into original c1")
+	}
+
+	// Original repo still holds the pre-update entity.
+	if origGot := r.Component(c1.GetRef()); origGot != c1 {
+		t.Errorf("original repo mutated: r.Component(c1) changed identity")
+	}
+}
+
+func TestRepository_DeleteEntity_PreservesStatus(t *testing.T) {
+	r, c1 := seedRepoWithComponent(t)
+
+	// Attach status to c1 — this must survive the deletion of another entity.
+	catalog.MergeObservations(c1, map[string]catalog.Observation{
+		"health": {
+			Value:     json.RawMessage(`"green"`),
+			Producer:  "p",
+			UpdatedAt: time.Now().UTC(),
+		},
+	})
+
+	// Add a second component c2 that we can delete without violating constraints.
+	c2 := mustNewEntityFromString(t, `
+apiVersion: swcat/v1alpha1
+kind: Component
+metadata:
+  name: c2
+spec:
+  type: service
+  lifecycle: production
+  owner: group:default/g1
+  system: system:default/s1
+`)
+	r, err := r.InsertOrUpdateEntity(c2)
+	if err != nil {
+		t.Fatalf("InsertOrUpdateEntity(c2): %v", err)
+	}
+
+	r2, err := r.DeleteEntity(c2.GetRef())
+	if err != nil {
+		t.Fatalf("DeleteEntity: %v", err)
+	}
+
+	if got := r2.Component(c2.GetRef()); got != nil {
+		t.Errorf("c2 still present after delete")
+	}
+
+	// c1's status must survive the rebuild.
+	got1 := r2.Component(c1.GetRef())
+	if got1 == nil {
+		t.Fatalf("c1 missing after delete")
+	}
+	status := got1.GetStatus()
+	if status == nil || len(status.Observations) != 1 {
+		t.Fatalf("c1 status not preserved after delete: %+v", status)
+	}
+	if _, ok := status.Observations["health"]; !ok {
+		t.Errorf("c1 observation %q missing after delete", "health")
 	}
 }

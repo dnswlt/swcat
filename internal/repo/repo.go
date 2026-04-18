@@ -127,6 +127,8 @@ func (r *Repository) InsertOrUpdateEntity(e catalog.Entity) (*Repository, error)
 		} else {
 			toAdd = n.Reset() // Add a shallow copy with cleared computed fields
 		}
+		// Copy over the status.
+		catalog.CopyStatus(toAdd, n.GetStatus())
 
 		if err := r2.AddEntity(toAdd); err != nil {
 			return nil, fmt.Errorf("failed to rebuild repository: %v", err)
@@ -191,6 +193,7 @@ func (r *Repository) DeleteEntity(ref *catalog.Ref) (*Repository, error) {
 			continue // Skip the entity to be deleted
 		}
 		toAdd := n.Reset()
+		catalog.CopyStatus(toAdd, n.GetStatus())
 		if err := r2.AddEntity(toAdd); err != nil {
 			return nil, fmt.Errorf("failed to rebuild repository: %v", err)
 		}

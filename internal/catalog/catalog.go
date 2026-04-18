@@ -446,11 +446,11 @@ func (s *Status) Clone() *Status {
 	}
 }
 
-// UpdateStatus atomically updates the status behind p using copy-on-write.
+// updateStatus atomically updates the status behind p using copy-on-write.
 // The mutate function receives a fresh clone of the current status and may
 // freely write to it. It may be called more than once if a concurrent update
 // is detected, so it must be free of side effects.
-func UpdateStatus(p *atomic.Pointer[Status], mutate func(*Status)) {
+func updateStatus(p *atomic.Pointer[Status], mutate func(*Status)) {
 	for {
 		old := p.Load()
 		next := old.Clone()
@@ -479,6 +479,20 @@ func entityStatusPtr(e Entity) *atomic.Pointer[Status] {
 	return nil
 }
 
+// CopyStatus sets the status of e to a copy of s.
+func CopyStatus(e Entity, s *Status) {
+	p := entityStatusPtr(e)
+	if p == nil {
+		return
+	}
+
+	var sNew *Status
+	if s != nil {
+		sNew = s.Clone()
+	}
+	p.Store(sNew)
+}
+
 // MergeObservations atomically merges obs into e's Status.Observations.
 // Returns false if e's kind has no Status field.
 func MergeObservations(e Entity, obs map[string]Observation) bool {
@@ -489,7 +503,7 @@ func MergeObservations(e Entity, obs map[string]Observation) bool {
 	if len(obs) == 0 {
 		return true
 	}
-	UpdateStatus(p, func(s *Status) {
+	updateStatus(p, func(s *Status) {
 		if s.Observations == nil {
 			s.Observations = make(map[string]Observation, len(obs))
 		}
@@ -506,7 +520,7 @@ func ReplaceObservations(e Entity, obs map[string]Observation) bool {
 	if p == nil {
 		return false
 	}
-	UpdateStatus(p, func(s *Status) {
+	updateStatus(p, func(s *Status) {
 		s.Observations = maps.Clone(obs)
 	})
 	return true
