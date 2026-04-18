@@ -64,36 +64,3 @@ func (c *CatalogExtensions) Merge(other *CatalogExtensions) {
 		}
 	}
 }
-
-// WrapAnnotation wraps the given annotation value in a $data and $meta
-// envelope.
-// E.g.: WrapAnnotation(value, now, map[string]any{"version": "v1.0.0"})
-func WrapAnnotation(value any, updateTime time.Time, meta map[string]any) map[string]any {
-	m := map[string]any{
-		"updateTime": updateTime.Format("2006-01-02 15:04:05"),
-	}
-	for k, v := range meta {
-		m[k] = v
-	}
-	return map[string]any{
-		"$data": value,
-		"$meta": m,
-	}
-}
-
-func UnwrapAnnotation(value any) (data any, meta map[string]any, found bool) {
-	m, ok := value.(map[string]any)
-	if !ok {
-		return value, nil, false
-	}
-	metaRaw, hasMeta := m["$meta"]
-	dataRaw, hasValue := m["$data"]
-	if !hasMeta || !hasValue || len(m) != 2 {
-		return value, nil, false
-	}
-	metaMap, ok := metaRaw.(map[string]any)
-	if !ok {
-		return value, nil, false
-	}
-	return dataRaw, metaMap, true
-}

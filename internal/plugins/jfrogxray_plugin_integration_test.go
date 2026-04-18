@@ -139,13 +139,9 @@ func TestJFrogXrayPlugin_Execute(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	wrapper, ok := result.Annotations["swcat/bom"].(map[string]any)
+	bom, ok := result.Annotations["swcat/bom"].(*sbom.MiniBOM)
 	if !ok {
-		t.Fatalf("swcat/bom annotation missing or wrong type: %v", result.Annotations)
-	}
-	bom, ok := wrapper["$data"].(*sbom.MiniBOM)
-	if !ok {
-		t.Fatalf("swcat/bom $data missing or wrong type: %v", wrapper)
+		t.Fatalf("swcat/bom missing or wrong type: %T", bom)
 	}
 	if want := "myimage"; bom.Name != want {
 		t.Errorf("bom.Name = %q, want %q", bom.Name, want)
@@ -204,13 +200,9 @@ func TestJFrogXrayPlugin_Execute_Fallback(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	wrapper, ok := result.Annotations["swcat/bom"].(map[string]any)
+	bom, ok := result.Annotations["swcat/bom"].(*sbom.MiniBOM)
 	if !ok {
-		t.Fatalf("swcat/bom annotation missing or wrong type: %v", result.Annotations)
-	}
-	bom, ok := wrapper["$data"].(*sbom.MiniBOM)
-	if !ok {
-		t.Fatalf("swcat/bom $data missing or wrong type: %v", wrapper)
+		t.Fatalf("swcat/bom annotation missing or wrong type: %T", bom)
 	}
 	if want := "myimage"; bom.Name != want {
 		t.Errorf("bom.Name = %q, want %q", bom.Name, want)

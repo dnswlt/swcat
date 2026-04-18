@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
-	"github.com/dnswlt/swcat/internal/config"
 	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/google/go-cmp/cmp"
 )
@@ -258,94 +257,6 @@ func TestRefOptions(t *testing.T) {
 
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Fatalf("refOptions() mismatch (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestNewCustomContent(t *testing.T) {
-	tests := []struct {
-		name    string
-		heading string
-		content string
-		style   string
-		want    *CustomContent
-		wantErr bool
-	}{
-		{
-			name:    "text style",
-			heading: "My Text",
-			content: `"Hello World"`,
-			style:   "text",
-			want: &CustomContent{
-				Heading: "My Text",
-				Text:    "Hello World",
-			},
-		},
-		{
-			name:    "list style valid",
-			heading: "My List",
-			content: `["a", "b"]`,
-			style:   "list",
-			want: &CustomContent{
-				Heading: "My List",
-				Items:   []string{"a", "b"},
-			},
-		},
-		{
-			name:    "json style valid",
-			heading: "My JSON",
-			content: `{"key": "value"}`,
-			style:   "json",
-			want: &CustomContent{
-				Heading: "My JSON",
-				Code:    "{\n  \"key\": \"value\"\n}",
-			},
-		},
-		{
-			name:    "attrs style valid",
-			heading: "My Attrs",
-			content: `{"b": 2, "a": "1"}`,
-			style:   "attrs",
-			want: &CustomContent{
-				Heading: "My Attrs",
-				Attrs: []ccAttr{
-					{Name: "a", Value: "1"},
-					{Name: "b", Value: "2"},
-				},
-			},
-		},
-		{
-			name:    "attrs style invalid json",
-			heading: "My Attrs",
-			content: `invalid`,
-			style:   "attrs",
-			wantErr: true,
-		},
-		{
-			name:    "unknown style",
-			heading: "Unknown",
-			content: "foo",
-			style:   "unknown",
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			abc := &config.AnnotationBasedContent{
-				Heading: tt.heading,
-				Style:   tt.style,
-			}
-			got, err := newCustomContent(abc, tt.content)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("newCustomContent() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !tt.wantErr {
-				if diff := cmp.Diff(tt.want, got); diff != "" {
-					t.Errorf("newCustomContent() mismatch (-want +got):\n%s", diff)
-				}
 			}
 		})
 	}

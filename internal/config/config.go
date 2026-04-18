@@ -24,14 +24,43 @@ func (c *CustomColumn) DataTemplate() *template.Template {
 	return c.dataTemplate
 }
 
+// NewCustomColumn returns a CustomColumn with its Data template pre-parsed.
+// Useful for programmatic construction (e.g. in tests); YAML-loaded columns
+// are populated by Load.
+func NewCustomColumn(header, data string) (*CustomColumn, error) {
+	tmpl, err := template.New("col").Funcs(template.FuncMap{
+		"join": join,
+	}).Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return &CustomColumn{Header: header, Data: data, dataTemplate: tmpl}, nil
+}
+
 // AnnotationBasedContent specifies how annotation-based content should be rendered in the UI.
+type CustomContent struct {
+	// The heading under which to display the content.
+	Heading string `yaml:"heading"`
+	// The style in which to render the content. One of "text", "list", "attrs", "json", "table".
+	Style string `yaml:"style"`
+	// Used to order multiple content blocks on the same page.
+	Rank int `yaml:"rank"`
+	// If true, the custom content <details> are open on load.
+	Open bool `yaml:"open"`
+	// For style "attrs", the attributes (GJSON paths, e.g. "field1", "nested.field") to display. If empty, all fields are displayed.
+	Fields []string `yaml:"fields"`
+	// For style "table", the columns to be rendered from the JSON list of objects.
+	Columns []*CustomColumn `yaml:"columns"`
+	// A GJSON path that selects the root element to be rendered.
+	// If empty, the full (annotation/status) JSON is used.
+	Selector string `yaml:"selector"`
+}
+
 type AnnotationBasedContent struct {
-	Heading string          `yaml:"heading"` // The heading under which to display the content.
-	Style   string          `yaml:"style"`   // The style in which to render the content. One of "text", "list", "json", "table".
-	Rank    int             `yaml:"rank"`    // Used to order multiple content blocks on the same page.
-	Open    bool            `yaml:"open"`    // If true, the custom content <details> are open on load.
-	Fields  []string        `yaml:"fields"`  // For style "attrs", the attributes to display. If empty, all fields are displayed.
-	Columns []*CustomColumn `yaml:"columns"` // For style "table", the columns to be rendered from the JSON list of objects.
+	CustomContent `yaml:",inline"`
+}
+type StatusBasedContent struct {
+	CustomContent `yaml:",inline"`
 }
 
 // HelpLink is a custom link shown in the footer.
@@ -45,6 +74,7 @@ type HelpLink struct {
 // a cyclic dependency.
 type UIConfig struct {
 	AnnotationBasedContent map[string]*AnnotationBasedContent `yaml:"annotationBasedContent"`
+	StatusBasedContent     map[string]*StatusBasedContent     `yaml:"statusBasedContent"`
 	// An optional custom help link shown at the bottom of the UI.
 	// DEPRECATED: Use HelpLinks instead.
 	HelpLink *HelpLink `yaml:"helpLink"`
@@ -99,14 +129,12 @@ func Load(st store.Store, configPath string) (*Bundle, error) {
 
 	// Populate and validate computed fields
 	for k, abc := range bundle.UI.AnnotationBasedContent {
-		for _, col := range abc.Columns {
-			tmpl, err := template.New("col").Funcs(template.FuncMap{
-				"join": join,
-			}).Parse(col.Data)
+		for i, col := range abc.Columns {
+			parsed, err := NewCustomColumn(col.Header, col.Data)
 			if err != nil {
 				return nil, fmt.Errorf("invalid column template for annotationBasedContent %q: %v", k, err)
 			}
-			col.dataTemplate = tmpl
+			abc.Columns[i] = parsed
 		}
 	}
 

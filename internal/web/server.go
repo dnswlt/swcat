@@ -806,7 +806,7 @@ func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) setCustomContent(e catalog.Entity, cfg *config.UIConfig, params map[string]any) {
-	customContent, err := customContentFromAnnotations(e.GetMetadata(), cfg.AnnotationBasedContent)
+	customContent, err := customContentForEntity(e, cfg)
 	if err != nil {
 		log.Printf("Invalid custom content for %q: %v", e.GetQName(), err)
 		return

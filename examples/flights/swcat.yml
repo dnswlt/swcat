@@ -30,7 +30,12 @@ ui:
         - header: Messages
           data: |
             {{ .messages | join }}
-
+  # Same thing as annotationBasedContent, but for status observations.
+  statusBasedContent:
+    swcat/plugins-update-time:
+      heading: Update Time (from Status)
+      style: text
+      open: true
 svg:
   # Show the (programming) language label as a <<stereotype>> on nodes.
   stereotypeLabels:

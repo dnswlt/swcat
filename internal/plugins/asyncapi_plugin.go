@@ -3,9 +3,7 @@ package plugins
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/plugins/asyncapi"
 	"gopkg.in/yaml.v3"
@@ -71,10 +69,9 @@ func (m *AsyncAPIImporterPlugin) Execute(ctx context.Context, entity catalog.Ent
 		return nil, fmt.Errorf("failed to parse AsyncAPI spec: %w", err)
 	}
 
-	now := time.Now()
 	return &PluginResult{
 		Annotations: map[string]any{
-			m.spec.TargetAnnotation: api.WrapAnnotation(spec.SimpleChannels(), now, map[string]any{"version": spec.Version()}),
+			m.spec.TargetAnnotation: spec.SimpleChannels(),
 		},
 	}, nil
 }
