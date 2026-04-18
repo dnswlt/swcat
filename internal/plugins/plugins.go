@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/jfrog"
 	"github.com/dnswlt/swcat/internal/query"
 	"github.com/dnswlt/swcat/internal/repo"
 	"gopkg.in/yaml.v3"
@@ -95,10 +96,15 @@ type Plugin interface {
 	Execute(ctx context.Context, entity catalog.Entity, args *PluginArgs) (*PluginResult, error)
 }
 
+type Services struct {
+	JFrogClient jfrog.Client
+}
+
 // Registry is the class used by clients of the plugins package to manage and execute plugins.
 type Registry struct {
 	config   *Config
 	triggers map[string]*Trigger
+	services Services
 }
 
 // FilesReturnValue is the interface for plugin return values that contain
@@ -146,10 +152,11 @@ func ReadConfig(path string) (*Config, error) {
 }
 
 // NewRegistry creates a new registry and registers all plugins configured in the given config.
-func NewRegistry(config *Config) (*Registry, error) {
+func NewRegistry(config *Config, services Services) (*Registry, error) {
 	r := &Registry{
 		config:   config,
 		triggers: make(map[string]*Trigger),
+		services: services,
 	}
 
 	for n, c := range config.Plugins {
@@ -318,7 +325,7 @@ func (r *Registry) registerPlugin(name string, def *Definition) error {
 		}
 		trigger.plugin = p
 	case "JFrogXrayPlugin":
-		p, err := NewJFrogXrayBOMPlugin(name, &def.Spec)
+		p, err := NewJFrogXrayBOMPlugin(name, &def.Spec, r.services)
 		if err != nil {
 			return fmt.Errorf("failed to create JFrogXrayPlugin %s: %w", name, err)
 		}

@@ -1,12 +1,18 @@
 package plugins
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/jfrog"
 	"github.com/dnswlt/swcat/internal/plugins/sbom"
 	"github.com/dnswlt/swcat/internal/repo"
+	"gopkg.in/yaml.v3"
 )
 
 func TestJFrogXrayPlugin_DetectDependencyMismatches(t *testing.T) {
@@ -190,4 +196,174 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches_Ignore(t *testing.T) {
 			t.Errorf("got missing=%v, want empty (ignored by groupId:artifactId)", missing)
 		}
 	})
+}
+
+type fakeJFrogClient struct {
+	tags            []string
+	sbomJSON        []byte
+	failForVersions []string // tags for which to return an error
+}
+
+func (c *fakeJFrogClient) ListDockerTags(ctx context.Context, repository, image string) ([]string, error) {
+	return c.tags, nil
+}
+
+func (c *fakeJFrogClient) XrayExportDetails(ctx context.Context, repository, image, version string) ([]byte, error) {
+	if slices.Contains(c.failForVersions, version) {
+		return nil, fmt.Errorf("no such version")
+	}
+	return c.sbomJSON, nil
+}
+
+// sbomJSON builds a minimal CycloneDX BOM JSON string with the given image
+// version and library components (each as "name:version").
+func sbomJSON(imageVersion string, libs ...string) string {
+	type comp struct {
+		Type    string `json:"type"`
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	}
+	components := make([]comp, 0, len(libs))
+	for _, lib := range libs {
+		name, version, _ := strings.Cut(lib, ":")
+		components = append(components, comp{Type: "library", Name: name, Version: version})
+	}
+	compsJSON, _ := json.Marshal(components)
+	return fmt.Sprintf(`{
+		"bomFormat": "CycloneDX",
+		"specVersion": "1.4",
+		"metadata": {
+			"component": {"type": "container", "name": "myimage", "version": %q}
+		},
+		"components": %s
+	}`, imageVersion, compsJSON)
+}
+
+// newTestPlugin constructs a JFrogXrayPlugin with the given (fake) client.
+func newTestPlugin(t *testing.T, client jfrog.Client) *JFrogXrayPlugin {
+	t.Helper()
+	specYAML := `lintMissingDependencies: false`
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(specYAML), &doc); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
+	}
+	p, err := NewJFrogXrayBOMPlugin("test", doc.Content[0], Services{
+		JFrogClient: client,
+	})
+	if err != nil {
+		t.Fatalf("NewJFrogXrayBOMPlugin: %v", err)
+	}
+	return p
+}
+
+// fakeEntity returns a Component entity with the given image name.
+func fakeEntity(name string) *catalog.Component {
+	return &catalog.Component{
+		Metadata: &catalog.Metadata{
+			Name: name,
+			Annotations: map[string]string{
+				JFrogXrayPluginRepositoryAnnotation: "jfrog.com/repository",
+			},
+		},
+		Spec: &catalog.ComponentSpec{Type: "service", Lifecycle: "production"},
+	}
+}
+
+// TestLatestSemverVersions tests the pure tag-sorting helper.
+func TestLatestSemverVersions(t *testing.T) {
+	tags := []string{"latest", "1.0.0", "v2.3.0", "0.9.1", "v2.3.1", "not-a-version", "v2.3.1-beta"}
+	got := latestSemverVersions(tags, 3)
+	// v2.3.1-beta > v2.3.0 in semver (higher patch, pre-release < release of same version).
+	want := []string{"v2.3.1", "v2.3.1-beta", "v2.3.0"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("got[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// TestJFrogXrayPlugin_Execute tests the happy path: tags fetched, latest version
+// SBOM downloaded and parsed, annotations set correctly.
+func TestJFrogXrayPlugin_Execute(t *testing.T) {
+	const image = "myimage"
+	const latestVersion = "1.3.0"
+
+	sbomStr := sbomJSON(latestVersion,
+		"com.example:alpha:1.0.0",
+		"org.acme:beta:2.5.0",
+	)
+
+	p := newTestPlugin(t, &fakeJFrogClient{
+		tags:     []string{"0.9.0", latestVersion, "1.2.0", "not-semver"},
+		sbomJSON: []byte(sbomStr),
+	})
+	result, err := p.Execute(context.Background(), fakeEntity(image), &PluginArgs{Repository: repo.NewRepository()})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	obs, ok := result.Observations[JFrogXrayPluginTarget]
+	if !ok {
+		t.Fatalf("%q observation missing", JFrogXrayPluginTarget)
+	}
+	var bom sbom.MiniBOM
+	if err := json.Unmarshal(obs.Value, &bom); err != nil {
+		t.Fatalf("Cannot unmarshal MiniBOM: %v", err)
+	}
+	if want := "myimage"; bom.Name != want {
+		t.Errorf("bom.Name = %q, want %q", bom.Name, want)
+	}
+	if bom.Version != latestVersion {
+		t.Errorf("bom.Version = %q, want %q", bom.Version, latestVersion)
+	}
+	wantComponents := []string{"com.example:alpha:1.0.0", "org.acme:beta:2.5.0"}
+	if len(bom.Components) != len(wantComponents) {
+		t.Fatalf("bom.Components = %v, want %v", bom.Components, wantComponents)
+	}
+	for i, c := range wantComponents {
+		if bom.Components[i] != c {
+			t.Errorf("bom.Components[%d] = %q, want %q", i, bom.Components[i], c)
+		}
+	}
+}
+
+// TestJFrogXrayPlugin_Execute_Fallback verifies that when the SBOM download for
+// the latest version fails, the plugin retries with the next version.
+func TestJFrogXrayPlugin_Execute_Fallback(t *testing.T) {
+	const image = "myimage"
+	const latestVersion = "2.0.0"
+	const fallbackVersion = "1.9.0"
+
+	sbomStr := sbomJSON(fallbackVersion, "com.example:lib:3.0.0")
+
+	p := newTestPlugin(t, &fakeJFrogClient{
+		tags:            []string{latestVersion, fallbackVersion},
+		sbomJSON:        []byte(sbomStr),
+		failForVersions: []string{latestVersion},
+	})
+	result, err := p.Execute(context.Background(), fakeEntity(image), &PluginArgs{Repository: repo.NewRepository()})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	obs, ok := result.Observations[JFrogXrayPluginTarget]
+	if !ok {
+		t.Fatalf("%q observation missing", JFrogXrayPluginTarget)
+	}
+	var bom sbom.MiniBOM
+	if err := json.Unmarshal(obs.Value, &bom); err != nil {
+		t.Fatalf("Cannot unmarshal MiniBOM: %v", err)
+	}
+	if !ok {
+		t.Fatalf("swcat/bom annotation missing or wrong type: %T", bom)
+	}
+	if want := "myimage"; bom.Name != want {
+		t.Errorf("bom.Name = %q, want %q", bom.Name, want)
+	}
+	if bom.Version != fallbackVersion {
+		t.Errorf("bom.Version = %q, want %q (fallback)", bom.Version, fallbackVersion)
+	}
 }

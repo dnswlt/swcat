@@ -19,8 +19,10 @@ import (
 	"github.com/dnswlt/swcat/internal/comments"
 	"github.com/dnswlt/swcat/internal/database"
 	"github.com/dnswlt/swcat/internal/gitclient"
+	"github.com/dnswlt/swcat/internal/jfrog"
 	"github.com/dnswlt/swcat/internal/kube"
 	"github.com/dnswlt/swcat/internal/lint"
+	"github.com/dnswlt/swcat/internal/maven"
 	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/prometheus"
 	"github.com/dnswlt/swcat/internal/store"
@@ -87,7 +89,46 @@ func promClientAuthFromEnv() (opts prometheus.ClientOptions) {
 	return opts
 }
 
-func createPluginRegistry(source store.Source) (*plugins.Registry, error) {
+func jfrogClientAuthFromEnv() (jfrog.Auth, error) {
+	mvnSettingsPath := os.Getenv("SWCAT_JFROG_MAVEN_SETTINGS_PATH")
+	if mvnSettingsPath == "" {
+		return jfrog.Auth{
+			Username: os.Getenv("SWCAT_JFROG_USER"),
+			Password: os.Getenv("SWCAT_JFROG_PASSWORD"),
+		}, nil
+	}
+
+	settings, err := maven.ReadSettings(mvnSettingsPath)
+	if err != nil {
+		return jfrog.Auth{}, err
+	}
+	serverID := os.Getenv("SWCAT_JFROG_MAVEN_SERVER_ID")
+	server, err := settings.ServerByID(serverID)
+	if err != nil {
+		return jfrog.Auth{}, err
+	}
+	return jfrog.Auth{
+		Username: server.Username,
+		Password: server.Password,
+	}, nil
+}
+
+func createJFrogClient(opts *Options) (jfrog.Client, error) {
+	if opts.JFrogURL == "" {
+		return nil, nil
+	}
+	auth, err := jfrogClientAuthFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	cfg := jfrog.Config{
+		JFrogURL: opts.JFrogURL,
+		Auth:     auth,
+	}
+	return jfrog.NewClient(cfg), nil
+}
+
+func createPluginRegistry(source store.Source, services plugins.Services) (*plugins.Registry, error) {
 	st, err := source.Store("")
 	if err != nil {
 		return nil, fmt.Errorf("could not get default store: %w", err)
@@ -102,7 +143,7 @@ func createPluginRegistry(source store.Source) (*plugins.Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return plugins.NewRegistry(config)
+	return plugins.NewRegistry(config, services)
 }
 
 // Options contains program options that can be set via command-line flags or environment variables.
@@ -127,11 +168,12 @@ type Options struct {
 	PrometheusURL     string
 	PrometheusTimeout time.Duration
 	BitbucketURL      string
+	JFrogURL          string
 	DocumentsDir      string
 	DatabaseDSN       string
 }
 
-func createKubeClient(source store.Source, opts Options) (kube.Client, error) {
+func createKubeClient(source store.Source, opts *Options) (kube.Client, error) {
 	cc := kube.ConnectConfig{
 		Kubeconfig: opts.KubeKubeconfig,
 		Context:    opts.KubeContext,
@@ -180,7 +222,7 @@ func createLinter(source store.Source) (*lint.Linter, error) {
 	return lint.NewLinter(lintCfg)
 }
 
-func createPrometheusClient(opts Options) *prometheus.Client {
+func createPrometheusClient(opts *Options) *prometheus.Client {
 	if opts.PrometheusURL == "" {
 		return nil
 	}
@@ -189,7 +231,7 @@ func createPrometheusClient(opts Options) *prometheus.Client {
 	return prometheus.NewClient(opts.PrometheusURL, clientOpts)
 }
 
-func createBitbucketClient(opts Options) *bitbucket.Client {
+func createBitbucketClient(opts *Options) *bitbucket.Client {
 	if opts.BitbucketURL == "" {
 		return nil
 	}
@@ -253,6 +295,7 @@ func main() {
 	fs.StringVar(&opts.PrometheusURL, "prometheus-url", "", "Base URL of a Prometheus or Thanos REST endpoint (for linting)")
 	fs.DurationVar(&opts.PrometheusTimeout, "prometheus-timeout", 30*time.Second, "Maximum time to wait for Prometheus queries")
 	fs.StringVar(&opts.BitbucketURL, "bitbucket-url", "", "Base URL of the Bitbucket Data Center instance (e.g. https://bitbucket.example.com)")
+	fs.StringVar(&opts.JFrogURL, "jfrog-url", "", "Base URL of the JFrog Artifactory/Docker repository")
 	fs.StringVar(&opts.DocumentsDir, "documents-dir", "", "Local path to serve HTML documents from, bypassing the catalog store (e.g. for sidecar sync)")
 	fs.StringVar(&opts.DatabaseDSN, "database-dsn", "", "SQLite DSN for entity status observations (e.g. data.db)")
 
@@ -314,17 +357,6 @@ func main() {
 		log.Printf("Linter initialized from %s with %d rules", store.LintFile, linter.NumRules())
 	}
 
-	var pluginRegistry *plugins.Registry
-	if !opts.ReadOnly && !opts.DisablePlugins {
-		r, err := createPluginRegistry(source)
-		if err != nil {
-			log.Fatalf("Could not create plugin registry: %v", err)
-		} else if r != nil {
-			log.Printf("%d plugins initialized from %s", len(r.Plugins()), store.PluginsFile)
-		}
-		pluginRegistry = r
-	}
-
 	var commentsStore comments.Store
 	if opts.CommentsDir != "" {
 		commentsDir := opts.CommentsDir
@@ -339,7 +371,7 @@ func main() {
 	}
 
 	// Optionally create a Kubernetes client.
-	kubeClient, err := createKubeClient(source, opts)
+	kubeClient, err := createKubeClient(source, &opts)
 	if err != nil {
 		// Do not fail here, k8s support is truly optional.
 		log.Printf("Could not create kube client: %v", err)
@@ -348,13 +380,13 @@ func main() {
 	}
 
 	// Optionally create a Prometheus scanner.
-	promClient := createPrometheusClient(opts)
+	promClient := createPrometheusClient(&opts)
 	if promClient != nil {
 		log.Printf("Prometheus client initialized")
 	}
 
 	// Optionally create a Bitbucket client.
-	bbClient := createBitbucketClient(opts)
+	bbClient := createBitbucketClient(&opts)
 	if bbClient != nil {
 		log.Printf("Bitbucket client initialized (url=%s)", opts.BitbucketURL)
 	}
@@ -374,6 +406,26 @@ func main() {
 			log.Fatalf("Failed to initialize database tables in %s: %v", opts.DatabaseDSN, err)
 		}
 		log.Printf("Database initialized from %s", opts.DatabaseDSN)
+	}
+
+	jfrogClient, err := createJFrogClient(&opts)
+	if err != nil {
+		log.Fatalf("Failed to create JFrog client: %v", err)
+	} else if jfrogClient != nil {
+		log.Printf("Created JFrog client for %s", opts.JFrogURL)
+	}
+
+	var pluginRegistry *plugins.Registry
+	if !opts.ReadOnly && !opts.DisablePlugins {
+		r, err := createPluginRegistry(source, plugins.Services{
+			JFrogClient: jfrogClient,
+		})
+		if err != nil {
+			log.Fatalf("Could not create plugin registry: %v", err)
+		} else if r != nil {
+			log.Printf("%d plugins initialized from %s", len(r.Plugins()), store.PluginsFile)
+		}
+		pluginRegistry = r
 	}
 
 	server, err := web.NewServer(

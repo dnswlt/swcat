@@ -1,9 +1,9 @@
 package sbom
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
-	"strings"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 )
@@ -23,9 +23,9 @@ type MiniBOM struct {
 	Components []string `json:"components"`
 }
 
-func Parse(input string) (*cdx.BOM, error) {
+func Parse(input []byte) (*cdx.BOM, error) {
 	var bom cdx.BOM
-	dec := cdx.NewBOMDecoder(strings.NewReader(input), cdx.BOMFileFormatJSON)
+	dec := cdx.NewBOMDecoder(bytes.NewReader(input), cdx.BOMFileFormatJSON)
 	err := dec.Decode(&bom)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode BOM: %w", err)

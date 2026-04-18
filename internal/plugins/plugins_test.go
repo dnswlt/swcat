@@ -77,7 +77,7 @@ plugins:
 	if err != nil {
 		t.Fatalf("ParseConfig failed: %v", err)
 	}
-	registry, err := NewRegistry(cfg)
+	registry, err := NewRegistry(cfg, Services{})
 	if err != nil {
 		t.Fatalf("NewRegistry failed: %v", err)
 	}
@@ -130,7 +130,7 @@ plugins:
 	if err != nil {
 		t.Fatalf("ParseConfig failed: %v", err)
 	}
-	registry, err := NewRegistry(cfg)
+	registry, err := NewRegistry(cfg, Services{})
 	if err != nil {
 		t.Fatalf("NewRegistry failed: %v", err)
 	}

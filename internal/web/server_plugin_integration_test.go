@@ -37,7 +37,7 @@ func setupPluginIntegrationServer(t *testing.T, dir string) (*httptest.Server, *
 	if err != nil {
 		t.Fatalf("Failed to read plugins config from %s: %v", pluginsConfigPath, err)
 	}
-	pluginRegistry, err := plugins.NewRegistry(cfg)
+	pluginRegistry, err := plugins.NewRegistry(cfg, plugins.Services{})
 	if err != nil {
 		t.Fatalf("Failed to create plugin registry: %v", err)
 	}
