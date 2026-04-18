@@ -104,16 +104,8 @@ func (c *linkTemplateContext) GetAnnotation(key string) string {
 }
 
 func (c *linkTemplateContext) IAnnotation(key string) string {
-	e := c.entity
-	for e != nil {
-		if v, ok := e.GetMetadata().Annotations[key]; ok {
-			return v
-		}
-		r := e.GetParent()
-		if r == nil {
-			break
-		}
-		e = c.repo.Entity(r)
+	if v, ok := c.repo.IAnnotation(c.entity, key); ok {
+		return v
 	}
 	return ""
 }
@@ -123,16 +115,8 @@ func (c *linkTemplateContext) Label(key string) string {
 }
 
 func (c *linkTemplateContext) ILabel(key string) string {
-	e := c.entity
-	for e != nil {
-		if v, ok := e.GetMetadata().Labels[key]; ok {
-			return v
-		}
-		r := e.GetParent()
-		if r == nil {
-			break
-		}
-		e = c.repo.Entity(r)
+	if v, ok := c.repo.ILabel(c.entity, key); ok {
+		return v
 	}
 	return ""
 }

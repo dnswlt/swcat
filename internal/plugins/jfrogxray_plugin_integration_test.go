@@ -82,8 +82,13 @@ targetAnnotation: swcat/bom
 // fakeEntity returns a Component entity with the given image name.
 func fakeEntity(name string) *catalog.Component {
 	return &catalog.Component{
-		Metadata: &catalog.Metadata{Name: name},
-		Spec:     &catalog.ComponentSpec{Type: "service", Lifecycle: "production"},
+		Metadata: &catalog.Metadata{
+			Name: name,
+			Annotations: map[string]string{
+				JFrogXrayPluginRepositoryAnnotation: "jfrog.com/repository",
+			},
+		},
+		Spec: &catalog.ComponentSpec{Type: "service", Lifecycle: "production"},
 	}
 }
 
@@ -139,9 +144,13 @@ func TestJFrogXrayPlugin_Execute(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	bom, ok := result.Annotations["swcat/bom"].(*sbom.MiniBOM)
+	obs, ok := result.Observations[JFrogXrayPluginTarget]
 	if !ok {
-		t.Fatalf("swcat/bom missing or wrong type: %T", bom)
+		t.Fatalf("%q observation missing", JFrogXrayPluginTarget)
+	}
+	var bom sbom.MiniBOM
+	if err := json.Unmarshal(obs.Value, &bom); err != nil {
+		t.Fatalf("Cannot unmarshal MiniBOM: %v", err)
 	}
 	if want := "myimage"; bom.Name != want {
 		t.Errorf("bom.Name = %q, want %q", bom.Name, want)
@@ -200,7 +209,14 @@ func TestJFrogXrayPlugin_Execute_Fallback(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	bom, ok := result.Annotations["swcat/bom"].(*sbom.MiniBOM)
+	obs, ok := result.Observations[JFrogXrayPluginTarget]
+	if !ok {
+		t.Fatalf("%q observation missing", JFrogXrayPluginTarget)
+	}
+	var bom sbom.MiniBOM
+	if err := json.Unmarshal(obs.Value, &bom); err != nil {
+		t.Fatalf("Cannot unmarshal MiniBOM: %v", err)
+	}
 	if !ok {
 		t.Fatalf("swcat/bom annotation missing or wrong type: %T", bom)
 	}

@@ -36,11 +36,16 @@ const (
 	KindGroup     Kind = api.KindGroup
 )
 
-// Well-known annotation and label names with defined interpretations.
+// Well-known annotation, label and status observation names with defined interpretations.
 const (
 	AnnotSterotype = "swcat/stereotype"
 	AnnotFillColor = "swcat/fillcolor"
-	AnnotKubeName  = "app.kubernetes.io/name"
+	// Annotation holding the kubernetes workload name of an entity.
+	AnnotKubeName = "app.kubernetes.io/name"
+	// Annotation in which to find the Docker image name for an entity.
+	AnnotDockerImage = "docker.com/image"
+	// Annotation in which to find the Maven (GAV) coordinates for an entity.
+	AnnotMavenCoords = "maven.apache.org/coords"
 )
 
 type Ref struct {

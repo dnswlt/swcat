@@ -21,7 +21,7 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches(t *testing.T) {
 		Metadata: &catalog.Metadata{
 			Name: "beta",
 			Annotations: map[string]string{
-				"my/coords": "org.acme:beta",
+				JFrogXrayPluginCoordsAnnotation: "org.acme:beta",
 			},
 		},
 		Spec: &catalog.ComponentSpec{Type: "service", Lifecycle: "production", Owner: &catalog.Ref{Name: "owner"}, System: &catalog.Ref{Name: "system"}},
@@ -52,9 +52,7 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches(t *testing.T) {
 	repository.AddEntity(mainComp)
 
 	p := &JFrogXrayPlugin{
-		spec: &jfrogXrayPluginSpec{
-			CoordsAnnotation: "my/coords",
-		},
+		spec: &jfrogXrayPluginSpec{},
 	}
 	fullIdx := p.newCatalogIndexFromEntities(repository.AllEntities())
 
@@ -158,9 +156,7 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches_Ignore(t *testing.T) {
 	repository.AddEntity(mainComp)
 
 	p := &JFrogXrayPlugin{
-		spec: &jfrogXrayPluginSpec{
-			LintIgnoreAnnotation: "my/ignore",
-		},
+		spec: &jfrogXrayPluginSpec{},
 	}
 	fullIdx := p.newCatalogIndexFromEntities(repository.AllEntities())
 
@@ -180,7 +176,7 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches_Ignore(t *testing.T) {
 	})
 
 	t.Run("IgnoreByArtifactId", func(t *testing.T) {
-		mainComp.Metadata.Annotations["my/ignore"] = `["beta"]`
+		mainComp.Metadata.Annotations[JFrogXrayPluginLintIgnoreAnnotation] = `["beta"]`
 		missing, _ := p.detectDependencyMismatches(bom, mainComp, fullIdx, repository)
 		if len(missing) != 0 {
 			t.Errorf("got missing=%v, want empty (ignored by artifactId)", missing)
@@ -188,7 +184,7 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches_Ignore(t *testing.T) {
 	})
 
 	t.Run("IgnoreByGroupArtifactId", func(t *testing.T) {
-		mainComp.Metadata.Annotations["my/ignore"] = `["org.example:beta"]`
+		mainComp.Metadata.Annotations[JFrogXrayPluginLintIgnoreAnnotation] = `["org.example:beta"]`
 		missing, _ := p.detectDependencyMismatches(bom, mainComp, fullIdx, repository)
 		if len(missing) != 0 {
 			t.Errorf("got missing=%v, want empty (ignored by groupId:artifactId)", missing)

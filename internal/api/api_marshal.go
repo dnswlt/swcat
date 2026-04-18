@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -280,4 +281,15 @@ func (v *Version) UnmarshalYAML(node *yaml.Node) error {
 	v.Suffix = matches[4] // Suffix is captured with its separator
 
 	return nil
+}
+
+// MustMarshalJSON marshals item as (unindented) JSON.
+// It must only be called on internal structs that are known to marshal properly.
+// It panics on any error.
+func MustMarshalJSON(item any) []byte {
+	bs, err := json.Marshal(item)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to marshal item of type %T: %v", item, err))
+	}
+	return bs
 }

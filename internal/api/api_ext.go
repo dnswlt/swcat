@@ -1,6 +1,8 @@
 package api
 
-import "time"
+import (
+	"time"
+)
 
 // MetadataExtensions represents supplemental metadata derived from automated processes.
 // These are merged into the core entity during catalog ingestion.

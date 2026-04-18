@@ -23,6 +23,24 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	// The status field in which the plugin stores its results.
+	JFrogXrayPluginTarget = "swcat-plugins/jfrog-xray-sbom"
+	// The status field that lint findings get written to.
+	JFrogXrayPluginLintTarget = "swcat-lint/finding-jfrog-xray"
+	// Annotation in which to find a JSON list of "[groupId:]artifactId"
+	// strings of dependencies that should never be declared as missing during linting.
+	// This is the usual "lint:ignore" hook that's always needed for weird edge
+	// cases, to avoid flooding the system with lint warnings that no none looks at.
+	JFrogXrayPluginLintIgnoreAnnotation = "swcat-plugins/jfrog-xray-ignore"
+	// (Inherited) annotation in which to find the JFrog Artifactory repository name.
+	JFrogXrayPluginRepositoryAnnotation = "jfrog.com/repository"
+	// Annotation in which to find the Docker image name for an entity.
+	JFrogXrayPluginImageAnnotation = catalog.AnnotDockerImage
+	// Annotation in which to find the Maven GAV coordinates for an entity.
+	JFrogXrayPluginCoordsAnnotation = catalog.AnnotMavenCoords
+)
+
 type jfrogAuth struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
@@ -33,22 +51,16 @@ type jfrogAuth struct {
 }
 
 type jfrogXrayPluginSpec struct {
-	JFrogURL          string `yaml:"jfrogUrl"`
-	DefaultRepository string `yaml:"defaultRepository"`
-	// Annotation in which to find the Docker image name
-	ImageAnnotation string `yaml:"imageAnnotation"`
-	// Annotation in which to find the Artifactory repository name
-	RepositoryAnnotation  string                `yaml:"repositoryAnnotation"`
-	Auth                  jfrogAuth             `yaml:"auth"`
-	ComponentsFilter      sbom.ComponentsFilter `yaml:"componentsFilter"`
-	CoordsAnnotation      string                `yaml:"coordsAnnotation"`
-	TargetAnnotation      string                `yaml:"targetAnnotation"`
-	LintFindingAnnotation string                `yaml:"lintFindingAnnotation"`
-	// Annotation in which to find a JSON list of "[groupId:]artifactId"
-	// strings of dependencies that should never be declared as missing during linting.
-	// This is the usual "lint:ignore" hook that's always needed for weird edge
-	// cases, to avoid flooding the system with lint warnings that no none looks at.
-	LintIgnoreAnnotation string `yaml:"lintIgnoreAnnotation"`
+	// URL under which to find JFrog.
+	JFrogURL string `yaml:"jfrogUrl"`
+	// Authentication config
+	Auth jfrogAuth `yaml:"auth"`
+
+	ComponentsFilter sbom.ComponentsFilter `yaml:"componentsFilter"`
+
+	// If true, the plugin will detect missing dependencies and store them
+	// in the
+	LintMissingDependencies bool `yaml:"lintMissingDependencies"`
 }
 
 type JFrogXrayPlugin struct {
@@ -80,9 +92,6 @@ func NewJFrogXrayBOMPlugin(name string, specYaml *yaml.Node) (*JFrogXrayPlugin, 
 
 	if spec.JFrogURL == "" {
 		return nil, fmt.Errorf("field 'jfrogURL' not specified for plugin %s", name)
-	}
-	if !catalog.IsValidAnnotation(spec.TargetAnnotation, "true") {
-		return nil, fmt.Errorf("invalid targetAnnotation %q for plugin %s", spec.TargetAnnotation, name)
 	}
 
 	if spec.Auth.MavenServerID != "" && spec.Auth.Username == "" {
@@ -261,23 +270,16 @@ func (p *JFrogXrayPlugin) fetchSBOM(ctx context.Context, repository, image strin
 }
 
 func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, args *PluginArgs) (*PluginResult, error) {
-	repository := p.spec.DefaultRepository
-	if ra := p.spec.RepositoryAnnotation; ra != "" {
-		// Get the repository from annotations
-		if r, ok := entity.GetMetadata().Annotations[ra]; ok {
-			repository = r
-		}
-	}
-	if repository == "" {
-		return nil, fmt.Errorf("No repository specified for %v", entity.GetQName())
+
+	repository, ok := args.Repository.IAnnotation(entity, JFrogXrayPluginRepositoryAnnotation)
+	if !ok || repository == "" {
+		return nil, fmt.Errorf("No repository specified in annotation %q for %v", JFrogXrayPluginRepositoryAnnotation, entity.GetQName())
 	}
 
 	image := entity.GetMetadata().Name
-	if ia := p.spec.ImageAnnotation; ia != "" {
-		// Get the image from annotations
-		if img, ok := entity.GetMetadata().Annotations[ia]; ok {
-			image = img
-		}
+	if img, ok := entity.GetMetadata().Annotations[JFrogXrayPluginImageAnnotation]; ok {
+		// Override image name from annotation
+		image = img
 	}
 
 	// Fetch CycloneDX SBOM from jFrog XRay
@@ -304,22 +306,34 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 	idx := p.newCatalogIndexFromEntities(args.Repository.AllEntities())
 
 	now := time.Now()
-	annotations := map[string]any{
-		p.spec.TargetAnnotation: bom,
+
+	observations := map[string]catalog.Observation{
+		JFrogXrayPluginTarget: {
+			Value:     api.MustMarshalJSON(bom),
+			UpdatedAt: now,
+			Producer:  "JFrogXrayPlugin",
+			Version:   bom.Version,
+		},
 	}
 
-	if p.spec.LintFindingAnnotation != "" {
+	if p.spec.LintMissingDependencies {
 		missing, _ := p.detectDependencyMismatches(bom, entity, idx, args.Repository)
 		if len(missing) > 0 {
-			annotations[p.spec.LintFindingAnnotation] = api.LintFinding{
+			finding := api.LintFinding{
 				CreateTime: now,
 				Message:    fmt.Sprintf("Dependencies found in BOM, but missing in entity: %s", strings.Join(missing, ",")),
+			}
+			observations[JFrogXrayPluginLintTarget] = catalog.Observation{
+				Value:     api.MustMarshalJSON(finding),
+				UpdatedAt: now,
+				Producer:  "JFrogXrayPlugin",
+				Version:   bom.Version,
 			}
 		}
 	}
 
 	return &PluginResult{
-		Annotations: annotations,
+		Observations: observations,
 	}, nil
 }
 
@@ -335,13 +349,12 @@ func (p *JFrogXrayPlugin) detectDependencyMismatches(bom *sbom.MiniBOM, entity c
 	}
 
 	ignored := make(map[string]bool)
-	if p.spec.LintIgnoreAnnotation != "" {
-		if val, ok := entity.GetMetadata().Annotations[p.spec.LintIgnoreAnnotation]; ok {
-			var list []string
-			if err := json.Unmarshal([]byte(val), &list); err == nil {
-				for _, s := range list {
-					ignored[s] = true
-				}
+	if val, ok := entity.GetMetadata().Annotations[JFrogXrayPluginLintIgnoreAnnotation]; ok {
+		var list []string
+		err := json.Unmarshal([]byte(val), &list)
+		if err == nil {
+			for _, s := range list {
+				ignored[s] = true
 			}
 		}
 	}
@@ -438,10 +451,8 @@ func (p *JFrogXrayPlugin) newCatalogIndexFromEntities(allEntities []catalog.Enti
 	entities := make([]indexedEntity, 0, len(allEntities))
 	for _, e := range allEntities {
 		info := indexedEntity{entity: e, coords: gav{a: e.GetMetadata().Name}}
-		if p.spec.CoordsAnnotation != "" {
-			if coords, ok := e.GetMetadata().Annotations[p.spec.CoordsAnnotation]; ok {
-				info.coords = parseGAV(coords)
-			}
+		if coords, ok := e.GetMetadata().Annotations[JFrogXrayPluginCoordsAnnotation]; ok {
+			info.coords = parseGAV(coords)
 		}
 		entities = append(entities, info)
 	}

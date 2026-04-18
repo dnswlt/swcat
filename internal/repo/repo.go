@@ -343,7 +343,35 @@ func (r *Repository) Entity(ref *catalog.Ref) catalog.Entity {
 	return nil // invalid kind specifier
 }
 
-// Removed FindEntities and findEntities logic in favor of Finder
+// IAnnotation returns an "inherited" annotation value for e, traversing up e's ancestor chain.
+func (r *Repository) IAnnotation(e catalog.Entity, key string) (string, bool) {
+	for e != nil {
+		if v, ok := e.GetMetadata().Annotations[key]; ok {
+			return v, true
+		}
+		parent := e.GetParent()
+		if parent == nil {
+			break
+		}
+		e = r.Entity(parent)
+	}
+	return "", false
+}
+
+// ILabel returns an "inherited" label value for e, traversing up e's ancestor chain.
+func (r *Repository) ILabel(e catalog.Entity, key string) (string, bool) {
+	for e != nil {
+		if v, ok := e.GetMetadata().Labels[key]; ok {
+			return v, true
+		}
+		parent := e.GetParent()
+		if parent == nil {
+			break
+		}
+		e = r.Entity(parent)
+	}
+	return "", false
+}
 
 func labelKeys[T catalog.Entity](items map[string]T) []string {
 	keySet := map[string]bool{}

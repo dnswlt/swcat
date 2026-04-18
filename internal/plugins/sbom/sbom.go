@@ -8,11 +8,15 @@ import (
 	cdx "github.com/CycloneDX/cyclonedx-go"
 )
 
+// ComponentsFilter defines which items of an SBOM to include in the MiniBOM.
 type ComponentsFilter struct {
-	Types       []string `yaml:"types"`
-	NamePattern string   `yaml:"namePattern"`
+	// Defines the types of SBOM components to include in the MiniBOM, e.g., "library".
+	Types []string `yaml:"types"`
+	// A regex to filter SBOM components to include in the MiniBOM
+	NamePattern string `yaml:"namePattern"`
 }
 
+// MiniBOM is a minimal representation of a CycloneDX SBOM.
 type MiniBOM struct {
 	Name       string   `json:"name"`
 	Version    string   `json:"version"`
@@ -29,6 +33,7 @@ func Parse(input string) (*cdx.BOM, error) {
 	return &bom, nil
 }
 
+// FilterComponents uses the given filter to build a MiniBOM from the given bom.
 func FilterComponents(bom *cdx.BOM, filter ComponentsFilter) (*MiniBOM, error) {
 	var nameRE *regexp.Regexp
 	if filter.NamePattern != "" {

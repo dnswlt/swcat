@@ -10,16 +10,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	AnnotPluginsUpdateTime = "swcat-plugins/update-time"
+)
+
 // TimestampPlugin writes the current time to an entity.
 // Target selects where the timestamp is written: "annotation" (default)
 // or "observation".
 type TimestampPlugin struct {
 	Target string `yaml:"target"`
 }
-
-const (
-	AnnotPluginsUpdateTime = "swcat/plugins-update-time"
-)
 
 func newTimestampPlugin(name string, specYaml *yaml.Node) (TimestampPlugin, error) {
 	var p TimestampPlugin
