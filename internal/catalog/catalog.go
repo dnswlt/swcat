@@ -199,7 +199,7 @@ type Domain struct {
 	Spec     *DomainSpec `json:"spec"`
 	// An optional status containing "live" information about the entity.
 	// The status is not persisted in the repository, but updated at runtime, e.g. by plugins.
-	Status atomic.Pointer[Status]
+	status atomic.Pointer[Status]
 
 	sourceInfo *api.SourceInfo
 }
@@ -235,7 +235,7 @@ type System struct {
 	Spec     *SystemSpec `json:"spec"`
 	// An optional status containing "live" information about the entity.
 	// The status is not persisted in the repository, but updated at runtime, e.g. by plugins.
-	Status atomic.Pointer[Status]
+	status atomic.Pointer[Status]
 
 	sourceInfo *api.SourceInfo
 }
@@ -288,7 +288,7 @@ type Component struct {
 	Spec     *ComponentSpec `json:"spec"`
 	// An optional status containing "live" information about the entity.
 	// The status is not persisted in the repository, but updated at runtime, e.g. by plugins.
-	Status atomic.Pointer[Status]
+	status atomic.Pointer[Status]
 
 	sourceInfo *api.SourceInfo
 }
@@ -324,7 +324,7 @@ type Resource struct {
 	Spec     *ResourceSpec `json:"spec"`
 	// An optional status containing "live" information about the entity.
 	// The status is not persisted in the repository, but updated at runtime, e.g. by plugins.
-	Status atomic.Pointer[Status]
+	status atomic.Pointer[Status]
 
 	sourceInfo *api.SourceInfo
 }
@@ -377,7 +377,7 @@ type API struct {
 	Spec     *APISpec  `json:"spec"`
 	// An optional status containing "live" information about the entity.
 	// The status is not persisted in the repository, but updated at runtime, e.g. by plugins.
-	Status atomic.Pointer[Status]
+	status atomic.Pointer[Status]
 
 	sourceInfo *api.SourceInfo
 }
@@ -466,15 +466,15 @@ func UpdateStatus(p *atomic.Pointer[Status], mutate func(*Status)) {
 func entityStatusPtr(e Entity) *atomic.Pointer[Status] {
 	switch x := e.(type) {
 	case *Domain:
-		return &x.Status
+		return &x.status
 	case *System:
-		return &x.Status
+		return &x.status
 	case *Component:
-		return &x.Status
+		return &x.status
 	case *Resource:
-		return &x.Status
+		return &x.status
 	case *API:
-		return &x.Status
+		return &x.status
 	}
 	return nil
 }
@@ -657,7 +657,7 @@ func (c *Component) AddSubcomponent(sub *Ref) {
 }
 func (c *Component) GetSourceInfo() *api.SourceInfo   { return c.sourceInfo }
 func (c *Component) SetSourceInfo(si *api.SourceInfo) { c.sourceInfo = si }
-func (c *Component) GetStatus() *Status               { return c.Status.Load() }
+func (c *Component) GetStatus() *Status               { return c.status.Load() }
 func (c *Component) Reset() Entity {
 	cpy, err := cloneEntityFromAPI[*api.Component](c)
 	if err != nil {
@@ -698,7 +698,7 @@ func (s *System) AddComponent(c *Ref)              { s.Spec.inv.components = app
 func (s *System) AddResource(r *Ref)               { s.Spec.inv.resources = append(s.Spec.inv.resources, r) }
 func (s *System) GetSourceInfo() *api.SourceInfo   { return s.sourceInfo }
 func (s *System) SetSourceInfo(si *api.SourceInfo) { s.sourceInfo = si }
-func (s *System) GetStatus() *Status               { return s.Status.Load() }
+func (s *System) GetStatus() *Status               { return s.status.Load() }
 func (s *System) Reset() Entity {
 	cpy, err := cloneEntityFromAPI[*api.System](s)
 	if err != nil {
@@ -724,7 +724,7 @@ func (d *Domain) GetSystems() []*Ref               { return d.Spec.inv.systems }
 func (d *Domain) AddSystem(s *Ref)                 { d.Spec.inv.systems = append(d.Spec.inv.systems, s) }
 func (d *Domain) GetSourceInfo() *api.SourceInfo   { return d.sourceInfo }
 func (d *Domain) SetSourceInfo(si *api.SourceInfo) { d.sourceInfo = si }
-func (d *Domain) GetStatus() *Status               { return d.Status.Load() }
+func (d *Domain) GetStatus() *Status               { return d.status.Load() }
 func (d *Domain) Reset() Entity {
 	cpy, err := cloneEntityFromAPI[*api.Domain](d)
 	if err != nil {
@@ -752,7 +752,7 @@ func (a *API) AddProvider(p *LabelRef)          { a.Spec.inv.providers = append(
 func (a *API) AddConsumer(c *LabelRef)          { a.Spec.inv.consumers = append(a.Spec.inv.consumers, c) }
 func (a *API) GetSourceInfo() *api.SourceInfo   { return a.sourceInfo }
 func (a *API) SetSourceInfo(si *api.SourceInfo) { a.sourceInfo = si }
-func (a *API) GetStatus() *Status               { return a.Status.Load() }
+func (a *API) GetStatus() *Status               { return a.status.Load() }
 func (a *API) Reset() Entity {
 	cpy, err := cloneEntityFromAPI[*api.API](a)
 	if err != nil {
@@ -780,7 +780,7 @@ func (r *Resource) AddDependent(d *LabelRef) {
 }
 func (r *Resource) GetSourceInfo() *api.SourceInfo   { return r.sourceInfo }
 func (r *Resource) SetSourceInfo(si *api.SourceInfo) { r.sourceInfo = si }
-func (r *Resource) GetStatus() *Status               { return r.Status.Load() }
+func (r *Resource) GetStatus() *Status               { return r.status.Load() }
 func (r *Resource) Reset() Entity {
 	cpy, err := cloneEntityFromAPI[*api.Resource](r)
 	if err != nil {
