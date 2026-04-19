@@ -20,27 +20,38 @@ const (
 	DefaultBackoffMax    = 7 * 24 * time.Hour
 )
 
+// entityState tracks the per-entity scheduling state owned by the Run loop.
 type entityState struct {
-	ref      *catalog.Ref
-	nextDue  time.Time
-	backoff  time.Duration
-	inFlight bool
+	ref      *catalog.Ref  // The entity this state refers to.
+	nextDue  time.Time     // Earliest time at which the entity may run again.
+	backoff  time.Duration // Current retry delay; reset to BaseInterval on success.
+	inFlight bool          // True while a plugin run for this entity is in progress.
 }
 
+// taskResult is the outcome of a single plugin run, sent from a worker
+// goroutine back to the scheduler loop.
 type taskResult struct {
 	ref     *catalog.Ref
 	success bool
 }
 
+// SchedulerConfig is the YAML-serializable configuration for Scheduler.
+// Zero or invalid fields are replaced by package defaults in NewScheduler.
 type SchedulerConfig struct {
-	Enabled       bool          `yaml:"enabled"`
-	BaseInterval  time.Duration `yaml:"baseInterval"`
-	BackoffFactor float64       `yaml:"backoffFactor"`
-	BackoffMax    time.Duration `yaml:"backoffMax"`
-	// Maximum time a single task is allowed to run.
+	// Enabled gates whether Run actually starts the loop.
+	Enabled bool `yaml:"enabled"`
+	// BaseInterval is the cadence at which a healthy entity is re-evaluated.
+	BaseInterval time.Duration `yaml:"baseInterval"`
+	// BackoffFactor is the multiplier applied to the current backoff after a failure.
+	BackoffFactor float64 `yaml:"backoffFactor"`
+	// BackoffMax caps the post-failure retry delay.
+	BackoffMax time.Duration `yaml:"backoffMax"`
+	// TaskTimeout is the maximum time a single plugin run is allowed to take.
 	TaskTimeout time.Duration `yaml:"taskTimeout"`
 }
 
+// Scheduler periodically runs the registered plugins for each entity in the
+// repository, with per-entity exponential backoff on failure.
 type Scheduler struct {
 	config   SchedulerConfig
 	registry *Registry
@@ -50,6 +61,9 @@ type Scheduler struct {
 	results  chan taskResult
 }
 
+// NewScheduler returns a Scheduler ready to be started with Run. Zero or
+// invalid fields in config are replaced by their package defaults, and the
+// resolved configuration is logged.
 func NewScheduler(config SchedulerConfig, registry *Registry, provider RepositoryProvider, db *sql.DB) *Scheduler {
 	if config.BackoffFactor <= 1 {
 		config.BackoffFactor = DefaultBackoffFactor
@@ -74,6 +88,10 @@ func NewScheduler(config SchedulerConfig, registry *Registry, provider Repositor
 	}
 }
 
+// updateEntities reconciles the scheduler's entity table with the current
+// repository: new entities are registered with a randomized initial delay
+// (to avoid a thundering herd at startup), and entries for entities that no
+// longer exist are dropped.
 func (s *Scheduler) updateEntities() {
 	entities := make(map[string]bool)
 	now := time.Now()
@@ -102,8 +120,11 @@ func (s *Scheduler) updateEntities() {
 	})
 }
 
+// processResult applies the aggregated plugin run result to entity and, if a
+// database is configured, persists the entity's current observations.
+// Only observations are propagated; annotations are stored as side-car files
+// in git and cannot be updated here.
 func (s *Scheduler) processResult(ctx context.Context, entity catalog.Entity, result *RunResult) error {
-	// Only store observations; annotations are stored as side-car files in git and cannot get updated here.
 	catalog.MergeObservations(entity, result.Observations)
 	if s.db != nil {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -116,6 +137,11 @@ func (s *Scheduler) processResult(ctx context.Context, entity catalog.Entity, re
 	return nil
 }
 
+// runPlugins executes all matching plugins for the entity identified by ref
+// and reports the outcome on results. It is intended to be called in its own
+// goroutine; the result send is guarded by ctx so a cancelled run doesn't
+// block on a full channel. An entity that has vanished from the repository
+// in the meantime is reported as a non-success without invoking any plugins.
 func (s *Scheduler) runPlugins(ctx context.Context, ref *catalog.Ref, results chan<- taskResult) {
 	repo := s.provider.GetRepository()
 	var entity catalog.Entity
@@ -142,6 +168,8 @@ func (s *Scheduler) runPlugins(ctx context.Context, ref *catalog.Ref, results ch
 	}
 }
 
+// nextBackoff returns the next retry delay derived from current by multiplying
+// with BackoffFactor, capping at BackoffMax, and adding up to 10% jitter.
 func (s *Scheduler) nextBackoff(current time.Duration) time.Duration {
 	next := time.Duration(float64(current) * s.config.BackoffFactor)
 	next = min(next, s.config.BackoffMax)
@@ -149,6 +177,11 @@ func (s *Scheduler) nextBackoff(current time.Duration) time.Duration {
 	return next + jitter
 }
 
+// Run drives the scheduler loop until ctx is cancelled. On each tick it
+// reconciles the entity table and dispatches due plugin runs in their own
+// goroutines (capped per task by TaskTimeout). Successful runs reset the
+// entity's cadence to BaseInterval; failed runs back off exponentially up to
+// BackoffMax. If the scheduler is disabled, Run returns immediately.
 func (s *Scheduler) Run(ctx context.Context) {
 
 	if !s.config.Enabled {
