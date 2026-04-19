@@ -12,7 +12,6 @@ import (
 
 	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
-	"github.com/dnswlt/swcat/internal/jfrog"
 	"github.com/dnswlt/swcat/internal/plugins/sbom"
 	"github.com/dnswlt/swcat/internal/repo"
 	"golang.org/x/mod/semver"
@@ -46,13 +45,22 @@ type jfrogXrayPluginSpec struct {
 	LintMissingDependencies bool `yaml:"lintMissingDependencies"`
 }
 
+// JFrogXrayClient is a client-side interface for a JFrog client that is used to fetch Xray data.
+// A jfrog.Client should implement this interface.
+type JFrogXrayClient interface {
+	// https://{jfrog_url}/artifactory/api/docker/{repo-key}/v2/{imageName}/tags/list
+	ListDockerTags(ctx context.Context, repository, image string) ([]string, error)
+	// https://{jfrog_url}/xray/api/v2/component/exportDetails
+	XrayExportDetails(ctx context.Context, repository, image, version string) ([]byte, error)
+}
+
 type JFrogXrayPlugin struct {
 	name   string
 	spec   *jfrogXrayPluginSpec
-	client jfrog.Client
+	client JFrogXrayClient
 }
 
-func NewJFrogXrayBOMPlugin(name string, specYaml *yaml.Node, services Services) (*JFrogXrayPlugin, error) {
+func NewJFrogXrayBOMPlugin(name string, specYaml *yaml.Node, client JFrogXrayClient) (*JFrogXrayPlugin, error) {
 	var spec jfrogXrayPluginSpec
 	if err := specYaml.Decode(&spec); err != nil {
 		return nil, fmt.Errorf("failed to decode JFrogXrayPlugin spec for %s: %v", name, err)
@@ -61,7 +69,7 @@ func NewJFrogXrayBOMPlugin(name string, specYaml *yaml.Node, services Services) 
 	return &JFrogXrayPlugin{
 		name:   name,
 		spec:   &spec,
-		client: services.JFrogClient,
+		client: client,
 	}, nil
 }
 

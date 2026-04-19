@@ -124,6 +124,7 @@ func createJFrogClient(opts *Options) (jfrog.Client, error) {
 	cfg := jfrog.Config{
 		JFrogURL: opts.JFrogURL,
 		Auth:     auth,
+		Timeout:  5 * time.Second,
 	}
 	return jfrog.NewClient(cfg), nil
 }

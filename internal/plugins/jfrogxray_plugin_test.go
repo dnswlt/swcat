@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
-	"github.com/dnswlt/swcat/internal/jfrog"
 	"github.com/dnswlt/swcat/internal/plugins/sbom"
 	"github.com/dnswlt/swcat/internal/repo"
 	"gopkg.in/yaml.v3"
@@ -240,16 +239,14 @@ func sbomJSON(imageVersion string, libs ...string) string {
 }
 
 // newTestPlugin constructs a JFrogXrayPlugin with the given (fake) client.
-func newTestPlugin(t *testing.T, client jfrog.Client) *JFrogXrayPlugin {
+func newTestPlugin(t *testing.T, client JFrogXrayClient) *JFrogXrayPlugin {
 	t.Helper()
 	specYAML := `lintMissingDependencies: false`
 	var doc yaml.Node
 	if err := yaml.Unmarshal([]byte(specYAML), &doc); err != nil {
 		t.Fatalf("yaml.Unmarshal: %v", err)
 	}
-	p, err := NewJFrogXrayBOMPlugin("test", doc.Content[0], Services{
-		JFrogClient: client,
-	})
+	p, err := NewJFrogXrayBOMPlugin("test", doc.Content[0], client)
 	if err != nil {
 		t.Fatalf("NewJFrogXrayBOMPlugin: %v", err)
 	}

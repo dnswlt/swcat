@@ -325,7 +325,7 @@ func (r *Registry) registerPlugin(name string, def *Definition) error {
 		}
 		trigger.plugin = p
 	case "JFrogXrayPlugin":
-		p, err := NewJFrogXrayBOMPlugin(name, &def.Spec, r.services)
+		p, err := NewJFrogXrayBOMPlugin(name, &def.Spec, r.services.JFrogClient)
 		if err != nil {
 			return fmt.Errorf("failed to create JFrogXrayPlugin %s: %w", name, err)
 		}
