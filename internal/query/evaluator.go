@@ -86,6 +86,11 @@ func metadataAccessor(e catalog.Entity) ([]string, bool) {
 	for k, v := range m.Annotations {
 		values = append(values, k, v)
 	}
+	if status := e.GetStatus(); status != nil {
+		for k, v := range status.Observations {
+			values = append(values, k, string(v.Value))
+		}
+	}
 	values = append(values, m.Tags...)
 	for _, l := range m.Links {
 		values = append(values, l.Title, l.URL)
@@ -120,6 +125,19 @@ var attributeAccessors = map[string]attributeAccessor{
 		var results []string
 		for k, v := range e.GetMetadata().Annotations {
 			results = append(results, fmt.Sprintf("%s=%s", k, v))
+		}
+		return results, true
+	},
+	"status": func(e catalog.Entity) ([]string, bool) {
+		// For status, we match against "key=value";
+		// value will typically be a JSON object.
+		status := e.GetStatus()
+		if status == nil {
+			return nil, false
+		}
+		var results []string
+		for k, obs := range status.Observations {
+			results = append(results, fmt.Sprintf("%s=%s", k, string(obs.Value)))
 		}
 		return results, true
 	},

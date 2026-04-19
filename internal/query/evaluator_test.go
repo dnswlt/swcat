@@ -51,6 +51,11 @@ func TestEvaluator_Matches(t *testing.T) {
 		},
 	}
 	comp1.SetDomain(dom1.GetRef())
+	catalog.MergeObservations(comp1, map[string]catalog.Observation{
+		"swcat-plugins/test": {
+			Value: []byte(`{"foo": "bar"}`),
+		},
+	})
 
 	tests := []struct {
 		name      string
@@ -190,6 +195,20 @@ func TestEvaluator_Matches(t *testing.T) {
 			wantErr:   false,
 		},
 		{
+			name:      "status key match",
+			query:     "status:swcat-plugin",
+			entity:    comp1,
+			wantMatch: true,
+			wantErr:   false,
+		},
+		{
+			name:      "status regex match",
+			query:     "status~'swcat-plugins/test=.*\"bar\"'",
+			entity:    comp1,
+			wantMatch: true,
+			wantErr:   false,
+		},
+		{
 			name:      "attribute no match",
 			query:     "owner:team-b",
 			entity:    comp1,
@@ -275,6 +294,14 @@ func TestEvaluator_Matches(t *testing.T) {
 		{
 			name:      "component consumesApis",
 			query:     "providesApis:my-api",
+			entity:    comp1,
+			wantMatch: true,
+			wantErr:   false,
+		},
+		// Full text search with *:
+		{
+			name:      "full text search",
+			query:     "*:'super duper' AND *:swcat-plugins",
 			entity:    comp1,
 			wantMatch: true,
 			wantErr:   false,
