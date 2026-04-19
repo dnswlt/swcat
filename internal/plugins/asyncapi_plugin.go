@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"time"
 
@@ -241,17 +242,20 @@ func parseProperties(data []byte) map[string]string {
 	return props
 }
 
+var unresolvedPropertyPlaceholderRE = regexp.MustCompile(`@@[^@]+@@`)
+
 // replacePropertyPlaceholders replaces all @@key@@ placeholders in data with
-// the corresponding value from props. Unknown placeholders are left untouched.
+// the corresponding value from props. Any placeholders that remain unresolved
+// are replaced with a sentinel token so the output stays valid YAML.
 func replacePropertyPlaceholders(data []byte, props map[string]string) []byte {
-	if len(props) == 0 {
-		return data
+	if len(props) > 0 {
+		pairs := make([]string, 0, len(props)*2)
+		for k, v := range props {
+			pairs = append(pairs, "@@"+k+"@@", v)
+		}
+		data = []byte(strings.NewReplacer(pairs...).Replace(string(data)))
 	}
-	pairs := make([]string, 0, len(props)*2)
-	for k, v := range props {
-		pairs = append(pairs, "@@"+k+"@@", v)
-	}
-	return []byte(strings.NewReplacer(pairs...).Replace(string(data)))
+	return unresolvedPropertyPlaceholderRE.ReplaceAll(data, []byte("MISSING"))
 }
 
 func (m *AsyncAPIImporterPlugin) executeProvider(ctx context.Context, entity catalog.Entity, args *PluginArgs) (*PluginResult, error) {
