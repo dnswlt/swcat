@@ -37,7 +37,7 @@ type Definition struct {
 // Config is the top-level YAML node, i.e. the thing that is read from plugins.yml.
 type Config struct {
 	Plugins   map[string]*Definition `yaml:"plugins"`
-	Scheduler SchedulerConfig
+	Scheduler SchedulerConfig        `yaml:"scheduler"`
 }
 
 // Trigger combines a plugin with the conditions under which it should be executed.
