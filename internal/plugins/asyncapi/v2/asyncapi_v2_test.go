@@ -1,8 +1,6 @@
 package v2
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -24,18 +22,12 @@ components:
       title: User Signed Up
 `
 
-	tmpDir := t.TempDir()
-	tmpFile := filepath.Join(tmpDir, "asyncapi_v2.yaml")
-	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
-		t.Fatalf("Failed to write temp file: %v", err)
-	}
-
-	spec, err := Parse(tmpFile)
+	spec, err := ParseBytes([]byte(yamlContent))
 	if err != nil {
-		t.Fatalf("Parse() error = %v", err)
+		t.Fatalf("ParseBytes() error = %v", err)
 	}
 	if spec == nil {
-		t.Fatal("Parse() returned nil spec")
+		t.Fatal("ParseBytes() returned nil spec")
 	}
 
 	// Verify Channels

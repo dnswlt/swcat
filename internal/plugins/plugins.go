@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"maps"
@@ -14,6 +15,13 @@ import (
 	"github.com/dnswlt/swcat/internal/query"
 	"github.com/dnswlt/swcat/internal/repo"
 	"gopkg.in/yaml.v3"
+)
+
+var (
+	// Used by plugin constructors to indicate that the plugin cannot be activated,
+	// typically due to missing service dependencies.
+	// The plugin registry will not fail when seeing this error, but disable the plugin.
+	ErrPreconditionFailed = errors.New("precondition failed")
 )
 
 // Definition defines the YAML structure of a plugin definition.
@@ -277,27 +285,8 @@ func (r *Registry) registerPlugin(name string, def *Definition) error {
 		return fmt.Errorf("multiple definitions for plugin %s", name)
 	}
 
-	var condition *query.Evaluator
-	if def.Trigger != "" {
-		expr, err := query.Parse(def.Trigger)
-		if err != nil {
-			return fmt.Errorf("invalid trigger expression for plugin %s: %v", name, err)
-		}
-		condition = query.NewEvaluator(expr)
-	}
-	var inhibitCondition *query.Evaluator
-	if def.Inhibit != "" {
-		expr, err := query.Parse(def.Inhibit)
-		if err != nil {
-			return fmt.Errorf("invalid inhibit expression for plugin %s: %v", name, err)
-		}
-		inhibitCondition = query.NewEvaluator(expr)
-	}
+	trigger := &Trigger{}
 
-	trigger := &Trigger{
-		condition:        condition,
-		inhibitCondition: inhibitCondition,
-	}
 	switch def.Kind {
 	case "TimestampPlugin":
 		// Configuring TimestampPlugin explicitly is mostly useful for plugin testing
@@ -307,9 +296,12 @@ func (r *Registry) registerPlugin(name string, def *Definition) error {
 		}
 		trigger.plugin = p
 	case "AsyncAPIImporterPlugin":
-		p, err := newAsyncAPIImporterPlugin(name, &def.Spec)
-		if err != nil {
-			return fmt.Errorf("failed to create AsyncAPIImporterPlugin %s: %w", name, err)
+		p, err := newAsyncAPIImporterPlugin(name, &def.Spec, r.services.JFrogClient)
+		if errors.Is(err, ErrPreconditionFailed) {
+			log.Printf("Plugin %s (%s) disabled: %v", name, def.Kind, err)
+			return nil // Not a hard error, just disable the plugin
+		} else if err != nil {
+			return fmt.Errorf("failed to create %s %s: %w", def.Kind, name, err)
 		}
 		trigger.plugin = p
 	case "ExternalPlugin":
@@ -326,13 +318,30 @@ func (r *Registry) registerPlugin(name string, def *Definition) error {
 		trigger.plugin = p
 	case "JFrogXrayPlugin":
 		p, err := NewJFrogXrayBOMPlugin(name, &def.Spec, r.services.JFrogClient)
-		if err != nil {
-			return fmt.Errorf("failed to create JFrogXrayPlugin %s: %w", name, err)
+		if errors.Is(err, ErrPreconditionFailed) {
+			log.Printf("Plugin %s (%s) disabled: %v", name, def.Kind, err)
+			return nil // Not a hard error, just disable the plugin
+		} else if err != nil {
+			return fmt.Errorf("failed to create %s %s: %w", def.Kind, name, err)
 		}
 		trigger.plugin = p
 	default:
 		return fmt.Errorf("invalid plugin kind %s for plugin %s", def.Kind, name)
+	}
 
+	if def.Trigger != "" {
+		expr, err := query.Parse(def.Trigger)
+		if err != nil {
+			return fmt.Errorf("invalid trigger expression for plugin %s: %v", name, err)
+		}
+		trigger.condition = query.NewEvaluator(expr)
+	}
+	if def.Inhibit != "" {
+		expr, err := query.Parse(def.Inhibit)
+		if err != nil {
+			return fmt.Errorf("invalid inhibit expression for plugin %s: %v", name, err)
+		}
+		trigger.inhibitCondition = query.NewEvaluator(expr)
 	}
 
 	r.triggers[name] = trigger

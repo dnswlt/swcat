@@ -46,6 +46,9 @@ const (
 	AnnotDockerImage = "docker.com/image"
 	// Annotation in which to find the Maven (GAV) coordinates for an entity.
 	AnnotMavenCoords = "maven.apache.org/coords"
+	// Annotation in which to find the Maven groupId for an entity.
+	// This one is typically defined at the System level and inherited for its child entities.
+	AnnotMavenGroupID = "maven.apache.org/groupId"
 )
 
 type Ref struct {

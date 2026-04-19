@@ -259,7 +259,7 @@ func fakeEntity(name string) *catalog.Component {
 		Metadata: &catalog.Metadata{
 			Name: name,
 			Annotations: map[string]string{
-				JFrogXrayPluginRepositoryAnnotation: "jfrog.com/repository",
+				JFrogDockerRepositoryAnnotation: "example.com/docker-repository",
 			},
 		},
 		Spec: &catalog.ComponentSpec{Type: "service", Lifecycle: "production"},

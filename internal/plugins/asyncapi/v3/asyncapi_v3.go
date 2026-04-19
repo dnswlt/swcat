@@ -2,7 +2,6 @@ package v3
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -57,17 +56,11 @@ type Spec struct {
 	Components *Components           `yaml:"components"`
 }
 
-func Parse(path string) (*Spec, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file %s: %w", path, err)
-	}
-
+func ParseBytes(data []byte) (*Spec, error) {
 	var spec Spec
 	if err := yaml.Unmarshal(data, &spec); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal YAML from %s: %w", path, err)
+		return nil, fmt.Errorf("failed to unmarshal YAML: %w", err)
 	}
-
 	spec.Resolve()
 	return &spec, nil
 }

@@ -105,17 +105,22 @@ func Parse(path string) (ParsedSpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %s: %w", path, err)
 	}
+	return ParseBytes(data)
+}
 
+// ParseBytes parses an AsyncAPI specification from raw bytes, detects its
+// version, and returns a version-agnostic ParsedSpec.
+func ParseBytes(data []byte) (ParsedSpec, error) {
 	// Detect version from the "asyncapi" root field.
 	var meta struct {
 		AsyncAPI string `yaml:"asyncapi"`
 	}
 	if err := yaml.Unmarshal(data, &meta); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal YAML header from %s: %w", path, err)
+		return nil, fmt.Errorf("failed to unmarshal YAML header: %w", err)
 	}
 
 	if strings.HasPrefix(meta.AsyncAPI, "2.") {
-		v2Spec, err := v2.Parse(path)
+		v2Spec, err := v2.ParseBytes(data)
 		if err != nil {
 			return nil, err
 		}
@@ -123,7 +128,7 @@ func Parse(path string) (ParsedSpec, error) {
 	}
 
 	if strings.HasPrefix(meta.AsyncAPI, "3.") || meta.AsyncAPI == "3" {
-		v3Spec, err := v3.Parse(path)
+		v3Spec, err := v3.ParseBytes(data)
 		if err != nil {
 			return nil, err
 		}

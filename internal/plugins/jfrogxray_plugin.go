@@ -14,7 +14,6 @@ import (
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/plugins/sbom"
 	"github.com/dnswlt/swcat/internal/repo"
-	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
 )
 
@@ -28,8 +27,6 @@ const (
 	// This is the usual "lint:ignore" hook that's always needed for weird edge
 	// cases, to avoid flooding the system with lint warnings that no none looks at.
 	JFrogXrayPluginLintIgnoreAnnotation = "swcat-plugins/jfrog-xray-ignore"
-	// (Inherited) annotation in which to find the JFrog Artifactory repository name.
-	JFrogXrayPluginRepositoryAnnotation = "jfrog.com/repository"
 	// Annotation in which to find the Docker image name for an entity.
 	JFrogXrayPluginImageAnnotation = catalog.AnnotDockerImage
 	// Annotation in which to find the Maven GAV coordinates for an entity.
@@ -66,6 +63,9 @@ func NewJFrogXrayBOMPlugin(name string, specYaml *yaml.Node, client JFrogXrayCli
 		return nil, fmt.Errorf("failed to decode JFrogXrayPlugin spec for %s: %v", name, err)
 	}
 
+	if client == nil {
+		return nil, fmt.Errorf("no JFrogXrayClient provided: %w", ErrPreconditionFailed)
+	}
 	return &JFrogXrayPlugin{
 		name:   name,
 		spec:   &spec,
@@ -85,34 +85,6 @@ type SBOMRequest struct {
 	CycloneDX       bool   `json:"cyclonedx"`
 	CycloneDXFormat string `json:"cyclonedx_format"`
 	Vex             bool   `json:"vex"`
-}
-
-// semverNormalize returns tag with a "v" prefix for semver comparison,
-// leaving tags that already have one unchanged.
-func semverNormalize(tag string) string {
-	if strings.HasPrefix(tag, "v") {
-		return tag
-	}
-	return "v" + tag
-}
-
-// latestSemverVersions filters tags to those with valid semver, sorts them in
-// descending order, and returns the top n original tags (preserving their
-// original "v"-prefix or lack thereof).
-func latestSemverVersions(tags []string, n int) []string {
-	var valid []string
-	for _, tag := range tags {
-		if semver.IsValid(semverNormalize(tag)) {
-			valid = append(valid, tag)
-		}
-	}
-	slices.SortFunc(valid, func(v1, v2 string) int {
-		return semver.Compare(semverNormalize(v2), semverNormalize(v1)) // descending
-	})
-	if len(valid) > n {
-		valid = valid[:n]
-	}
-	return valid
 }
 
 // fetchSBOM retrieves the SBOM for the latest available semver version of
@@ -141,9 +113,9 @@ func (p *JFrogXrayPlugin) fetchSBOM(ctx context.Context, repository, image strin
 
 func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, args *PluginArgs) (*PluginResult, error) {
 
-	repository, ok := args.Repository.IAnnotation(entity, JFrogXrayPluginRepositoryAnnotation)
+	repository, ok := args.Repository.IAnnotation(entity, JFrogDockerRepositoryAnnotation)
 	if !ok || repository == "" {
-		return nil, fmt.Errorf("No repository specified in annotation %q for %v", JFrogXrayPluginRepositoryAnnotation, entity.GetQName())
+		return nil, fmt.Errorf("No repository specified in annotation %q for %v", JFrogDockerRepositoryAnnotation, entity.GetQName())
 	}
 
 	image := entity.GetMetadata().Name
