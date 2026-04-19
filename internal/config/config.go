@@ -137,6 +137,15 @@ func Load(st store.Store, configPath string) (*Bundle, error) {
 			abc.Columns[i] = parsed
 		}
 	}
+	for k, sbc := range bundle.UI.StatusBasedContent {
+		for i, col := range sbc.Columns {
+			parsed, err := NewCustomColumn(col.Header, col.Data)
+			if err != nil {
+				return nil, fmt.Errorf("invalid column template for statusBasedContent %q: %v", k, err)
+			}
+			sbc.Columns[i] = parsed
+		}
+	}
 
 	return &bundle, nil
 }
