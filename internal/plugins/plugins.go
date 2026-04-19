@@ -233,22 +233,30 @@ func (r *Registry) Plugins() []string {
 }
 
 func (r *Registry) Run(ctx context.Context, repoProvider RepositoryProvider, e catalog.Entity) (*RunResult, error) {
-	tempDir, err := os.MkdirTemp("", "swcat-plugins")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp dir for plugin runs: %w", err)
-	}
+	repository := repoProvider.GetRepository()
+
+	var tempDir string
 	defer func() {
-		err := os.RemoveAll(tempDir)
-		if err != nil {
+		if tempDir == "" {
+			return
+		}
+		if err := os.RemoveAll(tempDir); err != nil {
 			log.Printf("Failed to delete plugin temp dir %s: %v", tempDir, err)
 		}
 	}()
 
-	repository := repoProvider.GetRepository()
-
 	annotations := make(map[string]any)
 	observations := make(map[string]catalog.Observation)
 	execFunc := func(name string, p Plugin) error {
+		if tempDir == "" {
+			// Lazily create a shared temp dir on the first triggering plugin,
+			// so subsequent plugins in this run can see each other's files.
+			dir, err := os.MkdirTemp("", "swcat-plugins")
+			if err != nil {
+				return fmt.Errorf("failed to create temp dir for plugin runs: %w", err)
+			}
+			tempDir = dir
+		}
 		log.Printf("Executing plugin %s for %s", name, e.GetRef().String())
 		res, err := p.Execute(ctx, e, &PluginArgs{
 			Registry:   r,
