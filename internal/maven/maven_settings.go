@@ -15,11 +15,11 @@ type Settings struct {
 
 // Server represents a <server> entry in the Maven settings <servers> section.
 type Server struct {
-	ID          string `xml:"id"`
-	Username    string `xml:"username"`
-	Password    string `xml:"password"`
-	PrivateKey  string `xml:"privateKey"`
-	Passphrase  string `xml:"passphrase"`
+	ID         string `xml:"id"`
+	Username   string `xml:"username"`
+	Password   string `xml:"password"`
+	PrivateKey string `xml:"privateKey"`
+	Passphrase string `xml:"passphrase"`
 }
 
 // ReadSettings reads and parses a Maven settings.xml file.
@@ -44,9 +44,10 @@ func ReadSettings(path string) (*Settings, error) {
 }
 
 // ServerByID returns the Server with the given id, or an error if not found.
+// If id is "", returns the first server in the list.
 func (s *Settings) ServerByID(id string) (*Server, error) {
 	for i := range s.Servers {
-		if s.Servers[i].ID == id {
+		if s.Servers[i].ID == id || id == "" {
 			return &s.Servers[i], nil
 		}
 	}
