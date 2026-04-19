@@ -364,3 +364,32 @@ func TestJFrogXrayPlugin_Execute_Fallback(t *testing.T) {
 		t.Errorf("bom.Version = %q, want %q (fallback)", bom.Version, fallbackVersion)
 	}
 }
+
+// TestJFrogXrayPlugin_Execute_Skip verifies that when the latest version has
+// already been ingested, the plugin returns early with zero observations.
+func TestJFrogXrayPlugin_Execute_Skip(t *testing.T) {
+	const image = "myimage"
+	const latestVersion = "1.3.0"
+
+	p := newTestPlugin(t, &fakeJFrogClient{
+		tags: []string{latestVersion, "1.2.0"},
+		// SBOM download shouldn't even be called
+		sbomJSON: nil,
+	})
+
+	entity := fakeEntity(image)
+	catalog.MergeObservations(entity, map[string]catalog.Observation{
+		JFrogXrayPluginTarget: {
+			Version: latestVersion,
+		},
+	})
+
+	result, err := p.Execute(context.Background(), entity, &PluginArgs{Repository: repo.NewRepository()})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if len(result.Observations) != 0 {
+		t.Errorf("expected 0 observations, got %d", len(result.Observations))
+	}
+}

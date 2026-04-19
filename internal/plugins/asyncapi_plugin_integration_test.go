@@ -158,8 +158,8 @@ file: META-INF/asyncapi.yaml
 	if obs.Producer != "asyncapi-test" {
 		t.Errorf("observation Producer = %q, want %q", obs.Producer, "asyncapi-test")
 	}
-	if obs.Version != "4.2.0" {
-		t.Errorf("observation Version = %q, want %q", obs.Version, "4.2.0")
+	if obs.Version != "1.2.0" {
+		t.Errorf("observation Version = %q, want %q", obs.Version, "1.2.0")
 	}
 	var channels []*asyncapi.SimpleChannel
 	if err := json.Unmarshal(obs.Value, &channels); err != nil {

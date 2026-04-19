@@ -87,9 +87,9 @@ type SBOMRequest struct {
 	Vex             bool   `json:"vex"`
 }
 
-// fetchSBOM retrieves the SBOM for the latest available semver version of
-// image in repository, trying up to the three most recent versions.
-func (p *JFrogXrayPlugin) fetchSBOM(ctx context.Context, repository, image string) ([]byte, error) {
+// latestVersions returns the three most recent semver Docker tags for image
+// in repository, newest first.
+func (p *JFrogXrayPlugin) latestVersions(ctx context.Context, repository, image string) ([]string, error) {
 	tags, err := p.client.ListDockerTags(ctx, repository, image)
 	if err != nil {
 		return nil, err
@@ -98,17 +98,27 @@ func (p *JFrogXrayPlugin) fetchSBOM(ctx context.Context, repository, image strin
 	if len(versions) == 0 {
 		return nil, fmt.Errorf("no valid semver tags found for %s/%s", repository, image)
 	}
+	return versions, nil
+}
+
+// fetchSBOM retrieves the SBOM for the first version in versions whose Xray
+// export succeeds, falling back in order. If it encounters prevVersion before
+// a successful download, it returns a nil byte slice to indicate no update is needed.
+func (p *JFrogXrayPlugin) fetchSBOM(ctx context.Context, repository, image string, versions []string, prevVersion string) ([]byte, string, error) {
 	var lastErr error
 	for _, version := range versions {
+		if version == prevVersion {
+			return nil, version, nil
+		}
 		data, err := p.client.XrayExportDetails(ctx, repository, image, version)
 		if err != nil {
 			log.Printf("fetchSBOM: skipping %s:%s: %v", image, version, err)
 			lastErr = err
 			continue
 		}
-		return data, nil
+		return data, version, nil
 	}
-	return nil, fmt.Errorf("could not download SBOM for %s/%s (tried %v): %w", repository, image, versions, lastErr)
+	return nil, "", fmt.Errorf("could not download SBOM for %s/%s (tried %v): %w", repository, image, versions, lastErr)
 }
 
 func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, args *PluginArgs) (*PluginResult, error) {
@@ -125,14 +135,30 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 	}
 
 	// Fetch CycloneDX SBOM from jFrog XRay
-	sbomStr, err := p.fetchSBOM(ctx, repository, image)
+	versions, err := p.latestVersions(ctx, repository, image)
 	if err != nil {
 		return nil, err
 	}
 
+	var prevVersion string
+	if status := entity.GetStatus(); status != nil {
+		if prev, ok := status.Observations[JFrogXrayPluginTarget]; ok {
+			prevVersion = prev.Version
+		}
+	}
+
+	sbomBytes, version, err := p.fetchSBOM(ctx, repository, image, versions, prevVersion)
+	if err != nil {
+		return nil, err
+	}
+	if version == prevVersion {
+		// We reached the previously ingested version before finding a newer valid SBOM.
+		return &PluginResult{}, nil
+	}
+
 	// Process SBOM and extract flat string list of component coordinates
 	// (group:artifact).
-	sbomObj, err := sbom.Parse(sbomStr)
+	sbomObj, err := sbom.Parse(sbomBytes)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse SBOM: %w", err)
 	}
@@ -154,7 +180,7 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 			Value:     api.MustMarshalJSON(bom),
 			UpdatedAt: now,
 			Producer:  "JFrogXrayPlugin",
-			Version:   bom.Version,
+			Version:   version,
 		},
 	}
 
@@ -169,7 +195,7 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 				Value:     api.MustMarshalJSON(finding),
 				UpdatedAt: now,
 				Producer:  "JFrogXrayPlugin",
-				Version:   bom.Version,
+				Version:   version,
 			}
 		}
 	}

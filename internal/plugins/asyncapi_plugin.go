@@ -124,6 +124,14 @@ func (m *AsyncAPIImporterPlugin) executeInternal(ctx context.Context, entity cat
 		version = latest[0]
 	}
 
+	// Skip the (expensive) artifact download if we've already ingested this
+	// Maven version on a previous run.
+	if status := entity.GetStatus(); status != nil {
+		if prev, ok := status.Observations[AsyncAPIPluginTarget]; ok && prev.Version == version {
+			return &PluginResult{}, nil
+		}
+	}
+
 	coords := jfrog.MavenCoordinates{
 		GroupID:    groupId,
 		ArtifactID: artifactId,
@@ -167,7 +175,7 @@ func (m *AsyncAPIImporterPlugin) executeInternal(ctx context.Context, entity cat
 				Producer:  m.name,
 				Value:     api.MustMarshalJSON(spec.SimpleChannels()),
 				UpdatedAt: now,
-				Version:   spec.Version(),
+				Version:   version,
 			},
 		},
 	}, nil
