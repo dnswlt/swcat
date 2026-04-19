@@ -1946,6 +1946,18 @@ func (s *Server) ValidateCatalog(ref string) (size int, err error) {
 	return rd.repo.Size(), nil
 }
 
+// GetRepository returns the repository for the default ref. It makes Server
+// implement plugins.RepositoryProvider so the plugin scheduler can observe
+// the live catalog across edit-session swaps.
+func (s *Server) GetRepository() *repo.Repository {
+	rd, err := s.loadStoreData("")
+	if err != nil {
+		log.Printf("GetRepository: failed to load default store data: %v", err)
+		return nil
+	}
+	return rd.repo
+}
+
 // contextKey is the type used to store data in the request context.
 type contextKey string
 

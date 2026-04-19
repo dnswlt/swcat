@@ -462,6 +462,15 @@ func main() {
 	}
 	log.Printf("Read %d entities from catalog", size)
 
+	if pluginRegistry != nil {
+		schedulerCfg := pluginRegistry.SchedulerConfig()
+		if schedulerCfg.Enabled {
+			scheduler := plugins.NewScheduler(schedulerCfg, pluginRegistry, server, db)
+			go scheduler.Run(context.Background())
+			log.Printf("Plugin scheduler started")
+		}
+	}
+
 	log.Fatal(server.Serve()) // Never returns
 
 }

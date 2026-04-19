@@ -218,6 +218,11 @@ func (r *Registry) MatchingPlugins(e catalog.Entity) []string {
 	return keys
 }
 
+// SchedulerConfig returns the scheduler config loaded from the plugins config file.
+func (r *Registry) SchedulerConfig() SchedulerConfig {
+	return r.config.Scheduler
+}
+
 // Plugins returns a list of names of all registered plugins.
 func (r *Registry) Plugins() []string {
 	keys := make([]string, 0, len(r.triggers))

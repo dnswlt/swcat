@@ -78,6 +78,9 @@ func (s *Scheduler) updateEntities() {
 	entities := make(map[string]bool)
 	now := time.Now()
 	repo := s.provider.GetRepository()
+	if repo == nil {
+		return
+	}
 	for _, e := range repo.AllEntities() {
 		ref := e.GetRef()
 		id := ref.String()
@@ -115,7 +118,10 @@ func (s *Scheduler) processResult(ctx context.Context, entity catalog.Entity, re
 
 func (s *Scheduler) runPlugins(ctx context.Context, ref *catalog.Ref, results chan<- taskResult) {
 	repo := s.provider.GetRepository()
-	entity := repo.Entity(ref)
+	var entity catalog.Entity
+	if repo != nil {
+		entity = repo.Entity(ref)
+	}
 	success := false
 	if entity != nil {
 		result, err := s.registry.Run(ctx, s.provider, entity)
