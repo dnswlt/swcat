@@ -67,6 +67,11 @@ func NewRepository() *Repository {
 	return NewRepositoryWithConfig(Config{})
 }
 
+// GetRepository returns r itself. It makes Repository implement RepositoryProvider
+func (r *Repository) GetRepository() *Repository {
+	return r
+}
+
 func (r *Repository) Size() int {
 	return len(r.allEntities)
 }

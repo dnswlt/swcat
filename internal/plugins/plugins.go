@@ -36,7 +36,8 @@ type Definition struct {
 
 // Config is the top-level YAML node, i.e. the thing that is read from plugins.yml.
 type Config struct {
-	Plugins map[string]*Definition `yaml:"plugins"`
+	Plugins   map[string]*Definition `yaml:"plugins"`
+	Scheduler SchedulerConfig
 }
 
 // Trigger combines a plugin with the conditions under which it should be executed.
@@ -97,6 +98,11 @@ type PluginArgs struct {
 
 	// Additional arguments passed from the calling plugin or registry.
 	Args map[string]any
+}
+
+// RepositoryProvider is the interface used by Registry to obtain the current entity repository.
+type RepositoryProvider interface {
+	GetRepository() *repo.Repository
 }
 
 // Plugin in the interface that any plugin implementation must satisfy.
@@ -221,7 +227,7 @@ func (r *Registry) Plugins() []string {
 	return keys
 }
 
-func (r *Registry) Run(ctx context.Context, repository *repo.Repository, e catalog.Entity) (*RunResult, error) {
+func (r *Registry) Run(ctx context.Context, repoProvider RepositoryProvider, e catalog.Entity) (*RunResult, error) {
 	tempDir, err := os.MkdirTemp("", "swcat-plugins")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp dir for plugin runs: %w", err)
@@ -232,6 +238,8 @@ func (r *Registry) Run(ctx context.Context, repository *repo.Repository, e catal
 			log.Printf("Failed to delete plugin temp dir %s: %v", tempDir, err)
 		}
 	}()
+
+	repository := repoProvider.GetRepository()
 
 	annotations := make(map[string]any)
 	observations := make(map[string]catalog.Observation)

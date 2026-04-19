@@ -168,3 +168,20 @@ plugins:
 		t.Errorf("UpdatedAt %v not in [%v, %v]", obs.UpdatedAt, before, after)
 	}
 }
+
+func TestParseInterval(t *testing.T) {
+	configYaml := `
+enabled: true
+baseInterval: 24h`
+
+	var sc SchedulerConfig
+	if err := yaml.Unmarshal([]byte(configYaml), &sc); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
+	}
+	if !sc.Enabled {
+		t.Errorf("Enabled = false, want true")
+	}
+	if sc.BaseInterval != 24*time.Hour {
+		t.Errorf("Interval = %v, want %v", sc.BaseInterval, 24*time.Hour)
+	}
+}
