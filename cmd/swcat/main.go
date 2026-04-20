@@ -172,6 +172,7 @@ type Options struct {
 	JFrogURL          string
 	DocumentsDir      string
 	DatabaseDSN       string
+	DisableScheduler  bool
 }
 
 func createKubeClient(source store.Source, opts *Options) (kube.Client, error) {
@@ -286,6 +287,7 @@ func main() {
 	fs.StringVar(&opts.BaseDir, "base-dir", "", "Base directory for resource files. If empty, uses embedded resources (recommended for production).")
 	fs.BoolVar(&opts.ReadOnly, "read-only", false, "Start server in read-only mode (no entity editing).")
 	fs.BoolVar(&opts.DisablePlugins, "disable-plugins", false, "Disable all plugins (even if a plugin config is found)")
+	fs.BoolVar(&opts.DisableScheduler, "disable-scheduler", false, "Disable the plugin scheduler (even if the plugin config has it enabled)")
 	fs.DurationVar(&opts.DotTimeout, "dot-timeout", 10*time.Second, "Maximum time to wait before cancelling dot executions")
 	fs.BoolVar(&opts.UseDotStreaming, "dot-streaming", runtime.GOOS == "windows", "Use long-running dot process to render SVG graphs (use only if dot process startup is slow, e.g. on Windows)")
 	fs.IntVar(&opts.SVGCacheSize, "svg-cache-size", 1024, "Max. number of SVG graphs to hold in the in-memory LRU cache")
@@ -462,7 +464,7 @@ func main() {
 	}
 	log.Printf("Read %d entities from catalog", size)
 
-	if pluginRegistry != nil {
+	if pluginRegistry != nil && !opts.DisableScheduler {
 		schedulerCfg := pluginRegistry.SchedulerConfig()
 		if schedulerCfg.Enabled {
 			scheduler := plugins.NewScheduler(schedulerCfg, pluginRegistry, server, db)
