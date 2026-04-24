@@ -79,10 +79,7 @@ func (s *Server) getRef(r *http.Request) string {
 	if v := r.Context().Value(ctxRef); v != nil {
 		return v.(string)
 	}
-	if g, ok := s.source.(*store.GitSource); ok {
-		return g.DefaultRef()
-	}
-	return ""
+	return s.source.DefaultRef()
 }
 
 // storeData contains all data extracted from a given view of a Store at reference ref.
@@ -280,6 +277,9 @@ func (s *Server) getFindings(data *storeData, e catalog.Entity) []lint.Finding {
 // loadStoreData retrieves the storeData for ref from the cache, if present,
 // or else loads it from the associated store.
 func (s *Server) loadStoreData(ref string) (*storeData, error) {
+	if ref == "" {
+		ref = s.source.DefaultRef()
+	}
 	// Fast path: already cached
 	s.mu.RLock()
 	cached, ok := s.storeDataMap[ref]
@@ -1950,9 +1950,10 @@ func (s *Server) ValidateCatalog(ref string) (size int, err error) {
 // implement plugins.RepositoryProvider so the plugin scheduler can observe
 // the live catalog across edit-session swaps.
 func (s *Server) GetRepository() *repo.Repository {
-	rd, err := s.loadStoreData("")
+	ref := s.source.DefaultRef()
+	rd, err := s.loadStoreData(ref)
 	if err != nil {
-		log.Printf("GetRepository: failed to load default store data: %v", err)
+		log.Printf("GetRepository: failed to load default store data for ref %q: %v", ref, err)
 		return nil
 	}
 	return rd.repo

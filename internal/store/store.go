@@ -38,8 +38,11 @@ type Source interface {
 	// For a disk store, this might be a no-op.
 	Refresh() error
 	// Store returns a handle to a store at the given ref.
-	// For non-versioned disk-based stores, ref must be "".
+	// For non-versioned disk-based stores, ref must be equal to DefaultRef().
 	Store(ref string) (Store, error)
+	// DefaultRef returns the name of default ref (e.g. git branch)
+	// For disk-based stores, it always returns "".
+	DefaultRef() string
 }
 
 // Store is a minimal abstraction to list, read, and write files.

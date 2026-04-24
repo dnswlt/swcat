@@ -23,6 +23,10 @@ func NewDiskStore(rootDir string) *DiskStore {
 	}
 }
 
+func (d *DiskStore) DefaultRef() string {
+	return ""
+}
+
 func (d *DiskStore) IsDefaultRef() bool {
 	return true
 }
