@@ -25,6 +25,7 @@ import (
 	"github.com/dnswlt/swcat/internal/maven"
 	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/prometheus"
+	"github.com/dnswlt/swcat/internal/status"
 	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/web"
 	"github.com/peterbourgon/ff/v3"
@@ -431,6 +432,8 @@ func main() {
 		pluginRegistry = r
 	}
 
+	statusRegistry := status.NewRegistry()
+
 	server, err := web.NewServer(
 		web.ServerOptions{
 			Addr:            opts.Addr,
@@ -451,6 +454,7 @@ func main() {
 		web.WithPrometheusClient(promClient),
 		web.WithBitbucketClient(bbClient),
 		web.WithDatabase(db),
+		web.WithStatusReader(statusRegistry),
 	)
 	if err != nil {
 		log.Fatalf("Could not create server: %v", err)
@@ -467,7 +471,7 @@ func main() {
 	if pluginRegistry != nil && !opts.DisableScheduler {
 		schedulerCfg := pluginRegistry.SchedulerConfig()
 		if schedulerCfg.Enabled {
-			scheduler := plugins.NewScheduler(schedulerCfg, pluginRegistry, server, db)
+			scheduler := plugins.NewScheduler(schedulerCfg, pluginRegistry, server, db, statusRegistry)
 			go scheduler.Run(context.Background())
 			log.Printf("Plugin scheduler started")
 		}

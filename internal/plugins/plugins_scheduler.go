@@ -11,6 +11,7 @@ import (
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/database"
+	"github.com/dnswlt/swcat/internal/status"
 )
 
 const (
@@ -53,18 +54,26 @@ type SchedulerConfig struct {
 // Scheduler periodically runs the registered plugins for each entity in the
 // repository, with per-entity exponential backoff on failure.
 type Scheduler struct {
-	config   SchedulerConfig
-	registry *Registry
-	provider RepositoryProvider
-	db       *sql.DB
-	entities map[string]*entityState
-	results  chan taskResult
+	config        SchedulerConfig
+	registry      *Registry
+	provider      RepositoryProvider
+	db            *sql.DB
+	statusUpdater status.Updater
+	entities      map[string]*entityState
+	results       chan taskResult
+	stats         SchedulerStats
+}
+
+type SchedulerStats struct {
+	Processed   int       `json:"processed"`
+	Errors      int       `json:"errors"`
+	LastRunTime time.Time `json:"lastRunTime"`
 }
 
 // NewScheduler returns a Scheduler ready to be started with Run. Zero or
 // invalid fields in config are replaced by their package defaults, and the
 // resolved configuration is logged.
-func NewScheduler(config SchedulerConfig, registry *Registry, provider RepositoryProvider, db *sql.DB) *Scheduler {
+func NewScheduler(config SchedulerConfig, registry *Registry, provider RepositoryProvider, db *sql.DB, statusUpdater status.Updater) *Scheduler {
 	if config.BackoffFactor <= 1 {
 		config.BackoffFactor = DefaultBackoffFactor
 	}
@@ -79,12 +88,13 @@ func NewScheduler(config SchedulerConfig, registry *Registry, provider Repositor
 	}
 	log.Printf("Plugin scheduler config: %+v", config)
 	return &Scheduler{
-		config:   config,
-		registry: registry,
-		provider: provider,
-		db:       db,
-		entities: make(map[string]*entityState),
-		results:  make(chan taskResult, 64),
+		config:        config,
+		registry:      registry,
+		provider:      provider,
+		db:            db,
+		statusUpdater: statusUpdater,
+		entities:      make(map[string]*entityState),
+		results:       make(chan taskResult, 64),
 	}
 }
 
@@ -196,6 +206,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			now := time.Now()
+			s.stats.LastRunTime = now
 			s.updateEntities()
 			for _, state := range s.entities {
 				if state.inFlight || now.Before(state.nextDue) {
@@ -208,8 +219,10 @@ func (s *Scheduler) Run(ctx context.Context) {
 					s.runPlugins(taskCtx, ref, s.results)
 				}(state.ref)
 			}
+			s.statusUpdater.Update("pluginsScheduler", s.stats)
 
 		case result := <-s.results:
+			s.stats.Processed++
 			state, ok := s.entities[result.ref.String()]
 			if !ok {
 				continue // Entity got removed in the meantime, ignore result
@@ -219,6 +232,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 				state.backoff = s.config.BaseInterval
 				state.nextDue = time.Now().Add(s.config.BaseInterval)
 			} else {
+				s.stats.Errors++
 				state.backoff = s.nextBackoff(state.backoff)
 				state.nextDue = time.Now().Add(state.backoff)
 			}

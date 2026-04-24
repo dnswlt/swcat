@@ -91,6 +91,14 @@ type storeData struct {
 	findingsCache *lru.Cache[string, []lint.Finding]
 }
 
+// StatusReader is used by Server to retrieve status information from
+// other components that provide status information.
+type StatusReader interface {
+	// Snapshot retrieves the current snapshot of all available
+	// component status information.
+	Snapshot() map[string]any
+}
+
 type Server struct {
 	opts     ServerOptions
 	template *template.Template
@@ -101,6 +109,9 @@ type Server struct {
 	finder       *repo.Finder
 
 	dotRunner dot.Runner
+
+	// The optional status registry.
+	statusReader StatusReader
 
 	// The optional plugins registry.
 	// If set, plugins are available to update entity annotations.
@@ -147,6 +158,13 @@ func WithDatabase(db *sql.DB) ServerOption {
 func WithLinter(linter *lint.Linter) ServerOption {
 	return func(s *Server) {
 		s.linter = linter
+	}
+}
+
+// WithPluginRegistry configures the server to use the given plugin registry.
+func WithStatusReader(reader StatusReader) ServerOption {
+	return func(s *Server) {
+		s.statusReader = reader
 	}
 }
 
@@ -2297,6 +2315,13 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"storeSourceType":   fmt.Sprintf("%T", s.source),
 		"started":           s.started,
 		"registeredPlugins": registeredPlugins,
+	}
+
+	if s.statusReader != nil {
+		snapshot := s.statusReader.Snapshot()
+		if len(snapshot) > 0 {
+			status["components"] = snapshot
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
