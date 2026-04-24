@@ -151,8 +151,14 @@ func ParseConfig(data []byte) (*Config, error) {
 	})
 
 	var config Config
-	if err := yaml.Unmarshal([]byte(expanded), &config); err != nil {
-		return nil, fmt.Errorf("failed to parse plugins config: %w", err)
+	strictDec := yaml.NewDecoder(strings.NewReader(expanded))
+	strictDec.KnownFields(true)
+	if err := strictDec.Decode(&config); err != nil {
+		log.Printf("WARNING: strict parse of plugins config failed, retrying leniently: %v", err)
+		config = Config{}
+		if err := yaml.Unmarshal([]byte(expanded), &config); err != nil {
+			return nil, fmt.Errorf("failed to parse plugins config: %w", err)
+		}
 	}
 	return &config, nil
 }
