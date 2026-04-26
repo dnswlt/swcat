@@ -63,48 +63,6 @@ The `style` property determines how the annotation value is parsed and displayed
 | `attrs` | Renders a key-value table. | A simple JSON object: `{"key": "value"}` |
 | `table` | Renders a table with custom columns. | A JSON array of objects: `[{"a": 1}, {"a": 2}]` |
 
-## Adding Metadata to Annotations
-
-Any annotation value can be wrapped in a `$data`/`$meta` envelope to attach
-metadata — such as a timestamp or version — that is displayed at the bottom of
-the card independently of the main content style:
-
-```json
-{
-  "$data": <the actual annotation value>,
-  "$meta": {
-    "key": "value"
-  }
-}
-```
-
-`$data` holds the payload that would otherwise be the full annotation value.
-`$meta` is a flat JSON object whose key-value pairs are rendered as a footer row
-beneath the main content.
-
-**Example:** an `attrs`-style annotation written by an automation pipeline that
-records when it last ran:
-
-```yaml
-metadata:
-  annotations:
-    my-org.com/data: |
-      {
-        "$data": {
-          "team": "Alpha",
-          "cost-center": "12345",
-          "criticality": "high"
-        },
-        "$meta": {
-          "updatedAt": "2025-03-07T14:32:00Z",
-          "source": "pipeline/nightly"
-        }
-      }
-```
-
-The card will render the `$data` object as a key-value table (because `style: attrs`)
-and show `updatedAt` and `source` in a small footer line.
-
 ## Custom Tables
 
 The `table` style allows you to define a custom table structure.
@@ -145,3 +103,40 @@ metadata:
         }
       ]
 ```
+
+## Multiple Blocks per Section
+
+A single annotation can be rendered as several blocks inside the same
+section card by listing them under `blocks`. Each block has its own
+`style` and (optionally) a `heading` rendered as a sub-heading above
+the block, plus a `selector` that picks a sub-value out of the
+annotation's JSON.
+
+This is useful when one annotation contains a structured payload whose
+parts you want to display differently — for example, a summary table
+together with the raw JSON.
+
+```yaml
+ui:
+  annotationBasedContent:
+    my-org.com/data:
+      heading: Organization Data   # The section heading.
+      rank: 10
+      open: true                   # If true, the section is expanded on load.
+      blocks:
+        - heading: Team
+          style: attrs
+          selector: team           # Picks the "team" sub-object.
+        - heading: Cost
+          style: attrs
+          selector: cost
+        - style: json              # No sub-heading; renders the full JSON.
+```
+
+`selector` is a [GJSON path](https://github.com/tidwall/gjson#path-syntax)
+evaluated against the annotation value. When omitted, the block sees the
+full value.
+
+When `blocks` is omitted, the section is rendered as a single block using
+the `style`, `selector`, etc. defined directly on the section — the format
+shown in all the earlier examples.

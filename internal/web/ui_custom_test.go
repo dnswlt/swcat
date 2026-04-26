@@ -2,7 +2,9 @@ package web
 
 import (
 	"testing"
+	"time"
 
+	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/config"
 	"github.com/google/go-cmp/cmp"
 	"github.com/tidwall/gjson"
@@ -436,5 +438,127 @@ func TestFormatJSONValue(t *testing.T) {
 				t.Errorf("formatJSONValue(%v) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNewCustomContentGroup_InlineFallback(t *testing.T) {
+	// When Blocks is empty, the inline CustomContent is rendered as a single
+	// block, and the inline Heading is consumed as the group heading — the
+	// block itself must have an empty Heading.
+	s := &config.CustomContentSection{
+		Rank: 5,
+		Open: true,
+		CustomContent: config.CustomContent{
+			Heading: "Inline Section",
+			Style:   "text",
+		},
+	}
+	got, err := newCustomContentGroup(s, `"hi"`)
+	if err != nil {
+		t.Fatalf("newCustomContentGroup: %v", err)
+	}
+	want := &CustomContentGroup{
+		Heading: "Inline Section",
+		Open:    true,
+		Rank:    5,
+		Blocks: []*CustomContent{
+			{Text: "hi"}, // No sub-heading.
+		},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestNewCustomContentGroup_Blocks(t *testing.T) {
+	// Multiple blocks with selectors slicing the same JSON value. Each
+	// block's Heading is preserved as a sub-heading; the group's Heading
+	// comes from the inline (outer) Heading.
+	s := &config.CustomContentSection{
+		Rank: 1,
+		CustomContent: config.CustomContent{
+			Heading: "Org Data",
+		},
+		Blocks: []*config.CustomContent{
+			{Heading: "Team", Style: "attrs", Selector: "team"},
+			{Heading: "Cost", Style: "text", Selector: "cost"},
+			{Style: "json"}, // No sub-heading; renders the full value.
+		},
+	}
+	value := `{"team": {"name": "Alpha"}, "cost": "12345"}`
+	got, err := newCustomContentGroup(s, value)
+	if err != nil {
+		t.Fatalf("newCustomContentGroup: %v", err)
+	}
+	want := &CustomContentGroup{
+		Heading: "Org Data",
+		Rank:    1,
+		Blocks: []*CustomContent{
+			{Heading: "Team", Attrs: []ccAttr{{Name: "name", Value: "Alpha"}}},
+			{Heading: "Cost", Text: "12345"},
+			{Code: "{\n  \"cost\": \"12345\",\n  \"team\": {\n    \"name\": \"Alpha\"\n  }\n}"},
+		},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestNewCustomContentGroup_BlockErrorPropagates(t *testing.T) {
+	s := &config.CustomContentSection{
+		CustomContent: config.CustomContent{Heading: "Sec"},
+		Blocks: []*config.CustomContent{
+			{Style: "text", Selector: "ok"},
+			{Style: "text", Selector: "missing"}, // Will error.
+		},
+	}
+	if _, err := newCustomContentGroup(s, `{"ok": "fine"}`); err == nil {
+		t.Fatalf("expected error for missing selector, got nil")
+	}
+}
+
+func TestNewCustomContentGroupObservation_AddsMeta(t *testing.T) {
+	updated := time.Date(2026, 4, 26, 10, 0, 0, 0, time.UTC)
+	obs := catalog.Observation{
+		Value:     []byte(`"hello"`),
+		UpdatedAt: updated,
+		Version:   "v1.2.3",
+	}
+	s := &config.CustomContentSection{
+		CustomContent: config.CustomContent{Heading: "Status", Style: "text"},
+	}
+	got, err := newCustomContentGroupObservation(s, obs)
+	if err != nil {
+		t.Fatalf("newCustomContentGroupObservation: %v", err)
+	}
+	want := &CustomContentGroup{
+		Heading: "Status",
+		Blocks:  []*CustomContent{{Text: "hello"}},
+		Meta: []ccAttr{
+			{Name: "updatedAt", Value: "2026-04-26T10:00:00Z"},
+			{Name: "version", Value: "v1.2.3"},
+		},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestNewCustomContentGroupObservation_NoVersion(t *testing.T) {
+	updated := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	obs := catalog.Observation{
+		Value:     []byte(`"x"`),
+		UpdatedAt: updated,
+	}
+	s := &config.CustomContentSection{
+		CustomContent: config.CustomContent{Style: "text"},
+	}
+	got, err := newCustomContentGroupObservation(s, obs)
+	if err != nil {
+		t.Fatalf("newCustomContentGroupObservation: %v", err)
+	}
+	wantMeta := []ccAttr{{Name: "updatedAt", Value: "2026-01-02T03:04:05Z"}}
+	if diff := cmp.Diff(wantMeta, got.Meta); diff != "" {
+		t.Errorf("Meta mismatch (-want +got):\n%s", diff)
 	}
 }

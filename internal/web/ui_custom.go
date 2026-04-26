@@ -28,22 +28,28 @@ type ccTable struct {
 	Rows    []*ccRow
 }
 
-// CustomContent represents content that is displayed in the detail view
-// and is specified in an entity annotation.
-type CustomContent struct {
+// CustomContentGroup is one <details> section in the entity detail view.
+// It contains one or more rendered Blocks plus optional Meta footer.
+type CustomContentGroup struct {
 	Heading string
+	Open    bool
+	Rank    int
+	Blocks  []*CustomContent
+	Meta    []ccAttr // Optional metadata fields rendered at the bottom of the section.
+}
+
+// CustomContent is one rendered block within a CustomContentGroup.
+type CustomContent struct {
+	Heading string   // Optional sub-heading rendered above the block.
 	Text    string   // Text to be presented as-is.
 	Items   []string // Items to be rendered as an <ul> list.
 	Attrs   []ccAttr // Items to be rendered as a key-value <table>.
 	Table   *ccTable // Items to be rendered in a custom <table>.
 	Code    string   // Preformatted code (typically JSON)
-	Meta    []ccAttr // Optional metadata fields rendered at the bottom (from $meta wrapper).
-	Rank    int      // Used to order multiple custom content items.
-	Open    bool     // If true, the custom content will be open (expanded).
 }
 
-func customContentForEntity(entity catalog.Entity, cfg *config.UIConfig) ([]*CustomContent, error) {
-	var result []*CustomContent
+func customContentForEntity(entity catalog.Entity, cfg *config.UIConfig) ([]*CustomContentGroup, error) {
+	var result []*CustomContentGroup
 	// Annotations
 	if len(entity.GetMetadata().Annotations) > 0 && len(cfg.AnnotationBasedContent) > 0 {
 		meta := entity.GetMetadata()
@@ -52,12 +58,11 @@ func customContentForEntity(entity catalog.Entity, cfg *config.UIConfig) ([]*Cus
 			if !ok {
 				continue
 			}
-			cc, err := newCustomContent(&abc.CustomContent, anno)
+			g, err := newCustomContentGroup(abc, anno)
 			if err != nil {
 				return nil, fmt.Errorf("invalid custom content: %v", err)
 			}
-			cc.Rank = abc.Rank
-			result = append(result, cc)
+			result = append(result, g)
 		}
 	}
 	// Status
@@ -67,16 +72,15 @@ func customContentForEntity(entity catalog.Entity, cfg *config.UIConfig) ([]*Cus
 			if !ok {
 				continue
 			}
-			cc, err := newCustomContentObservation(&sbc.CustomContent, obs)
+			g, err := newCustomContentGroupObservation(sbc, obs)
 			if err != nil {
 				return nil, fmt.Errorf("invalid custom content: %v", err)
 			}
-			cc.Rank = sbc.Rank
-			result = append(result, cc)
+			result = append(result, g)
 		}
 	}
 
-	slices.SortFunc(result, func(a, b *CustomContent) int {
+	slices.SortFunc(result, func(a, b *CustomContentGroup) int {
 		if c := cmp.Compare(a.Rank, b.Rank); c != 0 {
 			return c
 		}
@@ -86,17 +90,54 @@ func customContentForEntity(entity catalog.Entity, cfg *config.UIConfig) ([]*Cus
 	return result, nil
 }
 
-func newCustomContentObservation(ccc *config.CustomContent, obs catalog.Observation) (*CustomContent, error) {
-	cc, err := newCustomContent(ccc, string(obs.Value))
+func newCustomContentGroup(s *config.CustomContentSection, value string) (*CustomContentGroup, error) {
+	g := &CustomContentGroup{
+		Heading: s.Heading,
+		Open:    s.Open,
+		Rank:    s.Rank,
+	}
+	blocks, err := buildBlocks(&s.CustomContent, s.Blocks, value)
 	if err != nil {
 		return nil, err
 	}
-	// Add metadata
-	cc.Meta = append(cc.Meta, ccAttr{Name: "updatedAt", Value: obs.UpdatedAt.Format(time.RFC3339)})
-	if obs.Version != "" {
-		cc.Meta = append(cc.Meta, ccAttr{Name: "version", Value: obs.Version})
+	g.Blocks = blocks
+	return g, nil
+}
+
+func newCustomContentGroupObservation(s *config.CustomContentSection, obs catalog.Observation) (*CustomContentGroup, error) {
+	g, err := newCustomContentGroup(s, string(obs.Value))
+	if err != nil {
+		return nil, err
 	}
-	return cc, nil
+	g.Meta = append(g.Meta, ccAttr{Name: "updatedAt", Value: obs.UpdatedAt.Format(time.RFC3339)})
+	if obs.Version != "" {
+		g.Meta = append(g.Meta, ccAttr{Name: "version", Value: obs.Version})
+	}
+	return g, nil
+}
+
+// buildBlocks renders the configured Blocks for a group. If Blocks is empty,
+// the inline CustomContent is rendered as a single block (its Heading is
+// cleared because at the inline level it represents the group heading, not
+// a block sub-heading).
+func buildBlocks(inline *config.CustomContent, blocks []*config.CustomContent, value string) ([]*CustomContent, error) {
+	if len(blocks) == 0 {
+		cc, err := newCustomContent(inline, value)
+		if err != nil {
+			return nil, err
+		}
+		cc.Heading = ""
+		return []*CustomContent{cc}, nil
+	}
+	out := make([]*CustomContent, 0, len(blocks))
+	for _, b := range blocks {
+		cc, err := newCustomContent(b, value)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, cc)
+	}
+	return out, nil
 }
 
 func setCCText(cc *CustomContent, value string) {
@@ -215,7 +256,6 @@ func setCCAttrs(cc *CustomContent, fields []string, value string) error {
 func newCustomContent(ccc *config.CustomContent, value string) (*CustomContent, error) {
 	cc := &CustomContent{
 		Heading: ccc.Heading,
-		Open:    ccc.Open,
 	}
 	if ccc.Selector != "" {
 		res := gjson.Get(value, ccc.Selector)

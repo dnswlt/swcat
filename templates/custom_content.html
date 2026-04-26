@@ -1,17 +1,21 @@
-<!-- Custom content based on entity annotations -->
-{{ range $index, $cc := . }}
-<details class="border rounded-lg" {{if $cc.Open }}open{{end}}>
-    <summary class="font-semibold bg-gray-100 px-3 py-1 rounded-t-lg cursor-pointer">{{ $cc.Heading }}</summary>
+<!-- Custom content based on entity annotations / status observations -->
+{{ range $gi, $g := . }}
+<details class="border rounded-lg" {{if $g.Open }}open{{end}}>
+    <summary class="font-semibold bg-gray-100 px-3 py-1 rounded-t-lg cursor-pointer">{{ $g.Heading }}</summary>
+    {{ range $bi, $cc := $g.Blocks }}
+    {{ if $cc.Heading }}
+    <h4 class="px-3 pt-2 pb-1 text-sm font-semibold text-gray-700">{{ $cc.Heading }}</h4>
+    {{ end }}
     {{ if $cc.Code }}
     <div class="max-h-32 overflow-y-auto">
-        <textarea id="custom-content-{{$index}}" class="json-viewer">{{ $cc.Code }}</textarea>
+        <textarea id="custom-content-{{$gi}}-{{$bi}}" class="json-viewer">{{ $cc.Code }}</textarea>
     </div>
     {{ else if $cc.Text }}
-    <div class="p-3 max-h-32 overflow-y-auto">
+    <div class="px-3 py-1 max-h-32 overflow-y-auto">
         <p>{{ $cc.Text }}</p>
     </div>
     {{ else if $cc.Items }}
-    <div class="p-3 max-h-32 overflow-y-auto">
+    <div class="px-3 py-1 max-h-32 overflow-y-auto">
         <ul class="list-disc list-inside leading-tight text-sm">
             {{ range $cc.Items }}
             <li>{{ . }}</li>
@@ -53,9 +57,10 @@
         </table>
     </div>
     {{ end }}
-    {{ if $cc.Meta }}
+    {{ end }}
+    {{ if $g.Meta }}
     <dl class="px-3 py-1.5 border-t flex flex-wrap gap-x-5 gap-y-0.5 text-xs text-gray-500">
-        {{ range $cc.Meta }}
+        {{ range $g.Meta }}
         <div class="flex gap-1">
             <dt>{{ .Name }}</dt>
             <dd>{{ .Value }}</dd>

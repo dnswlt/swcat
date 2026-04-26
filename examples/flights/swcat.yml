@@ -12,8 +12,10 @@ ui:
     # as a card on the API detail page:
     solace.com/topics:
       heading: Solace Topics
-      style: list  # Possible values: text|list|attrs|table|json
       open: true  # Whether the card should be open by default.
+      blocks:
+        - heading: 'Just for fun'
+          style: list  # Possible values: text|list|attrs|table|json
     swcat/custom-fields:
       heading: Deployment Details
       style: json

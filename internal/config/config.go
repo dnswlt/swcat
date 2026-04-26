@@ -37,16 +37,15 @@ func NewCustomColumn(header, data string) (*CustomColumn, error) {
 	return &CustomColumn{Header: header, Data: data, dataTemplate: tmpl}, nil
 }
 
-// AnnotationBasedContent specifies how annotation-based content should be rendered in the UI.
+// CustomContent specifies how a single block of annotation-based or status-based
+// content should be rendered in the UI.
 type CustomContent struct {
-	// The heading under which to display the content.
+	// Optional heading. At the group level, used as the section heading
+	// (in the <summary> of the <details>). At the block level (when used
+	// inside a Blocks list), rendered as a sub-heading above the block.
 	Heading string `yaml:"heading"`
 	// The style in which to render the content. One of "text", "list", "attrs", "json", "table".
 	Style string `yaml:"style"`
-	// Used to order multiple content blocks on the same page.
-	Rank int `yaml:"rank"`
-	// If true, the custom content <details> are open on load.
-	Open bool `yaml:"open"`
 	// For style "attrs", the attributes (GJSON paths, e.g. "field1", "nested.field") to display. If empty, all fields are displayed.
 	Fields []string `yaml:"fields"`
 	// For style "table", the columns to be rendered from the JSON list of objects.
@@ -56,10 +55,19 @@ type CustomContent struct {
 	Selector string `yaml:"selector"`
 }
 
-type AnnotationBasedContent struct {
-	CustomContent `yaml:",inline"`
-}
-type StatusBasedContent struct {
+// CustomContentSection describes one <details> section on an entity detail page.
+// The section can contain multiple Blocks; for backward compatibility the
+// inline CustomContent is used as a single block when Blocks is empty.
+// Sections are bound to an annotation key or status observation key by the
+// map they live in (UIConfig.AnnotationBasedContent / StatusBasedContent).
+type CustomContentSection struct {
+	// Used to order multiple sections on the same page.
+	Rank int `yaml:"rank"`
+	// If true, the section <details> is open on load.
+	Open bool `yaml:"open"`
+	// Multiple blocks to render inside the same section. If empty, the
+	// inline CustomContent is rendered as a single block.
+	Blocks        []*CustomContent `yaml:"blocks"`
 	CustomContent `yaml:",inline"`
 }
 
@@ -73,8 +81,8 @@ type HelpLink struct {
 // We cannot put it into the web package as that would generate
 // a cyclic dependency.
 type UIConfig struct {
-	AnnotationBasedContent map[string]*AnnotationBasedContent `yaml:"annotationBasedContent"`
-	StatusBasedContent     map[string]*StatusBasedContent     `yaml:"statusBasedContent"`
+	AnnotationBasedContent map[string]*CustomContentSection `yaml:"annotationBasedContent"`
+	StatusBasedContent     map[string]*CustomContentSection `yaml:"statusBasedContent"`
 	// An optional custom help link shown at the bottom of the UI.
 	// DEPRECATED: Use HelpLinks instead.
 	HelpLink *HelpLink `yaml:"helpLink"`
@@ -115,6 +123,18 @@ func join(v any) string {
 	return builder.String()
 }
 
+// parseCustomContentColumns parses (and replaces) each Column's Data template.
+func parseCustomContentColumns(cc *CustomContent) error {
+	for i, col := range cc.Columns {
+		parsed, err := NewCustomColumn(col.Header, col.Data)
+		if err != nil {
+			return err
+		}
+		cc.Columns[i] = parsed
+	}
+	return nil
+}
+
 func Load(st store.Store, configPath string) (*Bundle, error) {
 	bs, err := st.ReadFile(configPath)
 	if err != nil {
@@ -129,21 +149,23 @@ func Load(st store.Store, configPath string) (*Bundle, error) {
 
 	// Populate and validate computed fields
 	for k, abc := range bundle.UI.AnnotationBasedContent {
-		for i, col := range abc.Columns {
-			parsed, err := NewCustomColumn(col.Header, col.Data)
-			if err != nil {
-				return nil, fmt.Errorf("invalid column template for annotationBasedContent %q: %v", k, err)
+		if err := parseCustomContentColumns(&abc.CustomContent); err != nil {
+			return nil, fmt.Errorf("invalid column template for annotationBasedContent %q: %v", k, err)
+		}
+		for j, block := range abc.Blocks {
+			if err := parseCustomContentColumns(block); err != nil {
+				return nil, fmt.Errorf("invalid column template for annotationBasedContent %q block %d: %v", k, j, err)
 			}
-			abc.Columns[i] = parsed
 		}
 	}
 	for k, sbc := range bundle.UI.StatusBasedContent {
-		for i, col := range sbc.Columns {
-			parsed, err := NewCustomColumn(col.Header, col.Data)
-			if err != nil {
-				return nil, fmt.Errorf("invalid column template for statusBasedContent %q: %v", k, err)
+		if err := parseCustomContentColumns(&sbc.CustomContent); err != nil {
+			return nil, fmt.Errorf("invalid column template for statusBasedContent %q: %v", k, err)
+		}
+		for j, block := range sbc.Blocks {
+			if err := parseCustomContentColumns(block); err != nil {
+				return nil, fmt.Errorf("invalid column template for statusBasedContent %q block %d: %v", k, j, err)
 			}
-			sbc.Columns[i] = parsed
 		}
 	}
 
