@@ -7,6 +7,7 @@ import (
 	"log"
 	"maps"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"github.com/dnswlt/swcat/internal/catalog"
@@ -62,12 +63,20 @@ type Scheduler struct {
 	entities      map[string]*entityState
 	results       chan taskResult
 	stats         SchedulerStats
+	paused        atomic.Bool
+	trigger       chan struct{} // Used to actively trigger a "tick", e.g. after a Resume().
 }
 
 type SchedulerStats struct {
 	Processed   int       `json:"processed"`
 	Errors      int       `json:"errors"`
 	LastRunTime time.Time `json:"lastRunTime"`
+	Paused      bool      `json:"paused"`
+}
+
+type SchedulerControl interface {
+	Pause()
+	Resume()
 }
 
 // NewScheduler returns a Scheduler ready to be started with Run. Zero or
@@ -95,6 +104,23 @@ func NewScheduler(config SchedulerConfig, registry *Registry, provider Repositor
 		statusUpdater: statusUpdater,
 		entities:      make(map[string]*entityState),
 		results:       make(chan taskResult, 64),
+		trigger:       make(chan struct{}, 1),
+	}
+}
+
+func (s *Scheduler) Pause() {
+	s.paused.Store(true)
+	select {
+	case s.trigger <- struct{}{}:
+	default:
+	}
+}
+
+func (s *Scheduler) Resume() {
+	s.paused.Store(false)
+	select {
+	case s.trigger <- struct{}{}:
+	default:
 	}
 }
 
@@ -205,41 +231,57 @@ func (s *Scheduler) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			now := time.Now()
-			s.stats.LastRunTime = now
-			s.updateEntities()
-			for _, state := range s.entities {
-				if state.inFlight || now.Before(state.nextDue) {
-					continue
-				}
-				state.inFlight = true
-				taskCtx, cancel := context.WithTimeout(ctx, s.config.TaskTimeout)
-				go func(ref *catalog.Ref) {
-					defer cancel()
-					s.runPlugins(taskCtx, ref, s.results)
-				}(state.ref)
-			}
-			s.statusUpdater.Update("pluginsScheduler", s.stats)
+			s.tick(ctx)
+
+		case <-s.trigger:
+			s.tick(ctx)
 
 		case result := <-s.results:
-			s.stats.Processed++
-			state, ok := s.entities[result.ref.String()]
-			if !ok {
-				continue // Entity got removed in the meantime, ignore result
-			}
-			state.inFlight = false
-			if result.success {
-				state.backoff = s.config.BaseInterval
-				state.nextDue = time.Now().Add(s.config.BaseInterval)
-			} else {
-				s.stats.Errors++
-				state.backoff = s.nextBackoff(state.backoff)
-				state.nextDue = time.Now().Add(state.backoff)
-			}
+			s.handleResult(result)
 
 		case <-ctx.Done():
 			log.Printf("Terminating plugin scheduler (context is done).")
 			return
 		}
+	}
+}
+
+func (s *Scheduler) tick(ctx context.Context) {
+	s.stats.Paused = s.paused.Load()
+	if s.stats.Paused {
+		s.statusUpdater.Update("pluginsScheduler", s.stats)
+		return
+	}
+	now := time.Now()
+	s.stats.LastRunTime = now
+	s.updateEntities()
+	for _, state := range s.entities {
+		if state.inFlight || now.Before(state.nextDue) {
+			continue
+		}
+		state.inFlight = true
+		taskCtx, cancel := context.WithTimeout(ctx, s.config.TaskTimeout)
+		go func(ref *catalog.Ref) {
+			defer cancel()
+			s.runPlugins(taskCtx, ref, s.results)
+		}(state.ref)
+	}
+	s.statusUpdater.Update("pluginsScheduler", s.stats)
+}
+
+func (s *Scheduler) handleResult(result taskResult) {
+	s.stats.Processed++
+	state, ok := s.entities[result.ref.String()]
+	if !ok {
+		return // Entity got removed in the meantime, ignore result
+	}
+	state.inFlight = false
+	if result.success {
+		state.backoff = s.config.BaseInterval
+		state.nextDue = time.Now().Add(s.config.BaseInterval)
+	} else {
+		s.stats.Errors++
+		state.backoff = s.nextBackoff(state.backoff)
+		state.nextDue = time.Now().Add(state.backoff)
 	}
 }

@@ -472,6 +472,7 @@ func main() {
 		schedulerCfg := pluginRegistry.SchedulerConfig()
 		if schedulerCfg.Enabled {
 			scheduler := plugins.NewScheduler(schedulerCfg, pluginRegistry, server, db, statusRegistry)
+			server.SetSchedulerControl(scheduler)
 			go scheduler.Run(context.Background())
 			log.Printf("Plugin scheduler started")
 		}

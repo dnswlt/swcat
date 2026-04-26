@@ -110,8 +110,11 @@ type Server struct {
 
 	dotRunner dot.Runner
 
-	// The optional status registry.
+	// The optional status reader (for the /status endpoint).
 	statusReader StatusReader
+
+	// The optional scheduler controller to pause/resume the scheduler.
+	schedulerControl plugins.SchedulerControl
 
 	// The optional plugins registry.
 	// If set, plugins are available to update entity annotations.
@@ -201,6 +204,10 @@ func WithBitbucketClient(client bitbucket.Searcher) ServerOption {
 	return func(s *Server) {
 		s.bbClient = client
 	}
+}
+
+func (s *Server) SetSchedulerControl(control plugins.SchedulerControl) {
+	s.schedulerControl = control
 }
 
 func NewServer(opts ServerOptions, source store.Source, serverOpts ...ServerOption) (*Server, error) {
@@ -2293,6 +2300,19 @@ func cacheControlHandler(cacheControl string, next http.Handler) http.Handler {
 	})
 }
 
+func (s *Server) setSchedulerPaused(w http.ResponseWriter, paused bool) {
+	if s.schedulerControl == nil {
+		http.Error(w, "scheduler not configured", http.StatusServiceUnavailable)
+		return
+	}
+	if paused {
+		s.schedulerControl.Pause()
+	} else {
+		s.schedulerControl.Resume()
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -2354,6 +2374,13 @@ func (s *Server) routes() *http.ServeMux {
 	root.Handle("GET /catalog/autocomplete", s.handleRefDataDispatch(http.HandlerFunc(s.serveAutocomplete)))
 
 	root.HandleFunc("POST /catalog/reload", s.reloadCatalog)
+
+	root.HandleFunc("POST /plugins/scheduler/pause", func(w http.ResponseWriter, r *http.Request) {
+		s.setSchedulerPaused(w, true)
+	})
+	root.HandleFunc("POST /plugins/scheduler/resume", func(w http.ResponseWriter, r *http.Request) {
+		s.setSchedulerPaused(w, false)
+	})
 
 	// Health check. Useful for cloud deployments.
 	root.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
