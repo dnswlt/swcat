@@ -141,10 +141,9 @@ func (m *AsyncAPIImporterPlugin) Execute(ctx context.Context, entity catalog.Ent
 	// For non-API entities (or APIs with no declared versions), targetMeta is
 	// nil and we record the single resolved version in Observation.Version.
 	// For API entities with declared versions, targetMeta is non-nil and we
-	// record the resolved versions in Meta instead. In any case, we only
-	// set Observation.Version if there is exactly one resolved version.
+	// record the resolved versions in Meta instead.
 	var obsVersion string
-	if len(targetVersions) == 1 {
+	if len(targetMeta) == 0 && len(targetVersions) > 0 {
 		obsVersion = targetVersions[0]
 	}
 
