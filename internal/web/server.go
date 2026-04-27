@@ -831,10 +831,11 @@ func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) setCustomContent(e catalog.Entity, cfg *config.UIConfig, params map[string]any) {
-	customContent, err := customContentForEntity(e, cfg)
-	if err != nil {
-		log.Printf("Invalid custom content for %q: %v", e.GetQName(), err)
-		return
+	customContent := customContentForEntity(e, cfg)
+	for _, cc := range customContent {
+		if cc.Err != "" {
+			log.Printf("Custom content error for %q (%s): %s", e.GetQName(), cc.Heading, cc.Err)
+		}
 	}
 	params["CustomContent"] = customContent
 }

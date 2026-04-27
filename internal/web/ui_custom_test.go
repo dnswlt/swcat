@@ -143,6 +143,46 @@ func TestNewCustomContentObservation_AddsMeta(t *testing.T) {
 	}
 }
 
+func TestCustomContentForEntity_PartialFailureSurfacesPerSection(t *testing.T) {
+	// Two configured sections, both matched by the entity's annotations:
+	// one renders cleanly, one fails. We must get both sections back, with
+	// the failed one carrying its Err.
+	good := mustTemplate(t, `<p>{{ . }}</p>`)
+	good.Heading = "Good"
+	bad := mustTemplate(t, `{{ range . }}{{ end }}`) // range over a number → execution error
+	bad.Heading = "Bad"
+
+	cfg := &config.UIConfig{
+		AnnotationBasedContent: map[string]*config.CustomContent{
+			"my.org/good": good,
+			"my.org/bad":  bad,
+		},
+	}
+	entity := &catalog.Component{
+		Metadata: &catalog.Metadata{
+			Annotations: map[string]string{
+				"my.org/good": `"hi"`,
+				"my.org/bad":  `42`,
+			},
+		},
+	}
+
+	got := customContentForEntity(entity, cfg)
+	if len(got) != 2 {
+		t.Fatalf("want 2 sections, got %d: %#v", len(got), got)
+	}
+	byHeading := map[string]*CustomContent{}
+	for _, cc := range got {
+		byHeading[cc.Heading] = cc
+	}
+	if cc := byHeading["Good"]; cc == nil || cc.HTML == "" || cc.Err != "" {
+		t.Errorf("Good section should render, got %#v", cc)
+	}
+	if cc := byHeading["Bad"]; cc == nil || cc.Err == "" || !cc.Open {
+		t.Errorf("Bad section should carry Err and be force-opened, got %#v", cc)
+	}
+}
+
 func TestNewCustomContentObservation_NoVersion(t *testing.T) {
 	c := &config.CustomContent{} // raw JSON view
 	updated := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)

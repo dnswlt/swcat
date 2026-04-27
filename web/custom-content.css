@@ -13,6 +13,23 @@
     font-size: 0.875rem;
     line-height: 1.35rem;
 }
+
+/* Shown in place of the rendered content when a section failed to render
+ * (invalid JSON, template error, ...). The section is force-opened so the
+ * user notices the error without having to expand it. */
+.custom-content-error {
+    padding: 0.5rem 0.75rem;
+    background-color: #fef2f2;
+    color: #991b1b;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+}
+.custom-content-error::before {
+    content: "⚠ ";
+}
+.custom-content-error strong {
+    font-weight: 600;
+}
 .custom-content > :first-child { margin-top: 0; }
 .custom-content > :last-child { margin-bottom: 0; }
 

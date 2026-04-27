@@ -19,8 +19,11 @@ type ccAttr struct {
 }
 
 // CustomContent is one rendered <details> section on an entity detail page.
-// Exactly one of HTML and Code is set: HTML when a user template was
-// rendered, Code when the value was rendered as raw pretty-printed JSON.
+// At most one of HTML, Code, and Err is set:
+//   - HTML when a user template was rendered;
+//   - Code when the value was rendered as raw pretty-printed JSON;
+//   - Err when rendering failed for this section (the section is shown
+//     with an error banner instead of content).
 type CustomContent struct {
 	Heading string
 	Open    bool
@@ -28,9 +31,14 @@ type CustomContent struct {
 	HTML    template.HTML // user-template output (already safe HTML)
 	Code    string        // pretty-printed JSON shown in the read-only viewer
 	Meta    []ccAttr      // optional footer attributes (status observations only)
+	Err     string        // non-empty when rendering this section failed
 }
 
-func customContentForEntity(entity catalog.Entity, cfg *config.UIConfig) ([]*CustomContent, error) {
+// customContentForEntity collects every configured section that applies
+// to entity. A section that fails to render (invalid JSON, template
+// error, …) is included with its Err set, so the rest of the page still
+// renders — and the user is told which section is broken.
+func customContentForEntity(entity catalog.Entity, cfg *config.UIConfig) []*CustomContent {
 	var result []*CustomContent
 	if len(entity.GetMetadata().Annotations) > 0 && len(cfg.AnnotationBasedContent) > 0 {
 		annotations := entity.GetMetadata().Annotations
@@ -41,7 +49,7 @@ func customContentForEntity(entity catalog.Entity, cfg *config.UIConfig) ([]*Cus
 			}
 			cc, err := newCustomContent(c, anno)
 			if err != nil {
-				return nil, fmt.Errorf("annotationBasedContent %q: %v", k, err)
+				cc = errorCustomContent(c, err)
 			}
 			result = append(result, cc)
 		}
@@ -54,7 +62,7 @@ func customContentForEntity(entity catalog.Entity, cfg *config.UIConfig) ([]*Cus
 			}
 			cc, err := newCustomContentObservation(c, obs)
 			if err != nil {
-				return nil, fmt.Errorf("statusBasedContent %q: %v", k, err)
+				cc = errorCustomContent(c, err)
 			}
 			result = append(result, cc)
 		}
@@ -67,7 +75,19 @@ func customContentForEntity(entity catalog.Entity, cfg *config.UIConfig) ([]*Cus
 		return cmp.Compare(a.Heading, b.Heading)
 	})
 
-	return result, nil
+	return result
+}
+
+// errorCustomContent builds a placeholder CustomContent that records a
+// rendering failure. The section is force-opened so the user notices the
+// error without having to click.
+func errorCustomContent(c *config.CustomContent, err error) *CustomContent {
+	return &CustomContent{
+		Heading: c.Heading,
+		Open:    true,
+		Rank:    c.Rank,
+		Err:     err.Error(),
+	}
 }
 
 func newCustomContent(c *config.CustomContent, value string) (*CustomContent, error) {

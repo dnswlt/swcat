@@ -2,7 +2,11 @@
 {{ range $i, $cc := . }}
 <details class="border rounded-lg" {{if $cc.Open }}open{{end}}>
     <summary class="font-semibold bg-gray-100 px-3 py-1 rounded-t-lg cursor-pointer">{{ $cc.Heading }}</summary>
-    {{ if $cc.Code }}
+    {{ if $cc.Err }}
+    <div class="custom-content-error">
+        <strong>Error:</strong> {{ $cc.Err }}
+    </div>
+    {{ else if $cc.Code }}
     <div class="max-h-96 overflow-y-auto">
         <textarea id="custom-content-{{$i}}" class="json-viewer">{{ $cc.Code }}</textarea>
     </div>
