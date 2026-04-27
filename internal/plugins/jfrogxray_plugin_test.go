@@ -59,7 +59,7 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches(t *testing.T) {
 	p := &JFrogXrayPlugin{
 		spec: &jfrogXrayPluginSpec{},
 	}
-	fullIdx := p.newCatalogIndexFromEntities(repository.AllEntities())
+	fullIdx := newCatalogIndexFromEntities(repository.AllEntities())
 
 	t.Run("PerfectMatch", func(t *testing.T) {
 		bom := &sbom.MiniBOM{
@@ -163,7 +163,7 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches_Ignore(t *testing.T) {
 	p := &JFrogXrayPlugin{
 		spec: &jfrogXrayPluginSpec{},
 	}
-	fullIdx := p.newCatalogIndexFromEntities(repository.AllEntities())
+	fullIdx := newCatalogIndexFromEntities(repository.AllEntities())
 
 	bom := &sbom.MiniBOM{
 		Components: []string{

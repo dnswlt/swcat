@@ -63,6 +63,11 @@ type PluginResult struct {
 	// "live" data.
 	Observations map[string]catalog.Observation
 
+	// RemovedObservations lists observation keys that should be cleared from
+	// the entity's status. Used by plugins to retract previously-emitted
+	// observations (e.g. lint findings that no longer apply).
+	RemovedObservations []string
+
 	// An optional additional return value that the plugin returns to its caller.
 	ReturnValue any
 }
@@ -77,6 +82,10 @@ type RunResult struct {
 	// Observations aggregated from all plugins, to be applied to the
 	// entity's Status field.
 	Observations map[string]catalog.Observation
+
+	// RemovedObservations aggregated from all plugins, to be cleared from
+	// the entity's Status field before Observations are merged in.
+	RemovedObservations []string
 }
 
 // PluginArgs contains the arguments passed to any plugin execution.
@@ -253,6 +262,7 @@ func (r *Registry) Run(ctx context.Context, repoProvider RepositoryProvider, e c
 
 	annotations := make(map[string]any)
 	observations := make(map[string]catalog.Observation)
+	removedObservations := make(map[string]struct{})
 	execFunc := func(name string, p Plugin) error {
 		if tempDir == "" {
 			// Lazily create a shared temp dir on the first triggering plugin,
@@ -275,8 +285,16 @@ func (r *Registry) Run(ctx context.Context, repoProvider RepositoryProvider, e c
 		if len(res.Annotations) > 0 {
 			maps.Copy(annotations, res.Annotations)
 		}
-		if len(res.Observations) > 0 {
-			maps.Copy(observations, res.Observations)
+		// Apply this plugin's removals first, then its writes — a plugin that
+		// both removes and writes the same key (a refresh) ends up with the
+		// write. Across plugins, last-writer-wins for the same key.
+		for _, k := range res.RemovedObservations {
+			delete(observations, k)
+			removedObservations[k] = struct{}{}
+		}
+		for k, v := range res.Observations {
+			observations[k] = v
+			delete(removedObservations, k)
 		}
 		return nil
 	}
@@ -301,9 +319,14 @@ func (r *Registry) Run(ctx context.Context, repoProvider RepositoryProvider, e c
 		keys := slices.Sorted(maps.Keys(observations))
 		log.Printf("Collected observations for entity %s: %v", e.GetRef().String(), keys)
 	}
+	var removed []string
+	if len(removedObservations) > 0 {
+		removed = slices.Sorted(maps.Keys(removedObservations))
+	}
 	return &RunResult{
-		Annotations:  annotations,
-		Observations: observations,
+		Annotations:         annotations,
+		Observations:        observations,
+		RemovedObservations: removed,
 	}, nil
 }
 

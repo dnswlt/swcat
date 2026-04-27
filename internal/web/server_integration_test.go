@@ -16,10 +16,30 @@ import (
 	"time"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/jfrog"
 	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/store"
 )
+
+// stubJFrogClient is a no-op jfrog.Client for tests that need the plugin
+// registry to accept JFrog-backed plugins without performing real network I/O.
+// All methods return zero values; tests using it must not actually invoke
+// plugin execution paths that read the responses.
+type stubJFrogClient struct{}
+
+func (stubJFrogClient) RetrieveArtifact(context.Context, string, jfrog.MavenCoordinates, io.Writer) error {
+	return nil
+}
+func (stubJFrogClient) SearchVersions(context.Context, string, string, string, bool) ([]string, error) {
+	return nil, nil
+}
+func (stubJFrogClient) ListDockerTags(context.Context, string, string) ([]string, error) {
+	return nil, nil
+}
+func (stubJFrogClient) XrayExportDetails(context.Context, string, string, string) ([]byte, error) {
+	return nil, nil
+}
 
 // mustFindDotPath locates the dot executable or fails the test.
 func mustFindDotPath(t *testing.T) string {
@@ -56,7 +76,7 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 	if err != nil {
 		t.Fatalf("Failed to read plugins config from %s: %v", pluginsConfigPath, err)
 	}
-	pluginRegistry, err := plugins.NewRegistry(cfg, plugins.Services{})
+	pluginRegistry, err := plugins.NewRegistry(cfg, plugins.Services{JFrogClient: stubJFrogClient{}})
 	if err != nil {
 		t.Fatalf("Failed to create plugin registry: %v", err)
 	}

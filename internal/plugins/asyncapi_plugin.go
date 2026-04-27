@@ -72,12 +72,15 @@ func newAsyncAPIImporterPlugin(name string, specYaml *yaml.Node, fetcher JFrogAr
 	if spec.File == "" {
 		return nil, fmt.Errorf("field 'file' not specified for plugin %s", name)
 	}
-
 	if spec.Fetcher == nil {
-		return nil, fmt.Errorf("no JFrogArtifactFetcher provided: %w", ErrPreconditionFailed)
+		return nil, fmt.Errorf("'fetcher' config not specified for plugin %s", name)
 	}
 	if spec.Fetcher.Packaging == "" {
 		return nil, fmt.Errorf("field 'fetcher.packaging' not specified for plugin %s", name)
+	}
+
+	if fetcher == nil {
+		return nil, fmt.Errorf("no JFrogArtifactFetcher provided for plugin %s: %w", name, ErrPreconditionFailed)
 	}
 
 	return &AsyncAPIImporterPlugin{
@@ -89,6 +92,8 @@ func newAsyncAPIImporterPlugin(name string, specYaml *yaml.Node, fetcher JFrogAr
 
 // Execute runs the AsyncAPI importer plugin, resolving artifacts, fetching versions, and returning the updated status observations.
 func (m *AsyncAPIImporterPlugin) Execute(ctx context.Context, entity catalog.Entity, args *PluginArgs) (*PluginResult, error) {
+	now := time.Now()
+
 	groupId, artifactId, explicitVersion, repository, err := m.resolveArtifactContext(entity, args)
 	if err != nil {
 		return nil, err
@@ -101,19 +106,24 @@ func (m *AsyncAPIImporterPlugin) Execute(ctx context.Context, entity catalog.Ent
 		return nil, fmt.Errorf("failed to search versions for %s:%s: %w", groupId, artifactId, err)
 	}
 
-	targetVersions, err := m.identifyTargetVersions(entity, groupId, artifactId, explicitVersion, available)
+	targetVersions, targetMeta, err := m.identifyTargetVersions(entity, groupId, artifactId, explicitVersion, available)
 	if err != nil {
 		return nil, err
 	}
 
 	observations := make(map[string]catalog.Observation)
+	var removedObservations []string
 
-	if finding := checkForNewerMajorVersion(entity, available); finding != nil {
+	if finding := checkForNewerMajorVersion(entity, available, now); finding != nil {
 		observations[AsyncAPIPluginLintTarget] = catalog.Observation{
 			Producer:  m.name,
 			Value:     api.MustMarshalJSON(finding),
-			UpdatedAt: time.Now(),
+			UpdatedAt: now,
 		}
+	} else {
+		// Clear any previously-emitted finding so it doesn't linger after the
+		// entity catches up with the available versions.
+		removedObservations = append(removedObservations, AsyncAPIPluginLintTarget)
 	}
 
 	results, err := m.fetchResults(ctx, repository, groupId, artifactId, targetVersions, storedResults)
@@ -121,30 +131,24 @@ func (m *AsyncAPIImporterPlugin) Execute(ctx context.Context, entity catalog.Ent
 		return nil, err
 	}
 
+	// For non-API entities (or APIs with no declared versions), targetMeta is
+	// nil and we record the single resolved version in Observation.Version.
 	var obsVersion string
-	var targetMeta map[string]string
-
-	if apiEntity, isAPI := entity.(*catalog.API); isAPI && len(apiEntity.Spec.Versions) > 0 {
-		targetMeta = make(map[string]string)
-		for _, v := range apiEntity.Spec.Versions {
-			if match := findLatestMatch(v.Version, available); match != "" {
-				targetMeta["version-"+v.Version.RawVersion] = match
-			}
-		}
-	} else if len(targetVersions) > 0 {
+	if targetMeta == nil && len(targetVersions) > 0 {
 		obsVersion = targetVersions[0]
 	}
 
 	observations[AsyncAPIPluginTarget] = catalog.Observation{
 		Producer:  m.name,
 		Value:     api.MustMarshalJSON(results),
-		UpdatedAt: time.Now(),
+		UpdatedAt: now,
 		Version:   obsVersion,
 		Meta:      targetMeta,
 	}
 
 	return &PluginResult{
-		Observations: observations,
+		Observations:        observations,
+		RemovedObservations: removedObservations,
 	}, nil
 }
 
@@ -156,7 +160,17 @@ func (m *AsyncAPIImporterPlugin) resolveArtifactContext(entity catalog.Entity, a
 
 	if mc, ok := entity.GetMetadata().Annotations[catalog.AnnotMavenCoords]; ok {
 		coords := parseGAV(mc)
-		g, a, v = coords.g, coords.a, coords.v
+		// Partial GAV annotations (e.g. just an artifactId) must not erase
+		// fields that were already resolved from other annotations.
+		if coords.g != "" {
+			g = coords.g
+		}
+		if coords.a != "" {
+			a = coords.a
+		}
+		if coords.v != "" {
+			v = coords.v
+		}
 	}
 
 	if g == "" || repo == "" {
@@ -183,49 +197,53 @@ func (m *AsyncAPIImporterPlugin) getStoredObservation(entity catalog.Entity) map
 	if err := dec.Decode(&stored); err != nil {
 		return nil
 	}
-
-	// If the JSON parsed but was the old format ([]*asyncapi.SimpleChannel),
-	// the Version field will be empty. Discard it.
-	results := make(map[string]*VersionedChannels)
+	results := make(map[string]*VersionedChannels, len(stored))
 	for _, vch := range stored {
-		if vch.Version == "" {
-			return nil
-		}
 		results[vch.Version] = vch
 	}
 	return results
 }
 
 // identifyTargetVersions determines which versions of the AsyncAPI spec should be present.
-func (m *AsyncAPIImporterPlugin) identifyTargetVersions(entity catalog.Entity, g, a, explicitVersion string, available []string) ([]string, error) {
+// For API entities with declared versions, also returns a meta map keyed by
+// the entity's RawVersion → resolved repository version. The meta map is nil
+// for the non-API path (where the single resolved version is reported via
+// Observation.Version instead).
+func (m *AsyncAPIImporterPlugin) identifyTargetVersions(entity catalog.Entity, g, a, explicitVersion string, available []string) ([]string, map[string]string, error) {
 	if apiEntity, isAPI := entity.(*catalog.API); isAPI && len(apiEntity.Spec.Versions) > 0 {
-		return identifyAPIVersions(apiEntity, available), nil
+		versions, meta := identifyAPIVersions(apiEntity, available)
+		return versions, meta, nil
 	}
 
 	if explicitVersion != "" {
-		return []string{explicitVersion}, nil
+		return []string{explicitVersion}, nil, nil
 	}
 
 	v, err := identifyLatestVersion(g, a, available)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return []string{v}, nil
+	return []string{v}, nil, nil
 }
 
-// identifyAPIVersions identifies the target versions for an API entity from the available versions in the repository.
-func identifyAPIVersions(apiEntity *catalog.API, available []string) []string {
+// identifyAPIVersions identifies the target versions for an API entity from the available versions in the repository,
+// along with a meta map keyed by the entity's RawVersion → resolved repository version.
+func identifyAPIVersions(apiEntity *catalog.API, available []string) ([]string, map[string]string) {
 	var versions []string
 	seen := make(map[string]bool)
+	meta := make(map[string]string)
 	for _, v := range apiEntity.Spec.Versions {
-		if match := findLatestMatch(v.Version, available); match != "" {
-			if !seen[match] {
-				versions = append(versions, match)
-				seen[match] = true
-			}
+		match := findLatestMatch(v.Version, available)
+		if match == "" {
+			continue
+		}
+		meta["version-"+v.Version.RawVersion] = match
+		if !seen[match] {
+			versions = append(versions, match)
+			seen[match] = true
 		}
 	}
-	return versions
+	return versions, meta
 }
 
 // identifyLatestVersion identifies the latest single target version.
@@ -238,38 +256,39 @@ func identifyLatestVersion(g, a string, available []string) (string, error) {
 }
 
 // checkForNewerMajorVersion checks if there is a newer major version available in the repository that is not listed in the entity's versions.
-func checkForNewerMajorVersion(entity catalog.Entity, available []string) *api.LintFinding {
+func checkForNewerMajorVersion(entity catalog.Entity, available []string, now time.Time) *api.LintFinding {
 	apiEntity, isAPI := entity.(*catalog.API)
 	if !isAPI || len(apiEntity.Spec.Versions) == 0 || len(available) == 0 {
 		return nil
 	}
 
-	maxEntityMajor := -1
+	maxEntityMajor := 0
 	for _, v := range apiEntity.Spec.Versions {
 		if v.Version.Major > maxEntityMajor {
 			maxEntityMajor = v.Version.Major
 		}
 	}
-
-	if maxEntityMajor == -1 {
-		return nil
-	}
-
-	var newerMajorFound string
 	maxEntityMajorPrefix := fmt.Sprintf("v%d", maxEntityMajor)
 
+	var newerMajorFound string
 	for _, a := range available {
 		norm := semverNormalize(a)
-		if semver.IsValid(norm) {
-			if semver.Compare(semver.Major(norm), maxEntityMajorPrefix) > 0 {
-				newerMajorFound = semver.Major(norm)
-			}
+		if !semver.IsValid(norm) {
+			continue
+		}
+		major := semver.Major(norm)
+		if semver.Compare(major, maxEntityMajorPrefix) <= 0 {
+			continue
+		}
+		// Track the *highest* newer major, not whichever happens to come last.
+		if newerMajorFound == "" || semver.Compare(major, newerMajorFound) > 0 {
+			newerMajorFound = major
 		}
 	}
 
 	if newerMajorFound != "" {
 		return &api.LintFinding{
-			CreateTime: time.Now(),
+			CreateTime: now,
 			Message:    fmt.Sprintf("A newer major version (%s) is available in the repository but not listed in the entity's versions.", newerMajorFound),
 		}
 	}

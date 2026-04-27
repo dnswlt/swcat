@@ -161,6 +161,7 @@ func (s *Scheduler) updateEntities() {
 // Only observations are propagated; annotations are stored as side-car files
 // in git and cannot be updated here.
 func (s *Scheduler) processResult(ctx context.Context, entity catalog.Entity, result *RunResult) error {
+	catalog.DeleteObservations(entity, result.RemovedObservations)
 	catalog.MergeObservations(entity, result.Observations)
 	if s.db != nil {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dnswlt/swcat/internal/api"
@@ -55,6 +56,27 @@ type JFrogXrayPlugin struct {
 	name   string
 	spec   *jfrogXrayPluginSpec
 	client JFrogXrayClient
+
+	// catalogIndex is memoized per repository pointer. Repositories are
+	// immutable (InsertOrUpdateEntity returns a new instance), so pointer
+	// identity is a precise cache key. Only one index is held at a time —
+	// when a new repo arrives, the old one becomes GC-able.
+	indexMu     sync.Mutex
+	indexedRepo *repo.Repository
+	index       *catalogIndex
+}
+
+// getCatalogIndex returns a catalogIndex for r, building it on the first call
+// for a given repository instance and reusing it on subsequent calls.
+func (p *JFrogXrayPlugin) getCatalogIndex(r *repo.Repository) *catalogIndex {
+	p.indexMu.Lock()
+	defer p.indexMu.Unlock()
+	if p.indexedRepo == r {
+		return p.index
+	}
+	p.index = newCatalogIndexFromEntities(r.AllEntities())
+	p.indexedRepo = r
+	return p.index
 }
 
 func NewJFrogXrayBOMPlugin(name string, specYaml *yaml.Node, client JFrogXrayClient) (*JFrogXrayPlugin, error) {
@@ -151,40 +173,39 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 	if err != nil {
 		return nil, err
 	}
-	if version == prevVersion {
-		// We reached the previously ingested version before finding a newer valid SBOM.
+	bomChanged := sbomBytes != nil
+
+	// When the BOM is unchanged and lint is disabled, there's nothing to do.
+	if !bomChanged && !p.spec.LintMissingDependencies {
 		return &PluginResult{}, nil
 	}
 
-	// Process SBOM and extract flat string list of component coordinates
-	// (group:artifact).
-	sbomObj, err := sbom.Parse(sbomBytes)
+	bom, err := p.resolveBOM(entity, sbomBytes)
 	if err != nil {
-		return nil, fmt.Errorf("cannot parse SBOM: %w", err)
+		return nil, err
 	}
-	bom, err := sbom.FilterComponents(sbomObj, p.spec.ComponentsFilter)
-	if err != nil {
-		return nil, fmt.Errorf("filtering components: %w", err)
+	if bomChanged {
+		log.Printf("Processed SBOM %s for entity %s: %d components", bom.Name, entity.GetQName(), len(bom.Components))
 	}
-	log.Printf("Processed SBOM %s for entity %s: %d components", bom.Name, entity.GetQName(), len(bom.Components))
-
-	if args.Repository == nil {
-		return nil, fmt.Errorf("repository not set in plugin args")
-	}
-	idx := p.newCatalogIndexFromEntities(args.Repository.AllEntities())
 
 	now := time.Now()
+	observations := make(map[string]catalog.Observation)
+	var removedObservations []string
 
-	observations := map[string]catalog.Observation{
-		JFrogXrayPluginTarget: {
+	if bomChanged {
+		observations[JFrogXrayPluginTarget] = catalog.Observation{
 			Value:     api.MustMarshalJSON(bom),
 			UpdatedAt: now,
 			Producer:  "JFrogXrayPlugin",
 			Version:   version,
-		},
+		}
 	}
 
 	if p.spec.LintMissingDependencies {
+		// Lint runs every tick, even when the BOM is cached, because the
+		// entity's declared dependencies may have changed in the YAML repo
+		// and we have no cheap way to detect that.
+		idx := p.getCatalogIndex(args.Repository)
 		missing, _ := p.detectDependencyMismatches(bom, entity, idx, args.Repository)
 		if len(missing) > 0 {
 			finding := api.LintFinding{
@@ -197,12 +218,47 @@ func (p *JFrogXrayPlugin) Execute(ctx context.Context, entity catalog.Entity, ar
 				Producer:  "JFrogXrayPlugin",
 				Version:   version,
 			}
+		} else {
+			// Clear any previously-emitted finding so it doesn't linger after
+			// the entity's declared dependencies catch up with the BOM.
+			removedObservations = append(removedObservations, JFrogXrayPluginLintTarget)
 		}
 	}
 
 	return &PluginResult{
-		Observations: observations,
+		Observations:        observations,
+		RemovedObservations: removedObservations,
 	}, nil
+}
+
+// resolveBOM returns the parsed/filtered BOM either from freshly downloaded
+// sbomBytes (when non-nil) or from the entity's previously stored observation.
+func (p *JFrogXrayPlugin) resolveBOM(entity catalog.Entity, sbomBytes []byte) (*sbom.MiniBOM, error) {
+	if sbomBytes != nil {
+		sbomObj, err := sbom.Parse(sbomBytes)
+		if err != nil {
+			return nil, fmt.Errorf("cannot parse SBOM: %w", err)
+		}
+		bom, err := sbom.FilterComponents(sbomObj, p.spec.ComponentsFilter)
+		if err != nil {
+			return nil, fmt.Errorf("filtering components: %w", err)
+		}
+		return bom, nil
+	}
+
+	status := entity.GetStatus()
+	if status == nil {
+		return nil, fmt.Errorf("BOM not refreshed and no stored observation for %v", entity.GetQName())
+	}
+	prev, ok := status.Observations[JFrogXrayPluginTarget]
+	if !ok {
+		return nil, fmt.Errorf("BOM not refreshed and no stored observation for %v", entity.GetQName())
+	}
+	var bom sbom.MiniBOM
+	if err := json.Unmarshal(prev.Value, &bom); err != nil {
+		return nil, fmt.Errorf("failed to parse stored BOM for %v: %w", entity.GetQName(), err)
+	}
+	return &bom, nil
 }
 
 // detectDependencyMismatches compares bom.Components and all dependencies (including API usage)
@@ -258,7 +314,7 @@ func (p *JFrogXrayPlugin) detectDependencyMismatches(bom *sbom.MiniBOM, entity c
 	for _, e := range declared {
 		declaredEntities = append(declaredEntities, e)
 	}
-	declaredIdx := p.newCatalogIndexFromEntities(declaredEntities)
+	declaredIdx := newCatalogIndexFromEntities(declaredEntities)
 
 	// 3. Compare SBOM components with declared dependencies.
 	matchedRefs := make(map[string]bool)
@@ -315,7 +371,7 @@ type catalogIndex struct {
 	entities []indexedEntity
 }
 
-func (p *JFrogXrayPlugin) newCatalogIndexFromEntities(allEntities []catalog.Entity) *catalogIndex {
+func newCatalogIndexFromEntities(allEntities []catalog.Entity) *catalogIndex {
 	entities := make([]indexedEntity, 0, len(allEntities))
 	for _, e := range allEntities {
 		info := indexedEntity{entity: e, coords: gav{a: e.GetMetadata().Name}}

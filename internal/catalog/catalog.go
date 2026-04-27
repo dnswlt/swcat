@@ -516,6 +516,24 @@ func MergeObservations(e Entity, obs map[string]Observation) bool {
 	return true
 }
 
+// DeleteObservations atomically removes the given keys from e's Status.Observations.
+// Returns false if e's kind has no Status field.
+func DeleteObservations(e Entity, keys []string) bool {
+	p := entityStatusPtr(e)
+	if p == nil {
+		return false
+	}
+	if len(keys) == 0 {
+		return true
+	}
+	updateStatus(p, func(s *Status) {
+		for _, k := range keys {
+			delete(s.Observations, k)
+		}
+	})
+	return true
+}
+
 // ReplaceObservations atomically replaces e's Status.Observations with obs.
 // A nil or empty obs clears all observations.
 // Returns false if e's kind has no Status field.
