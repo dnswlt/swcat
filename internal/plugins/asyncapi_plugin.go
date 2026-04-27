@@ -134,6 +134,9 @@ func (m *AsyncAPIImporterPlugin) Execute(ctx context.Context, entity catalog.Ent
 	if err != nil {
 		return nil, err
 	}
+	if len(results) == 0 {
+		return nil, fmt.Errorf("no AsyncAPI specs found for %s (matching versions: %v)", entity.GetQName(), targetVersions)
+	}
 
 	// For non-API entities (or APIs with no declared versions), targetMeta is
 	// nil and we record the single resolved version in Observation.Version.

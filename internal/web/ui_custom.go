@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"maps"
 	"slices"
 	"time"
 
@@ -128,6 +129,9 @@ func newCustomContentObservation(c *config.CustomContent, obs catalog.Observatio
 	cc.Meta = append(cc.Meta, ccAttr{Name: "updatedAt", Value: obs.UpdatedAt.Format(time.RFC3339)})
 	if obs.Version != "" {
 		cc.Meta = append(cc.Meta, ccAttr{Name: "version", Value: obs.Version})
+	}
+	for _, k := range slices.Sorted(maps.Keys(obs.Meta)) {
+		cc.Meta = append(cc.Meta, ccAttr{Name: k, Value: obs.Meta[k]})
 	}
 	return cc, nil
 }

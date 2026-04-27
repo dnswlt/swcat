@@ -125,6 +125,10 @@ func TestNewCustomContentObservation_AddsMeta(t *testing.T) {
 		Value:     []byte(`"hello"`),
 		UpdatedAt: updated,
 		Version:   "v1.2.3",
+		Meta: map[string]string{
+			"z-attr": "last",
+			"a-attr": "first",
+		},
 	}
 	got, err := newCustomContentObservation(c, obs)
 	if err != nil {
@@ -136,6 +140,8 @@ func TestNewCustomContentObservation_AddsMeta(t *testing.T) {
 		Meta: []ccAttr{
 			{Name: "updatedAt", Value: "2026-04-26T10:00:00Z"},
 			{Name: "version", Value: "v1.2.3"},
+			{Name: "a-attr", Value: "first"},
+			{Name: "z-attr", Value: "last"},
 		},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {

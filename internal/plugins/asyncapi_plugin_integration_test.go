@@ -394,3 +394,56 @@ file: META-INF/asyncapi.yaml
 		t.Errorf("expected finding message %q, got %q", expectedMsg, finding.Message)
 	}
 }
+
+func TestAsyncAPIImporterPlugin_ExecuteInternal_NoMatchingVersions(t *testing.T) {
+	const (
+		entityName = "my-api"
+		groupId    = "com.example"
+		repository = "libs-release"
+	)
+
+	fetcher := &fakeArtifactFetcher{
+		versions: []string{"3.0.0"}, // Only version 3 is available
+	}
+
+	pluginYAML := `
+fetcher:
+  packaging: jar
+file: META-INF/asyncapi.yaml
+`
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(pluginYAML), &doc); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
+	}
+	plugin, err := newAsyncAPIImporterPlugin("asyncapi-test", doc.Content[0], fetcher)
+	if err != nil {
+		t.Fatalf("newAsyncAPIImporterPlugin: %v", err)
+	}
+
+	entity := &catalog.API{
+		Metadata: &catalog.Metadata{
+			Name: entityName,
+			Annotations: map[string]string{
+				catalog.AnnotMavenGroupID: groupId,
+				JFrogRepositoryAnnotation: repository,
+			},
+		},
+		Spec: &catalog.APISpec{
+			Versions: []*catalog.APISpecVersion{
+				{Version: catalog.Version{RawVersion: "v1", Major: 1}}, // Entity only has v1
+			},
+		},
+	}
+
+	repository_ := repo.NewRepository()
+	repository_.AddEntity(entity)
+
+	result, err := plugin.Execute(t.Context(), entity, &PluginArgs{Repository: repository_})
+	if err == nil {
+		t.Fatalf("Execute should have failed because no matching versions were found")
+	}
+
+	if result != nil {
+		t.Errorf("result should be nil when Execute returns an error")
+	}
+}
