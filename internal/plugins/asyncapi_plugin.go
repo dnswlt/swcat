@@ -105,6 +105,10 @@ func (m *AsyncAPIImporterPlugin) Execute(ctx context.Context, entity catalog.Ent
 	if err != nil {
 		return nil, fmt.Errorf("failed to search versions for %s:%s: %w", groupId, artifactId, err)
 	}
+	if len(available) == 0 {
+		// The artifact is not / no longer stored in JFrog.
+		return nil, fmt.Errorf("no versions available for %s:%s", groupId, artifactId)
+	}
 
 	targetVersions, targetMeta, err := m.identifyTargetVersions(entity, groupId, artifactId, explicitVersion, available)
 	if err != nil {
