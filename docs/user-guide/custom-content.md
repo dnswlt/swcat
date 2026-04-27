@@ -87,6 +87,23 @@ Templates use Go's `html/template` package, which **auto-escapes** any
 data inserted via `{{ … }}`. Raw HTML in the template literal itself
 (`<table>`, `<a href="…">`, etc.) is rendered as-is.
 
+### Loading templates from a file
+
+For larger templates that you'd rather not embed in YAML, use
+`templateFile` with a path **relative to the directory of the config
+file**:
+
+```yaml
+ui:
+  annotationBasedContent:
+    asyncapi.com/channels:
+      heading: AsyncAPI Channels
+      templateFile: custom/asyncapi_channels.html
+```
+
+`template` and `templateFile` are mutually exclusive — set one or the
+other, not both.
+
 The template's output is wrapped in a `<div class="custom-content">…</div>`.
 Use semantic HTML; styling for the contents of `.custom-content` is
 provided by `swcat`'s stylesheet — there's no need to know about Tailwind

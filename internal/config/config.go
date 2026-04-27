@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"path"
 	"reflect"
 	"strings"
 
@@ -18,10 +19,11 @@ import (
 // bound to an annotation/observation key by the map they live in
 // (UIConfig.AnnotationBasedContent / StatusBasedContent).
 //
-// If Template is empty, the value is rendered as pretty-printed JSON in a
-// read-only viewer. Otherwise, Template is executed against the parsed JSON
-// (or the raw string, if the value isn't valid JSON) and its output is
-// inserted as HTML into a <div class="custom-content"> wrapper.
+// If neither Template nor TemplateFile is set, the value is rendered as
+// pretty-printed JSON in a read-only viewer. Otherwise, the template is
+// executed against the parsed JSON (or the raw string, if the value isn't
+// valid JSON) and its output is inserted as HTML into a
+// <div class="custom-content"> wrapper.
 type CustomContent struct {
 	// Heading appears in the <summary> of the section.
 	Heading string `yaml:"heading"`
@@ -32,9 +34,15 @@ type CustomContent struct {
 	// Template is an optional Go html/template. The template's . is the
 	// JSON-decoded annotation/observation value (any), or the raw string
 	// when the value isn't valid JSON. Output should be semantic HTML.
+	// Mutually exclusive with TemplateFile.
 	Template string `yaml:"template"`
+	// TemplateFile is a path to a file (relative to the config file's
+	// directory) whose contents are used as the Template. Useful for
+	// keeping larger HTML templates out of the YAML config.
+	// Mutually exclusive with Template.
+	TemplateFile string `yaml:"templateFile"`
 
-	tmpl *template.Template // parsed Template; nil if Template is empty
+	tmpl *template.Template // parsed template; nil if no template configured
 }
 
 // Tmpl returns the parsed template (nil if no Template was configured).
@@ -125,27 +133,44 @@ func Load(st store.Store, configPath string) (*Bundle, error) {
 		return nil, fmt.Errorf("invalid configuration YAML in %q: %w", configPath, err)
 	}
 
-	// Pre-parse user templates.
+	// Resolve and pre-parse user templates. TemplateFile paths are
+	// relative to the directory containing the config file.
+	configDir := path.Dir(configPath)
 	for k, c := range bundle.UI.AnnotationBasedContent {
-		if c.Template == "" {
-			continue
+		if err := loadCustomContentTemplate(st, configDir, k, c); err != nil {
+			return nil, fmt.Errorf("annotationBasedContent %q: %v", k, err)
 		}
-		t, err := parseCustomContentTemplate(k, c.Template)
-		if err != nil {
-			return nil, fmt.Errorf("invalid template for annotationBasedContent %q: %v", k, err)
-		}
-		c.tmpl = t
 	}
 	for k, c := range bundle.UI.StatusBasedContent {
-		if c.Template == "" {
-			continue
+		if err := loadCustomContentTemplate(st, configDir, k, c); err != nil {
+			return nil, fmt.Errorf("statusBasedContent %q: %v", k, err)
 		}
-		t, err := parseCustomContentTemplate(k, c.Template)
-		if err != nil {
-			return nil, fmt.Errorf("invalid template for statusBasedContent %q: %v", k, err)
-		}
-		c.tmpl = t
 	}
 
 	return &bundle, nil
+}
+
+// loadCustomContentTemplate validates the template/templateFile combination,
+// reads the templateFile from the store if needed, and parses the resulting
+// template. The template is stored on c in-place.
+func loadCustomContentTemplate(st store.Store, configDir, name string, c *CustomContent) error {
+	if c.Template != "" && c.TemplateFile != "" {
+		return fmt.Errorf("template and templateFile are mutually exclusive")
+	}
+	if c.TemplateFile != "" {
+		bs, err := st.ReadFile(path.Join(configDir, c.TemplateFile))
+		if err != nil {
+			return fmt.Errorf("could not read templateFile %q: %v", c.TemplateFile, err)
+		}
+		c.Template = string(bs)
+	}
+	if c.Template == "" {
+		return nil
+	}
+	t, err := parseCustomContentTemplate(name, c.Template)
+	if err != nil {
+		return fmt.Errorf("invalid template: %v", err)
+	}
+	c.tmpl = t
+	return nil
 }

@@ -26,18 +26,9 @@ ui:
     asyncapi.com/channels:
       heading: AsyncAPI Channels
       rank: 99 # This custom content should come last (just for fun).
-      template: |
-        <table>
-          <thead><tr><th>Topic</th><th>Messages</th></tr></thead>
-          <tbody>
-            {{ range . }}
-            <tr>
-              <td>{{ .address }}</td>
-              <td>{{ .messages | join }}</td>
-            </tr>
-            {{ end }}
-          </tbody>
-        </table>
+      # For larger templates, load them from a file (relative to this
+      # config file) instead of embedding them inline.
+      templateFile: custom/asyncapi_channels.html
   # Same thing as annotationBasedContent, but for status observations.
   statusBasedContent:
     swcat/plugins-update-time:

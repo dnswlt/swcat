@@ -1,0 +1,11 @@
+<table>
+  <thead><tr><th>Topic</th><th>Messages</th></tr></thead>
+  <tbody>
+    {{ range . }}
+    <tr>
+      <td>{{ .address }}</td>
+      <td>{{ .messages | join }}</td>
+    </tr>
+    {{ end }}
+  </tbody>
+</table>
