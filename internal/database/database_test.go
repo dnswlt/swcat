@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/google/go-cmp/cmp"
 )
 
 func newTestDB(t *testing.T) *sql.DB {
@@ -56,12 +57,16 @@ func TestStoreAndLoadObservations_Roundtrip(t *testing.T) {
 			Producer:  "FooPlugin",
 			UpdatedAt: now,
 			Version:   "v1.0",
+			Meta: map[string]string{
+				"a": "1",
+				"b": "2",
+			},
 		},
 		"swcat/bar": {
 			Value:     mustJSON(t, map[string]int{"n": 42}),
 			Producer:  "BarPlugin",
 			UpdatedAt: now.Add(-time.Minute),
-			// No version
+			// No version, no meta
 		},
 	}
 	c := newTestComponent("comp", obs)
@@ -75,7 +80,7 @@ func TestStoreAndLoadObservations_Roundtrip(t *testing.T) {
 		t.Fatalf("LoadObservations: %v", err)
 	}
 	if len(got) != len(obs) {
-		t.Fatalf("got %d observations, want %d", len(got), len(obs))
+		t.Fatalf("got %d observations, want %d", len(got), len(obs) )
 	}
 	for key, want := range obs {
 		g, ok := got[key]
@@ -91,6 +96,9 @@ func TestStoreAndLoadObservations_Roundtrip(t *testing.T) {
 		}
 		if string(g.Value) != string(want.Value) {
 			t.Errorf("%s: value %q, want %q", key, g.Value, want.Value)
+		}
+		if diff := cmp.Diff(want.Meta, g.Meta); diff != "" {
+			t.Errorf("%s: Meta mismatch (-want +got):\n%s", key, diff)
 		}
 	}
 }
