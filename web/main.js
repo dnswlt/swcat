@@ -1,4 +1,5 @@
 import './style.css'; // Make sure Tailwind CSS gets included by vite.
+import './custom-content.css';
 
 // Metadata parsed from the JSON sidecar returned together with the SVG graph.
 let svgMeta = {};

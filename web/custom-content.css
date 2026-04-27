@@ -1,0 +1,169 @@
+/* Styling for the rendered output of user-defined CustomContent templates.
+ * Tailwind preflight strips defaults from semantic HTML elements; these rules
+ * restore reasonable typography for the bounded set of elements we support.
+ *
+ * Supported elements are documented in docs/user-guide/custom-content.md.
+ * Anything else falls through to Tailwind's preflight and renders unstyled. */
+
+.custom-content {
+    max-height: 18rem;
+    overflow-y: auto;
+    padding: 0.25rem 0.75rem;
+    color: #1f2937;
+    font-size: 0.875rem;
+    line-height: 1.35rem;
+}
+.custom-content > :first-child { margin-top: 0; }
+.custom-content > :last-child { margin-bottom: 0; }
+
+/* Headings */
+.custom-content h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0.5rem 0 0.25rem;
+}
+.custom-content h3 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #374151;
+    margin: 0.5rem 0 0.25rem;
+}
+.custom-content h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #374151;
+    margin: 0.5rem 0 0.25rem;
+}
+
+/* Paragraphs */
+.custom-content p {
+    margin: 0.25rem 0;
+}
+
+/* Lists */
+.custom-content ul {
+    list-style-type: disc;
+    padding-left: 1.5rem;
+    margin: 0.25rem 0;
+}
+.custom-content ol {
+    list-style-type: decimal;
+    padding-left: 1.5rem;
+    margin: 0.25rem 0;
+}
+.custom-content li {
+    margin: 0.125rem 0;
+}
+
+/* Definition lists — rendered as a 2-column key/value grid */
+.custom-content dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.125rem 0.75rem;
+    margin: 0.25rem 0;
+}
+.custom-content dt {
+    font-weight: 500;
+    color: #4b5563;
+}
+.custom-content dd {
+    margin: 0;
+}
+
+/* Tables */
+.custom-content table {
+    width: 100%;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    border-collapse: collapse;
+}
+.custom-content thead tr {
+    background-color: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+}
+.custom-content tbody tr {
+    border-bottom: 1px solid #e5e7eb;
+}
+.custom-content tbody tr:last-child {
+    border-bottom: 0;
+}
+.custom-content th {
+    padding: 0.25rem 0.75rem;
+    font-weight: 500;
+    color: #4b5563;
+    text-align: left;
+}
+.custom-content td {
+    padding: 0.25rem 0.75rem;
+    color: #1f2937;
+}
+
+/* Links */
+.custom-content a {
+    color: #2563eb;
+    text-decoration: underline;
+}
+.custom-content a:hover {
+    color: #1d4ed8;
+}
+
+/* Code */
+.custom-content code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.85em;
+    background-color: #f3f4f6;
+    padding: 0.05rem 0.25rem;
+    border-radius: 0.25rem;
+}
+.custom-content pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.85em;
+    background-color: #f3f4f6;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.25rem;
+    overflow-x: auto;
+    margin: 0.25rem 0;
+}
+.custom-content pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+}
+
+/* Keyboard input */
+.custom-content kbd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.85em;
+    background-color: #f9fafb;
+    border: 1px solid #d1d5db;
+    border-bottom-width: 2px;
+    border-radius: 0.25rem;
+    padding: 0.05rem 0.25rem;
+    color: #1f2937;
+}
+
+/* Emphasis */
+.custom-content strong {
+    font-weight: 600;
+    color: #1f2937;
+}
+.custom-content em {
+    font-style: italic;
+}
+
+/* Horizontal rule */
+.custom-content hr {
+    border: 0;
+    border-top: 1px solid #e5e7eb;
+    margin: 0.5rem 0;
+}
+
+/* Blockquote */
+.custom-content blockquote {
+    border-left: 3px solid #d1d5db;
+    padding-left: 0.75rem;
+    margin: 0.5rem 0;
+    color: #4b5563;
+    font-style: italic;
+}

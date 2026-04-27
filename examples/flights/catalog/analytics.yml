@@ -38,6 +38,24 @@ metadata:
   annotations:
     swcat/visibility: public
     maven.apache.org/coords: org.slf4j:slf4j-api
+    asyncapi.com/channels: |-
+      [
+        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
+        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
+        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
+        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
+        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
+        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
+        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
+        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
+        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
+        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
+        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
+        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
+        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
+        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
+        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] }
+      ]
 spec:
   type: kafka/csv
   lifecycle: production

@@ -7,37 +7,44 @@ ui:
     - title: GitHub
       url: https://github.com/dnswlt/swcat
   # Define custom sections in entity detail pages based on annotations.
+  # Each section renders an annotation either as raw JSON (when no template
+  # is given) or via a Go html/template (using semantic HTML; styled by the
+  # .custom-content CSS class).
   annotationBasedContent:
-    # Show solace topics, annotated as a JSON list in the solace.com/topics annotation,
-    # as a card on the API detail page:
+    # Show solace topics, annotated as a JSON list in the solace.com/topics
+    # annotation, as a card on the API detail page.
     solace.com/topics:
       heading: Solace Topics
       open: true  # Whether the card should be open by default.
-      blocks:
-        - heading: 'Just for fun'
-          style: list  # Possible values: text|list|attrs|table|json
+      template: |
+        <ol>
+          {{ range . }}<li>{{ . }}</li>{{ end }}
+        </ol>
+    # No template: rendered as pretty-printed JSON in the read-only viewer.
     swcat/custom-fields:
       heading: Deployment Details
-      style: json
     asyncapi.com/channels:
       heading: AsyncAPI Channels
-      style: table
-      rank: 99 # This custom content should come last (just for fun)
-      # Define the table structure to be rendered, based on specific
-      # fields of each item in the JSON list stored in this annotation.
-      columns:
-        - header: Topic
-          data: |
-            {{ .address }}
-        - header: Messages
-          data: |
-            {{ .messages | join }}
+      rank: 99 # This custom content should come last (just for fun).
+      template: |
+        <table>
+          <thead><tr><th>Topic</th><th>Messages</th></tr></thead>
+          <tbody>
+            {{ range . }}
+            <tr>
+              <td>{{ .address }}</td>
+              <td>{{ .messages | join }}</td>
+            </tr>
+            {{ end }}
+          </tbody>
+        </table>
   # Same thing as annotationBasedContent, but for status observations.
   statusBasedContent:
     swcat/plugins-update-time:
       heading: Update Time (from Status)
-      style: text
       open: true
+      template: |
+        <p>{{ . }}</p>
 svg:
   # Show the (programming) language label as a <<stereotype>> on nodes.
   stereotypeLabels:

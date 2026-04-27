@@ -1,66 +1,17 @@
 <!-- Custom content based on entity annotations / status observations -->
-{{ range $gi, $g := . }}
-<details class="border rounded-lg" {{if $g.Open }}open{{end}}>
-    <summary class="font-semibold bg-gray-100 px-3 py-1 rounded-t-lg cursor-pointer">{{ $g.Heading }}</summary>
-    {{ range $bi, $cc := $g.Blocks }}
-    {{ if $cc.Heading }}
-    <h4 class="px-3 pt-2 pb-1 text-sm font-semibold text-gray-700">{{ $cc.Heading }}</h4>
-    {{ end }}
+{{ range $i, $cc := . }}
+<details class="border rounded-lg" {{if $cc.Open }}open{{end}}>
+    <summary class="font-semibold bg-gray-100 px-3 py-1 rounded-t-lg cursor-pointer">{{ $cc.Heading }}</summary>
     {{ if $cc.Code }}
-    <div class="max-h-32 overflow-y-auto">
-        <textarea id="custom-content-{{$gi}}-{{$bi}}" class="json-viewer">{{ $cc.Code }}</textarea>
+    <div class="max-h-96 overflow-y-auto">
+        <textarea id="custom-content-{{$i}}" class="json-viewer">{{ $cc.Code }}</textarea>
     </div>
-    {{ else if $cc.Text }}
-    <div class="px-3 py-1 max-h-32 overflow-y-auto">
-        <p>{{ $cc.Text }}</p>
-    </div>
-    {{ else if $cc.Items }}
-    <div class="px-3 py-1 max-h-32 overflow-y-auto">
-        <ul class="list-disc list-inside leading-tight text-sm">
-            {{ range $cc.Items }}
-            <li>{{ . }}</li>
-            {{ end }}
-        </ul>
-    </div>
-    {{ else if $cc.Attrs }}
-    <div class="max-h-32 overflow-y-auto">
-        <table class="w-full text-sm">
-             {{ range $cc.Attrs }}
-             <tr class="border-b last:border-0">
-                 <td class="px-3 py-1 font-medium text-gray-600 bg-gray-50 w-1/3">{{ .Name }}</td>
-                 <td class="px-3 py-1 text-gray-800">{{ .Value }}</td>
-             </tr>
-             {{ end }}
-        </table>
-    </div>
-    {{ else if $cc.Table }}
-    <div class="max-h-48 overflow-y-auto">
-        <table class="w-full text-sm">
-            {{ if $cc.Table.Headers }}
-            <thead>
-                <tr class="border-b bg-gray-50">
-                    {{ range $cc.Table.Headers }}
-                    <th class="px-3 py-1 font-medium text-gray-600 text-left">{{ . }}</th>
-                    {{ end }}
-                </tr>
-            </thead>
-            {{ end }}
-            <tbody>
-                {{ range $cc.Table.Rows }}
-                <tr class="border-b last:border-0">
-                    {{ range .Columns }}
-                    <td class="px-3 py-1 text-gray-800">{{ . }}</td>
-                    {{ end }}
-                </tr>
-                {{ end }}
-            </tbody>
-        </table>
-    </div>
+    {{ else }}
+    <div class="custom-content">{{ $cc.HTML }}</div>
     {{ end }}
-    {{ end }}
-    {{ if $g.Meta }}
+    {{ if $cc.Meta }}
     <dl class="px-3 py-1.5 border-t flex flex-wrap gap-x-5 gap-y-0.5 text-xs text-gray-500">
-        {{ range $g.Meta }}
+        {{ range $cc.Meta }}
         <div class="flex gap-1">
             <dt>{{ .Name }}</dt>
             <dd>{{ .Value }}</dd>
