@@ -22,8 +22,10 @@ plugins:
     inhibit: |-
       annotation='swcat/visibility=internal'
     spec:
-      providerPlugin: mavenAsyncApiProvider
-      targetAnnotation: swcat/asyncapi
+      fetcher:
+        packaging: jar
+        classifier: asyncapi
+      file: META-INF/asyncapi.yaml
   grpcPlugin:
     kind: GRPCPlugin
     spec:

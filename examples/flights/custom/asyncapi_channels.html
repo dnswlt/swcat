@@ -1,7 +1,9 @@
+{{ range . }}
+<h3>Version: {{ .version }}</h3>
 <table>
   <thead><tr><th>Topic</th><th>Messages</th></tr></thead>
   <tbody>
-    {{ range . }}
+    {{ range .channels }}
     <tr>
       <td>{{ .address }}</td>
       <td>{{ .messages | join }}</td>
@@ -9,3 +11,4 @@
     {{ end }}
   </tbody>
 </table>
+{{ end }}

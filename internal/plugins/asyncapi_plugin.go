@@ -2,26 +2,32 @@ package plugins
 
 import (
 	"archive/zip"
-	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/jfrog"
 	"github.com/dnswlt/swcat/internal/plugins/asyncapi"
+	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
 )
 
 const (
 	// The status field that the simplified representation of AsyncAPI channels gets written to.
 	AsyncAPIPluginTarget = "swcat-plugins/asyncapi-channels"
+	// The status field that lint findings are stored in.
+	AsyncAPIPluginLintTarget = "swcat-lint/finding-newer-version"
 )
+
+type VersionedChannels struct {
+	Version  string                    `json:"version"`
+	Channels []*asyncapi.SimpleChannel `json:"channels"`
+}
 
 type asyncAPIFetcherConfig struct {
 	// The packaging (e.g., "zip", "jar")
@@ -37,9 +43,7 @@ type asyncAPIFetcherConfig struct {
 }
 
 type asyncAPIImporterPluginSpec struct {
-	// If specified, uses the named plugin to fetch the AsyncAPI spec.
-	ProviderPlugin string `yaml:"providerPlugin"`
-	// Otherwise, the built-in JFrog client is used to fetch it, based on the
+	// The built-in JFrog client used to fetch the AsyncAPI spec.
 	Fetcher *asyncAPIFetcherConfig `yaml:"fetcher"`
 	// The file name of the AsyncAPI spec.
 	File string `yaml:"file"`
@@ -58,6 +62,7 @@ type JFrogArtifactFetcher interface {
 	SearchVersions(ctx context.Context, repository, groupId, artifactId string, releaseOnly bool) ([]string, error)
 }
 
+// newAsyncAPIImporterPlugin creates a new instance of the AsyncAPI importer plugin.
 func newAsyncAPIImporterPlugin(name string, specYaml *yaml.Node, fetcher JFrogArtifactFetcher) (*AsyncAPIImporterPlugin, error) {
 	var spec asyncAPIImporterPluginSpec
 	if err := specYaml.Decode(&spec); err != nil {
@@ -68,19 +73,11 @@ func newAsyncAPIImporterPlugin(name string, specYaml *yaml.Node, fetcher JFrogAr
 		return nil, fmt.Errorf("field 'file' not specified for plugin %s", name)
 	}
 
-	if spec.ProviderPlugin != "" {
-		if spec.Fetcher != nil {
-			return nil, fmt.Errorf("both 'providerPlugin' and 'fetcher' specified for plugin %s", name)
-		}
-	} else if spec.Fetcher != nil {
-		if fetcher == nil {
-			return nil, fmt.Errorf("no JFrogArtifactFetcher provided: %w", ErrPreconditionFailed)
-		}
-		if spec.Fetcher.Packaging == "" {
-			return nil, fmt.Errorf("field 'fetcher.packaging' not specified for plugin %s", name)
-		}
-	} else {
-		return nil, fmt.Errorf("neither 'fetcher' nor 'providerPlugin' specified for plugin %s", name)
+	if spec.Fetcher == nil {
+		return nil, fmt.Errorf("no JFrogArtifactFetcher provided: %w", ErrPreconditionFailed)
+	}
+	if spec.Fetcher.Packaging == "" {
+		return nil, fmt.Errorf("field 'fetcher.packaging' not specified for plugin %s", name)
 	}
 
 	return &AsyncAPIImporterPlugin{
@@ -90,49 +87,215 @@ func newAsyncAPIImporterPlugin(name string, specYaml *yaml.Node, fetcher JFrogAr
 	}, nil
 }
 
-func (m *AsyncAPIImporterPlugin) executeInternal(ctx context.Context, entity catalog.Entity, args *PluginArgs) (*PluginResult, error) {
-	artifactId := entity.GetMetadata().Name
-	groupId, _ := args.Repository.IAnnotation(entity, catalog.AnnotMavenGroupID)
-	var version string
-	repository, _ := args.Repository.IAnnotation(entity, JFrogRepositoryAnnotation)
+// Execute runs the AsyncAPI importer plugin, resolving artifacts, fetching versions, and returning the updated status observations.
+func (m *AsyncAPIImporterPlugin) Execute(ctx context.Context, entity catalog.Entity, args *PluginArgs) (*PluginResult, error) {
+	groupId, artifactId, explicitVersion, repository, err := m.resolveArtifactContext(entity, args)
+	if err != nil {
+		return nil, err
+	}
+
+	storedResults := m.getStoredObservation(entity)
+
+	available, err := m.fetcher.SearchVersions(ctx, repository, groupId, artifactId, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search versions for %s:%s: %w", groupId, artifactId, err)
+	}
+
+	targetVersions, err := m.identifyTargetVersions(entity, groupId, artifactId, explicitVersion, available)
+	if err != nil {
+		return nil, err
+	}
+
+	observations := make(map[string]catalog.Observation)
+
+	if finding := checkForNewerMajorVersion(entity, available); finding != nil {
+		observations[AsyncAPIPluginLintTarget] = catalog.Observation{
+			Producer:  m.name,
+			Value:     api.MustMarshalJSON(finding),
+			UpdatedAt: time.Now(),
+		}
+	}
+
+	results, err := m.fetchResults(ctx, repository, groupId, artifactId, targetVersions, storedResults)
+	if err != nil {
+		return nil, err
+	}
+
+	var obsVersion string
+	var targetMeta map[string]string
+
+	if apiEntity, isAPI := entity.(*catalog.API); isAPI && len(apiEntity.Spec.Versions) > 0 {
+		targetMeta = make(map[string]string)
+		for _, v := range apiEntity.Spec.Versions {
+			if match := findLatestMatch(v.Version, available); match != "" {
+				targetMeta["version-"+v.Version.RawVersion] = match
+			}
+		}
+	} else if len(targetVersions) > 0 {
+		obsVersion = targetVersions[0]
+	}
+
+	observations[AsyncAPIPluginTarget] = catalog.Observation{
+		Producer:  m.name,
+		Value:     api.MustMarshalJSON(results),
+		UpdatedAt: time.Now(),
+		Version:   obsVersion,
+		Meta:      targetMeta,
+	}
+
+	return &PluginResult{
+		Observations: observations,
+	}, nil
+}
+
+// resolveArtifactContext determines the Maven coordinates and repository for the entity.
+func (m *AsyncAPIImporterPlugin) resolveArtifactContext(entity catalog.Entity, args *PluginArgs) (g, a, v, repo string, err error) {
+	a = entity.GetMetadata().Name
+	g, _ = args.Repository.IAnnotation(entity, catalog.AnnotMavenGroupID)
+	repo, _ = args.Repository.IAnnotation(entity, JFrogRepositoryAnnotation)
 
 	if mc, ok := entity.GetMetadata().Annotations[catalog.AnnotMavenCoords]; ok {
-		gav := parseGAV(mc)
-		groupId = gav.g
-		artifactId = gav.a
-		if gav.v != "" {
-			version = gav.v
-		}
-	}
-	if groupId == "" {
-		return nil, fmt.Errorf("no Maven groupId for %v (set %q or %q annotation)",
-			entity.GetQName(), catalog.AnnotMavenGroupID, catalog.AnnotMavenCoords)
-	}
-	if repository == "" {
-		return nil, fmt.Errorf("no JFrog repository for %v (set %q annotation)",
-			entity.GetQName(), JFrogRepositoryAnnotation)
+		coords := parseGAV(mc)
+		g, a, v = coords.g, coords.a, coords.v
 	}
 
-	if version == "" {
-		versions, err := m.fetcher.SearchVersions(ctx, repository, groupId, artifactId, true)
-		if err != nil {
-			return nil, fmt.Errorf("failed to search versions for %s:%s: %w", groupId, artifactId, err)
-		}
-		latest := latestSemverVersions(versions, 1)
-		if len(latest) == 0 {
-			return nil, fmt.Errorf("no valid semver versions found for %s:%s", groupId, artifactId)
-		}
-		version = latest[0]
+	if g == "" || repo == "" {
+		return "", "", "", "", fmt.Errorf("missing Maven groupId or JFrog repository for %v", entity.GetQName())
+	}
+	return g, a, v, repo, nil
+}
+
+// getStoredObservation extracts previously fetched results from the entity's status.
+// If the JSON is incompatible (e.g. from an older version of the plugin),
+// it safely discards the data by returning nil, triggering a fresh fetch.
+func (m *AsyncAPIImporterPlugin) getStoredObservation(entity catalog.Entity) map[string]*VersionedChannels {
+	status := entity.GetStatus()
+	if status == nil {
+		return nil
+	}
+	obs, ok := status.Observations[AsyncAPIPluginTarget]
+	if !ok {
+		return nil
+	}
+	var stored []*VersionedChannels
+	dec := json.NewDecoder(bytes.NewReader(obs.Value))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&stored); err != nil {
+		return nil
 	}
 
-	// Skip the (expensive) artifact download if we've already ingested this
-	// Maven version on a previous run.
-	if status := entity.GetStatus(); status != nil {
-		if prev, ok := status.Observations[AsyncAPIPluginTarget]; ok && prev.Version == version {
-			return &PluginResult{}, nil
+	// If the JSON parsed but was the old format ([]*asyncapi.SimpleChannel),
+	// the Version field will be empty. Discard it.
+	results := make(map[string]*VersionedChannels)
+	for _, vch := range stored {
+		if vch.Version == "" {
+			return nil
+		}
+		results[vch.Version] = vch
+	}
+	return results
+}
+
+// identifyTargetVersions determines which versions of the AsyncAPI spec should be present.
+func (m *AsyncAPIImporterPlugin) identifyTargetVersions(entity catalog.Entity, g, a, explicitVersion string, available []string) ([]string, error) {
+	if apiEntity, isAPI := entity.(*catalog.API); isAPI && len(apiEntity.Spec.Versions) > 0 {
+		return identifyAPIVersions(apiEntity, available), nil
+	}
+
+	if explicitVersion != "" {
+		return []string{explicitVersion}, nil
+	}
+
+	v, err := identifyLatestVersion(g, a, available)
+	if err != nil {
+		return nil, err
+	}
+	return []string{v}, nil
+}
+
+// identifyAPIVersions identifies the target versions for an API entity from the available versions in the repository.
+func identifyAPIVersions(apiEntity *catalog.API, available []string) []string {
+	var versions []string
+	seen := make(map[string]bool)
+	for _, v := range apiEntity.Spec.Versions {
+		if match := findLatestMatch(v.Version, available); match != "" {
+			if !seen[match] {
+				versions = append(versions, match)
+				seen[match] = true
+			}
+		}
+	}
+	return versions
+}
+
+// identifyLatestVersion identifies the latest single target version.
+func identifyLatestVersion(g, a string, available []string) (string, error) {
+	latest := latestSemverVersions(available, 1)
+	if len(latest) == 0 {
+		return "", fmt.Errorf("no valid semver versions found for %s:%s", g, a)
+	}
+	return latest[0], nil
+}
+
+// checkForNewerMajorVersion checks if there is a newer major version available in the repository that is not listed in the entity's versions.
+func checkForNewerMajorVersion(entity catalog.Entity, available []string) *api.LintFinding {
+	apiEntity, isAPI := entity.(*catalog.API)
+	if !isAPI || len(apiEntity.Spec.Versions) == 0 || len(available) == 0 {
+		return nil
+	}
+
+	maxEntityMajor := -1
+	for _, v := range apiEntity.Spec.Versions {
+		if v.Version.Major > maxEntityMajor {
+			maxEntityMajor = v.Version.Major
 		}
 	}
 
+	if maxEntityMajor == -1 {
+		return nil
+	}
+
+	var newerMajorFound string
+	maxEntityMajorPrefix := fmt.Sprintf("v%d", maxEntityMajor)
+
+	for _, a := range available {
+		norm := semverNormalize(a)
+		if semver.IsValid(norm) {
+			if semver.Compare(semver.Major(norm), maxEntityMajorPrefix) > 0 {
+				newerMajorFound = semver.Major(norm)
+			}
+		}
+	}
+
+	if newerMajorFound != "" {
+		return &api.LintFinding{
+			CreateTime: time.Now(),
+			Message:    fmt.Sprintf("A newer major version (%s) is available in the repository but not listed in the entity's versions.", newerMajorFound),
+		}
+	}
+
+	return nil
+}
+
+// fetchResults populates results, downloading missing versions while reusing stored ones.
+func (m *AsyncAPIImporterPlugin) fetchResults(ctx context.Context, repo, g, a string, versions []string, stored map[string]*VersionedChannels) ([]*VersionedChannels, error) {
+	var results []*VersionedChannels
+	for _, v := range versions {
+		if vch, ok := stored[v]; ok {
+			results = append(results, vch)
+		} else {
+			vch, err := m.fetchVersionedChannels(ctx, repo, g, a, v)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, vch)
+		}
+	}
+	return results, nil
+}
+
+// fetchVersionedChannels retrieves the artifact for a specific version and parses the AsyncAPI channels.
+func (m *AsyncAPIImporterPlugin) fetchVersionedChannels(ctx context.Context, repository, groupId, artifactId, version string) (*VersionedChannels, error) {
 	coords := jfrog.MavenCoordinates{
 		GroupID:    groupId,
 		ArtifactID: artifactId,
@@ -141,10 +304,9 @@ func (m *AsyncAPIImporterPlugin) executeInternal(ctx context.Context, entity cat
 		Extension:  m.spec.Fetcher.Packaging,
 	}
 
-	// Both .zip and .jar artifacts are zip archives.
 	var buf bytes.Buffer
 	if err := m.fetcher.RetrieveArtifact(ctx, repository, coords, &buf); err != nil {
-		return nil, fmt.Errorf("failed to retrieve artifact for %v: %w", entity.GetQName(), err)
+		return nil, fmt.Errorf("failed to retrieve artifact for %v: %w", coords, err)
 	}
 	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	if err != nil {
@@ -169,140 +331,24 @@ func (m *AsyncAPIImporterPlugin) executeInternal(ctx context.Context, entity cat
 		return nil, fmt.Errorf("failed to parse AsyncAPI spec: %w", err)
 	}
 
-	now := time.Now()
-	return &PluginResult{
-		Observations: map[string]catalog.Observation{
-			AsyncAPIPluginTarget: {
-				Producer:  m.name,
-				Value:     api.MustMarshalJSON(spec.SimpleChannels()),
-				UpdatedAt: now,
-				Version:   version,
-			},
-		},
+	return &VersionedChannels{
+		Version:  version,
+		Channels: spec.SimpleChannels(),
 	}, nil
 }
 
-// readZipFile reads and returns the contents of the named file from the archive.
-func readZipFile(zr *zip.Reader, name string) ([]byte, error) {
-	for _, f := range zr.File {
-		if f.Name == name {
-			rc, err := f.Open()
-			if err != nil {
-				return nil, err
-			}
-			defer rc.Close()
-			return io.ReadAll(rc)
+// findLatestMatch finds the latest version in the available list that matches the major version of the provided catalog version.
+func findLatestMatch(v catalog.Version, available []string) string {
+	majorPrefix := fmt.Sprintf("v%d", v.Major)
+	var candidates []string
+	for _, a := range available {
+		if semver.Major(semverNormalize(a)) == majorPrefix {
+			candidates = append(candidates, a)
 		}
 	}
-	return nil, fmt.Errorf("file %q not found in archive", name)
-}
-
-// readAllProperties reads every .properties file in the archive and merges
-// them into a single key/value map. On key collisions, last write wins.
-func readAllProperties(zr *zip.Reader) (map[string]string, error) {
-	props := map[string]string{}
-	for _, f := range zr.File {
-		if !strings.HasSuffix(f.Name, ".properties") {
-			continue
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return nil, fmt.Errorf("open %s: %w", f.Name, err)
-		}
-		data, err := io.ReadAll(rc)
-		rc.Close()
-		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", f.Name, err)
-		}
-		for k, v := range parseProperties(data) {
-			props[k] = v
-		}
+	latest := latestSemverVersions(candidates, 1)
+	if len(latest) > 0 {
+		return latest[0]
 	}
-	return props, nil
-}
-
-// parseProperties parses Java-style .properties content into a key/value map.
-// Recognises '=' or ':' as separators; lines starting with '#' or '!' are comments.
-func parseProperties(data []byte) map[string]string {
-	props := map[string]string{}
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || line[0] == '#' || line[0] == '!' {
-			continue
-		}
-		sep := strings.IndexAny(line, "=:")
-		if sep < 0 {
-			continue
-		}
-		k := strings.TrimSpace(line[:sep])
-		v := strings.TrimSpace(line[sep+1:])
-		props[k] = v
-	}
-	return props
-}
-
-var unresolvedPropertyPlaceholderRE = regexp.MustCompile(`@@[^@]+@@`)
-
-// replacePropertyPlaceholders replaces all @@key@@ placeholders in data with
-// the corresponding value from props. Any placeholders that remain unresolved
-// are replaced with a sentinel token so the output stays valid YAML.
-func replacePropertyPlaceholders(data []byte, props map[string]string) []byte {
-	if len(props) > 0 {
-		pairs := make([]string, 0, len(props)*2)
-		for k, v := range props {
-			pairs = append(pairs, "@@"+k+"@@", v)
-		}
-		data = []byte(strings.NewReplacer(pairs...).Replace(string(data)))
-	}
-	return unresolvedPropertyPlaceholderRE.ReplaceAll(data, []byte("MISSING"))
-}
-
-func (m *AsyncAPIImporterPlugin) executeProvider(ctx context.Context, entity catalog.Entity, args *PluginArgs) (*PluginResult, error) {
-	trigger, ok := args.Registry.triggers[m.spec.ProviderPlugin]
-	if !ok {
-		return nil, fmt.Errorf("plugin %q not found", m.spec.ProviderPlugin)
-	}
-
-	providerArgs := args.EmptyArgs()
-	providerArgs.Args = map[string]any{
-		"file": m.spec.File,
-	}
-
-	res, err := trigger.plugin.Execute(ctx, entity, providerArgs)
-	if err != nil {
-		return nil, fmt.Errorf("provider plugin %q failed: %w", m.spec.ProviderPlugin, err)
-	}
-
-	rv, ok := res.ReturnValue.(FilesReturnValue)
-	if !ok {
-		return nil, fmt.Errorf("unexpected return value type from provider plugin, got %T", res.ReturnValue)
-	}
-	if len(rv.Files()) != 1 {
-		return nil, fmt.Errorf("expected 1 output file from provider plugin, got %d", len(rv.Files()))
-	}
-
-	spec, err := asyncapi.Parse(rv.Files()[0])
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse AsyncAPI spec: %w", err)
-	}
-
-	now := time.Now()
-	return &PluginResult{
-		Observations: map[string]catalog.Observation{
-			AsyncAPIPluginTarget: {
-				Producer:  m.name,
-				Value:     api.MustMarshalJSON(spec.SimpleChannels()),
-				UpdatedAt: now,
-				Version:   spec.Version(),
-			},
-		},
-	}, nil
-}
-
-func (m *AsyncAPIImporterPlugin) Execute(ctx context.Context, entity catalog.Entity, args *PluginArgs) (*PluginResult, error) {
-	if m.spec.ProviderPlugin != "" {
-		return m.executeProvider(ctx, entity, args)
-	}
-	return m.executeInternal(ctx, entity, args)
+	return ""
 }

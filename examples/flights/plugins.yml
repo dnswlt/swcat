@@ -6,6 +6,7 @@ plugins:
       kind:Domain
     spec:
       target: observation
+  
   asyncApiImporter:
     # Showcases the importer plugin for 3.0.0 AsyncAPI specs.
     kind: AsyncAPIImporterPlugin
@@ -14,22 +15,12 @@ plugins:
     inhibit: |-
       annotation='swcat/visibility=internal'
     spec:
-      providerPlugin: mavenAsyncApiProvider
-      targetAnnotation: swcat/asyncapi
-      file: META-INF/MANIFEST.MF
+      fetcher:
+        packaging: jar
+        classifier: asyncapi
+        replaceProperties: true
+      file: META-INF/asyncapi.yaml
 
-  mavenAsyncApiProvider:
-    kind: GRPCPlugin
-    # No trigger - this plugin is only used by the asyncApiImporter plugin
-    spec:
-      address: ${SWCAT_GRPC_PLUGIN_ADDR:-localhost:50051}
-      verbose: true
-      config:
-        pluginName: maven-extractor
-        defaultGroupId: com.example.swcat
-        defaultPackaging: jar
-        includeSnapshots: false
-  
   javaHello:
     kind: GRPCPlugin
     trigger: |-

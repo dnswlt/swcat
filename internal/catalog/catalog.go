@@ -430,10 +430,11 @@ type Status struct {
 }
 
 type Observation struct {
-	Value     json.RawMessage `json:"value"`    // immutable
-	Producer  string          `json:"producer"` // which plugin wrote this
-	UpdatedAt time.Time       `json:"updatedAt"`
-	Version   string          `json:"version"` // Optional: the entity version at which this observation was made.
+	Value     json.RawMessage   `json:"value"`    // immutable
+	Producer  string            `json:"producer"` // which plugin wrote this
+	UpdatedAt time.Time         `json:"updatedAt"`
+	Version   string            `json:"version"` // Optional: the entity version at which this observation was made.
+	Meta      map[string]string `json:"meta"`    // Optional: more metadata (to display in custom content)
 }
 
 // Clone returns a deep copy of this Status.
