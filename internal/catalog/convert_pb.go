@@ -1,7 +1,11 @@
 package catalog
 
 import (
+	"encoding/json"
+
 	catalog_pb "github.com/dnswlt/swcat/internal/catalog/pb"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // ToPB converts a catalog Entity to its Protobuf representation.
@@ -48,6 +52,16 @@ func labelRefToPB(r *LabelRef) *catalog_pb.LabelRef {
 	}
 }
 
+func linkGroupInfoToPB(g *LinkGroupInfo) *catalog_pb.LinkGroupInfo {
+	if g == nil {
+		return nil
+	}
+	return &catalog_pb.LinkGroupInfo{
+		Group: g.Group,
+		Label: g.Label,
+	}
+}
+
 func linkToPB(l *Link) *catalog_pb.Link {
 	if l == nil {
 		return nil
@@ -58,7 +72,50 @@ func linkToPB(l *Link) *catalog_pb.Link {
 		Icon:        l.Icon,
 		Type:        l.Type,
 		IsGenerated: l.IsGenerated,
+		GroupInfo:   linkGroupInfoToPB(l.GroupInfo),
 	}
+}
+
+// observationValueToPB parses raw (which is expected to be valid JSON) into a
+// structpb.Value so that protojson renders it as native JSON. If parsing
+// fails, the raw bytes are preserved as a JSON string instead of being lost.
+func observationValueToPB(raw json.RawMessage) *structpb.Value {
+	if len(raw) == 0 {
+		return nil
+	}
+	var v any
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return structpb.NewStringValue(string(raw))
+	}
+	pv, err := structpb.NewValue(v)
+	if err != nil {
+		return structpb.NewStringValue(string(raw))
+	}
+	return pv
+}
+
+func observationToPB(o Observation) *catalog_pb.Observation {
+	return &catalog_pb.Observation{
+		Value:     observationValueToPB(o.Value),
+		Producer:  o.Producer,
+		UpdatedAt: timestamppb.New(o.UpdatedAt),
+		Version:   o.Version,
+		Meta:      o.Meta,
+	}
+}
+
+func statusToPB(s *Status) *catalog_pb.Status {
+	if s == nil {
+		return nil
+	}
+	pb := &catalog_pb.Status{}
+	if len(s.Observations) > 0 {
+		pb.Observations = make(map[string]*catalog_pb.Observation, len(s.Observations))
+		for k, v := range s.Observations {
+			pb.Observations[k] = observationToPB(v)
+		}
+	}
+	return pb
 }
 
 func metadataToPB(m *Metadata) *catalog_pb.Metadata {
@@ -121,6 +178,7 @@ func componentToPB(c *Component) *catalog_pb.Entity {
 		Kind:     string(KindComponent),
 		Metadata: metadataToPB(c.Metadata),
 		Spec:     &catalog_pb.Entity_ComponentSpec{ComponentSpec: spec},
+		Status:   statusToPB(c.GetStatus()),
 	}
 }
 
@@ -146,6 +204,7 @@ func systemToPB(s *System) *catalog_pb.Entity {
 		Kind:     string(KindSystem),
 		Metadata: metadataToPB(s.Metadata),
 		Spec:     &catalog_pb.Entity_SystemSpec{SystemSpec: spec},
+		Status:   statusToPB(s.GetStatus()),
 	}
 }
 
@@ -165,6 +224,7 @@ func domainToPB(d *Domain) *catalog_pb.Entity {
 		Kind:     string(KindDomain),
 		Metadata: metadataToPB(d.Metadata),
 		Spec:     &catalog_pb.Entity_DomainSpec{DomainSpec: spec},
+		Status:   statusToPB(d.GetStatus()),
 	}
 }
 
@@ -188,6 +248,7 @@ func resourceToPB(r *Resource) *catalog_pb.Entity {
 		Kind:     string(KindResource),
 		Metadata: metadataToPB(r.Metadata),
 		Spec:     &catalog_pb.Entity_ResourceSpec{ResourceSpec: spec},
+		Status:   statusToPB(r.GetStatus()),
 	}
 }
 
@@ -219,6 +280,7 @@ func apiToPB(a *API) *catalog_pb.Entity {
 		Kind:     string(KindAPI),
 		Metadata: metadataToPB(a.Metadata),
 		Spec:     &catalog_pb.Entity_ApiSpec{ApiSpec: spec},
+		Status:   statusToPB(a.GetStatus()),
 	}
 }
 

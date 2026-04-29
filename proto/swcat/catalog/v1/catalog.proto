@@ -2,6 +2,9 @@ syntax = "proto3";
 
 package swcat.catalog.v1;
 
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
 option go_package = "github.com/dnswlt/swcat/internal/catalog/pb;catalog_pb";
 
 // Metadata common to all entities.
@@ -30,6 +33,16 @@ message Link {
   string icon = 3;
   string type = 4;
   bool is_generated = 5;
+  // Set for auto-generated multi-environment links. Non-nil links with the
+  // same group_info.group are rendered together in the UI.
+  LinkGroupInfo group_info = 6;
+}
+
+// LinkGroupInfo groups multiple links (e.g. one per environment) under a
+// shared display title. A nil value means the link is standalone.
+message LinkGroupInfo {
+  string group = 1; // shared display title for the group, e.g. "Monitoring"
+  string label = 2; // per-link label within the group, e.g. "dev", "prod"
 }
 
 // Ref represents a reference to another entity.
@@ -58,7 +71,7 @@ message Version {
 message Entity {
   string kind = 1;
   Metadata metadata = 2;
-  
+
   oneof spec {
     DomainSpec domain_spec = 3;
     SystemSpec system_spec = 4;
@@ -67,6 +80,31 @@ message Entity {
     ApiSpec api_spec = 7;
     GroupSpec group_spec = 8;
   }
+
+  // Runtime status. Not persisted in the repository, but populated at runtime
+  // (e.g. by plugins). Always nil for Group entities.
+  Status status = 9;
+}
+
+// Status holds runtime observations attached to an entity by plugins.
+message Status {
+  // Map from observation name (following annotation naming conventions) to
+  // status observation.
+  map<string, Observation> observations = 1;
+}
+
+message Observation {
+  // The observation value as a parsed JSON value, so it round-trips through
+  // protojson as native JSON (object/array/number/string/bool/null) rather
+  // than a base64-encoded blob.
+  google.protobuf.Value value = 1;
+  // Identifier of the plugin that produced this observation.
+  string producer = 2;
+  google.protobuf.Timestamp updated_at = 3;
+  // Optional: the entity version at which this observation was made.
+  string version = 4;
+  // Optional: additional metadata for display in custom content.
+  map<string, string> meta = 5;
 }
 
 // --- Domain ---
