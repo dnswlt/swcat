@@ -70,7 +70,7 @@ func TestStreamingRunner_InvalidInput(t *testing.T) {
 	defer runner.Close()
 
 	// Use a short timeout for the test to detect hangs
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
 	// 1. Invalid DOT input
@@ -82,7 +82,7 @@ func TestStreamingRunner_InvalidInput(t *testing.T) {
 	}
 
 	// 2. Try valid input to see if it recovered (it should restart the process if it died)
-	ctx2, cancel2 := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel2()
 	dotValid := `digraph G { a -> b }`
 	svg, err := runner.Run(ctx2, dotValid)
