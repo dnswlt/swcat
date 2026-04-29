@@ -86,61 +86,6 @@ func TestCEL(t *testing.T) {
 	}
 }
 
-// toMap converts a struct to a map[string]any via JSON round-trip,
-// so that CEL expressions can use the JSON field names (e.g. spec.type).
-func toMap(v any) map[string]any {
-	b, err := json.Marshal(v)
-	if err != nil {
-		panic(err)
-	}
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		panic(err)
-	}
-	return m
-}
-
-func TestCELComponentViaJSON(t *testing.T) {
-	env, err := cel.NewEnv(
-		cel.Variable("spec", cel.MapType(cel.StringType, cel.DynType)),
-	)
-	if err != nil {
-		t.Fatalf("NewEnv: %v", err)
-	}
-	ast, iss := env.Compile(`spec.type == "banana"`)
-	if iss.Err() != nil {
-		t.Fatalf("Compile: %v", iss.Err())
-	}
-	prg, err := env.Program(ast)
-	if err != nil {
-		t.Fatalf("Program: %v", err)
-	}
-	tests := []struct {
-		name     string
-		specType string
-		want     bool
-	}{
-		{"match", "banana", true},
-		{"no match", "apple", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			comp := &catalog.Component{
-				Metadata: &catalog.Metadata{Name: "test"},
-				Spec:     &catalog.ComponentSpec{Type: tt.specType},
-			}
-			m := toMap(comp)
-			out, _, err := prg.Eval(m)
-			if err != nil {
-				t.Fatalf("Eval: %v", err)
-			}
-			if out.Value() != tt.want {
-				t.Errorf("got %v, want %v", out.Value(), tt.want)
-			}
-		})
-	}
-}
-
 func TestLinter(t *testing.T) {
 	config := &Config{
 		CELRules: []Rule{

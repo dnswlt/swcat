@@ -2,8 +2,6 @@
 
 The `GRPCPlugin` kind allows you to integrate external tools or services that implement a gRPC interface. This is useful for long-running services, or when you want to implement plugins in languages other than Go while maintaining a high-performance communication channel.
 
-Unlike [External Plugins](external.md) which run as subprocesses for each execution, gRPC plugins typically run as standalone services (e.g., in a separate container) that `swcat` connects to over the network.
-
 ## Configuration
 
 gRPC plugins are configured in `plugins.yml`.

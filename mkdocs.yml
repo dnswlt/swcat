@@ -37,7 +37,6 @@ nav:
     - 'Plugins':
       - 'user-guide/plugins/index.md'
       - 'AsyncAPI Importer': 'user-guide/plugins/asyncapi.md'
-      - 'External Plugins': 'user-guide/plugins/external.md'
       - 'gRPC Plugins': 'user-guide/plugins/grpc.md'
       - 'JFrog Xray BOM': 'user-guide/plugins/jfrog-xray.md'
     - 'Linting':
