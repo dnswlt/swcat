@@ -4,6 +4,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,10 +17,12 @@ import (
 	"time"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	catalog_pb "github.com/dnswlt/swcat/internal/catalog/pb"
 	"github.com/dnswlt/swcat/internal/jfrog"
 	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/store"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // stubJFrogClient is a no-op jfrog.Client for tests that need the plugin
@@ -121,7 +124,7 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 
 func TestIntegration_ServerSmoke(t *testing.T) {
 	ts, _ := setupIntegrationServer(t)
-	defer ts.Close()
+	t.Cleanup(func() { ts.Close() })
 
 	// List of explicit URLs to check with expected substrings
 	testCases := []struct {
@@ -159,6 +162,7 @@ func TestIntegration_ServerSmoke(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.path, func(t *testing.T) {
+			t.Parallel()
 			fullURL := ts.URL + tc.path
 			resp, err := client.Get(fullURL)
 			if err != nil {
@@ -190,7 +194,7 @@ func TestIntegration_ServerSmoke(t *testing.T) {
 
 func TestIntegration_ServerEntities(t *testing.T) {
 	ts, s := setupIntegrationServer(t)
-	defer ts.Close()
+	t.Cleanup(func() { ts.Close() })
 
 	// Access internal state to get the list of all entities.
 	// We use the default ref "" (local disk store).
@@ -238,35 +242,15 @@ func TestIntegration_ServerEntities(t *testing.T) {
 		urlPath := pathPrefix + ref.QName()
 
 		t.Run(fmt.Sprintf("Entity_%s", ref), func(t *testing.T) {
+			t.Parallel()
 			fullURL := ts.URL + urlPath
 
-			// Retry loop to handle potential timeouts during heavy SVG generation
-			var resp *http.Response
-			var reqErr error
-			var successCancel context.CancelFunc
-
-			for i := 0; i < 3; i++ {
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				req, _ := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
-				resp, reqErr = client.Do(req)
-
-				if reqErr == nil && resp.StatusCode == http.StatusOK {
-					successCancel = cancel
-					break
-				}
-				cancel() // Cancel failed attempt
-				if resp != nil {
-					resp.Body.Close()
-				}
-				time.Sleep(100 * time.Millisecond)
-			}
-
-			if successCancel != nil {
-				defer successCancel()
-			}
-
-			if reqErr != nil {
-				t.Fatalf("Failed to GET %s after retries: %v", fullURL, reqErr)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			req, _ := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatalf("Failed to GET %s: %v", fullURL, err)
 			}
 			defer resp.Body.Close()
 
@@ -290,5 +274,112 @@ func TestIntegration_ServerEntities(t *testing.T) {
 				t.Errorf("GET %s: response body missing <svg tag for entity kind %s", urlPath, ref.Kind)
 			}
 		})
+	}
+}
+
+func TestIntegration_ServeEntitiesJSON_ProtoJSON(t *testing.T) {
+	ts, _ := setupIntegrationServer(t)
+	defer ts.Close()
+
+	client := ts.Client()
+	client.Timeout = 10 * time.Second
+
+	// Fetch the full set of entities and verify each item round-trips through
+	// protojson.Unmarshal — i.e. the response is valid protojson for the
+	// catalog Entity message, not just arbitrary JSON.
+	resp, err := client.Get(ts.URL + "/catalog/entities")
+	if err != nil {
+		t.Fatalf("GET /catalog/entities: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json", ct)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+
+	var envelope struct {
+		Entities []json.RawMessage `json:"entities"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		t.Fatalf("decode envelope: %v\nbody: %s", err, body)
+	}
+	if len(envelope.Entities) == 0 {
+		t.Fatal("expected at least one entity, got 0")
+	}
+
+	parsed := make(map[string]*catalog_pb.Entity, len(envelope.Entities))
+	for i, raw := range envelope.Entities {
+		var e catalog_pb.Entity
+		if err := protojson.Unmarshal(raw, &e); err != nil {
+			t.Fatalf("entity[%d] not valid protojson: %v\nraw: %s", i, err, raw)
+		}
+		// Kinds must be the canonical lowercase form (i.e. catalog.KindXxx),
+		// not the YAML-cased form ("Component", "API", ...).
+		switch catalog.Kind(e.Kind) {
+		case catalog.KindComponent, catalog.KindSystem, catalog.KindDomain,
+			catalog.KindAPI, catalog.KindResource, catalog.KindGroup:
+		default:
+			t.Errorf("entity[%d] has unexpected kind %q", i, e.Kind)
+		}
+		if e.Metadata == nil || e.Metadata.Name == "" {
+			t.Errorf("entity[%d] missing metadata.name", i)
+			continue
+		}
+		ref := e.Kind + ":" + e.Metadata.Name
+		parsed[ref] = &e
+	}
+
+	// Spot-check a known component and a known API from the flights example.
+	comp, ok := parsed["component:flights-search-backend"]
+	if !ok {
+		t.Fatalf("expected component:flights-search-backend in response")
+	}
+	if comp.GetComponentSpec() == nil {
+		t.Errorf("component:flights-search-backend missing component_spec oneof")
+	}
+
+	apiEntity, ok := parsed["api:flights-search-api"]
+	if !ok {
+		t.Fatalf("expected api:flights-search-api in response")
+	}
+	if apiEntity.GetApiSpec() == nil {
+		t.Errorf("api:flights-search-api missing api_spec oneof")
+	}
+
+	// Now verify the kind filter still works post-conversion.
+	resp2, err := client.Get(ts.URL + "/catalog/entities?q=kind:api")
+	if err != nil {
+		t.Fatalf("GET /catalog/entities?q=kind:api: %v", err)
+	}
+	defer resp2.Body.Close()
+	body2, err := io.ReadAll(resp2.Body)
+	if err != nil {
+		t.Fatalf("read filtered body: %v", err)
+	}
+	var filtered struct {
+		Entities []json.RawMessage `json:"entities"`
+	}
+	if err := json.Unmarshal(body2, &filtered); err != nil {
+		t.Fatalf("decode filtered envelope: %v", err)
+	}
+	if len(filtered.Entities) == 0 {
+		t.Fatal("filtered query returned no entities")
+	}
+	for i, raw := range filtered.Entities {
+		var e catalog_pb.Entity
+		if err := protojson.Unmarshal(raw, &e); err != nil {
+			t.Fatalf("filtered entity[%d] not valid protojson: %v", i, err)
+		}
+		if catalog.Kind(e.Kind) != catalog.KindAPI {
+			t.Errorf("filtered entity[%d] kind = %q, want %q", i, e.Kind, catalog.KindAPI)
+		}
 	}
 }

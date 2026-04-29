@@ -33,6 +33,7 @@ import (
 	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/svg"
 	lru "github.com/hashicorp/golang-lru/v2"
+	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1916,18 +1917,19 @@ func (s *Server) serveEntitiesJSON(w http.ResponseWriter, r *http.Request) {
 	data := s.getStoreData(r)
 	entities := s.finder.FindEntities(data.repo, query)
 
-	result := make([]map[string]any, 0, len(entities))
+	result := make([]json.RawMessage, 0, len(entities))
 	for _, e := range entities {
-		if e.GetSourceInfo() == nil || e.GetSourceInfo().Node == nil {
+		pb := catalog.ToPB(e)
+		if pb == nil {
 			continue
 		}
-		var data map[string]any
-		if err := e.GetSourceInfo().Node.Decode(&data); err != nil {
-			log.Printf("Failed to decode yaml.Node to map: %v", err)
+		b, err := protojson.Marshal(pb)
+		if err != nil {
+			log.Printf("Failed to marshal entity %v to protojson: %v", e.GetRef(), err)
 			http.Error(w, "JSON marshalling error", http.StatusInternalServerError)
 			return
 		}
-		result = append(result, data)
+		result = append(result, json.RawMessage(b))
 	}
 
 	output, err := json.Marshal(map[string]any{
