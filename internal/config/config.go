@@ -127,7 +127,8 @@ func Load(st store.Store, configPath string) (*Bundle, error) {
 		return nil, fmt.Errorf("could not read config %q: %w", configPath, err)
 	}
 	dec := yaml.NewDecoder(bytes.NewReader(bs))
-	dec.KnownFields(true)
+	// Don't enforce KnownFields for now, to enable processing older tags and branches.
+	// dec.KnownFields(true)
 	var bundle Bundle
 	if err := dec.Decode(&bundle); err != nil {
 		return nil, fmt.Errorf("invalid configuration YAML in %q: %w", configPath, err)
