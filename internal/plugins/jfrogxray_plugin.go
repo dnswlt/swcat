@@ -23,10 +23,12 @@ const (
 	JFrogXrayPluginTarget = "swcat-plugins/jfrog-xray-sbom"
 	// The status field that lint findings get written to.
 	JFrogXrayPluginLintTarget = "swcat-lint/finding-jfrog-xray"
-	// Annotation in which to find a JSON list of "[groupId:]artifactId"
-	// strings of dependencies that should never be declared as missing during linting.
-	// This is the usual "lint:ignore" hook that's always needed for weird edge
-	// cases, to avoid flooding the system with lint warnings that no none looks at.
+	// Annotation set on an entity to exclude it from JFrog Xray lint checks.
+	// When the value is "true", the entity is dropped from the catalog index
+	// used for linting, so it will never be reported as a missing dependency
+	// for any other entity. This is the usual "lint:ignore" hook needed for
+	// weird edge cases, to avoid flooding the system with lint warnings that
+	// nobody looks at.
 	JFrogXrayPluginLintIgnoreAnnotation = "swcat-plugins/jfrog-xray-ignore"
 	// Annotation in which to find the Docker image name for an entity.
 	JFrogXrayPluginImageAnnotation = catalog.AnnotDockerImage
@@ -272,30 +274,6 @@ func (p *JFrogXrayPlugin) detectDependencyMismatches(bom *sbom.MiniBOM, entity c
 		return nil, nil
 	}
 
-	ignored := make(map[string]bool)
-	if val, ok := entity.GetMetadata().Annotations[JFrogXrayPluginLintIgnoreAnnotation]; ok {
-		var list []string
-		err := json.Unmarshal([]byte(val), &list)
-		if err == nil {
-			for _, s := range list {
-				ignored[s] = true
-			}
-		}
-	}
-
-	isIgnored := func(bc gav) bool {
-		if len(ignored) == 0 {
-			return false
-		}
-		if ignored[bc.a] { // artifactId
-			return true
-		}
-		if bc.g != "" && ignored[bc.g+":"+bc.a] { // groupId:artifactId
-			return true
-		}
-		return false
-	}
-
 	// 1. Resolve all declared dependencies of this component.
 	declared := make(map[string]catalog.Entity)
 	add := func(refs []*catalog.LabelRef) {
@@ -327,8 +305,10 @@ func (p *JFrogXrayPlugin) detectDependencyMismatches(bom *sbom.MiniBOM, entity c
 			// Not in declared deps. Is it in the catalog at all?
 			if e := fullIdx.matchEntity(bc); e != nil {
 				// Yes, it's a catalog entity.
-				// Add to mising if it's different from 'entity' itself and not explicitly ignored.
-				if !isIgnored(bc) && !e.GetRef().Equal(entity.GetRef()) {
+				// Add to missing if it's different from 'entity' itself.
+				// (Entities annotated as lint-ignored are filtered out of fullIdx
+				// in newCatalogIndexFromEntities, so they cannot match here.)
+				if !e.GetRef().Equal(entity.GetRef()) {
 					missing = append(missing, raw)
 				}
 			}
@@ -374,8 +354,12 @@ type catalogIndex struct {
 func newCatalogIndexFromEntities(allEntities []catalog.Entity) *catalogIndex {
 	entities := make([]indexedEntity, 0, len(allEntities))
 	for _, e := range allEntities {
+		annotations := e.GetMetadata().Annotations
+		if annotations[JFrogXrayPluginLintIgnoreAnnotation] == "true" {
+			continue
+		}
 		info := indexedEntity{entity: e, coords: gav{a: e.GetMetadata().Name}}
-		if coords, ok := e.GetMetadata().Annotations[JFrogXrayPluginCoordsAnnotation]; ok {
+		if coords, ok := annotations[JFrogXrayPluginCoordsAnnotation]; ok {
 			info.coords = parseGAV(coords)
 		}
 		entities = append(entities, info)

@@ -137,17 +137,17 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches_Ignore(t *testing.T) {
 		Spec:     &catalog.ComponentSpec{Type: "service", Lifecycle: "production", Owner: &catalog.Ref{Name: "owner"}, System: &catalog.Ref{Name: "system"}},
 	}
 	e2 := &catalog.Component{
-		Metadata: &catalog.Metadata{Name: "beta"},
-		Spec:     &catalog.ComponentSpec{Type: "service", Lifecycle: "production", Owner: &catalog.Ref{Name: "owner"}, System: &catalog.Ref{Name: "system"}},
+		Metadata: &catalog.Metadata{
+			Name:        "beta",
+			Annotations: make(map[string]string),
+		},
+		Spec: &catalog.ComponentSpec{Type: "service", Lifecycle: "production", Owner: &catalog.Ref{Name: "owner"}, System: &catalog.Ref{Name: "system"}},
 	}
 	repository.AddEntity(e1)
 	repository.AddEntity(e2)
 
 	mainComp := &catalog.Component{
-		Metadata: &catalog.Metadata{
-			Name:        "main",
-			Annotations: make(map[string]string),
-		},
+		Metadata: &catalog.Metadata{Name: "main"},
 		Spec: &catalog.ComponentSpec{
 			Type:      "service",
 			Lifecycle: "production",
@@ -163,7 +163,6 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches_Ignore(t *testing.T) {
 	p := &JFrogXrayPlugin{
 		spec: &jfrogXrayPluginSpec{},
 	}
-	fullIdx := newCatalogIndexFromEntities(repository.AllEntities())
 
 	bom := &sbom.MiniBOM{
 		Components: []string{
@@ -173,6 +172,7 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches_Ignore(t *testing.T) {
 	}
 
 	t.Run("NoIgnore", func(t *testing.T) {
+		fullIdx := newCatalogIndexFromEntities(repository.AllEntities())
 		missing, _ := p.detectDependencyMismatches(bom, mainComp, fullIdx, repository)
 		wantMissing := []string{"org.example:beta:1.0.0"}
 		if !slices.Equal(missing, wantMissing) {
@@ -180,19 +180,14 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches_Ignore(t *testing.T) {
 		}
 	})
 
-	t.Run("IgnoreByArtifactId", func(t *testing.T) {
-		mainComp.Metadata.Annotations[JFrogXrayPluginLintIgnoreAnnotation] = `["beta"]`
-		missing, _ := p.detectDependencyMismatches(bom, mainComp, fullIdx, repository)
-		if len(missing) != 0 {
-			t.Errorf("got missing=%v, want empty (ignored by artifactId)", missing)
-		}
-	})
+	t.Run("IgnoreByEntityAnnotation", func(t *testing.T) {
+		e2.Metadata.Annotations[JFrogXrayPluginLintIgnoreAnnotation] = "true"
+		t.Cleanup(func() { delete(e2.Metadata.Annotations, JFrogXrayPluginLintIgnoreAnnotation) })
 
-	t.Run("IgnoreByGroupArtifactId", func(t *testing.T) {
-		mainComp.Metadata.Annotations[JFrogXrayPluginLintIgnoreAnnotation] = `["org.example:beta"]`
+		fullIdx := newCatalogIndexFromEntities(repository.AllEntities())
 		missing, _ := p.detectDependencyMismatches(bom, mainComp, fullIdx, repository)
 		if len(missing) != 0 {
-			t.Errorf("got missing=%v, want empty (ignored by groupId:artifactId)", missing)
+			t.Errorf("got missing=%v, want empty (beta entity is annotated as ignored)", missing)
 		}
 	})
 }
