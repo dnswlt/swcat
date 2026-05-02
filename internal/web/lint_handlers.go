@@ -137,12 +137,18 @@ func (s *Server) serveLintFindings(w http.ResponseWriter, r *http.Request) {
 		return strings.Compare(a.Owner, b.Owner)
 	})
 
+	var linkCheckSources []string
+	if s.linter != nil {
+		linkCheckSources = lint.LinkFetchers{Bitbucket: s.bbClient}.Names()
+	}
+
 	params := map[string]any{
-		"PageTitle":     "Lint",
-		"OwnerGroups":   result,
-		"HasKube":       s.kubeClient != nil && s.linter != nil && s.linter.Kube().Enabled,
-		"HasPrometheus": s.promClient != nil && s.linter != nil && s.linter.Prometheus().Enabled,
-		"HasBitbucket":  s.bbClient != nil && s.linter != nil && s.linter.Bitbucket().Enabled,
+		"PageTitle":        "Lint",
+		"OwnerGroups":      result,
+		"HasKube":          s.kubeClient != nil && s.linter != nil && s.linter.Kube().Enabled,
+		"HasPrometheus":    s.promClient != nil && s.linter != nil && s.linter.Prometheus().Enabled,
+		"HasBitbucket":     s.bbClient != nil && s.linter != nil && s.linter.Bitbucket().Enabled,
+		"LinkCheckSources": linkCheckSources,
 	}
 
 	s.serveHTMLPage(w, r, "lint_findings.html", params)
@@ -363,4 +369,75 @@ func (s *Server) serveBitbucketResults(w http.ResponseWriter, r *http.Request) {
 		"Results": views,
 	}
 	s.serveHTMLPage(w, r, "bitbucket_results.html", params)
+}
+
+type linkCheckRowView struct {
+	Entity catalog.Entity
+	URL    string
+	Title  string
+	Type   string
+	OK     bool
+	Reason string
+}
+
+// linkCheckConcurrency caps how many link checks run in parallel.
+// Kept conservative to avoid overloading the Bitbucket server.
+const linkCheckConcurrency = 4
+
+func (s *Server) serveLinkCheckResults(w http.ResponseWriter, r *http.Request) {
+	if s.linter == nil {
+		s.renderErrorSnippet(w, "Linter not configured")
+		return
+	}
+	// At least one fetcher must be available to make this useful.
+	if s.bbClient == nil {
+		s.renderErrorSnippet(w, "No link fetchers configured")
+		return
+	}
+
+	data := s.getStoreData(r)
+	entities := s.finder.FindEntities(data.repo, "")
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+
+	fetchers := lint.LinkFetchers{Bitbucket: s.bbClient}
+	checks := s.linter.ScanLinks(ctx, fetchers, entities, linkCheckConcurrency)
+
+	brokenOnly := r.URL.Query().Get("broken") == "on"
+	var views []linkCheckRowView
+	for _, c := range checks {
+		ok := c.Result.Status == lint.LinkCheckOK
+		if brokenOnly && ok {
+			continue
+		}
+		reason := c.Result.Reason
+		if c.Result.Err != nil {
+			if reason != "" {
+				reason = fmt.Sprintf("%s: %v", reason, c.Result.Err)
+			} else {
+				reason = c.Result.Err.Error()
+			}
+		}
+		views = append(views, linkCheckRowView{
+			Entity: c.Entity,
+			URL:    c.Link.URL,
+			Title:  c.Link.Title,
+			Type:   c.Link.Type,
+			OK:     ok,
+			Reason: reason,
+		})
+	}
+
+	slices.SortFunc(views, func(a, b linkCheckRowView) int {
+		if c := strings.Compare(a.Entity.GetQName(), b.Entity.GetQName()); c != 0 {
+			return c
+		}
+		return strings.Compare(a.URL, b.URL)
+	})
+
+	params := map[string]any{
+		"Results": views,
+	}
+	s.serveHTMLPage(w, r, "link_check_results.html", params)
 }

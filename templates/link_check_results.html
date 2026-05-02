@@ -1,0 +1,52 @@
+{{ if .Results }}
+<div class="mt-1 overflow-auto max-h-[500px]">
+    <table class="min-w-full text-sm">
+        <thead>
+            <tr class="border-b text-left font-semibold text-gray-500 tracking-wider">
+                <th class="px-3 py-1 w-8">Status</th>
+                <th class="px-3 py-1">Entity</th>
+                <th class="px-3 py-1">Link</th>
+                <th class="px-3 py-1">Reason</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {{ range .Results }}
+            <tr>
+                <td class="px-3 py-1">
+                    {{ if .OK }}
+                    <span title="Link OK">
+                        <svg class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </span>
+                    {{ else }}
+                    <span title="Broken link">
+                        <svg class="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </span>
+                    {{ end }}
+                </td>
+                <td class="px-3 py-1">
+                    <a href="{{ .Entity | toURL }}" class="text-blue-600 hover:underline">{{ .Entity.GetQName }}</a>
+                    <span class="text-[10px] text-gray-400 uppercase tracking-tighter ml-1">{{ .Entity.GetKind }}</span>
+                </td>
+                <td class="px-3 py-1">
+                    <a target="_blank" href="{{ .URL }}" class="text-blue-600 hover:underline break-all">
+                        {{ if .Title }}{{ .Title }}{{ else }}{{ .URL }}{{ end }}
+                    </a>
+                    {{ if .Type }}
+                    <span class="text-[10px] text-gray-400 uppercase tracking-tighter ml-1">{{ .Type }}</span>
+                    {{ end }}
+                </td>
+                <td class="px-3 py-1 text-gray-600">{{ .Reason }}</td>
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+</div>
+{{ else }}
+<div class="mt-4 text-center py-6 text-sm text-gray-500">
+    No links found to check.
+</div>
+{{ end }}

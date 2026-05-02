@@ -2069,6 +2069,9 @@ func (s *Server) uiMux() *http.ServeMux {
 	mux.HandleFunc("GET /lint/prometheus-workloads", func(w http.ResponseWriter, r *http.Request) {
 		s.servePrometheusWorkloads(w, r)
 	})
+	mux.HandleFunc("GET /lint/link-check", func(w http.ResponseWriter, r *http.Request) {
+		s.serveLinkCheckResults(w, r)
+	})
 
 	mux.HandleFunc("POST /sessions", func(w http.ResponseWriter, r *http.Request) {
 		s.createEditSession(w, r)

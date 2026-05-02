@@ -2,6 +2,7 @@ package lint
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/bitbucket"
@@ -35,6 +36,24 @@ func (f *fakeBitbucketSearcher) FileExists(_ context.Context, projectKey, repoSl
 
 func (f *fakeBitbucketSearcher) ListFiles(_ context.Context, projectKey, repoSlug, _ string) ([]string, error) {
 	return f.files[projectKey+"/"+repoSlug], nil
+}
+
+func (f *fakeBitbucketSearcher) PathExists(_ context.Context, projectKey, repoSlug, path, _ string) (bool, error) {
+	key := projectKey + "/" + repoSlug
+	files, ok := f.files[key]
+	if !ok {
+		return false, nil
+	}
+	p := strings.TrimPrefix(path, "/")
+	if p == "" {
+		return true, nil
+	}
+	for _, f := range files {
+		if f == p || strings.HasPrefix(f, p+"/") {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func TestCanonicalizeBitbucketURL(t *testing.T) {

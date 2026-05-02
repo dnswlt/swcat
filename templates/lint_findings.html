@@ -74,6 +74,37 @@
             </div>
             {{ end }}
 
+            {{ if .LinkCheckSources }}
+            <div class="border rounded-lg p-3 mb-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="font-semibold text-gray-800">Link Check</h2>
+                        <p class="text-sm text-gray-500">Validate entity links against the configured fetchers ({{ strJoin .LinkCheckSources ", " }}).</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                            <input type="checkbox" id="link-broken" name="broken" checked
+                                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            Broken only
+                        </label>
+                        <button
+                            hx-get="lint/link-check"
+                            hx-target="#link-check-result"
+                            hx-swap="innerHTML"
+                            hx-include="#link-broken"
+                            hx-indicator="#link-check-spinner"
+                            class="px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                            Check Links
+                        </button>
+                    </div>
+                </div>
+                <div id="link-check-spinner" class="htmx-indicator text-center py-3">
+                    <span class="text-sm text-gray-500">Checking links...</span>
+                </div>
+                <div id="link-check-result"></div>
+            </div>
+            {{ end }}
+
             {{ if .HasBitbucket }}
             <div class="border rounded-lg p-3 mb-4">
                 <div class="flex items-center justify-between">

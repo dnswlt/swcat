@@ -225,7 +225,7 @@ func createLinter(source store.Source) (*lint.Linter, error) {
 	return lint.NewLinter(lintCfg)
 }
 
-func createPrometheusClient(opts *Options) *prometheus.Client {
+func createPrometheusClient(opts *Options) prometheus.Querier {
 	if opts.PrometheusURL == "" {
 		return nil
 	}
@@ -234,7 +234,7 @@ func createPrometheusClient(opts *Options) *prometheus.Client {
 	return prometheus.NewClient(opts.PrometheusURL, clientOpts)
 }
 
-func createBitbucketClient(opts *Options) *bitbucket.Client {
+func createBitbucketClient(opts *Options) bitbucket.Searcher {
 	if opts.BitbucketURL == "" {
 		return nil
 	}
@@ -312,7 +312,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Unexpected positional arguments: %v\n", fs.Args())
 		os.Exit(1)
 	}
-	log.Printf("Using config from flags/env vars: %+v", opts)
+	log.Printf("Using config from flags/env vars: %#+v", opts)
 
 	// Check if dot (graphviz) is in the PATH, else try Windows default install path.
 	dotPath, err := lookupDotPath()

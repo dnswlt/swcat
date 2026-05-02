@@ -154,6 +154,23 @@ func (f *fakeBBSearcher) ListFiles(_ context.Context, projectKey, repoSlug, _ st
 	return f.files[projectKey+"/"+repoSlug], nil
 }
 
+func (f *fakeBBSearcher) PathExists(_ context.Context, projectKey, repoSlug, path, _ string) (bool, error) {
+	files, ok := f.files[projectKey+"/"+repoSlug]
+	if !ok {
+		return false, nil
+	}
+	p := strings.TrimPrefix(path, "/")
+	if p == "" {
+		return true, nil
+	}
+	for _, f := range files {
+		if f == p || strings.HasPrefix(f, p+"/") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func newBitbucketTestServer(t *testing.T, searcher bitbucket.Searcher) *Server {
 	t.Helper()
 

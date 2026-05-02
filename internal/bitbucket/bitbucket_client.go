@@ -60,6 +60,7 @@ type Searcher interface {
 	BaseURL() string
 	ListRepositories(ctx context.Context, projectKey string) ([]Repository, error)
 	FileExists(ctx context.Context, projectKey, repoSlug, filePath, at string) (bool, error)
+	PathExists(ctx context.Context, projectKey, repoSlug, path, at string) (bool, error)
 	ListFiles(ctx context.Context, projectKey, repoSlug, at string) ([]string, error)
 }
 
@@ -453,6 +454,54 @@ func (c *Client) FileExists(ctx context.Context, projectKey, repoSlug, filePath,
 	defer resp.Body.Close()
 
 	// Fully consume the response body to allow connection reuse.
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode == http.StatusOK {
+		return true, nil
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	return false, c.apiError(resp)
+}
+
+// PathExists checks if a path exists in the repository. The path may refer to
+// a file, a directory, or the repository root (when path is empty). Unlike
+// FileExists (which uses /raw/ and only works for files), this hits the
+// /browse/ endpoint, which returns a result for both files and directories.
+//
+// API: GET /rest/api/latest/projects/{projectKey}/repos/{repositorySlug}/browse/{path}?at={at}&limit=1
+func (c *Client) PathExists(ctx context.Context, projectKey, repoSlug, path, at string) (bool, error) {
+	rawURL := fmt.Sprintf("%s/rest/api/latest/projects/%s/repos/%s/browse",
+		c.baseURL, url.PathEscape(projectKey), url.PathEscape(repoSlug))
+	if p := strings.TrimPrefix(path, "/"); p != "" {
+		rawURL += "/" + p
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false, fmt.Errorf("bitbucket: building browse URL: %w", err)
+	}
+
+	q := u.Query()
+	q.Set("limit", "1")
+	if at != "" {
+		q.Set("at", at)
+	}
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return false, fmt.Errorf("bitbucket: creating browse request: %w", err)
+	}
+	c.setAuth(req, projectKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("bitbucket: executing browse request: %w", err)
+	}
+	defer resp.Body.Close()
+
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode == http.StatusOK {
