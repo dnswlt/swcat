@@ -376,7 +376,9 @@ type linkCheckRowView struct {
 	URL    string
 	Title  string
 	Type   string
-	OK     bool
+	// Status is one of "ok", "broken", "warn". Used by the template to
+	// pick an icon and color.
+	Status string
 	Reason string
 }
 
@@ -407,8 +409,19 @@ func (s *Server) serveLinkCheckResults(w http.ResponseWriter, r *http.Request) {
 	brokenOnly := r.URL.Query().Get("broken") == "on"
 	var views []linkCheckRowView
 	for _, c := range checks {
-		ok := c.Result.Status == lint.LinkCheckOK
-		if brokenOnly && ok {
+		var status string
+		switch c.Result.Status {
+		case lint.LinkCheckOK:
+			status = "ok"
+		case lint.LinkCheckBroken:
+			status = "broken"
+		default:
+			// LinkCheckError, LinkCheckNoAccess: cannot be confirmed
+			// either way, displayed as a warning.
+			status = "warn"
+		}
+		// "Broken only" hides everything except confirmed-broken links.
+		if brokenOnly && status != "broken" {
 			continue
 		}
 		reason := c.Result.Reason
@@ -424,7 +437,7 @@ func (s *Server) serveLinkCheckResults(w http.ResponseWriter, r *http.Request) {
 			URL:    c.Link.URL,
 			Title:  c.Link.Title,
 			Type:   c.Link.Type,
-			OK:     ok,
+			Status: status,
 			Reason: reason,
 		})
 	}

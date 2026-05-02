@@ -2,6 +2,8 @@ package lint
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -42,6 +44,10 @@ const (
 	// LinkCheckError means the check could not be completed due to a
 	// transport or API error (distinct from "not found").
 	LinkCheckError
+	// LinkCheckNoAccess means the source rejected the request for
+	// authorization reasons (HTTP 401/403). The link target may or may
+	// not exist; we cannot say either way.
+	LinkCheckNoAccess
 )
 
 // LinkCheckResult is the outcome of a single ValidateLink call.
@@ -103,6 +109,13 @@ func validateBitbucketLink(ctx context.Context, bb bitbucket.Searcher, link *cat
 
 	exists, err := bb.PathExists(ctx, projectKey, repoSlug, path, "")
 	if err != nil {
+		var apiErr *bitbucket.APIError
+		if errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden) {
+			return LinkCheckResult{
+				Status: LinkCheckNoAccess,
+				Reason: "no access to Bitbucket project",
+			}, true
+		}
 		return LinkCheckResult{
 			Status: LinkCheckError,
 			Reason: "Bitbucket request failed",

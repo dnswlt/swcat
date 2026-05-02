@@ -209,6 +209,53 @@ func TestValidateLink_FetcherError(t *testing.T) {
 	}
 }
 
+func TestValidateLink_NoAccess(t *testing.T) {
+	tests := []struct {
+		name string
+		code int
+	}{
+		{name: "401 unauthorized", code: 401},
+		{name: "403 forbidden", code: 403},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bb := &errorBitbucket{
+				baseURL: "https://bitbucket.example.com",
+				err:     &bitbucket.APIError{StatusCode: tt.code, Message: "denied"},
+			}
+			l := &Linter{}
+
+			got := l.ValidateLink(context.Background(), LinkFetchers{Bitbucket: bb},
+				&catalog.Link{Type: "code", URL: "https://bitbucket.example.com/projects/OTHER/repos/secret"})
+
+			if got.Status != LinkCheckNoAccess {
+				t.Fatalf("status = %v, want %v", got.Status, LinkCheckNoAccess)
+			}
+			// Underlying error must not leak — caller treats this as a
+			// non-broken state, no need to surface API details.
+			if got.Err != nil {
+				t.Errorf("Err = %v, want nil", got.Err)
+			}
+		})
+	}
+}
+
+func TestValidateLink_NonAuthAPIError(t *testing.T) {
+	// A non-401/403 APIError still maps to LinkCheckError.
+	bb := &errorBitbucket{
+		baseURL: "https://bitbucket.example.com",
+		err:     &bitbucket.APIError{StatusCode: 500, Message: "boom"},
+	}
+	l := &Linter{}
+
+	got := l.ValidateLink(context.Background(), LinkFetchers{Bitbucket: bb},
+		&catalog.Link{Type: "code", URL: "https://bitbucket.example.com/projects/PROJ/repos/my-repo"})
+
+	if got.Status != LinkCheckError {
+		t.Fatalf("status = %v, want %v", got.Status, LinkCheckError)
+	}
+}
+
 func TestScanLinks(t *testing.T) {
 	bb := &fakeBitbucketSearcher{
 		baseURL: "https://bitbucket.example.com",
