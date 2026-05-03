@@ -222,7 +222,7 @@ func TestFindBitbucketFiles_PathQuery(t *testing.T) {
 		Queries:  []BitbucketPathQuery{{Path: "catalog.yaml"}},
 	})
 
-	got, err := l.FindBitbucketFiles(context.Background(), searcher, false)
+	got, err := l.FindBitbucketFiles(context.Background(), searcher, false, 4)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestFindBitbucketFiles_PathRegexQuery(t *testing.T) {
 		Queries:  []BitbucketPathQuery{{PathRegex: `^svc-.*/asyncapi\.yaml$`, Repositories: []string{"monorepo"}}},
 	})
 
-	got, err := l.FindBitbucketFiles(context.Background(), searcher, false)
+	got, err := l.FindBitbucketFiles(context.Background(), searcher, false, 4)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestFindBitbucketFiles_RepoExclusion(t *testing.T) {
 		Queries:       []BitbucketPathQuery{{Path: "catalog.yaml"}},
 	})
 
-	got, err := l.FindBitbucketFiles(context.Background(), searcher, false)
+	got, err := l.FindBitbucketFiles(context.Background(), searcher, false, 4)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -319,13 +319,13 @@ func TestFindBitbucketFiles_CacheHit(t *testing.T) {
 	})
 
 	// First call populates the cache.
-	if _, err := l.FindBitbucketFiles(context.Background(), searcher, false); err != nil {
+	if _, err := l.FindBitbucketFiles(context.Background(), searcher, false, 4); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	callsAfterFirst := searcher.listCalls
 
 	// Second call with useCache=true must not call ListRepositories again.
-	if _, err := l.FindBitbucketFiles(context.Background(), searcher, true); err != nil {
+	if _, err := l.FindBitbucketFiles(context.Background(), searcher, true, 4); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if searcher.listCalls != callsAfterFirst {

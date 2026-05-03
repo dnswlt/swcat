@@ -90,8 +90,9 @@ func sortedEntityLinks(entities []catalog.Entity) []entityLink {
 
 // FindBitbucketFiles executes the configured queries against Bitbucket to find files.
 // If useCache is true and a cached result exists for the same Bitbucket base URL, it is
-// returned immediately without hitting the API.
-func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient bitbucket.Searcher, useCache bool) ([]BitbucketFile, error) {
+// returned immediately without hitting the API. concurrency controls how many repos
+// are scanned in parallel; it is clamped to at least 1.
+func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient bitbucket.Searcher, useCache bool, concurrency int) ([]BitbucketFile, error) {
 	if useCache {
 		if files, ok := l.bbCache.get(bbClient.BaseURL()); ok {
 			log.Printf("FindBitbucketFiles: returning %d cached files", len(files))
@@ -130,62 +131,93 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient bitbucket.Sear
 		}
 	}
 
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	type repoResult struct {
+		files []BitbucketFile
+		errs  []error
+	}
+	results := make([]repoResult, len(allRepos))
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+	for i, repo := range allRepos {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, repo bitbucket.Repository) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			files, repoErrs := l.findFilesInRepo(ctx, bbClient, repo, config.Queries)
+			results[i] = repoResult{files: files, errs: repoErrs}
+		}(i, repo)
+	}
+	wg.Wait()
+
 	var allFiles []BitbucketFile
-
-	for _, repo := range allRepos {
-		lenBefore := len(allFiles)
-		nQueries := 0
-		for _, q := range config.Queries {
-			if len(q.Repositories) > 0 && !slices.Contains(q.Repositories, repo.Slug) {
-				continue
-			}
-			nQueries++
-
-			if q.Path != "" {
-				exists, err := bbClient.FileExists(ctx, repo.Project.Key, repo.Slug, q.Path, "")
-				if err != nil {
-					errs = append(errs, fmt.Errorf("check existence of %q in %s/%s: %v", q.Path, repo.Project.Key, repo.Slug, err))
-					continue
-				}
-				if exists {
-					allFiles = append(allFiles, BitbucketFile{
-						Path:       strings.TrimPrefix(q.Path, "/"),
-						RepoSlug:   repo.Slug,
-						ProjectKey: repo.Project.Key,
-					})
-				}
-			} else if q.PathRegex != "" {
-				files, err := bbClient.ListFiles(ctx, repo.Project.Key, repo.Slug, "")
-				if err != nil {
-					errs = append(errs, fmt.Errorf("list files in %s/%s: %v", repo.Project.Key, repo.Slug, err))
-					continue
-				}
-				re, err := regexp.Compile(q.PathRegex)
-				if err != nil {
-					// Shouldn't happen, we validate regexps when reading the config
-					return nil, fmt.Errorf("invalid regex for pathRegex %q: %v", q.PathRegex, err)
-				}
-				for _, f := range files {
-					if re.MatchString(f) {
-						allFiles = append(allFiles, BitbucketFile{
-							Path:       f,
-							RepoSlug:   repo.Slug,
-							ProjectKey: repo.Project.Key,
-						})
-					}
-				}
-			}
-		}
-		if nQueries > 0 {
-			log.Printf("FindBitbucketFiles found %d files with %d queries in repo %s/%s",
-				len(allFiles)-lenBefore, nQueries, repo.Project.Key, repo.Slug)
-		}
+	for _, r := range results {
+		allFiles = append(allFiles, r.files...)
+		errs = append(errs, r.errs...)
 	}
 
 	if len(errs) == 0 {
 		l.bbCache.set(bbClient.BaseURL(), allFiles)
 	}
 	return allFiles, errors.Join(errs...)
+}
+
+// findFilesInRepo runs all applicable queries against a single repository and
+// returns the matching files together with any non-fatal errors encountered.
+func (l *Linter) findFilesInRepo(ctx context.Context, bbClient bitbucket.Searcher, repo bitbucket.Repository, queries []BitbucketPathQuery) ([]BitbucketFile, []error) {
+	var files []BitbucketFile
+	var errs []error
+	nQueries := 0
+	for _, q := range queries {
+		if len(q.Repositories) > 0 && !slices.Contains(q.Repositories, repo.Slug) {
+			continue
+		}
+		nQueries++
+
+		if q.Path != "" {
+			exists, err := bbClient.FileExists(ctx, repo.Project.Key, repo.Slug, q.Path, "")
+			if err != nil {
+				errs = append(errs, fmt.Errorf("check existence of %q in %s/%s: %v", q.Path, repo.Project.Key, repo.Slug, err))
+				continue
+			}
+			if exists {
+				files = append(files, BitbucketFile{
+					Path:       strings.TrimPrefix(q.Path, "/"),
+					RepoSlug:   repo.Slug,
+					ProjectKey: repo.Project.Key,
+				})
+			}
+		} else if q.PathRegex != "" {
+			listed, err := bbClient.ListFiles(ctx, repo.Project.Key, repo.Slug, "")
+			if err != nil {
+				errs = append(errs, fmt.Errorf("list files in %s/%s: %v", repo.Project.Key, repo.Slug, err))
+				continue
+			}
+			re, err := regexp.Compile(q.PathRegex)
+			if err != nil {
+				// Shouldn't happen, we validate regexps when reading the config
+				errs = append(errs, fmt.Errorf("invalid regex for pathRegex %q: %v", q.PathRegex, err))
+				continue
+			}
+			for _, f := range listed {
+				if re.MatchString(f) {
+					files = append(files, BitbucketFile{
+						Path:       f,
+						RepoSlug:   repo.Slug,
+						ProjectKey: repo.Project.Key,
+					})
+				}
+			}
+		}
+	}
+	if nQueries > 0 {
+		log.Printf("FindBitbucketFiles found %d files with %d queries in repo %s/%s",
+			len(files), nQueries, repo.Project.Key, repo.Slug)
+	}
+	return files, errs
 }
 
 // MatchBitbucketFiles matches pre-fetched Bitbucket search results against catalog entities.

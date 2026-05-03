@@ -331,7 +331,7 @@ func (s *Server) serveBitbucketResults(w http.ResponseWriter, r *http.Request) {
 
 	useCache := r.URL.Query().Get("rescan") != "on"
 	log.Printf("Looking for files in Bitbucket (useCache=%v)", useCache)
-	queryResults, err := s.linter.FindBitbucketFiles(ctx, s.bbClient, useCache)
+	queryResults, err := s.linter.FindBitbucketFiles(ctx, s.bbClient, useCache, bitbucketConcurrency)
 	if err != nil {
 		log.Printf("Error scanning Bitbucket files: %v", err)
 		s.renderErrorSnippet(w, fmt.Sprintf("Error scanning Bitbucket files: %v", err))
@@ -382,9 +382,9 @@ type linkCheckRowView struct {
 	Reason string
 }
 
-// linkCheckConcurrency caps how many link checks run in parallel.
+// bitbucketConcurrency caps how many Bitbucket requests run in parallel.
 // Kept conservative to avoid overloading the Bitbucket server.
-const linkCheckConcurrency = 4
+const bitbucketConcurrency = 4
 
 func (s *Server) serveLinkCheckResults(w http.ResponseWriter, r *http.Request) {
 	if s.linter == nil {
@@ -404,7 +404,7 @@ func (s *Server) serveLinkCheckResults(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	fetchers := lint.LinkFetchers{Bitbucket: s.bbClient}
-	checks := s.linter.ScanLinks(ctx, fetchers, entities, linkCheckConcurrency)
+	checks := s.linter.ScanLinks(ctx, fetchers, entities, bitbucketConcurrency)
 
 	brokenOnly := r.URL.Query().Get("broken") == "on"
 	var views []linkCheckRowView
