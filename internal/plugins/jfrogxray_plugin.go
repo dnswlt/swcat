@@ -355,7 +355,7 @@ func newCatalogIndexFromEntities(allEntities []catalog.Entity) *catalogIndex {
 	entities := make([]indexedEntity, 0, len(allEntities))
 	for _, e := range allEntities {
 		annotations := e.GetMetadata().Annotations
-		if annotations[JFrogXrayPluginLintIgnoreAnnotation] == "true" {
+		if strings.EqualFold(annotations[JFrogXrayPluginLintIgnoreAnnotation], "ignore") {
 			continue
 		}
 		info := indexedEntity{entity: e, coords: gav{a: e.GetMetadata().Name}}

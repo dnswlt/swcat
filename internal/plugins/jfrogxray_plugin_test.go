@@ -181,7 +181,7 @@ func TestJFrogXrayPlugin_DetectDependencyMismatches_Ignore(t *testing.T) {
 	})
 
 	t.Run("IgnoreByEntityAnnotation", func(t *testing.T) {
-		e2.Metadata.Annotations[JFrogXrayPluginLintIgnoreAnnotation] = "true"
+		e2.Metadata.Annotations[JFrogXrayPluginLintIgnoreAnnotation] = "ignore"
 		t.Cleanup(func() { delete(e2.Metadata.Annotations, JFrogXrayPluginLintIgnoreAnnotation) })
 
 		fullIdx := newCatalogIndexFromEntities(repository.AllEntities())
