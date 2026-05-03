@@ -29,7 +29,7 @@ const (
 	// for any other entity. This is the usual "lint:ignore" hook needed for
 	// weird edge cases, to avoid flooding the system with lint warnings that
 	// nobody looks at.
-	JFrogXrayPluginLintIgnoreAnnotation = "swcat-plugins/jfrog-xray-ignore"
+	JFrogXrayPluginLintIgnoreAnnotation = "swcat-lint/ignore-jfrog-xray"
 	// Annotation in which to find the Docker image name for an entity.
 	JFrogXrayPluginImageAnnotation = catalog.AnnotDockerImage
 	// Annotation in which to find the Maven GAV coordinates for an entity.
