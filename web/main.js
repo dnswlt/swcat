@@ -93,6 +93,7 @@ function toggleExpandedEntity(entityRef) {
     } else {
         already.concat(entityRef).forEach(e => url.searchParams.append('e', e));
     }
+    url.hash = 'relationships-svg';
     window.location.href = url.toString();
 }
 
