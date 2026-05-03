@@ -456,9 +456,22 @@ func (r *Renderer) SystemInternalGraph(ctx context.Context, system *catalog.Syst
 	return runDot(ctx, r.runner, dotSource)
 }
 
-func (r *Renderer) generateComponentDotSource(component *catalog.Component) *dot.DotSource {
+// ComponentViewOptions configures which APIs to expand in a component detail view.
+type ComponentViewOptions struct {
+	// ExpandedAPIs: show consumers for provided APIs and providers for consumed APIs.
+	ExpandedAPIs []*catalog.Ref
+}
+
+func (r *Renderer) generateComponentDotSource(component *catalog.Component, opts *ComponentViewOptions) *dot.DotSource {
 	dw := dot.New()
 	dw.Start()
+
+	expandedAPIs := map[string]bool{}
+	if opts != nil {
+		for _, ref := range opts.ExpandedAPIs {
+			expandedAPIs[ref.String()] = true
+		}
+	}
 
 	// Component
 	dw.AddNode(r.entityNode(component))
@@ -466,7 +479,7 @@ func (r *Renderer) generateComponentDotSource(component *catalog.Component) *dot
 	// "Incoming" dependencies
 	// - Owner
 	// - System
-	// - Parent compnent
+	// - Parent component
 	// - Provided APIs
 	// - Other entities with a DependsOn relationship to this entity
 	owner := r.repo.Group(component.Spec.Owner)
@@ -490,6 +503,15 @@ func (r *Renderer) generateComponentDotSource(component *catalog.Component) *dot
 		ap := r.repo.API(a.Ref)
 		dw.AddNode(r.entityNodeContext(ap, component))
 		dw.AddEdge(r.entityEdgeLabel(ap, component, a, dot.ESProvidedBy))
+		if expandedAPIs[a.Ref.String()] {
+			for _, c := range ap.GetConsumers() {
+				consumer := r.repo.Component(c.Ref)
+				if consumer != nil {
+					dw.AddNode(r.entityNodeContext(consumer, component))
+					dw.AddEdge(r.entityEdgeLabel(consumer, ap, c, dot.ESNormal))
+				}
+			}
+		}
 	}
 	for _, d := range component.GetDependents() {
 		e := r.repo.Entity(d.Ref)
@@ -507,6 +529,15 @@ func (r *Renderer) generateComponentDotSource(component *catalog.Component) *dot
 		ap := r.repo.API(a.Ref)
 		dw.AddNode(r.entityNodeContext(ap, component))
 		dw.AddEdge(r.entityEdgeLabel(component, ap, a, dot.ESNormal))
+		if expandedAPIs[a.Ref.String()] {
+			for _, p := range ap.GetProviders() {
+				provider := r.repo.Component(p.Ref)
+				if provider != nil {
+					dw.AddNode(r.entityNodeContext(provider, component))
+					dw.AddEdge(r.entityEdgeLabel(ap, provider, p, dot.ESProvidedBy))
+				}
+			}
+		}
 	}
 	for _, s := range component.GetSubcomponents() {
 		sc := r.repo.Component(s)
@@ -526,8 +557,9 @@ func (r *Renderer) generateComponentDotSource(component *catalog.Component) *dot
 }
 
 // ComponentGraph generates an SVG for the given component.
-func (r *Renderer) ComponentGraph(ctx context.Context, component *catalog.Component) (*Result, error) {
-	dotSource := r.generateComponentDotSource(component)
+// opts may be nil to use default rendering with no expanded APIs.
+func (r *Renderer) ComponentGraph(ctx context.Context, component *catalog.Component, opts *ComponentViewOptions) (*Result, error) {
+	dotSource := r.generateComponentDotSource(component, opts)
 	return runDot(ctx, r.runner, dotSource)
 }
 

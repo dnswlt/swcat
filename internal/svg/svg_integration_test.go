@@ -32,7 +32,7 @@ func TestGenerateComponentSVG_WithDot(t *testing.T) {
 	defer cancel()
 
 	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(Config{}))
-	res, err := renderer.ComponentGraph(ctx, comp)
+	res, err := renderer.ComponentGraph(ctx, comp, nil)
 	if err != nil {
 		t.Fatalf("GenerateComponentSVG failed: %v", err)
 	}

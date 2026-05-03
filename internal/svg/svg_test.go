@@ -189,7 +189,7 @@ func TestComponentGraph_Topology(t *testing.T) {
 
 	compA := r.Component(&catalog.Ref{Name: "comp-a"})
 
-	_, err := renderer.ComponentGraph(context.Background(), compA)
+	_, err := renderer.ComponentGraph(context.Background(), compA, nil)
 	if err != nil {
 		t.Fatalf("ComponentGraph failed: %v", err)
 	}
@@ -206,6 +206,146 @@ func TestComponentGraph_Topology(t *testing.T) {
 	if !strings.Contains(dot, `"api:api-b"[`) {
 		t.Errorf("DOT missing node for api-b")
 	}
+}
+
+// setupRepoWithProviders extends setupRepo with:
+//   - api-a in sys-a, provided by comp-a and consumed by comp-c (in sys-b)
+//   - comp-b in sys-b, which provides api-b
+func setupRepoWithProviders(t *testing.T) *repo.Repository {
+	r := repo.NewRepository()
+
+	group := &catalog.Group{Metadata: &catalog.Metadata{Name: "owner"}, Spec: &catalog.GroupSpec{Type: "team"}}
+	dom := &catalog.Domain{
+		Metadata: &catalog.Metadata{Name: "dom-a"},
+		Spec:     &catalog.DomainSpec{Owner: &catalog.Ref{Name: "owner"}},
+	}
+
+	sysA := &catalog.System{
+		Metadata: &catalog.Metadata{Name: "sys-a"},
+		Spec:     &catalog.SystemSpec{Type: "app", Owner: &catalog.Ref{Name: "owner"}, Domain: dom.GetRef()},
+	}
+	apiA := &catalog.API{
+		Metadata: &catalog.Metadata{Name: "api-a"},
+		Spec:     &catalog.APISpec{Type: "openapi", Lifecycle: "prod", Owner: &catalog.Ref{Name: "owner"}, System: sysA.GetRef()},
+	}
+	compA := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "comp-a"},
+		Spec: &catalog.ComponentSpec{
+			Type: "service", Lifecycle: "prod", Owner: &catalog.Ref{Name: "owner"}, System: sysA.GetRef(),
+			ProvidesAPIs: []*catalog.LabelRef{
+				{Ref: &catalog.Ref{Kind: catalog.KindAPI, Name: "api-a"}},
+			},
+			ConsumesAPIs: []*catalog.LabelRef{
+				{Ref: &catalog.Ref{Kind: catalog.KindAPI, Name: "api-b"}},
+			},
+		},
+	}
+
+	sysB := &catalog.System{
+		Metadata: &catalog.Metadata{Name: "sys-b"},
+		Spec:     &catalog.SystemSpec{Type: "app", Owner: &catalog.Ref{Name: "owner"}, Domain: dom.GetRef()},
+	}
+	apiB := &catalog.API{
+		Metadata: &catalog.Metadata{Name: "api-b"},
+		Spec:     &catalog.APISpec{Type: "openapi", Lifecycle: "prod", Owner: &catalog.Ref{Name: "owner"}, System: sysB.GetRef()},
+	}
+	// comp-b provides api-b (so it shows up when comp-a's consumption of api-b is expanded)
+	compB := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "comp-b"},
+		Spec: &catalog.ComponentSpec{
+			Type: "service", Lifecycle: "prod", Owner: &catalog.Ref{Name: "owner"}, System: sysB.GetRef(),
+			ProvidesAPIs: []*catalog.LabelRef{
+				{Ref: &catalog.Ref{Kind: catalog.KindAPI, Name: "api-b"}},
+			},
+		},
+	}
+	// comp-c consumes api-a (so it shows up when comp-a's provision of api-a is expanded)
+	compC := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "comp-c"},
+		Spec: &catalog.ComponentSpec{
+			Type: "service", Lifecycle: "prod", Owner: &catalog.Ref{Name: "owner"}, System: sysB.GetRef(),
+			ConsumesAPIs: []*catalog.LabelRef{
+				{Ref: &catalog.Ref{Kind: catalog.KindAPI, Name: "api-a"}},
+			},
+		},
+	}
+
+	for _, e := range []catalog.Entity{group, dom, sysA, apiA, compA, sysB, apiB, compB, compC} {
+		if err := r.AddEntity(e); err != nil {
+			t.Fatalf("AddEntity(%s): %v", e.GetRef(), err)
+		}
+	}
+	if err := r.Validate(); err != nil {
+		t.Fatalf("Validate(): %v", err)
+	}
+	return r
+}
+
+func TestComponentGraph_ExpandedAPIs(t *testing.T) {
+	r := setupRepoWithProviders(t)
+	runner := &mockRunner{}
+	renderer := NewRenderer(r, runner, NewStandardLayouter(Config{}))
+	compA := r.Component(&catalog.Ref{Name: "comp-a"})
+
+	t.Run("no expansion", func(t *testing.T) {
+		_, err := renderer.ComponentGraph(context.Background(), compA, nil)
+		if err != nil {
+			t.Fatalf("ComponentGraph failed: %v", err)
+		}
+		dot := runner.lastDotSource
+		if strings.Contains(dot, `"component:comp-b"`) {
+			t.Error("DOT should not contain comp-b without expansion")
+		}
+		if strings.Contains(dot, `"component:comp-c"`) {
+			t.Error("DOT should not contain comp-c without expansion")
+		}
+	})
+
+	t.Run("expand consumed api", func(t *testing.T) {
+		opts := &ComponentViewOptions{
+			ExpandedAPIs: []*catalog.Ref{{Kind: catalog.KindAPI, Name: "api-b"}},
+		}
+		_, err := renderer.ComponentGraph(context.Background(), compA, opts)
+		if err != nil {
+			t.Fatalf("ComponentGraph failed: %v", err)
+		}
+		dot := runner.lastDotSource
+		// comp-b (provider of api-b) must appear
+		if !strings.Contains(dot, `"component:comp-b"`) {
+			t.Error("DOT missing node for comp-b (provider of expanded api-b)")
+		}
+		// providedBy edge: api-b -> comp-b
+		if !strings.Contains(dot, `"api:api-b" -> "component:comp-b"`) {
+			t.Error(`DOT missing edge "api:api-b" -> "component:comp-b"`)
+		}
+		// comp-c must not appear (it relates to api-a, which is not expanded here)
+		if strings.Contains(dot, `"component:comp-c"`) {
+			t.Error("DOT should not contain comp-c when only api-b is expanded")
+		}
+	})
+
+	t.Run("expand provided api", func(t *testing.T) {
+		opts := &ComponentViewOptions{
+			ExpandedAPIs: []*catalog.Ref{{Kind: catalog.KindAPI, Name: "api-a"}},
+		}
+		_, err := renderer.ComponentGraph(context.Background(), compA, opts)
+		if err != nil {
+			t.Fatalf("ComponentGraph failed: %v", err)
+		}
+		dot := runner.lastDotSource
+		// comp-c (consumer of api-a) must appear
+		if !strings.Contains(dot, `"component:comp-c"`) {
+			t.Error("DOT missing node for comp-c (consumer of expanded api-a)")
+		}
+		// normal edge: comp-c -> api-a
+		if !strings.Contains(dot, `"component:comp-c" -> "api:api-a"`) {
+			t.Error(`DOT missing edge "component:comp-c" -> "api:api-a"`)
+		}
+		// comp-b must not appear (it relates to api-b, which is not expanded here)
+		if strings.Contains(dot, `"component:comp-b"`) {
+			t.Error("DOT should not contain comp-b when only api-a is expanded")
+		}
+	})
 }
 
 func TestGraph_Topology(t *testing.T) {

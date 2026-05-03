@@ -82,6 +82,20 @@ function searchRelatedEntities(entityRef) {
     }
 }
 
+// Toggles entityRef in the e= query param list of the current URL and navigates.
+// Used on the component detail page to expand/collapse API consumers/providers.
+function toggleExpandedEntity(entityRef) {
+    const url = new URL(window.location.href);
+    const already = url.searchParams.getAll('e');
+    url.searchParams.delete('e');
+    if (already.includes(entityRef)) {
+        already.filter(e => e !== entityRef).forEach(e => url.searchParams.append('e', e));
+    } else {
+        already.concat(entityRef).forEach(e => url.searchParams.append('e', e));
+    }
+    window.location.href = url.toString();
+}
+
 // Handles clicks on SVG nodes by looking up the URL to navigate to in
 // svgMeta.routes.
 function onClickNode(node, shiftKey) {
@@ -89,6 +103,10 @@ function onClickNode(node, shiftKey) {
     if (!id) return;
 
     if (shiftKey) {
+        if (document.body.dataset.page === 'component' && id.startsWith('api:')) {
+            toggleExpandedEntity(id);
+            return;
+        }
         searchRelatedEntities(id);
         return;
     }

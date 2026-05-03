@@ -282,6 +282,16 @@ func (s *storeData) storeSVG(cacheKey string, svg *svg.Result) {
 	s.svgCache.Add(cacheKey, svg)
 }
 
+// refsKey returns a stable cache-key segment for a slice of refs: sorted ref strings joined by commas.
+func refsKey(refs []*catalog.Ref) string {
+	ids := make([]string, len(refs))
+	for i, r := range refs {
+		ids[i] = r.String()
+	}
+	slices.Sort(ids)
+	return strings.Join(ids, ",")
+}
+
 func (s *Server) commentsEnabled() bool {
 	return s.commentsStore != nil
 }
@@ -648,17 +658,8 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	// Create view options with pre-computed exclusions
 	viewOpts := svg.NewSystemViewOptions(data.repo, system, onlySystems, contextSystems, excludedSystems)
 
-	// Build cache key from view options
-	cacheKeyIDs := func(refs []*catalog.Ref) string {
-		ids := make([]string, 0, len(refs))
-		for _, r := range refs {
-			ids = append(ids, r.String())
-		}
-		slices.Sort(ids)
-		return strings.Join(ids, ",")
-	}
 	internalView := r.URL.Query().Get("view") == "internal"
-	cacheKey := fmt.Sprintf("%s?c=%s&x=%s&i=%t", system.GetRef(), cacheKeyIDs(viewOpts.ContextSystems), cacheKeyIDs(viewOpts.ExcludedSystems), internalView)
+	cacheKey := fmt.Sprintf("%s?c=%s&x=%s&i=%t", system.GetRef(), refsKey(viewOpts.ContextSystems), refsKey(viewOpts.ExcludedSystems), internalView)
 
 	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
@@ -765,13 +766,24 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		"PageTitle": component.GetQName(),
 	}
 
-	cacheKey := component.GetRef().String()
+	// Parse view options from query params:
+	// - e= (expand): APIs to show in full detail (with consumers/providers)
+	var expandedAPIs []*catalog.Ref
+	for _, v := range r.URL.Query()["e"] {
+		if ref, err := catalog.ParseRefAs(catalog.KindAPI, v); err == nil {
+			expandedAPIs = append(expandedAPIs, ref)
+		}
+	}
+	viewOpts := &svg.ComponentViewOptions{ExpandedAPIs: expandedAPIs}
+
+	cacheKey := fmt.Sprintf("%s?e=%s", component.GetRef(), refsKey(expandedAPIs))
+
 	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := s.withDotTimeout(r.Context())
 		defer cancel()
-		svgResult, err = s.svgRenderer(data).ComponentGraph(ctx, component)
+		svgResult, err = s.svgRenderer(data).ComponentGraph(ctx, component, viewOpts)
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
@@ -1127,13 +1139,11 @@ func (s *Server) renderGraphSVG(r *http.Request, data *storeData, selectedEntiti
 
 	systemsAsClusters := r.URL.Query().Get("clusters") == "1"
 
-	// Build cache key from sorted entity IDs
-	cacheKeyIDs := make([]string, len(selectedEntities))
+	entityRefs := make([]*catalog.Ref, len(selectedEntities))
 	for i, e := range selectedEntities {
-		cacheKeyIDs[i] = e.GetRef().String()
+		entityRefs[i] = e.GetRef()
 	}
-	slices.Sort(cacheKeyIDs)
-	cacheKey := fmt.Sprintf("graph?ids=%s&clusters=%v", strings.Join(cacheKeyIDs, ","), systemsAsClusters)
+	cacheKey := fmt.Sprintf("graph?ids=%s&clusters=%v", refsKey(entityRefs), systemsAsClusters)
 
 	// Get or render SVG
 	svgResult, ok := data.lookupSVG(cacheKey)
