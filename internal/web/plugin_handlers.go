@@ -91,6 +91,7 @@ func (s *Server) runPlugins(w http.ResponseWriter, r *http.Request, entityRef st
 			}
 		}
 
+		catalog.DeleteObservations(res.entity, res.result.RemovedObservations)
 		catalog.MergeObservations(res.entity, res.result.Observations)
 		if s.db != nil {
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
