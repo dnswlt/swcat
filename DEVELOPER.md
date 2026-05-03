@@ -43,7 +43,7 @@ Releases are only created from tags.
 ### 1. Create and push the tag
 
 ```bash
-TAG="v0.4.0"
+TAG="v0.12.3"
 git tag "$TAG"
 git push origin "$TAG"
 ```

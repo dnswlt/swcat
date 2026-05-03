@@ -25,11 +25,6 @@ func (s *Server) runPlugins(w http.ResponseWriter, r *http.Request, entityRef st
 		http.Error(w, "Plugin execution must be done via HTMX", http.StatusBadRequest)
 		return
 	}
-	if s.isReadOnly(r) {
-		http.Error(w, "Cannot run plugins in read-only mode", http.StatusPreconditionFailed)
-		return
-	}
-
 	ref, err := catalog.ParseRef(entityRef)
 	if err != nil {
 		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
@@ -77,7 +72,9 @@ func (s *Server) runPlugins(w http.ResponseWriter, r *http.Request, entityRef st
 			continue
 		}
 
-		if len(res.result.Annotations) > 0 {
+		if len(res.result.Annotations) > 0 && s.isReadOnly(r) {
+			log.Printf("Skipping %d annotation(s) for %s: read-only mode", len(res.result.Annotations), res.entity.GetRef())
+		} else if len(res.result.Annotations) > 0 {
 			exts := &api.CatalogExtensions{
 				Entities: map[string]*api.MetadataExtensions{
 					res.entity.GetRef().String(): {
