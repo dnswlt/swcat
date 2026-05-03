@@ -31,7 +31,8 @@ func TestGenerateComponentSVG_WithDot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(Config{}))
+	cfg := DefaultConfig()
+	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(cfg), cfg)
 	res, err := renderer.ComponentGraph(ctx, comp, nil)
 	if err != nil {
 		t.Fatalf("GenerateComponentSVG failed: %v", err)
@@ -92,7 +93,8 @@ func TestSystemExternalGraph_WithDot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(Config{}))
+	cfg := DefaultConfig()
+	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(cfg), cfg)
 	viewOpts := NewSystemViewOptions(repo, system1, nil, []*catalog.Ref{system2.GetRef()}, nil)
 	res, err := renderer.SystemExternalGraph(ctx, system1, viewOpts)
 	if err != nil {
@@ -132,7 +134,8 @@ func TestGraph_WithDot_SystemsAsClusters(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(Config{}))
+	cfg := DefaultConfig()
+	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(cfg), cfg)
 	// Pass only the component — its system should be discovered implicitly and rendered as a cluster.
 	res, err := renderer.Graph(ctx, []catalog.Entity{comp}, GraphOptions{SystemsAsClusters: true})
 	if err != nil {
@@ -177,7 +180,8 @@ func TestSystemInternalGraph_WithDot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(Config{}))
+	cfg := DefaultConfig()
+	renderer := NewRenderer(repo, dot.NewRunner("dot"), NewStandardLayouter(cfg), cfg)
 	res, err := renderer.SystemInternalGraph(ctx, system)
 	if err != nil {
 		t.Fatalf("GenerateSystemSVG failed: %v", err)

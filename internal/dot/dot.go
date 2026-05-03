@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os/exec"
 	"sort"
@@ -69,16 +68,7 @@ func (r *dotRunner) Run(ctx context.Context, dotSource string) ([]byte, error) {
 
 	// Provide the DOT source on stdin and capture stdout/stderr
 	// Use CombinedOutput to get useful error messages in case dot fails.
-	cmd.Stdin = nil // we'll set via a pipe below
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, fmt.Errorf("creating stdin pipe: %w", err)
-	}
-
-	go func() {
-		defer stdin.Close()
-		io.WriteString(stdin, dotSource)
-	}()
+	cmd.Stdin = strings.NewReader(dotSource)
 
 	output, err := cmd.CombinedOutput() // will wait until process exits
 	if err != nil {
@@ -207,17 +197,7 @@ type Writer struct {
 	config      WriterConfig
 }
 
-func DefaultConfig() WriterConfig {
-	return WriterConfig{
-		EdgeMinLen: 3,
-	}
-}
-
-func New() *Writer {
-	return NewWithConfig(DefaultConfig())
-}
-
-func NewWithConfig(config WriterConfig) *Writer {
+func New(config WriterConfig) *Writer {
 	return &Writer{
 		w:           &strings.Builder{},
 		nodeInfo:    make(map[string]*NodeInfo),

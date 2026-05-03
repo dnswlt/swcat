@@ -28,6 +28,25 @@ type Config struct {
 	// Include the API version in labelled references if specified and if no
 	// explicit label is specified.
 	ShowVersionAsLabel bool `yaml:"showVersionAsLabel"`
+	// Minimum edge length (graphviz minlen) for standard graph views. Default: 1.
+	NormalEdgeMinLen int `yaml:"normalEdgeMinLen"`
+	// Minimum edge length (graphviz minlen) for dense graph views (system internal, ad-hoc). Default: 3.
+	CompactEdgeMinLen int `yaml:"compactEdgeMinLen"`
+}
+
+func DefaultConfig() Config {
+	c := Config{}
+	c.ApplyDefaults()
+	return c
+}
+
+func (c *Config) ApplyDefaults() {
+	if c.NormalEdgeMinLen == 0 {
+		c.NormalEdgeMinLen = 3
+	}
+	if c.CompactEdgeMinLen == 0 {
+		c.CompactEdgeMinLen = 1
+	}
 }
 
 var (

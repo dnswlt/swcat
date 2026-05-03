@@ -13,13 +13,15 @@ type Renderer struct {
 	repo     *repo.Repository
 	runner   dot.Runner
 	layouter Layouter
+	config   Config
 }
 
-func NewRenderer(r *repo.Repository, runner dot.Runner, layouter Layouter) *Renderer {
+func NewRenderer(r *repo.Repository, runner dot.Runner, layouter Layouter, config Config) *Renderer {
 	return &Renderer{
 		repo:     r,
 		runner:   runner,
 		layouter: layouter,
+		config:   config,
 	}
 }
 
@@ -123,7 +125,7 @@ func (e extSysDep) String() string {
 }
 
 func (r *Renderer) generateDomainDotSource(domain *catalog.Domain) *dot.DotSource {
-	dw := dot.New()
+	dw := dot.New(dot.WriterConfig{EdgeMinLen: r.config.NormalEdgeMinLen})
 	dw.Start()
 
 	dw.StartCluster(domain.GetQName())
@@ -220,7 +222,7 @@ func (r *Renderer) generateSystemExternalDotSource(system *catalog.System, opts 
 		exclSysMap[exclSys.QName()] = true
 	}
 
-	dw := dot.New()
+	dw := dot.New(dot.WriterConfig{EdgeMinLen: r.config.NormalEdgeMinLen})
 	dw.Start()
 
 	var extDeps []extSysDep
@@ -365,8 +367,8 @@ func (r *Renderer) generateSystemExternalDotSource(system *catalog.System, opts 
 }
 
 func (r *Renderer) generateSystemInternalDotSource(system *catalog.System) *dot.DotSource {
-	dw := dot.NewWithConfig(dot.WriterConfig{
-		EdgeMinLen: 1, // The internal view will have many nodes. Draw it as compactly as possible.
+	dw := dot.New(dot.WriterConfig{
+		EdgeMinLen: r.config.CompactEdgeMinLen,
 	})
 	dw.Start()
 
@@ -463,7 +465,7 @@ type ComponentViewOptions struct {
 }
 
 func (r *Renderer) generateComponentDotSource(component *catalog.Component, opts *ComponentViewOptions) *dot.DotSource {
-	dw := dot.New()
+	dw := dot.New(dot.WriterConfig{EdgeMinLen: r.config.NormalEdgeMinLen})
 	dw.Start()
 
 	expandedAPIs := map[string]bool{}
@@ -564,7 +566,7 @@ func (r *Renderer) ComponentGraph(ctx context.Context, component *catalog.Compon
 }
 
 func (r *Renderer) generateAPIDotSource(api *catalog.API) *dot.DotSource {
-	dw := dot.New()
+	dw := dot.New(dot.WriterConfig{EdgeMinLen: r.config.NormalEdgeMinLen})
 	dw.Start()
 
 	// API
@@ -612,7 +614,7 @@ func (r *Renderer) APIGraph(ctx context.Context, api *catalog.API) (*Result, err
 }
 
 func (r *Renderer) generateResourceDotSource(resource *catalog.Resource) *dot.DotSource {
-	dw := dot.New()
+	dw := dot.New(dot.WriterConfig{EdgeMinLen: r.config.NormalEdgeMinLen})
 	dw.Start()
 
 	// Resource
@@ -667,8 +669,8 @@ func runDot(ctx context.Context, runner dot.Runner, ds *dot.DotSource) (*Result,
 }
 
 func (r *Renderer) generateGraphDotSource(entities []catalog.Entity, opts GraphOptions) *dot.DotSource {
-	dw := dot.NewWithConfig(dot.WriterConfig{
-		EdgeMinLen: 1, // Ad-hoc graphs can get arbitrarily large. Draw it as compactly as possible.
+	dw := dot.New(dot.WriterConfig{
+		EdgeMinLen: r.config.CompactEdgeMinLen,
 	})
 	dw.Start()
 

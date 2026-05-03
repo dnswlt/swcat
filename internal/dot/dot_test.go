@@ -40,7 +40,7 @@ func TestEscLabel(t *testing.T) {
 }
 
 func TestWriter_AddNode_DuplicateIgnored(t *testing.T) {
-	dw := New()
+	dw := New(WriterConfig{EdgeMinLen: 3})
 	dw.Start()
 	dw.AddNode(Node{ID: "x", Layout: NodeLayout{Label: "X"}})
 	dw.AddNode(Node{ID: "x", Layout: NodeLayout{Label: "X2"}}) // should be ignored
@@ -56,7 +56,7 @@ func TestWriter_AddNode_DuplicateIgnored(t *testing.T) {
 }
 
 func TestWriter_Golden_Simple(t *testing.T) {
-	dw := New()
+	dw := New(WriterConfig{EdgeMinLen: 3})
 	dw.Start()
 
 	// cluster sys1

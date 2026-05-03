@@ -134,21 +134,29 @@ func Load(st store.Store, configPath string) (*Bundle, error) {
 		return nil, fmt.Errorf("invalid configuration YAML in %q: %w", configPath, err)
 	}
 
-	// Resolve and pre-parse user templates. TemplateFile paths are
-	// relative to the directory containing the config file.
-	configDir := path.Dir(configPath)
-	for k, c := range bundle.UI.AnnotationBasedContent {
-		if err := loadCustomContentTemplate(st, configDir, k, c); err != nil {
-			return nil, fmt.Errorf("annotationBasedContent %q: %v", k, err)
-		}
-	}
-	for k, c := range bundle.UI.StatusBasedContent {
-		if err := loadCustomContentTemplate(st, configDir, k, c); err != nil {
-			return nil, fmt.Errorf("statusBasedContent %q: %v", k, err)
-		}
+	bundle.SVG.ApplyDefaults()
+
+	if err := bundle.UI.loadTemplates(st, path.Dir(configPath)); err != nil {
+		return nil, err
 	}
 
 	return &bundle, nil
+}
+
+// loadTemplates resolves and pre-parses all CustomContent templates in the UIConfig.
+// TemplateFile paths are relative to configDir.
+func (u *UIConfig) loadTemplates(st store.Store, configDir string) error {
+	for k, c := range u.AnnotationBasedContent {
+		if err := loadCustomContentTemplate(st, configDir, k, c); err != nil {
+			return fmt.Errorf("annotationBasedContent %q: %v", k, err)
+		}
+	}
+	for k, c := range u.StatusBasedContent {
+		if err := loadCustomContentTemplate(st, configDir, k, c); err != nil {
+			return fmt.Errorf("statusBasedContent %q: %v", k, err)
+		}
+	}
+	return nil
 }
 
 // loadCustomContentTemplate validates the template/templateFile combination,

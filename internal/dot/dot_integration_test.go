@@ -19,7 +19,7 @@ func TestDotRunner_Simple(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	dw := New()
+	dw := New(WriterConfig{EdgeMinLen: 3})
 	dw.Start()
 	dw.AddNode(Node{ID: "a", Layout: NodeLayout{Label: "A"}})
 	dw.AddNode(Node{ID: "b", Layout: NodeLayout{Label: "B"}})

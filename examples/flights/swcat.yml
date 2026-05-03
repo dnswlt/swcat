@@ -56,6 +56,8 @@ svg:
   # Show the API version in consumedApis/providedApis references, if specified
   # and unless an explicit label is present.
   showVersionAsLabel: true
+  # Make edges a bit longer than normal for a more relaxed layout.
+  normalEdgeMinLen: 2
 catalog:
   # Create links for entities with certain annotations.
   annotationBasedLinks:

@@ -489,7 +489,7 @@ func (s *Server) reloadTemplates() error {
 // going to be the s.State() obtained at the beginning of request processing.
 func (s *Server) svgRenderer(data *storeData) *svg.Renderer {
 	layouter := svg.NewStandardLayouter(data.config.SVG)
-	return svg.NewRenderer(data.repo, s.dotRunner, layouter)
+	return svg.NewRenderer(data.repo, s.dotRunner, layouter, data.config.SVG)
 }
 
 // getStoreData retrieves the storeData from the request's context.
