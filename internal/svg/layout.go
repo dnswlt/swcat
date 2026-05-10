@@ -113,7 +113,7 @@ func sameSystem(e1, e2 catalog.Entity) bool {
 	return sp1.GetSystem().Equal(sp2.GetSystem())
 }
 
-func (r *render) labels(e, contextEntity catalog.Entity) []dot.NodeLabel {
+func (r *render) labels(e catalog.Entity) []dot.NodeLabel {
 	var labels []dot.NodeLabel
 
 	// <<Stereotypes>>
@@ -134,7 +134,7 @@ func (r *render) labels(e, contextEntity catalog.Entity) []dot.NodeLabel {
 		}
 	}
 
-	// Parent system, if applicable (e is not a system itself, and the contextEntity is from another system).
+	// Parent system, if applicable (e is not a system itself, and the focal entity is from another system).
 	systemName := func() (string, bool) {
 		sp, isSystemPart := e.(catalog.SystemPart)
 		if !isSystemPart {
@@ -143,7 +143,7 @@ func (r *render) labels(e, contextEntity catalog.Entity) []dot.NodeLabel {
 		if !r.config.ShowParentSystem || e.GetKind() == catalog.KindSystem {
 			return "", false
 		}
-		if contextEntity == nil || sameSystem(e, contextEntity) {
+		if r.focalEntity == nil || sameSystem(e, r.focalEntity) {
 			return "", false
 		}
 		return sp.GetSystem().QName(), true
@@ -197,7 +197,7 @@ func (r *render) nodeTooltipAttrs(e catalog.Entity) []dot.TooltipAttr {
 	}
 }
 
-func (r *render) nodeLayout(e, contextEntity catalog.Entity) dot.NodeLayout {
+func (r *render) nodeLayout(e catalog.Entity) dot.NodeLayout {
 	fillColor := r.fillColor(e)
 	borderColor := "#000000"
 	if strings.HasPrefix(fillColor, "#") {
@@ -207,7 +207,7 @@ func (r *render) nodeLayout(e, contextEntity catalog.Entity) dot.NodeLayout {
 		}
 	}
 	return dot.NodeLayout{
-		Labels:       r.labels(e, contextEntity),
+		Labels:       r.labels(e),
 		FillColor:    fillColor,
 		BorderColor:  borderColor,
 		Shape:        r.shape(e),

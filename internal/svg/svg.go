@@ -25,25 +25,24 @@ func NewRenderer(r *repo.Repository, runner dot.Runner, config Config) *Renderer
 	}
 }
 
-// render is a per-call rendering context. It bundles the diagram kind being
-// rendered with the immutable Renderer (for repo/config access). One render
-// is created per public *Graph call, scoped to that call only.
+// render is a per-call rendering context. It bundles the diagram kind and
+// focal entity being rendered with the immutable Renderer (for repo/config
+// access). One render is created per public *Graph call, scoped to that call
+// only.
 type render struct {
 	*Renderer
 	kind DiagramKind
+	// focalEntity is the focal entity of the diagram (e.g. the component
+	// for ComponentGraph). It informs labelling decisions, like whether to
+	// show another entity's parent system because it crosses system boundaries.
+	// nil for ad-hoc views with no single focal entity.
+	focalEntity catalog.Entity
 }
 
 func (r *render) entityNode(e catalog.Entity) dot.Node {
 	return dot.Node{
 		ID:     e.GetRef().String(),
-		Layout: r.nodeLayout(e, nil),
-	}
-}
-
-func (r *render) entityNodeContext(e, contextEntity catalog.Entity) dot.Node {
-	return dot.Node{
-		ID:     e.GetRef().String(),
-		Layout: r.nodeLayout(e, contextEntity),
+		Layout: r.nodeLayout(e),
 	}
 }
 
@@ -213,7 +212,7 @@ func (r *render) generateDomainDotSource(domain *catalog.Domain) *dot.DotSource 
 
 // DomainGraph generates an SVG for the given domain.
 func (r *Renderer) DomainGraph(ctx context.Context, domain *catalog.Domain) (*Result, error) {
-	rd := &render{Renderer: r, kind: DiagramDomain}
+	rd := &render{Renderer: r, kind: DiagramDomain, focalEntity: domain}
 	return runDot(ctx, r.runner, rd.generateDomainDotSource(domain))
 }
 
@@ -455,14 +454,14 @@ func (r *render) generateSystemInternalDotSource(system *catalog.System) *dot.Do
 // SystemExternalGraph generates an SVG for an "external" view of the given system.
 // opts configures which systems to show, hide, or expand in detail.
 func (r *Renderer) SystemExternalGraph(ctx context.Context, system *catalog.System, opts *SystemViewOptions) (*Result, error) {
-	rd := &render{Renderer: r, kind: DiagramSystem}
+	rd := &render{Renderer: r, kind: DiagramSystem, focalEntity: system}
 	return runDot(ctx, r.runner, rd.generateSystemExternalDotSource(system, opts))
 }
 
 // SystemInternalGraph generates an SVG for an "internal" view of the given system.
 // Only entities that are part of the system and their relationships are shown.
 func (r *Renderer) SystemInternalGraph(ctx context.Context, system *catalog.System) (*Result, error) {
-	rd := &render{Renderer: r, kind: DiagramSystem}
+	rd := &render{Renderer: r, kind: DiagramSystem, focalEntity: system}
 	return runDot(ctx, r.runner, rd.generateSystemInternalDotSource(system))
 }
 
@@ -505,19 +504,19 @@ func (r *render) generateComponentDotSource(component *catalog.Component, opts *
 	if component.Spec.SubcomponentOf != nil {
 		parent := r.repo.Component(component.Spec.SubcomponentOf)
 		if parent != nil {
-			dw.AddNode(r.entityNodeContext(parent, component))
+			dw.AddNode(r.entityNode(parent))
 			dw.AddEdge(r.entityEdge(parent, component, dot.ESSubcomponent))
 		}
 	}
 	for _, a := range component.Spec.ProvidesAPIs {
 		ap := r.repo.API(a.Ref)
-		dw.AddNode(r.entityNodeContext(ap, component))
+		dw.AddNode(r.entityNode(ap))
 		dw.AddEdge(r.entityEdgeLabel(ap, component, a, dot.ESProvidedBy))
 		if expandedAPIs[a.Ref.String()] {
 			for _, c := range ap.GetConsumers() {
 				consumer := r.repo.Component(c.Ref)
 				if consumer != nil {
-					dw.AddNode(r.entityNodeContext(consumer, component))
+					dw.AddNode(r.entityNode(consumer))
 					dw.AddEdge(r.entityEdgeLabel(consumer, ap, c, dot.ESNormal))
 				}
 			}
@@ -526,7 +525,7 @@ func (r *render) generateComponentDotSource(component *catalog.Component, opts *
 	for _, d := range component.GetDependents() {
 		e := r.repo.Entity(d.Ref)
 		if e != nil {
-			dw.AddNode(r.entityNodeContext(e, component))
+			dw.AddNode(r.entityNode(e))
 			dw.AddEdge(r.entityEdgeLabel(e, component, d, dot.ESDependsOn))
 		}
 	}
@@ -537,13 +536,13 @@ func (r *render) generateComponentDotSource(component *catalog.Component, opts *
 	// - DependsOn relationships of this entity
 	for _, a := range component.Spec.ConsumesAPIs {
 		ap := r.repo.API(a.Ref)
-		dw.AddNode(r.entityNodeContext(ap, component))
+		dw.AddNode(r.entityNode(ap))
 		dw.AddEdge(r.entityEdgeLabel(component, ap, a, dot.ESNormal))
 		if expandedAPIs[a.Ref.String()] {
 			for _, p := range ap.GetProviders() {
 				provider := r.repo.Component(p.Ref)
 				if provider != nil {
-					dw.AddNode(r.entityNodeContext(provider, component))
+					dw.AddNode(r.entityNode(provider))
 					dw.AddEdge(r.entityEdgeLabel(ap, provider, p, dot.ESProvidedBy))
 				}
 			}
@@ -551,13 +550,13 @@ func (r *render) generateComponentDotSource(component *catalog.Component, opts *
 	}
 	for _, s := range component.GetSubcomponents() {
 		sc := r.repo.Component(s)
-		dw.AddNode(r.entityNodeContext(sc, component))
+		dw.AddNode(r.entityNode(sc))
 		dw.AddEdge(r.entityEdge(component, sc, dot.ESSubcomponent))
 	}
 	for _, d := range component.Spec.DependsOn {
 		e := r.repo.Entity(d.Ref)
 		if e != nil {
-			dw.AddNode(r.entityNodeContext(e, component))
+			dw.AddNode(r.entityNode(e))
 			dw.AddEdge(r.entityEdgeLabel(component, e, d, dot.ESDependsOn))
 		}
 	}
@@ -569,7 +568,7 @@ func (r *render) generateComponentDotSource(component *catalog.Component, opts *
 // ComponentGraph generates an SVG for the given component.
 // opts may be nil to use default rendering with no expanded APIs.
 func (r *Renderer) ComponentGraph(ctx context.Context, component *catalog.Component, opts *ComponentViewOptions) (*Result, error) {
-	rd := &render{Renderer: r, kind: DiagramComponent}
+	rd := &render{Renderer: r, kind: DiagramComponent, focalEntity: component}
 	return runDot(ctx, r.runner, rd.generateComponentDotSource(component, opts))
 }
 
@@ -597,7 +596,7 @@ func (r *render) generateAPIDotSource(api *catalog.API) *dot.DotSource {
 	for _, p := range api.GetProviders() {
 		provider := r.repo.Component(p.Ref)
 		if provider != nil {
-			dw.AddNode(r.entityNodeContext(provider, api))
+			dw.AddNode(r.entityNode(provider))
 			dw.AddEdge(r.entityEdgeLabel(api, provider, p, dot.ESProvidedBy))
 		}
 	}
@@ -606,7 +605,7 @@ func (r *render) generateAPIDotSource(api *catalog.API) *dot.DotSource {
 	for _, c := range api.GetConsumers() {
 		consumer := r.repo.Component(c.Ref)
 		if consumer != nil {
-			dw.AddNode(r.entityNodeContext(consumer, api))
+			dw.AddNode(r.entityNode(consumer))
 			dw.AddEdge(r.entityEdgeLabel(consumer, api, c, dot.ESNormal))
 		}
 	}
@@ -617,7 +616,7 @@ func (r *render) generateAPIDotSource(api *catalog.API) *dot.DotSource {
 
 // APIGraph generates an SVG for the given API.
 func (r *Renderer) APIGraph(ctx context.Context, api *catalog.API) (*Result, error) {
-	rd := &render{Renderer: r, kind: DiagramAPI}
+	rd := &render{Renderer: r, kind: DiagramAPI, focalEntity: api}
 	return runDot(ctx, r.runner, rd.generateAPIDotSource(api))
 }
 
@@ -656,7 +655,7 @@ func (r *render) generateResourceDotSource(resource *catalog.Resource) *dot.DotS
 
 // ResourceGraph generates an SVG for the given resource.
 func (r *Renderer) ResourceGraph(ctx context.Context, resource *catalog.Resource) (*Result, error) {
-	rd := &render{Renderer: r, kind: DiagramResource}
+	rd := &render{Renderer: r, kind: DiagramResource, focalEntity: resource}
 	return runDot(ctx, r.runner, rd.generateResourceDotSource(resource))
 }
 

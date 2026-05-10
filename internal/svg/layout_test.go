@@ -19,7 +19,7 @@ func newComponent(name, systemName string) *catalog.Component {
 }
 
 func TestRenderer_nodeLayout(t *testing.T) {
-	r := &render{Renderer: &Renderer{config: Config{ShowParentSystem: true}}}
+	cfg := Config{ShowParentSystem: true}
 
 	testCases := []struct {
 		name           string
@@ -83,7 +83,8 @@ func TestRenderer_nodeLayout(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			layout := r.nodeLayout(tc.entity, tc.contextEntity)
+			r := &render{Renderer: &Renderer{config: cfg}, focalEntity: tc.contextEntity}
+			layout := r.nodeLayout(tc.entity)
 
 			if diff := cmp.Diff(tc.expectedLayout.Labels, layout.Labels); diff != "" {
 				t.Errorf("unexpected labels (-want +got):\n%s", diff)
