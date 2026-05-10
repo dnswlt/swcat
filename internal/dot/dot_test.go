@@ -42,8 +42,8 @@ func TestEscLabel(t *testing.T) {
 func TestWriter_AddNode_DuplicateIgnored(t *testing.T) {
 	dw := New(WriterConfig{EdgeMinLen: 3})
 	dw.Start()
-	dw.AddNode(Node{ID: "x", Layout: NodeLayout{Label: "X"}})
-	dw.AddNode(Node{ID: "x", Layout: NodeLayout{Label: "X2"}}) // should be ignored
+	dw.AddNode(Node{ID: "x", Layout: NodeLayout{Labels: []NodeLabel{{Text: "X"}}}})
+	dw.AddNode(Node{ID: "x", Layout: NodeLayout{Labels: []NodeLabel{{Text: "X2"}}}}) // should be ignored
 	dw.End()
 	result := dw.Result()
 	ds := result.DotSource
@@ -61,12 +61,12 @@ func TestWriter_Golden_Simple(t *testing.T) {
 
 	// cluster sys1
 	dw.StartCluster("sys1")
-	dw.AddNode(Node{ID: "c1", Layout: NodeLayout{Shape: NSRoundedBox, Label: "c1", FillColor: "#D2E5EF"}})
-	dw.AddNode(Node{ID: "api1", Layout: NodeLayout{Shape: NSRoundedBox, Label: "api1", FillColor: "#FCE0BA"}})
+	dw.AddNode(Node{ID: "c1", Layout: NodeLayout{Shape: NSRoundedBox, Labels: []NodeLabel{{Text: "c1"}}, FillColor: "#D2E5EF"}})
+	dw.AddNode(Node{ID: "api1", Layout: NodeLayout{Shape: NSRoundedBox, Labels: []NodeLabel{{Text: "api1"}}, FillColor: "#FCE0BA"}})
 	dw.EndCluster()
 
 	// outside node
-	dw.AddNode(Node{ID: "s1", Layout: NodeLayout{Shape: NSBox, Label: "s1", FillColor: "#6BABD0"}})
+	dw.AddNode(Node{ID: "s1", Layout: NodeLayout{Shape: NSBox, Labels: []NodeLabel{{Text: "s1"}}, FillColor: "#6BABD0"}})
 
 	// edges (root-level)
 	dw.AddEdge(Edge{From: "s1", To: "api1", Layout: EdgeLayout{Style: ESSystemLink}})
@@ -80,11 +80,11 @@ func TestWriter_Golden_Simple(t *testing.T) {
 digraph {
 charset="UTF-8"
 rankdir="LR"
-fontname="sans-serif"
+fontname="Liberation Sans"
 splines="spline"
 class="graphviz-svg"
-node[shape="box",fontname="sans-serif",fontsize="11",style="filled"]
-edge[fontname="sans-serif",fontsize="11",minlen="3"]
+node[shape="box",fontname="Liberation Sans",fontsize="11",style="filled"]
+edge[fontname="Liberation Sans",fontsize="11",minlen="3"]
 subgraph "cluster_svg-cluster-0" {
 id="svg-cluster-0"
 label="sys1"
@@ -92,10 +92,10 @@ fontsize="11"
 style=filled
 color="#C9CED7"
 fillcolor="#F3F4F6"
-"c1"[id="c1",label="c1",color="#000000",fillcolor="#D2E5EF",shape="box",style="filled,rounded",class="clickable-node"]
-"api1"[id="api1",label="api1",color="#000000",fillcolor="#FCE0BA",shape="box",style="filled,rounded",class="clickable-node"]
+"c1"[id="c1",label=<c1>,color="#000000",fillcolor="#D2E5EF",shape="box",style="filled,rounded",class="clickable-node"]
+"api1"[id="api1",label=<api1>,color="#000000",fillcolor="#FCE0BA",shape="box",style="filled,rounded",class="clickable-node"]
 }
-"s1"[id="s1",label="s1",color="#000000",fillcolor="#6BABD0",shape="box",style="filled",class="clickable-node"]
+"s1"[id="s1",label=<s1>,color="#000000",fillcolor="#6BABD0",shape="box",style="filled",class="clickable-node"]
 "s1" -> "api1"[class="system-link-edge",color="#8493A5",id="svg-edge-0"]
 "c1" -> "api1"[color="#8493A5",id="svg-edge-1",style="dashed"]
 }

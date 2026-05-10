@@ -93,11 +93,43 @@ func (r *dotRunner) Close() error {
 }
 
 type NodeLayout struct {
-	Label       string // Multi-line labels should use Graphviz \n \l \r sequences.
+	// Labels is the list of label lines for the node. Each entry renders on its
+	// own line. If empty, the node has no label.
+	Labels      []NodeLabel
 	FillColor   string // Either hex ("#ff00aa") or a well-known color name ("red").
 	BorderColor string
 	Shape       NodeShape
 }
+
+// LabelStyle controls font styling for a NodeLabel line.
+type LabelStyle int
+
+const (
+	// LSNormal renders the label in the default font.
+	LSNormal LabelStyle = iota
+	// LSEm renders the label in italics.
+	LSEm
+	// LSSmall renders the label in a smaller, italic, gray font.
+	LSSmall
+)
+
+// NodeLabel represents one line of a node label, with optional styling.
+// Multiple NodeLabels on a node are joined with line breaks in the rendered output.
+type NodeLabel struct {
+	// Text is the line's text content. HTML/XML special characters are escaped automatically.
+	Text string
+	// Style controls font styling. LSNormal is the default.
+	Style LabelStyle
+	// Color, if non-empty, overrides the default font color for this line.
+	// Either a hex code ("#ff00aa") or a well-known color name ("red").
+	Color string
+}
+
+// Default rendering values for the LSSmall style.
+const (
+	smallFontSize  = "9"
+	smallFontColor = "#6B7280"
+)
 
 type NodeShape int
 
@@ -112,8 +144,109 @@ type Node struct {
 	Layout NodeLayout
 }
 
+// Label returns the plain-text concatenation of all label lines, joined by newlines.
+// It is used for sidecar metadata (NodeInfo.Label) shipped to the frontend.
 func (n *Node) Label() string {
-	return n.Layout.Label
+	if len(n.Layout.Labels) == 0 {
+		return ""
+	}
+	parts := make([]string, len(n.Layout.Labels))
+	for i, lbl := range n.Layout.Labels {
+		parts[i] = lbl.Text
+	}
+	return strings.Join(parts, "\n")
+}
+
+// htmlLabel renders the labels as a Graphviz HTML-like label string,
+// without surrounding angle brackets.
+//
+// Single-line labels are emitted as plain inline content. Multi-line labels
+// use a borderless TABLE: each line in its own row, with a small CELLSPACING
+// to give vertical breathing room between lines (especially needed for mixed
+// font sizes, e.g. a small line directly below a normal one).
+func (n *Node) htmlLabel() string {
+	if len(n.Layout.Labels) == 0 {
+		return ""
+	}
+	if len(n.Layout.Labels) == 1 {
+		return renderLabelLine(n.Layout.Labels[0])
+	}
+	var b strings.Builder
+	b.WriteString(`<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="2" CELLPADDING="0">`)
+	for _, lbl := range n.Layout.Labels {
+		b.WriteString("<TR><TD>")
+		b.WriteString(renderLabelLine(lbl))
+		b.WriteString("</TD></TR>")
+	}
+	b.WriteString("</TABLE>")
+	return b.String()
+}
+
+func renderLabelLine(lbl NodeLabel) string {
+	text := escHTMLLabel(lbl.Text)
+
+	italic := false
+	pointSize := ""
+	color := ""
+
+	switch lbl.Style {
+	case LSEm:
+		italic = true
+	case LSSmall:
+		italic = true
+		pointSize = smallFontSize
+		color = smallFontColor
+	}
+
+	// User-specified color overrides any style default.
+	if lbl.Color != "" {
+		color = lbl.Color
+	}
+
+	if italic {
+		text = "<I>" + text + "</I>"
+	}
+	if pointSize != "" || color != "" {
+		var attrs []string
+		if pointSize != "" {
+			attrs = append(attrs, fmt.Sprintf(`POINT-SIZE="%s"`, pointSize))
+		}
+		if color != "" {
+			attrs = append(attrs, fmt.Sprintf(`COLOR="%s"`, color))
+		}
+		text = fmt.Sprintf("<FONT %s>%s</FONT>", strings.Join(attrs, " "), text)
+	}
+	return text
+}
+
+// escHTMLLabel escapes a string for safe use as text content in a Graphviz
+// HTML-like label. Special XML characters are replaced with entities; non-printable
+// characters are replaced with '?', whitespace is normalized to single spaces.
+func escHTMLLabel(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch r {
+		case '&':
+			b.WriteString("&amp;")
+		case '<':
+			b.WriteString("&lt;")
+		case '>':
+			b.WriteString("&gt;")
+		case '"':
+			b.WriteString("&quot;")
+		case '\r':
+			// drop
+		default:
+			if unicode.IsSpace(r) {
+				b.WriteRune(' ')
+			} else if unicode.IsPrint(r) {
+				b.WriteRune(r)
+			} else {
+				b.WriteRune('?')
+			}
+		}
+	}
+	return b.String()
 }
 
 func (n *Node) FillColor() string {
@@ -211,17 +344,17 @@ func (dw *Writer) Start() {
 	dw.w.WriteString("digraph {\n")
 	dw.w.WriteString("charset=\"UTF-8\"\n")
 	dw.w.WriteString("rankdir=\"LR\"\n")
-	dw.w.WriteString("fontname=\"sans-serif\"\n")
+	dw.w.WriteString("fontname=\"Liberation Sans\"\n")
 	dw.w.WriteString("splines=\"spline\"\n")
 	// Tell Graphviz about font sizes and (approximate) font families so it can
 	// size boxes and edge labels appropriately. The ultimate font style is defined
 	// via CSS (see style.css).
 	dw.w.WriteString("class=\"graphviz-svg\"\n")
-	dw.w.WriteString("node[shape=\"box\",fontname=\"sans-serif\",fontsize=\"11\",style=\"filled\"]\n")
+	dw.w.WriteString("node[shape=\"box\",fontname=\"Liberation Sans\",fontsize=\"11\",style=\"filled\"]\n")
 	// We would like to add tooltip="" here to prevent tooltips on edges (given that we render rich tooltips).
 	// https://forum.graphviz.org/t/svg-without-tooltips/425/3 indicates that this does not work
 	// (and indeed it didn't). So we remove the <title> element in postprocessing instead.
-	fmt.Fprintf(dw.w, "edge[fontname=\"sans-serif\",fontsize=\"11\",minlen=\"%d\"]\n", dw.config.EdgeMinLen)
+	fmt.Fprintf(dw.w, "edge[fontname=\"Liberation Sans\",fontsize=\"11\",minlen=\"%d\"]\n", dw.config.EdgeMinLen)
 }
 
 func (dw *Writer) End() {
@@ -233,11 +366,11 @@ func (dw *Writer) AddNode(node Node) {
 		// Ignore duplicate node definitions.
 		return
 	}
-	label := escLabel(node.Label())
+	label := node.htmlLabel()
 	fillColor := node.FillColor()
 	borderColor := node.BorderColor()
 
-	fmt.Fprintf(dw.w, `"%s"[id="%s",label="%s",color="%s",fillcolor="%s",shape="%s",style="%s",class="clickable-node"]`,
+	fmt.Fprintf(dw.w, `"%s"[id="%s",label=<%s>,color="%s",fillcolor="%s",shape="%s",style="%s",class="clickable-node"]`,
 		node.ID, node.ID, label, borderColor, fillColor, node.dotShape(), node.dotStyle())
 	fmt.Fprintln(dw.w)
 	dw.nodeInfo[node.ID] = &NodeInfo{

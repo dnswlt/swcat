@@ -21,8 +21,8 @@ func TestDotRunner_Simple(t *testing.T) {
 
 	dw := New(WriterConfig{EdgeMinLen: 3})
 	dw.Start()
-	dw.AddNode(Node{ID: "a", Layout: NodeLayout{Label: "A"}})
-	dw.AddNode(Node{ID: "b", Layout: NodeLayout{Label: "B"}})
+	dw.AddNode(Node{ID: "a", Layout: NodeLayout{Labels: []NodeLabel{{Text: "A"}}}})
+	dw.AddNode(Node{ID: "b", Layout: NodeLayout{Labels: []NodeLabel{{Text: "B"}}}})
 	dw.AddEdge(Edge{From: "a", To: "b", Layout: EdgeLayout{Style: ESSystemLink}})
 	dw.End()
 

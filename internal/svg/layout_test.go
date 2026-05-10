@@ -5,6 +5,7 @@ import (
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/dot"
+	"github.com/google/go-cmp/cmp"
 )
 
 // Test helpers to create entities
@@ -37,7 +38,7 @@ func TestStandardLayouter_NodeContext(t *testing.T) {
 			entity:        newComponent("my-comp", "my-sys"),
 			contextEntity: nil,
 			expectedLayout: dot.NodeLayout{
-				Label:     "my-comp",
+				Labels:    []dot.NodeLabel{{Text: "my-comp"}},
 				FillColor: "#D2E5EF",
 				Shape:     dot.NSRoundedBox,
 			},
@@ -48,7 +49,7 @@ func TestStandardLayouter_NodeContext(t *testing.T) {
 			entity:        newComponent("comp-a", "system-a"),
 			contextEntity: newComponent("comp-b", "system-a"),
 			expectedLayout: dot.NodeLayout{
-				Label:     "comp-a",
+				Labels:    []dot.NodeLabel{{Text: "comp-a"}},
 				FillColor: "#D2E5EF",
 				Shape:     dot.NSRoundedBox,
 			},
@@ -59,7 +60,10 @@ func TestStandardLayouter_NodeContext(t *testing.T) {
 			entity:        newComponent("comp-a", "system-a"),
 			contextEntity: newComponent("comp-b", "system-b"),
 			expectedLayout: dot.NodeLayout{
-				Label:     PrefixNodeLabelSmall + "system-a\\n" + "comp-a",
+				Labels: []dot.NodeLabel{
+					{Text: "system-a", Style: dot.LSSmall},
+					{Text: "comp-a"},
+				},
 				FillColor: "#D2E5EF",
 				Shape:     dot.NSRoundedBox,
 			},
@@ -76,7 +80,10 @@ func TestStandardLayouter_NodeContext(t *testing.T) {
 			},
 			contextEntity: nil,
 			expectedLayout: dot.NodeLayout{
-				Label:     PrefixNodeLabelEm + "&laquo;custom-stereotype&raquo;\\n" + "comp-with-stereotype",
+				Labels: []dot.NodeLabel{
+					{Text: "«custom-stereotype»", Style: dot.LSEm},
+					{Text: "comp-with-stereotype"},
+				},
 				FillColor: "#D2E5EF",
 				Shape:     dot.NSRoundedBox,
 			},
@@ -87,8 +94,8 @@ func TestStandardLayouter_NodeContext(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			layout := tc.layouter.NodeContext(tc.entity, tc.contextEntity)
 
-			if layout.Label != tc.expectedLayout.Label {
-				t.Errorf("unexpected label:\n  got: %q\n want: %q", layout.Label, tc.expectedLayout.Label)
+			if diff := cmp.Diff(tc.expectedLayout.Labels, layout.Labels); diff != "" {
+				t.Errorf("unexpected labels (-want +got):\n%s", diff)
 			}
 			if layout.FillColor != tc.expectedLayout.FillColor {
 				t.Errorf("unexpected fill color: got %q, want %q", layout.FillColor, tc.expectedLayout.FillColor)

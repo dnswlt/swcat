@@ -29,8 +29,10 @@ RUN go build -ldflags "-X main.Version=${VERSION}" -o /out/swcat ./cmd/swcat
 FROM ${RUNTIME_BASE}
 WORKDIR /app
 
-# Install graphviz (swcat needs the dot tool)
-RUN apk add --no-cache graphviz fontconfig ttf-dejavu
+# Install graphviz (swcat needs the dot tool) plus Liberation Sans, which is
+# the font graphviz uses for SVG layout. The browser falls back to Arial (which
+# is metric-compatible with Liberation Sans) when Liberation Sans isn't available.
+RUN apk add --no-cache graphviz fontconfig ttf-liberation
 
 # binary
 COPY --from=gobuilder /out/swcat /app/swcat

@@ -13,39 +13,9 @@ func TestPostprocessSVG(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:    "happy path with prefixes",
-			input:   []byte(`<svg><g><text>|. small text</text><text>|, emphatic text</text></g></svg>`),
-			want:    []byte("<svg><g><text class=\"node-label-small\">small text</text><text class=\"node-label-em\">emphatic text</text></g></svg>"),
-			wantErr: false,
-		},
-		{
-			name:    "no prefixes",
+			name:    "passes through normal text",
 			input:   []byte(`<svg><g><text>just normal text</text></g></svg>`),
-			want:    []byte("<svg><g><text>just normal text</text></g></svg>"),
-			wantErr: false,
-		},
-		{
-			name:    "invalid prefix not in map",
-			input:   []byte(`<svg><text>|3 invalid</text></svg>`),
-			want:    []byte("<svg><text>|3 invalid</text></svg>"),
-			wantErr: false,
-		},
-		{
-			name:    "invalid prefix wrong format",
-			input:   []byte(`<svg><text>|a invalid</text></svg>`),
-			want:    []byte("<svg><text>|a invalid</text></svg>"),
-			wantErr: false,
-		},
-		{
-			name:    "prefix with no following text",
-			input:   []byte(`<svg><text>|.</text></svg>`),
-			want:    []byte("<svg><text class=\"node-label-small\"></text></svg>"),
-			wantErr: false,
-		},
-		{
-			name:    "prefix with only spaces after",
-			input:   []byte(`<svg><text>|,   </text></svg>`),
-			want:    []byte("<svg><text class=\"node-label-em\"></text></svg>"),
+			want:    []byte(`<svg><g><text>just normal text</text></g></svg>`),
 			wantErr: false,
 		},
 		{
@@ -58,18 +28,6 @@ func TestPostprocessSVG(t *testing.T) {
 			name:    "malformed xml",
 			input:   []byte(`<svg><g>`),
 			wantErr: true,
-		},
-		{
-			name:    "text tag at end of file",
-			input:   []byte(`<svg><text>|. at end</text></svg>`),
-			want:    []byte("<svg><text class=\"node-label-small\">at end</text></svg>"),
-			wantErr: false,
-		},
-		{
-			name:    "self-closing text tag",
-			input:   []byte(`<svg><text/></svg>`),
-			want:    []byte(`<svg><text></text></svg>`),
-			wantErr: false,
 		},
 		{
 			name:    "filters out title elements",
@@ -92,8 +50,6 @@ func TestPostprocessSVG(t *testing.T) {
 				return
 			}
 
-			// Using TrimSpace on the byte slices provides a more robust comparison
-			// that isn't sensitive to minor whitespace differences from the encoder.
 			if !bytes.Equal(bytes.TrimSpace(got), bytes.TrimSpace(tc.want)) {
 				t.Errorf("PostprocessSVG() =%swant =%s", string(got), string(tc.want))
 			}

@@ -125,12 +125,15 @@ func sameSystem(e1, e2 catalog.Entity) bool {
 	return sp1.GetSystem().Equal(sp2.GetSystem())
 }
 
-func (l *StandardLayouter) label(e, contextEntity catalog.Entity) string {
-	var label strings.Builder
+func (l *StandardLayouter) labels(e, contextEntity catalog.Entity) []dot.NodeLabel {
+	var labels []dot.NodeLabel
 
 	// <<Stereotypes>>
 	if st, ok := l.stereotype(e); ok {
-		label.WriteString(PrefixNodeLabelEm + `&laquo;` + st + `&raquo;\n`)
+		labels = append(labels, dot.NodeLabel{
+			Text:  "«" + st + "»",
+			Style: dot.LSEm,
+		})
 	}
 
 	// Parent system, if applicable (e is not a system itself, and the contextEntity is from another system).
@@ -149,32 +152,39 @@ func (l *StandardLayouter) label(e, contextEntity catalog.Entity) string {
 	}
 	sysName, addSystemName := systemName()
 	if addSystemName {
-		label.WriteString(PrefixNodeLabelSmall + sysName + `\n`)
+		labels = append(labels, dot.NodeLabel{
+			Text:  sysName,
+			Style: dot.LSSmall,
+		})
 	}
 
-	// Qualified entity name
+	// Qualified entity name (optionally split across two lines if too long).
 	meta := e.GetMetadata()
 	if meta.Namespace != "" && meta.Namespace != catalog.DefaultNamespace {
-		// Wrap line between namespace and name if label gets too long.
-		label.WriteString(meta.Namespace + "/")
-		if len(meta.Namespace+"/"+meta.Name) > 30 {
-			label.WriteString(`\n`)
+		nsPrefix := meta.Namespace + "/"
+		if len(nsPrefix+meta.Name) > 30 {
+			labels = append(labels, dot.NodeLabel{Text: nsPrefix})
+			labels = append(labels, dot.NodeLabel{Text: meta.Name})
+		} else {
+			labels = append(labels, dot.NodeLabel{Text: nsPrefix + meta.Name})
 		}
+	} else {
+		labels = append(labels, dot.NodeLabel{Text: meta.Name})
 	}
-	label.WriteString(meta.Name)
 
 	// API provider component, if applicable and if parent system isn't already shown (to avoid visual overload).
 	if a, ok := e.(*catalog.API); ok && l.config.ShowAPIProvider && !addSystemName {
 		providers := a.GetProviders()
-		if l := len(providers); l > 0 {
-			label.WriteString(`\n` + PrefixNodeLabelSmall + providers[0].QName())
-			if l > 1 {
-				fmt.Fprintf(&label, "+%d", l-1)
+		if n := len(providers); n > 0 {
+			text := providers[0].QName()
+			if n > 1 {
+				text += fmt.Sprintf("+%d", n-1)
 			}
+			labels = append(labels, dot.NodeLabel{Text: text, Style: dot.LSSmall})
 		}
 	}
 
-	return label.String()
+	return labels
 }
 
 func (l *StandardLayouter) Node(e catalog.Entity) dot.NodeLayout {
@@ -192,7 +202,7 @@ func (l *StandardLayouter) NodeContext(e, contextEntity catalog.Entity) dot.Node
 		}
 	}
 	return dot.NodeLayout{
-		Label:       l.label(e, contextEntity),
+		Labels:      l.labels(e, contextEntity),
 		FillColor:   fillColor,
 		BorderColor: borderColor,
 		Shape:       l.shape(e),

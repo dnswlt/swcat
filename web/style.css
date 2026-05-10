@@ -56,16 +56,15 @@
         cursor: pointer;
     }
 
-    /* Override Graphviz font settings, if present. */
+    /* Pin SVG text to Liberation Sans (used by graphviz in the container) with
+       Arial as a metric-compatible fallback (used by Edge on Windows, where
+       Liberation Sans isn't installed). This keeps glyph widths in sync between
+       the layout pass and the browser render, so labels fit their nodes. */
     .graphviz-svg text {
-        /* Value is copied from the font-family seen for the whole HTML. */
-        font-family: ui-sans-serif,system-ui,sans-serif,"Apple Color Emoji","Segoe UI Emoji",Segoe UI Symbol,"Noto Color Emoji";
+        font-family: "Liberation Sans", Arial, sans-serif;
     }
 
-    .graphviz-svg .node text {
-        font-size: 11px;
-    }
-
+    /* Edge labels: smaller, italic, muted. */
     .graphviz-svg .edge text {
         font-size: 10px;
         font-style: italic;
@@ -83,14 +82,5 @@
         fill: #8493A5;
         stroke: #8493A5;
         stroke-width: 3;
-    }
-
-    .graphviz-svg text.node-label-small {
-        font-size: 9px;
-        font-style: italic;
-        fill: #6b7280;
-    }
-    .graphviz-svg text.node-label-em {
-        font-style: italic;
     }
 }
