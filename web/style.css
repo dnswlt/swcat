@@ -9,20 +9,44 @@
     #rich-tooltip {
         position: absolute;
         display: none;
-        padding: 12px;
-        background-color: #333;
-        color: white;
-        border: 1px solid #555;
-        border-radius: 4px;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        padding: 10px 12px;
+        background-color: rgba(55, 65, 81, 0.95); /* gray-700, slightly translucent */
+        color: #f9fafb; /* gray-50 */
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 6px;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+        backdrop-filter: blur(2px);
         z-index: 1000;
-        max-width: 300px;
+        max-width: 320px;
         pointer-events: none;
     }
 
-    #rich-tooltip p {
-        margin: 0;
+    #rich-tooltip .tooltip-title {
+        font-weight: 600;
         font-size: 0.9em;
+        padding-bottom: 6px;
+        margin-bottom: 6px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+        word-break: break-all;
+    }
+
+    #rich-tooltip .tooltip-attrs {
+        margin: 0;
+        font-size: 0.85em;
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        column-gap: 8px;
+        row-gap: 2px;
+    }
+
+    #rich-tooltip .tooltip-attrs dt {
+        color: #9ca3af; /* gray-400 */
+        font-weight: 500;
+    }
+
+    #rich-tooltip .tooltip-attrs dd {
+        margin: 0;
+        word-break: break-word;
     }
 
     /* --- Popovers --- */

@@ -12,6 +12,8 @@ export default {
             pattern: /graphviz-svg/,
         },
         '#rich-tooltip',
+        'tooltip-title',
+        'tooltip-attrs',
     ],
     theme: {
         extend: {},

@@ -12,17 +12,29 @@ function createTooltip() {
     document.body.appendChild(tooltip);
 }
 
-function showTooltip(attrs, event) {
-    if (!attrs || attrs.length === 0) return;
+function escapeHTML(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+}
+
+function showTooltip(info, event) {
+    if (!info) return;
+    const title = info.title || '';
+    const attrs = info.tooltipAttrs || [];
+    if (!title && attrs.length === 0) return;
 
     let content = '';
-    attrs.forEach(attr => {
-        if (attr.Key) {
-            content += `<p><strong>${attr.Key}:</strong> ${attr.Value}</p>`;
-        } else {
-            content += `<p>${attr.Value}</p>`;
-        }
-    });
+    if (title) {
+        content += `<div class="tooltip-title">${escapeHTML(title)}</div>`;
+    }
+    if (attrs.length > 0) {
+        content += '<dl class="tooltip-attrs">';
+        attrs.forEach(attr => {
+            content += `<dt>${escapeHTML(attr.Key)}</dt><dd>${escapeHTML(attr.Value)}</dd>`;
+        });
+        content += '</dl>';
+    }
 
     tooltip.innerHTML = content;
     tooltip.style.display = 'block';
@@ -141,13 +153,13 @@ function addSVGListener() {
         if (edgeLabel) {
             const edgeGroup = edgeLabel.closest('g.edge');
             const edgeInfo = edgeGroup && svgMeta.edges && svgMeta.edges[edgeGroup.id];
-            if (edgeInfo) showTooltip(edgeInfo.tooltipAttrs, event);
+            if (edgeInfo) showTooltip(edgeInfo, event);
             return;
         }
         const node = event.target.closest('.clickable-node');
         if (node) {
             const nodeInfo = svgMeta.nodes && svgMeta.nodes[node.id];
-            if (nodeInfo) showTooltip(nodeInfo.tooltipAttrs, event);
+            if (nodeInfo) showTooltip(nodeInfo, event);
         }
     });
 

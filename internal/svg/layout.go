@@ -206,12 +206,20 @@ func (r *render) nodeLayout(e catalog.Entity) dot.NodeLayout {
 			borderColor = c
 		}
 	}
+	tooltipAttrs := r.nodeTooltipAttrs(e)
+	// Only attach a tooltip title when there is something else to show; this
+	// keeps node hover gated on the presence of attrs.
+	tooltipTitle := ""
+	if len(tooltipAttrs) > 0 {
+		tooltipTitle = e.GetQName()
+	}
 	return dot.NodeLayout{
 		Labels:       r.labels(e),
 		FillColor:    fillColor,
 		BorderColor:  borderColor,
 		Shape:        r.shape(e),
-		TooltipAttrs: r.nodeTooltipAttrs(e),
+		TooltipTitle: tooltipTitle,
+		TooltipAttrs: tooltipAttrs,
 	}
 }
 
@@ -223,7 +231,7 @@ func (r *render) edgeLayout(src, dst catalog.Entity, style dot.EdgeStyle) dot.Ed
 
 // edgeLabelTooltipAttrs builds the list of tooltip attributes for a labelled edge.
 // It also returns the list of attr keys (all except "version"), sorted alphabetically.
-func (r *render) edgeLabelTooltipAttrs(src, dst catalog.Entity, ref *catalog.LabelRef) (otherKeys []string, tooltipAttrs []dot.TooltipAttr) {
+func (r *render) edgeLabelTooltipAttrs(ref *catalog.LabelRef) (otherKeys []string, tooltipAttrs []dot.TooltipAttr) {
 	otherKeys = make([]string, 0, len(ref.Attrs))
 	for k := range ref.Attrs {
 		if k == catalog.VersionAttrKey {
@@ -232,9 +240,6 @@ func (r *render) edgeLabelTooltipAttrs(src, dst catalog.Entity, ref *catalog.Lab
 		otherKeys = append(otherKeys, k)
 	}
 	slices.Sort(otherKeys)
-	tooltipAttrs = []dot.TooltipAttr{
-		{Key: "", Value: src.GetQName() + " → " + dst.GetQName()},
-	}
 	if ref.Label != "" {
 		tooltipAttrs = append(tooltipAttrs, dot.TooltipAttr{Key: "label", Value: ref.Label})
 	}
@@ -264,13 +269,14 @@ func (r *render) edgeLabelLayout(src, dst catalog.Entity, ref *catalog.LabelRef,
 		labelParts = append(labelParts, ref.Label)
 	}
 	// Attrs keys
-	otherKeys, tooltipAttrs := r.edgeLabelTooltipAttrs(src, dst, ref)
+	otherKeys, tooltipAttrs := r.edgeLabelTooltipAttrs(ref)
 	if len(otherKeys) > 0 {
 		labelParts = append(labelParts, strings.Join(otherKeys, "/"))
 	}
 	return dot.EdgeLayout{
 		Label:        joinWrap(labelParts, " · ", 20),
 		Style:        style,
+		TooltipTitle: src.GetQName() + " → " + dst.GetQName(),
 		TooltipAttrs: tooltipAttrs,
 	}
 }

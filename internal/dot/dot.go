@@ -14,12 +14,14 @@ import (
 
 type NodeInfo struct {
 	Label        string        `json:"label"`
+	Title        string        `json:"title,omitempty"`        // Optional tooltip title (typically the entity's qname).
 	TooltipAttrs []TooltipAttr `json:"tooltipAttrs,omitempty"` // Optional key/value pairs to be displayed in tooltips.
 }
 type EdgeInfo struct {
 	From         string        `json:"from"`                   // From entity reference (e.g. api:ns1/super-api).
 	To           string        `json:"to"`                     // To entity reference.
 	Label        string        `json:"label"`                  // Optional edge label.
+	Title        string        `json:"title,omitempty"`        // Optional tooltip title (e.g. "src qname → dst qname").
 	TooltipAttrs []TooltipAttr `json:"tooltipAttrs,omitempty"` // Optional key/value pairs to be displayed in tooltips.
 }
 type ClusterInfo struct {
@@ -100,6 +102,7 @@ type NodeLayout struct {
 	FillColor    string // Either hex ("#ff00aa") or a well-known color name ("red").
 	BorderColor  string
 	Shape        NodeShape
+	TooltipTitle string        // Optional title shown at the top of the hover tooltip.
 	TooltipAttrs []TooltipAttr // Optional key/value pairs surfaced as a hover tooltip on the node.
 }
 
@@ -311,6 +314,7 @@ type TooltipAttr struct {
 type EdgeLayout struct {
 	Label        string
 	Style        EdgeStyle
+	TooltipTitle string
 	TooltipAttrs []TooltipAttr
 }
 
@@ -377,6 +381,7 @@ func (dw *Writer) AddNode(node Node) {
 	fmt.Fprintln(dw.w)
 	dw.nodeInfo[node.ID] = &NodeInfo{
 		Label:        node.Label(),
+		Title:        node.Layout.TooltipTitle,
 		TooltipAttrs: node.Layout.TooltipAttrs,
 	}
 }
@@ -435,6 +440,7 @@ func (dw *Writer) AddEdge(edge Edge) {
 		From:         edge.From,
 		To:           edge.To,
 		Label:        edge.Layout.Label,
+		Title:        edge.Layout.TooltipTitle,
 		TooltipAttrs: edge.Layout.TooltipAttrs,
 	}
 
