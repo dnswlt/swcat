@@ -65,7 +65,7 @@ func (l *StandardLayouter) fillColor(e catalog.Entity) string {
 		return "#D2E5EF"
 		// return "#CBDCEB"
 	case catalog.KindSystem:
-		return "#6BABD0"
+		return "#A8CCDF"
 	case catalog.KindAPI:
 		return "#FCE0BA"
 		// return "#FADA7A"
@@ -132,8 +132,18 @@ func (l *StandardLayouter) labels(e, contextEntity catalog.Entity) []dot.NodeLab
 	if st, ok := l.stereotype(e); ok {
 		labels = append(labels, dot.NodeLabel{
 			Text:  "«" + st + "»",
-			Style: dot.LSEm,
+			Style: dot.LSEm | dot.LSSmall | dot.LSLight,
 		})
+	}
+
+	// Domain name for system entities.
+	if s, ok := e.(*catalog.System); ok {
+		if d := s.GetDomain(); d != nil && d.QName() != "" {
+			labels = append(labels, dot.NodeLabel{
+				Text:  d.QName(),
+				Style: dot.LSSmall | dot.LSLight,
+			})
+		}
 	}
 
 	// Parent system, if applicable (e is not a system itself, and the contextEntity is from another system).
@@ -154,7 +164,7 @@ func (l *StandardLayouter) labels(e, contextEntity catalog.Entity) []dot.NodeLab
 	if addSystemName {
 		labels = append(labels, dot.NodeLabel{
 			Text:  sysName,
-			Style: dot.LSSmall,
+			Style: dot.LSSmall | dot.LSLight,
 		})
 	}
 
@@ -176,11 +186,11 @@ func (l *StandardLayouter) labels(e, contextEntity catalog.Entity) []dot.NodeLab
 	if a, ok := e.(*catalog.API); ok && l.config.ShowAPIProvider && !addSystemName {
 		providers := a.GetProviders()
 		if n := len(providers); n > 0 {
-			text := providers[0].QName()
+			text := "◁ " + providers[0].QName()
 			if n > 1 {
 				text += fmt.Sprintf("+%d", n-1)
 			}
-			labels = append(labels, dot.NodeLabel{Text: text, Style: dot.LSSmall})
+			labels = append(labels, dot.NodeLabel{Text: text, Style: dot.LSSmall | dot.LSLight})
 		}
 	}
 

@@ -102,16 +102,18 @@ type NodeLayout struct {
 }
 
 // LabelStyle controls font styling for a NodeLabel line.
+// Values are bit flags and can be combined with |.
 type LabelStyle int
 
 const (
-	// LSNormal renders the label in the default font.
-	LSNormal LabelStyle = iota
-	// LSEm renders the label in italics.
-	LSEm
-	// LSSmall renders the label in a smaller, italic, gray font.
-	LSSmall
+	LSEm    LabelStyle = 1 << iota // italic
+	LSSmall                        // smaller font size
+	LSLight                        // gray color
 )
+
+func (s LabelStyle) Em() bool    { return s&LSEm != 0 }
+func (s LabelStyle) Small() bool { return s&LSSmall != 0 }
+func (s LabelStyle) Light() bool { return s&LSLight != 0 }
 
 // NodeLabel represents one line of a node label, with optional styling.
 // Multiple NodeLabels on a node are joined with line breaks in the rendered output.
@@ -185,16 +187,14 @@ func (n *Node) htmlLabel() string {
 func renderLabelLine(lbl NodeLabel) string {
 	text := escHTMLLabel(lbl.Text)
 
-	italic := false
+	italic := lbl.Style.Em()
 	pointSize := ""
 	color := ""
 
-	switch lbl.Style {
-	case LSEm:
-		italic = true
-	case LSSmall:
-		italic = true
+	if lbl.Style.Small() {
 		pointSize = smallFontSize
+	}
+	if lbl.Style.Light() {
 		color = smallFontColor
 	}
 

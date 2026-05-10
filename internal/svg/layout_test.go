@@ -61,7 +61,7 @@ func TestStandardLayouter_NodeContext(t *testing.T) {
 			contextEntity: newComponent("comp-b", "system-b"),
 			expectedLayout: dot.NodeLayout{
 				Labels: []dot.NodeLabel{
-					{Text: "system-a", Style: dot.LSSmall},
+					{Text: "system-a", Style: dot.LSSmall | dot.LSLight},
 					{Text: "comp-a"},
 				},
 				FillColor: "#D2E5EF",
@@ -81,7 +81,7 @@ func TestStandardLayouter_NodeContext(t *testing.T) {
 			contextEntity: nil,
 			expectedLayout: dot.NodeLayout{
 				Labels: []dot.NodeLabel{
-					{Text: "«custom-stereotype»", Style: dot.LSEm},
+					{Text: "«custom-stereotype»", Style: dot.LSEm | dot.LSSmall | dot.LSLight},
 					{Text: "comp-with-stereotype"},
 				},
 				FillColor: "#D2E5EF",
