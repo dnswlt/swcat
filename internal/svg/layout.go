@@ -1,7 +1,6 @@
 package svg
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 
@@ -160,8 +159,7 @@ func (l *StandardLayouter) labels(e, contextEntity catalog.Entity) []dot.NodeLab
 		}
 		return sp.GetSystem().QName(), true
 	}
-	sysName, addSystemName := systemName()
-	if addSystemName {
+	if sysName, ok := systemName(); ok {
 		labels = append(labels, dot.NodeLabel{
 			Text:  sysName,
 			Style: dot.LSSmall | dot.LSLight,
@@ -182,19 +180,27 @@ func (l *StandardLayouter) labels(e, contextEntity catalog.Entity) []dot.NodeLab
 		labels = append(labels, dot.NodeLabel{Text: meta.Name})
 	}
 
-	// API provider component, if applicable and if parent system isn't already shown (to avoid visual overload).
-	if a, ok := e.(*catalog.API); ok && l.config.ShowAPIProvider && !addSystemName {
-		providers := a.GetProviders()
-		if n := len(providers); n > 0 {
-			text := "◁ " + providers[0].QName()
-			if n > 1 {
-				text += fmt.Sprintf("+%d", n-1)
-			}
-			labels = append(labels, dot.NodeLabel{Text: text, Style: dot.LSSmall | dot.LSLight})
-		}
-	}
-
 	return labels
+}
+
+// nodeTooltipAttrs builds the tooltip attributes for a node. Currently this only
+// surfaces the API's provider component(s); other entity kinds get no tooltip.
+func (l *StandardLayouter) nodeTooltipAttrs(e catalog.Entity) []dot.TooltipAttr {
+	a, ok := e.(*catalog.API)
+	if !ok {
+		return nil
+	}
+	providers := a.GetProviders()
+	if len(providers) == 0 {
+		return nil
+	}
+	names := make([]string, len(providers))
+	for i, p := range providers {
+		names[i] = p.QName()
+	}
+	return []dot.TooltipAttr{
+		{Key: "provided by", Value: strings.Join(names, ", ")},
+	}
 }
 
 func (l *StandardLayouter) Node(e catalog.Entity) dot.NodeLayout {
@@ -212,10 +218,11 @@ func (l *StandardLayouter) NodeContext(e, contextEntity catalog.Entity) dot.Node
 		}
 	}
 	return dot.NodeLayout{
-		Labels:      l.labels(e, contextEntity),
-		FillColor:   fillColor,
-		BorderColor: borderColor,
-		Shape:       l.shape(e),
+		Labels:       l.labels(e, contextEntity),
+		FillColor:    fillColor,
+		BorderColor:  borderColor,
+		Shape:        l.shape(e),
+		TooltipAttrs: l.nodeTooltipAttrs(e),
 	}
 }
 

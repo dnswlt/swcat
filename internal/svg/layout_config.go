@@ -21,8 +21,6 @@ type Config struct {
 	// Maps label keys and label values to node colors.
 	// Can be used to override the default node colors per label value.
 	NodeColors NodeColorsConfig `yaml:"nodeColors"`
-	// Include the API provider (component) in labels of API entities.
-	ShowAPIProvider bool `yaml:"showAPIProvider"`
 	// Include the parent system in labels of component, resource, and API entities.
 	ShowParentSystem bool `yaml:"showParentSystem"`
 	// Include the API version in labelled references if specified and if no

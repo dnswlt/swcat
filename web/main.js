@@ -12,14 +12,11 @@ function createTooltip() {
     document.body.appendChild(tooltip);
 }
 
-function showTooltip(edgeId, event) {
-    if (!svgMeta.edges) return;
-    const edgeInfo = svgMeta.edges[edgeId];
-    if (!edgeInfo || !edgeInfo.tooltipAttrs) return;
+function showTooltip(attrs, event) {
+    if (!attrs || attrs.length === 0) return;
 
     let content = '';
-
-    edgeInfo.tooltipAttrs.forEach(attr => {
+    attrs.forEach(attr => {
         if (attr.Key) {
             content += `<p><strong>${attr.Key}:</strong> ${attr.Value}</p>`;
         } else {
@@ -140,18 +137,22 @@ function addSVGListener() {
     });
 
     svg.addEventListener('mouseover', (event) => {
-        const label = event.target.closest('g.edge text');
-        if (label) {
-            const edgeGroup = label.closest('g.edge');
-            if (edgeGroup && edgeGroup.id) {
-                showTooltip(edgeGroup.id, event);
-            }
+        const edgeLabel = event.target.closest('g.edge text');
+        if (edgeLabel) {
+            const edgeGroup = edgeLabel.closest('g.edge');
+            const edgeInfo = edgeGroup && svgMeta.edges && svgMeta.edges[edgeGroup.id];
+            if (edgeInfo) showTooltip(edgeInfo.tooltipAttrs, event);
+            return;
+        }
+        const node = event.target.closest('.clickable-node');
+        if (node) {
+            const nodeInfo = svgMeta.nodes && svgMeta.nodes[node.id];
+            if (nodeInfo) showTooltip(nodeInfo.tooltipAttrs, event);
         }
     });
 
     svg.addEventListener('mouseout', (event) => {
-        const label = event.target.closest('g.edge text');
-        if (label) {
+        if (event.target.closest('g.edge text') || event.target.closest('.clickable-node')) {
             hideTooltip();
         }
     });

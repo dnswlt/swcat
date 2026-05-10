@@ -13,7 +13,8 @@ import (
 )
 
 type NodeInfo struct {
-	Label string `json:"label"`
+	Label        string        `json:"label"`
+	TooltipAttrs []TooltipAttr `json:"tooltipAttrs,omitempty"` // Optional key/value pairs to be displayed in tooltips.
 }
 type EdgeInfo struct {
 	From         string        `json:"from"`                   // From entity reference (e.g. api:ns1/super-api).
@@ -95,10 +96,11 @@ func (r *dotRunner) Close() error {
 type NodeLayout struct {
 	// Labels is the list of label lines for the node. Each entry renders on its
 	// own line. If empty, the node has no label.
-	Labels      []NodeLabel
-	FillColor   string // Either hex ("#ff00aa") or a well-known color name ("red").
-	BorderColor string
-	Shape       NodeShape
+	Labels       []NodeLabel
+	FillColor    string // Either hex ("#ff00aa") or a well-known color name ("red").
+	BorderColor  string
+	Shape        NodeShape
+	TooltipAttrs []TooltipAttr // Optional key/value pairs surfaced as a hover tooltip on the node.
 }
 
 // LabelStyle controls font styling for a NodeLabel line.
@@ -374,7 +376,8 @@ func (dw *Writer) AddNode(node Node) {
 		node.ID, node.ID, label, borderColor, fillColor, node.dotShape(), node.dotStyle())
 	fmt.Fprintln(dw.w)
 	dw.nodeInfo[node.ID] = &NodeInfo{
-		Label: node.Label(),
+		Label:        node.Label(),
+		TooltipAttrs: node.Layout.TooltipAttrs,
 	}
 }
 

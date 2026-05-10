@@ -22,7 +22,6 @@ func TestStandardLayouter_NodeContext(t *testing.T) {
 	// Layouter with custom config for specific tests
 	layouter := NewStandardLayouter(Config{
 		ShowParentSystem: true,
-		ShowAPIProvider:  true,
 	})
 
 	testCases := []struct {
