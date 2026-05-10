@@ -12,37 +12,30 @@ type NodeOptions struct {
 	IncludeSystemPart bool
 }
 
-type Layouter interface {
-	Node(e catalog.Entity) dot.NodeLayout
-	// NodeContext lays out the given entity e as a node in the context of contextEntity.
-	// The context is used to determine how to lay out e. For example, a component
-	// might include the containing system's name in its label only if it is rendered
-	// in a context of an entity belonging to a different system.
-	NodeContext(e, contextEntity catalog.Entity) dot.NodeLayout
-	Edge(src, dst catalog.Entity, style dot.EdgeStyle) dot.EdgeLayout
-	EdgeLabel(src, dst catalog.Entity, ref *catalog.LabelRef, style dot.EdgeStyle) dot.EdgeLayout
-}
+// DiagramKind identifies the kind of diagram being rendered. Layout methods
+// consult it to tailor labels and tooltips (e.g. surface the API provider only
+// on system views, where many APIs from various systems appear side by side).
+type DiagramKind int
 
-type StandardLayouter struct {
-	config Config
-}
+const (
+	DiagramAdHoc DiagramKind = iota
+	DiagramDomain
+	DiagramSystem
+	DiagramComponent
+	DiagramAPI
+	DiagramResource
+)
 
-func NewStandardLayouter(config Config) *StandardLayouter {
-	return &StandardLayouter{
-		config: config,
-	}
-}
-
-func (l *StandardLayouter) fillColor(e catalog.Entity) string {
+func (r *render) fillColor(e catalog.Entity) string {
 	if c, ok := e.GetMetadata().Annotations[catalog.AnnotFillColor]; ok {
 		// explicit annotation overrides everything
 		return c
 	}
 
 	// Next priority: check colors per label.
-	if len(l.config.NodeColors.Labels) > 0 {
+	if len(r.config.NodeColors.Labels) > 0 {
 		for k, v := range e.GetMetadata().Labels {
-			if m, ok := l.config.NodeColors.Labels[k]; ok && m != nil {
+			if m, ok := r.config.NodeColors.Labels[k]; ok && m != nil {
 				if val, ok := m[v]; ok {
 					return string(val)
 				}
@@ -51,9 +44,9 @@ func (l *StandardLayouter) fillColor(e catalog.Entity) string {
 	}
 
 	// Check colors per type.
-	if len(l.config.NodeColors.Types) > 0 {
+	if len(r.config.NodeColors.Types) > 0 {
 		typ := e.GetType()
-		if col, ok := l.config.NodeColors.Types[typ]; ok {
+		if col, ok := r.config.NodeColors.Types[typ]; ok {
 			return string(col)
 		}
 	}
@@ -62,23 +55,19 @@ func (l *StandardLayouter) fillColor(e catalog.Entity) string {
 	switch e.GetKind() {
 	case catalog.KindComponent:
 		return "#D2E5EF"
-		// return "#CBDCEB"
 	case catalog.KindSystem:
 		return "#A8CCDF"
 	case catalog.KindAPI:
 		return "#FCE0BA"
-		// return "#FADA7A"
 	case catalog.KindResource:
 		return "#D5E8D4"
-		// return "#B4DEBD"
 	case catalog.KindGroup:
 		return "#F5EEDC"
-		// return "#F2F0EB"
 	}
 	return "#F5EEDC" // neutral beige
 }
 
-func (l *StandardLayouter) shape(e catalog.Entity) dot.NodeShape {
+func (r *render) shape(e catalog.Entity) dot.NodeShape {
 	switch e.GetKind() {
 	case catalog.KindSystem:
 		return dot.NSBox
@@ -88,7 +77,7 @@ func (l *StandardLayouter) shape(e catalog.Entity) dot.NodeShape {
 	return dot.NSRoundedBox
 }
 
-func (l *StandardLayouter) stereotype(e catalog.Entity) (string, bool) {
+func (r *render) stereotype(e catalog.Entity) (string, bool) {
 	meta := e.GetMetadata()
 
 	if st, ok := meta.Annotations[catalog.AnnotSterotype]; ok {
@@ -96,12 +85,12 @@ func (l *StandardLayouter) stereotype(e catalog.Entity) (string, bool) {
 		return st, true
 	}
 
-	if len(l.config.StereotypeLabels) == 0 {
+	if len(r.config.StereotypeLabels) == 0 {
 		return "", false
 	}
 
 	var values []string
-	for _, lbl := range l.config.StereotypeLabels {
+	for _, lbl := range r.config.StereotypeLabels {
 		if val, ok := meta.Labels[lbl]; ok {
 			values = append(values, val)
 		}
@@ -124,11 +113,11 @@ func sameSystem(e1, e2 catalog.Entity) bool {
 	return sp1.GetSystem().Equal(sp2.GetSystem())
 }
 
-func (l *StandardLayouter) labels(e, contextEntity catalog.Entity) []dot.NodeLabel {
+func (r *render) labels(e, contextEntity catalog.Entity) []dot.NodeLabel {
 	var labels []dot.NodeLabel
 
 	// <<Stereotypes>>
-	if st, ok := l.stereotype(e); ok {
+	if st, ok := r.stereotype(e); ok {
 		labels = append(labels, dot.NodeLabel{
 			Text:  "«" + st + "»",
 			Style: dot.LSEm | dot.LSSmall | dot.LSLight,
@@ -151,7 +140,7 @@ func (l *StandardLayouter) labels(e, contextEntity catalog.Entity) []dot.NodeLab
 		if !isSystemPart {
 			return "", false
 		}
-		if !l.config.ShowParentSystem || e.GetKind() == catalog.KindSystem {
+		if !r.config.ShowParentSystem || e.GetKind() == catalog.KindSystem {
 			return "", false
 		}
 		if contextEntity == nil || sameSystem(e, contextEntity) {
@@ -183,9 +172,14 @@ func (l *StandardLayouter) labels(e, contextEntity catalog.Entity) []dot.NodeLab
 	return labels
 }
 
-// nodeTooltipAttrs builds the tooltip attributes for a node. Currently this only
-// surfaces the API's provider component(s); other entity kinds get no tooltip.
-func (l *StandardLayouter) nodeTooltipAttrs(e catalog.Entity) []dot.TooltipAttr {
+// nodeTooltipAttrs builds the tooltip attributes for a node. Tooltip content is
+// tailored to the diagram kind: e.g. on a system view, API nodes get a
+// "provided by" entry, since seeing the implementing component is useful when
+// many APIs from different systems appear together.
+func (r *render) nodeTooltipAttrs(e catalog.Entity) []dot.TooltipAttr {
+	if r.kind != DiagramSystem {
+		return nil
+	}
 	a, ok := e.(*catalog.API)
 	if !ok {
 		return nil
@@ -203,13 +197,8 @@ func (l *StandardLayouter) nodeTooltipAttrs(e catalog.Entity) []dot.TooltipAttr 
 	}
 }
 
-func (l *StandardLayouter) Node(e catalog.Entity) dot.NodeLayout {
-	return l.NodeContext(e, nil)
-}
-
-func (l *StandardLayouter) NodeContext(e, contextEntity catalog.Entity) dot.NodeLayout {
-
-	fillColor := l.fillColor(e)
+func (r *render) nodeLayout(e, contextEntity catalog.Entity) dot.NodeLayout {
+	fillColor := r.fillColor(e)
 	borderColor := "#000000"
 	if strings.HasPrefix(fillColor, "#") {
 		// Use slightly darkened version of the fill color for borders.
@@ -218,23 +207,23 @@ func (l *StandardLayouter) NodeContext(e, contextEntity catalog.Entity) dot.Node
 		}
 	}
 	return dot.NodeLayout{
-		Labels:       l.labels(e, contextEntity),
+		Labels:       r.labels(e, contextEntity),
 		FillColor:    fillColor,
 		BorderColor:  borderColor,
-		Shape:        l.shape(e),
-		TooltipAttrs: l.nodeTooltipAttrs(e),
+		Shape:        r.shape(e),
+		TooltipAttrs: r.nodeTooltipAttrs(e),
 	}
 }
 
-func (l *StandardLayouter) Edge(src, dst catalog.Entity, style dot.EdgeStyle) dot.EdgeLayout {
+func (r *render) edgeLayout(src, dst catalog.Entity, style dot.EdgeStyle) dot.EdgeLayout {
 	return dot.EdgeLayout{
 		Style: style,
 	}
 }
 
-// tooltipAttrs builds the list of tooltip attributes that should be displayed.
+// edgeLabelTooltipAttrs builds the list of tooltip attributes for a labelled edge.
 // It also returns the list of attr keys (all except "version"), sorted alphabetically.
-func (l *StandardLayouter) tooltipAttrs(src, dst catalog.Entity, ref *catalog.LabelRef) (otherKeys []string, tooltipAttrs []dot.TooltipAttr) {
+func (r *render) edgeLabelTooltipAttrs(src, dst catalog.Entity, ref *catalog.LabelRef) (otherKeys []string, tooltipAttrs []dot.TooltipAttr) {
 	otherKeys = make([]string, 0, len(ref.Attrs))
 	for k := range ref.Attrs {
 		if k == catalog.VersionAttrKey {
@@ -262,12 +251,12 @@ func (l *StandardLayouter) tooltipAttrs(src, dst catalog.Entity, ref *catalog.La
 	return otherKeys, tooltipAttrs
 }
 
-// EdgeLabel generates a dot.EdgeLayout with an edge label.
-// The label and tooltip are built from the ref's label and attributes.
-func (l *StandardLayouter) EdgeLabel(src, dst catalog.Entity, ref *catalog.LabelRef, style dot.EdgeStyle) dot.EdgeLayout {
+// edgeLabelLayout builds a dot.EdgeLayout for a labelled edge. The label and
+// tooltip are built from the ref's label and attributes.
+func (r *render) edgeLabelLayout(src, dst catalog.Entity, ref *catalog.LabelRef, style dot.EdgeStyle) dot.EdgeLayout {
 	var labelParts []string
 	// Version
-	if version, ok := ref.GetAttr(catalog.VersionAttrKey); ok && l.config.ShowVersionAsLabel {
+	if version, ok := ref.GetAttr(catalog.VersionAttrKey); ok && r.config.ShowVersionAsLabel {
 		labelParts = append(labelParts, version)
 	}
 	// Label
@@ -275,7 +264,7 @@ func (l *StandardLayouter) EdgeLabel(src, dst catalog.Entity, ref *catalog.Label
 		labelParts = append(labelParts, ref.Label)
 	}
 	// Attrs keys
-	otherKeys, tooltipAttrs := l.tooltipAttrs(src, dst, ref)
+	otherKeys, tooltipAttrs := r.edgeLabelTooltipAttrs(src, dst, ref)
 	if len(otherKeys) > 0 {
 		labelParts = append(labelParts, strings.Join(otherKeys, "/"))
 	}
@@ -285,6 +274,3 @@ func (l *StandardLayouter) EdgeLabel(src, dst catalog.Entity, ref *catalog.Label
 		TooltipAttrs: tooltipAttrs,
 	}
 }
-
-// Interface implementation assertion
-var _ Layouter = (*StandardLayouter)(nil)

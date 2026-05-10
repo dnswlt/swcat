@@ -18,22 +18,17 @@ func newComponent(name, systemName string) *catalog.Component {
 	}
 }
 
-func TestStandardLayouter_NodeContext(t *testing.T) {
-	// Layouter with custom config for specific tests
-	layouter := NewStandardLayouter(Config{
-		ShowParentSystem: true,
-	})
+func TestRenderer_nodeLayout(t *testing.T) {
+	r := &render{Renderer: &Renderer{config: Config{ShowParentSystem: true}}}
 
 	testCases := []struct {
 		name           string
-		layouter       *StandardLayouter
 		entity         catalog.Entity
 		contextEntity  catalog.Entity
 		expectedLayout dot.NodeLayout
 	}{
 		{
 			name:          "simple component with no context",
-			layouter:      layouter,
 			entity:        newComponent("my-comp", "my-sys"),
 			contextEntity: nil,
 			expectedLayout: dot.NodeLayout{
@@ -44,7 +39,6 @@ func TestStandardLayouter_NodeContext(t *testing.T) {
 		},
 		{
 			name:          "component in same system context",
-			layouter:      layouter,
 			entity:        newComponent("comp-a", "system-a"),
 			contextEntity: newComponent("comp-b", "system-a"),
 			expectedLayout: dot.NodeLayout{
@@ -55,7 +49,6 @@ func TestStandardLayouter_NodeContext(t *testing.T) {
 		},
 		{
 			name:          "component in different system context",
-			layouter:      layouter,
 			entity:        newComponent("comp-a", "system-a"),
 			contextEntity: newComponent("comp-b", "system-b"),
 			expectedLayout: dot.NodeLayout{
@@ -68,8 +61,7 @@ func TestStandardLayouter_NodeContext(t *testing.T) {
 			},
 		},
 		{
-			name:     "component with stereotype annotation",
-			layouter: layouter,
+			name: "component with stereotype annotation",
 			entity: &catalog.Component{
 				Metadata: &catalog.Metadata{
 					Name:        "comp-with-stereotype",
@@ -91,7 +83,7 @@ func TestStandardLayouter_NodeContext(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			layout := tc.layouter.NodeContext(tc.entity, tc.contextEntity)
+			layout := r.nodeLayout(tc.entity, tc.contextEntity)
 
 			if diff := cmp.Diff(tc.expectedLayout.Labels, layout.Labels); diff != "" {
 				t.Errorf("unexpected labels (-want +got):\n%s", diff)

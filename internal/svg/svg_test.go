@@ -88,7 +88,7 @@ func TestSystemExternalGraph_Topology(t *testing.T) {
 	r := setupRepo(t)
 	runner := &mockRunner{}
 	cfg := DefaultConfig()
-	renderer := NewRenderer(r, runner, NewStandardLayouter(cfg), cfg)
+	renderer := NewRenderer(r, runner, cfg)
 
 	sysA := r.System(&catalog.Ref{Name: "sys-a"})
 	if sysA == nil {
@@ -125,7 +125,7 @@ func TestSystemExternalGraph_Excluded(t *testing.T) {
 	r := setupRepo(t)
 	runner := &mockRunner{}
 	cfg := DefaultConfig()
-	renderer := NewRenderer(r, runner, NewStandardLayouter(cfg), cfg)
+	renderer := NewRenderer(r, runner, cfg)
 
 	sysA := r.System(&catalog.Ref{Name: "sys-a"})
 	sysB := r.System(&catalog.Ref{Name: "sys-b"})
@@ -157,7 +157,7 @@ func TestSystemInternalGraph_Topology(t *testing.T) {
 	r := setupRepo(t)
 	runner := &mockRunner{}
 	cfg := DefaultConfig()
-	renderer := NewRenderer(r, runner, NewStandardLayouter(cfg), cfg)
+	renderer := NewRenderer(r, runner, cfg)
 
 	sysA := r.System(&catalog.Ref{Name: "sys-a"})
 
@@ -189,7 +189,7 @@ func TestComponentGraph_Topology(t *testing.T) {
 	r := setupRepo(t)
 	runner := &mockRunner{}
 	cfg := DefaultConfig()
-	renderer := NewRenderer(r, runner, NewStandardLayouter(cfg), cfg)
+	renderer := NewRenderer(r, runner, cfg)
 
 	compA := r.Component(&catalog.Ref{Name: "comp-a"})
 
@@ -289,7 +289,7 @@ func TestComponentGraph_ExpandedAPIs(t *testing.T) {
 	r := setupRepoWithProviders(t)
 	runner := &mockRunner{}
 	cfg := DefaultConfig()
-	renderer := NewRenderer(r, runner, NewStandardLayouter(cfg), cfg)
+	renderer := NewRenderer(r, runner, cfg)
 	compA := r.Component(&catalog.Ref{Name: "comp-a"})
 
 	t.Run("no expansion", func(t *testing.T) {
@@ -357,7 +357,7 @@ func TestGraph_Topology(t *testing.T) {
 	r := setupRepo(t)
 	runner := &mockRunner{}
 	cfg := DefaultConfig()
-	renderer := NewRenderer(r, runner, NewStandardLayouter(cfg), cfg)
+	renderer := NewRenderer(r, runner, cfg)
 
 	domA := r.Domain(&catalog.Ref{Kind: catalog.KindDomain, Name: "dom-a"})
 	sysA := r.System(&catalog.Ref{Kind: catalog.KindSystem, Name: "sys-a"})

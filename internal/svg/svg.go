@@ -9,49 +9,57 @@ import (
 	"github.com/dnswlt/swcat/internal/repo"
 )
 
+// Renderer is the stateless top-level entry point for rendering catalog SVGs.
+// It is safe for concurrent use; per-call state lives in the render struct.
 type Renderer struct {
-	repo     *repo.Repository
-	runner   dot.Runner
-	layouter Layouter
-	config   Config
+	repo   *repo.Repository
+	runner dot.Runner
+	config Config
 }
 
-func NewRenderer(r *repo.Repository, runner dot.Runner, layouter Layouter, config Config) *Renderer {
+func NewRenderer(r *repo.Repository, runner dot.Runner, config Config) *Renderer {
 	return &Renderer{
-		repo:     r,
-		runner:   runner,
-		layouter: layouter,
-		config:   config,
+		repo:   r,
+		runner: runner,
+		config: config,
 	}
 }
 
-func (r *Renderer) entityNode(e catalog.Entity) dot.Node {
+// render is a per-call rendering context. It bundles the diagram kind being
+// rendered with the immutable Renderer (for repo/config access). One render
+// is created per public *Graph call, scoped to that call only.
+type render struct {
+	*Renderer
+	kind DiagramKind
+}
+
+func (r *render) entityNode(e catalog.Entity) dot.Node {
 	return dot.Node{
 		ID:     e.GetRef().String(),
-		Layout: r.layouter.Node(e),
+		Layout: r.nodeLayout(e, nil),
 	}
 }
 
-func (r *Renderer) entityNodeContext(e, contextEntity catalog.Entity) dot.Node {
+func (r *render) entityNodeContext(e, contextEntity catalog.Entity) dot.Node {
 	return dot.Node{
 		ID:     e.GetRef().String(),
-		Layout: r.layouter.NodeContext(e, contextEntity),
+		Layout: r.nodeLayout(e, contextEntity),
 	}
 }
 
-func (r *Renderer) entityEdge(from, to catalog.Entity, style dot.EdgeStyle) dot.Edge {
+func (r *render) entityEdge(from, to catalog.Entity, style dot.EdgeStyle) dot.Edge {
 	return dot.Edge{
 		From:   from.GetRef().String(),
 		To:     to.GetRef().String(),
-		Layout: r.layouter.Edge(from, to, style),
+		Layout: r.edgeLayout(from, to, style),
 	}
 }
 
-func (r *Renderer) entityEdgeLabel(from, to catalog.Entity, ref *catalog.LabelRef, style dot.EdgeStyle) dot.Edge {
+func (r *render) entityEdgeLabel(from, to catalog.Entity, ref *catalog.LabelRef, style dot.EdgeStyle) dot.Edge {
 	return dot.Edge{
 		From:   from.GetRef().String(),
 		To:     to.GetRef().String(),
-		Layout: r.layouter.EdgeLabel(from, to, ref, style),
+		Layout: r.edgeLabelLayout(from, to, ref, style),
 	}
 }
 
@@ -124,7 +132,7 @@ func (e extSysDep) String() string {
 	return fmt.Sprintf("%s -> %s / %v", e.source.GetRef().String(), e.targetSystem.GetRef().String(), e.direction)
 }
 
-func (r *Renderer) generateDomainDotSource(domain *catalog.Domain) *dot.DotSource {
+func (r *render) generateDomainDotSource(domain *catalog.Domain) *dot.DotSource {
 	dw := dot.New(dot.WriterConfig{EdgeMinLen: r.config.NormalEdgeMinLen})
 	dw.Start()
 
@@ -205,11 +213,11 @@ func (r *Renderer) generateDomainDotSource(domain *catalog.Domain) *dot.DotSourc
 
 // DomainGraph generates an SVG for the given domain.
 func (r *Renderer) DomainGraph(ctx context.Context, domain *catalog.Domain) (*Result, error) {
-	dotSource := r.generateDomainDotSource(domain)
-	return runDot(ctx, r.runner, dotSource)
+	rd := &render{Renderer: r, kind: DiagramDomain}
+	return runDot(ctx, r.runner, rd.generateDomainDotSource(domain))
 }
 
-func (r *Renderer) generateSystemExternalDotSource(system *catalog.System, opts *SystemViewOptions) *dot.DotSource {
+func (r *render) generateSystemExternalDotSource(system *catalog.System, opts *SystemViewOptions) *dot.DotSource {
 	// Potential neighboring systems for which a detailed view is requested.
 	ctxSysMap := map[string]bool{}
 	for _, ctxSys := range opts.ContextSystems {
@@ -366,7 +374,7 @@ func (r *Renderer) generateSystemExternalDotSource(system *catalog.System, opts 
 	return dw.Result()
 }
 
-func (r *Renderer) generateSystemInternalDotSource(system *catalog.System) *dot.DotSource {
+func (r *render) generateSystemInternalDotSource(system *catalog.System) *dot.DotSource {
 	dw := dot.New(dot.WriterConfig{
 		EdgeMinLen: r.config.CompactEdgeMinLen,
 	})
@@ -447,15 +455,15 @@ func (r *Renderer) generateSystemInternalDotSource(system *catalog.System) *dot.
 // SystemExternalGraph generates an SVG for an "external" view of the given system.
 // opts configures which systems to show, hide, or expand in detail.
 func (r *Renderer) SystemExternalGraph(ctx context.Context, system *catalog.System, opts *SystemViewOptions) (*Result, error) {
-	dotSource := r.generateSystemExternalDotSource(system, opts)
-	return runDot(ctx, r.runner, dotSource)
+	rd := &render{Renderer: r, kind: DiagramSystem}
+	return runDot(ctx, r.runner, rd.generateSystemExternalDotSource(system, opts))
 }
 
 // SystemInternalGraph generates an SVG for an "internal" view of the given system.
 // Only entities that are part of the system and their relationships are shown.
 func (r *Renderer) SystemInternalGraph(ctx context.Context, system *catalog.System) (*Result, error) {
-	dotSource := r.generateSystemInternalDotSource(system)
-	return runDot(ctx, r.runner, dotSource)
+	rd := &render{Renderer: r, kind: DiagramSystem}
+	return runDot(ctx, r.runner, rd.generateSystemInternalDotSource(system))
 }
 
 // ComponentViewOptions configures which APIs to expand in a component detail view.
@@ -464,7 +472,7 @@ type ComponentViewOptions struct {
 	ExpandedAPIs []*catalog.Ref
 }
 
-func (r *Renderer) generateComponentDotSource(component *catalog.Component, opts *ComponentViewOptions) *dot.DotSource {
+func (r *render) generateComponentDotSource(component *catalog.Component, opts *ComponentViewOptions) *dot.DotSource {
 	dw := dot.New(dot.WriterConfig{EdgeMinLen: r.config.NormalEdgeMinLen})
 	dw.Start()
 
@@ -561,11 +569,11 @@ func (r *Renderer) generateComponentDotSource(component *catalog.Component, opts
 // ComponentGraph generates an SVG for the given component.
 // opts may be nil to use default rendering with no expanded APIs.
 func (r *Renderer) ComponentGraph(ctx context.Context, component *catalog.Component, opts *ComponentViewOptions) (*Result, error) {
-	dotSource := r.generateComponentDotSource(component, opts)
-	return runDot(ctx, r.runner, dotSource)
+	rd := &render{Renderer: r, kind: DiagramComponent}
+	return runDot(ctx, r.runner, rd.generateComponentDotSource(component, opts))
 }
 
-func (r *Renderer) generateAPIDotSource(api *catalog.API) *dot.DotSource {
+func (r *render) generateAPIDotSource(api *catalog.API) *dot.DotSource {
 	dw := dot.New(dot.WriterConfig{EdgeMinLen: r.config.NormalEdgeMinLen})
 	dw.Start()
 
@@ -609,11 +617,11 @@ func (r *Renderer) generateAPIDotSource(api *catalog.API) *dot.DotSource {
 
 // APIGraph generates an SVG for the given API.
 func (r *Renderer) APIGraph(ctx context.Context, api *catalog.API) (*Result, error) {
-	dotSource := r.generateAPIDotSource(api)
-	return runDot(ctx, r.runner, dotSource)
+	rd := &render{Renderer: r, kind: DiagramAPI}
+	return runDot(ctx, r.runner, rd.generateAPIDotSource(api))
 }
 
-func (r *Renderer) generateResourceDotSource(resource *catalog.Resource) *dot.DotSource {
+func (r *render) generateResourceDotSource(resource *catalog.Resource) *dot.DotSource {
 	dw := dot.New(dot.WriterConfig{EdgeMinLen: r.config.NormalEdgeMinLen})
 	dw.Start()
 
@@ -648,8 +656,8 @@ func (r *Renderer) generateResourceDotSource(resource *catalog.Resource) *dot.Do
 
 // ResourceGraph generates an SVG for the given resource.
 func (r *Renderer) ResourceGraph(ctx context.Context, resource *catalog.Resource) (*Result, error) {
-	dotSource := r.generateResourceDotSource(resource)
-	return runDot(ctx, r.runner, dotSource)
+	rd := &render{Renderer: r, kind: DiagramResource}
+	return runDot(ctx, r.runner, rd.generateResourceDotSource(resource))
 }
 
 func runDot(ctx context.Context, runner dot.Runner, ds *dot.DotSource) (*Result, error) {
@@ -668,7 +676,7 @@ func runDot(ctx context.Context, runner dot.Runner, ds *dot.DotSource) (*Result,
 	}, nil
 }
 
-func (r *Renderer) generateGraphDotSource(entities []catalog.Entity, opts GraphOptions) *dot.DotSource {
+func (r *render) generateGraphDotSource(entities []catalog.Entity, opts GraphOptions) *dot.DotSource {
 	dw := dot.New(dot.WriterConfig{
 		EdgeMinLen: r.config.CompactEdgeMinLen,
 	})
@@ -813,6 +821,6 @@ type GraphOptions struct {
 
 // Graph generates an SVG for the given list of entities.
 func (r *Renderer) Graph(ctx context.Context, entities []catalog.Entity, opts GraphOptions) (*Result, error) {
-	dotSource := r.generateGraphDotSource(entities, opts)
-	return runDot(ctx, r.runner, dotSource)
+	rd := &render{Renderer: r, kind: DiagramAdHoc}
+	return runDot(ctx, r.runner, rd.generateGraphDotSource(entities, opts))
 }

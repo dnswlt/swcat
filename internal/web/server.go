@@ -488,8 +488,7 @@ func (s *Server) reloadTemplates() error {
 // and dotRunner. The repository has to be passed in; this is typically
 // going to be the s.State() obtained at the beginning of request processing.
 func (s *Server) svgRenderer(data *storeData) *svg.Renderer {
-	layouter := svg.NewStandardLayouter(data.config.SVG)
-	return svg.NewRenderer(data.repo, s.dotRunner, layouter, data.config.SVG)
+	return svg.NewRenderer(data.repo, s.dotRunner, data.config.SVG)
 }
 
 // getStoreData retrieves the storeData from the request's context.
