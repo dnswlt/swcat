@@ -103,6 +103,10 @@ type StatusReader interface {
 type Server struct {
 	opts     ServerOptions
 	template *template.Template
+	// Maps logical asset names (e.g. "main.js", "main.css") to their hashed
+	// URLs (e.g. "/static/dist/main-abc123.js"). Populated from the Vite
+	// manifest at startup; consumed by the "asset" template function.
+	viteManifest map[string]string
 	// Mutex to synchronize access to the server's state across concurrent requests.
 	mu           sync.RWMutex
 	storeDataMap map[string]*storeData
@@ -444,6 +448,9 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 }
 
 func (s *Server) reloadTemplates() error {
+	if err := s.loadViteManifest(); err != nil {
+		return err
+	}
 	tmpl := template.New("root")
 	tmpl = tmpl.Funcs(map[string]any{
 		// These functions get replaced during request processing.
@@ -451,6 +458,7 @@ func (s *Server) reloadTemplates() error {
 		"toEntityURL": undefinedTemplateFunction,
 		"uiURL":       undefinedTemplateFunction,
 		// "Static" functions
+		"asset":        s.assetURL,
 		"markdown":     markdown,
 		"formatTags":   formatTags,
 		"formatLabels": formatLabels,
@@ -1855,7 +1863,6 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		"NavBar":          nav,
 		"ReadOnly":        s.isReadOnly(r),
 		"CommentsEnabled": s.commentsEnabled(),
-		"CacheBustingKey": s.started.Format("20060102150405"),
 		"Version":         s.opts.Version,
 	}
 	// Add Refs if we're running on a Git source.

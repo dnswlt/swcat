@@ -12,9 +12,12 @@ export default {
                 main: resolve(__dirname, 'main.js')
             },
             output: {
-                entryFileNames: '[name].js',       // disables content hashing
+                // Content-hashed names for every output. The Go server reads
+                // .vite/manifest.json at startup to resolve logical names
+                // (main.js, main.css) to their hashed file paths.
+                entryFileNames: '[name]-[hash].js',
                 chunkFileNames: '[name]-[hash].js',
-                assetFileNames: '[name][extname]'
+                assetFileNames: '[name]-[hash][extname]'
             }
         }
     }

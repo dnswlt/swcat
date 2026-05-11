@@ -123,8 +123,13 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 }
 
 func TestIntegration_ServerSmoke(t *testing.T) {
-	ts, _ := setupIntegrationServer(t)
+	ts, s := setupIntegrationServer(t)
 	t.Cleanup(func() { ts.Close() })
+
+	// Resolve hashed asset URLs via the Vite manifest — the on-disk filenames
+	// carry a content hash, so we can't hardcode /static/dist/main.{js,css}.
+	mainJS := s.assetURL("main.js")
+	mainCSS := s.assetURL("main.css")
 
 	// List of explicit URLs to check with expected substrings
 	testCases := []struct {
@@ -151,8 +156,8 @@ func TestIntegration_ServerSmoke(t *testing.T) {
 		// Plugins should trigger for this entity (asyncApiImporter matches kind:API type~kafka/)
 		{`/ui/apis/analytics-events-api`, []string{"asyncApiImporter"}},
 		{"/status", []string{"options", "cachedRefs", "storeSourceType", "started", "registeredPlugins", "asyncApiImporter"}},
-		{"/static/dist/main.js", []string{"function"}},
-		{"/static/dist/main.css", []string{"clickable-node"}},
+		{mainJS, []string{"function"}},
+		{mainCSS, []string{"clickable-node"}},
 		{"/ui/documents", []string{"Documents", "architecture"}},
 		{"/ui/documents/guide", []string{"Documents", "guide"}},
 		{"/documents/raw/html/architecture.html", []string{"<html"}},
