@@ -80,11 +80,11 @@ func TestWriter_Golden_Simple(t *testing.T) {
 digraph {
 charset="UTF-8"
 rankdir="LR"
-fontname="Liberation Sans"
+fontname="Noto Sans,Liberation Sans,Arial"
 splines="spline"
 class="graphviz-svg"
-node[shape="box",fontname="Liberation Sans",fontsize="11",style="filled"]
-edge[fontname="Liberation Sans",fontsize="11",minlen="3"]
+node[shape="box",fontname="Noto Sans,Liberation Sans,Arial",fontsize="11",style="filled"]
+edge[fontname="Noto Sans,Liberation Sans,Arial",fontsize="11",minlen="3"]
 subgraph "cluster_svg-cluster-0" {
 id="svg-cluster-0"
 label="sys1"

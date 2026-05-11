@@ -42,10 +42,10 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 FROM ${RUNTIME_BASE}
 WORKDIR /app
 
-# Install graphviz (swcat needs the dot tool) plus Liberation Sans, which is
-# the font graphviz uses for SVG layout. The browser falls back to Arial (which
-# is metric-compatible with Liberation Sans) when Liberation Sans isn't available.
-RUN apk add --no-cache graphviz fontconfig ttf-liberation
+# Install graphviz (swcat needs the dot tool) plus Noto Sans, which is the font
+# graphviz uses for SVG layout. The browser loads the same font as a self-hosted
+# web font (see web/main.js), keeping glyph widths in sync with dot's layout pass.
+RUN apk add --no-cache graphviz fontconfig font-noto
 
 # binary
 COPY --from=gobuilder /out/swcat /app/swcat

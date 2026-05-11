@@ -350,17 +350,17 @@ func (dw *Writer) Start() {
 	dw.w.WriteString("digraph {\n")
 	dw.w.WriteString("charset=\"UTF-8\"\n")
 	dw.w.WriteString("rankdir=\"LR\"\n")
-	dw.w.WriteString("fontname=\"Liberation Sans\"\n")
+	dw.w.WriteString("fontname=\"Noto Sans,Liberation Sans,Arial\"\n")
 	dw.w.WriteString("splines=\"spline\"\n")
 	// Tell Graphviz about font sizes and (approximate) font families so it can
 	// size boxes and edge labels appropriately. The ultimate font style is defined
 	// via CSS (see style.css).
 	dw.w.WriteString("class=\"graphviz-svg\"\n")
-	dw.w.WriteString("node[shape=\"box\",fontname=\"Liberation Sans\",fontsize=\"11\",style=\"filled\"]\n")
+	dw.w.WriteString("node[shape=\"box\",fontname=\"Noto Sans,Liberation Sans,Arial\",fontsize=\"11\",style=\"filled\"]\n")
 	// We would like to add tooltip="" here to prevent tooltips on edges (given that we render rich tooltips).
 	// https://forum.graphviz.org/t/svg-without-tooltips/425/3 indicates that this does not work
 	// (and indeed it didn't). So we remove the <title> element in postprocessing instead.
-	fmt.Fprintf(dw.w, "edge[fontname=\"Liberation Sans\",fontsize=\"11\",minlen=\"%d\"]\n", dw.config.EdgeMinLen)
+	fmt.Fprintf(dw.w, "edge[fontname=\"Noto Sans,Liberation Sans,Arial\",fontsize=\"11\",minlen=\"%d\"]\n", dw.config.EdgeMinLen)
 }
 
 func (dw *Writer) End() {

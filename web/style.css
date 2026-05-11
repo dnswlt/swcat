@@ -80,12 +80,11 @@
         cursor: pointer;
     }
 
-    /* Pin SVG text to Liberation Sans (used by graphviz in the container) with
-       Arial as a metric-compatible fallback (used by Edge on Windows, where
-       Liberation Sans isn't installed). This keeps glyph widths in sync between
-       the layout pass and the browser render, so labels fit their nodes. */
+    /* Pin SVG text to Noto Sans. Graphviz uses the same font (via font-noto in
+       the container) so glyph widths stay in sync between the layout pass and
+       the browser render, and labels fit their nodes. */
     .graphviz-svg text {
-        font-family: "Liberation Sans", Arial, sans-serif;
+        font-family: "Noto Sans", Arial, sans-serif;
     }
 
     /* Edge labels: smaller, italic, muted. */
