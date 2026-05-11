@@ -48,9 +48,11 @@ func (r *render) entityNode(e catalog.Entity) dot.Node {
 
 func (r *render) entityEdge(from, to catalog.Entity, style dot.EdgeStyle) dot.Edge {
 	return dot.Edge{
-		From:   from.GetRef().String(),
-		To:     to.GetRef().String(),
-		Layout: r.edgeLayout(from, to, style),
+		From: from.GetRef().String(),
+		To:   to.GetRef().String(),
+		Layout: dot.EdgeLayout{
+			Style: style,
+		},
 	}
 }
 

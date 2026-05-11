@@ -140,7 +140,7 @@ func (r *render) labels(e catalog.Entity) []dot.NodeLabel {
 		if !isSystemPart {
 			return "", false
 		}
-		if !r.config.ShowParentSystem || e.GetKind() == catalog.KindSystem {
+		if !r.config.ShowParentSystem || e.GetKind() == catalog.KindSystem || r.kind == DiagramSystem {
 			return "", false
 		}
 		if r.focalEntity == nil || sameSystem(e, r.focalEntity) {
@@ -177,24 +177,22 @@ func (r *render) labels(e catalog.Entity) []dot.NodeLabel {
 // "provided by" entry, since seeing the implementing component is useful when
 // many APIs from different systems appear together.
 func (r *render) nodeTooltipAttrs(e catalog.Entity) []dot.TooltipAttr {
-	if r.kind != DiagramSystem {
-		return nil
+	switch a := e.(type) {
+	case *catalog.API:
+		switch r.kind {
+		case DiagramSystem, DiagramComponent:
+			providers := a.GetProviders()
+			names := make([]string, len(providers))
+			for i, p := range providers {
+				names[i] = p.QName()
+			}
+			return []dot.TooltipAttr{
+				{Key: "system", Value: a.GetSystem().QName()},
+				{Key: "provided by", Value: strings.Join(names, ", ")},
+			}
+		}
 	}
-	a, ok := e.(*catalog.API)
-	if !ok {
-		return nil
-	}
-	providers := a.GetProviders()
-	if len(providers) == 0 {
-		return nil
-	}
-	names := make([]string, len(providers))
-	for i, p := range providers {
-		names[i] = p.QName()
-	}
-	return []dot.TooltipAttr{
-		{Key: "provided by", Value: strings.Join(names, ", ")},
-	}
+	return nil
 }
 
 func (r *render) nodeLayout(e catalog.Entity) dot.NodeLayout {
@@ -220,12 +218,6 @@ func (r *render) nodeLayout(e catalog.Entity) dot.NodeLayout {
 		Shape:        r.shape(e),
 		TooltipTitle: tooltipTitle,
 		TooltipAttrs: tooltipAttrs,
-	}
-}
-
-func (r *render) edgeLayout(src, dst catalog.Entity, style dot.EdgeStyle) dot.EdgeLayout {
-	return dot.EdgeLayout{
-		Style: style,
 	}
 }
 

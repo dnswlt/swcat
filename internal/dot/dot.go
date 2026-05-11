@@ -179,7 +179,7 @@ func (n *Node) htmlLabel() string {
 		return renderLabelLine(n.Layout.Labels[0])
 	}
 	var b strings.Builder
-	b.WriteString(`<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="2" CELLPADDING="0">`)
+	b.WriteString(`<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0">`)
 	for _, lbl := range n.Layout.Labels {
 		b.WriteString("<TR><TD>")
 		b.WriteString(renderLabelLine(lbl))
