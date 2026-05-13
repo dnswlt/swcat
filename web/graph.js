@@ -96,6 +96,12 @@ document.body.addEventListener('htmx:configRequest', (event) => {
     if (action === 'add-entity' || action === 'remove-entity' || action === 'toggle-clusters') {
         event.detail.parameters['refresh'] = 'full';
     }
+
+    // "Fully connect" expands selectedEntities server-side and returns an
+    // HX-Redirect, so we don't mutate state here — just forward the URL state.
+    if (action === 'fully-connect') {
+        event.detail.parameters['connect'] = 'full';
+    }
 });
 
 // Note: svgUpdated event is already handled in main.js (initPage function)

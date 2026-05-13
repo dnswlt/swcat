@@ -12,6 +12,7 @@ import (
 	"log"
 	"maps"
 	"net/http"
+	"net/url"
 	"path"
 	"slices"
 	"strings"
@@ -1222,6 +1223,32 @@ func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
 	slices.SortFunc(selectedEntities, func(a, b catalog.Entity) int {
 		return a.GetRef().Compare(b.GetRef())
 	})
+
+	// "Fully connect" action: expand selectedEntities to all entities on any
+	// path connecting two of them, then redirect to the canonical URL.
+	if r.Header.Get("HX-Request") == "true" && q.Get("connect") == "full" {
+		connected := FullyConnectedGraph(data.repo, selectedEntities)
+		slices.SortFunc(connected, func(a, b catalog.Entity) int {
+			return a.GetRef().Compare(b.GetRef())
+		})
+		vals := url.Values{}
+		for _, e := range connected {
+			vals.Add("e", e.GetRef().String())
+		}
+		if q.Get("clusters") == "1" {
+			vals.Set("clusters", "1")
+		}
+		if qStr := q.Get("q"); qStr != "" {
+			vals.Set("q", qStr)
+		}
+		redirectURL := uiURLWithContext(r.Context(), "graph")
+		if encoded := vals.Encode(); encoded != "" {
+			redirectURL += "?" + encoded
+		}
+		w.Header().Set("HX-Redirect", redirectURL)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 
 	// Retrieve entities matching query q=, filtering out already selected ones
 	var entities []catalog.Entity
