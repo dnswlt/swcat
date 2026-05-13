@@ -1,116 +1,90 @@
 package web
 
 import (
+	"maps"
+	"slices"
+
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/repo"
 )
 
-// FullyConnectedGraph returns all entities that lie on any path
-// connecting any two entities in roots, including roots.
+// FullyConnectedGraph returns all entities on any simple (cycle-free) directed
+// path connecting two entities in roots, including the roots themselves.
+//
 // A path is defined by the following edges:
 // (a) Component -(consumesApis)-> API
 // (b) API -(providedBy)-> Component
 // (c) (Resource|Component) -(dependsOn)-> (Component|Resource)
 //
-// The function uses two passes of multi-BFS starting from all entities
-// in roots: one forward pass, one backward pass. It returns
-// the intersection of the two passes.
+// The algorithm uses a Depth-First Search (DFS) from each root to identify
+// all nodes that can reach a root (including themselves) without forming a cycle.
 func FullyConnectedGraph(r *repo.Repository, roots []catalog.Entity) []catalog.Entity {
-	forward := bfsReachable(r, roots, forwardNeighbors)
-	backward := bfsReachable(r, roots, backwardNeighbors)
-	result := make([]catalog.Entity, 0, len(forward))
-	for k, e := range forward {
-		if _, ok := backward[k]; ok {
-			result = append(result, e)
-		}
+	if len(roots) == 0 {
+		return nil
 	}
-	return result
-}
 
-func bfsReachable(
-	r *repo.Repository,
-	roots []catalog.Entity,
-	neighbors func(*repo.Repository, catalog.Entity) []catalog.Entity,
-) map[string]catalog.Entity {
-	visited := make(map[string]catalog.Entity)
-	var queue []catalog.Entity
+	rootSet := make(map[string]struct{}, len(roots))
 	for _, e := range roots {
-		k := e.GetRef().String()
-		if _, ok := visited[k]; !ok {
-			visited[k] = e
-			queue = append(queue, e)
-		}
+		rootSet[e.GetRef().String()] = struct{}{}
 	}
-	for len(queue) > 0 {
-		cur := queue[0]
-		queue = queue[1:]
-		for _, nb := range neighbors(r, cur) {
-			k := nb.GetRef().String()
-			if _, ok := visited[k]; !ok {
-				visited[k] = nb
-				queue = append(queue, nb)
+
+	// result stores the entities on simple paths between roots.
+	result := make(map[string]catalog.Entity)
+	// pathSet tracks the current recursion stack to identify cycles.
+	pathSet := make(map[string]struct{})
+
+	var dfs func(e catalog.Entity) bool
+	dfs = func(e catalog.Entity) bool {
+		key := e.GetRef().String()
+		if _, ok := pathSet[key]; ok {
+			return false
+		}
+
+		pathSet[key] = struct{}{}
+		defer delete(pathSet, key)
+
+		// A node is on a valid path if it's a root or if it can reach one.
+		_, found := rootSet[key]
+		for _, nb := range forwardNeighbors(r, e) {
+			if dfs(nb) {
+				found = true
 			}
 		}
+
+		if found {
+			result[key] = e
+		}
+		return found
 	}
-	return visited
+
+	for _, root := range roots {
+		dfs(root)
+	}
+
+	return slices.Collect(maps.Values(result))
 }
 
+// forwardNeighbors returns the entities that the given entity has a directed edge to,
+// according to the rules defined in FullyConnectedGraph.
 func forwardNeighbors(r *repo.Repository, e catalog.Entity) []catalog.Entity {
 	var out []catalog.Entity
-	switch v := e.(type) {
-	case *catalog.Component:
-		for _, ref := range v.Spec.ConsumesAPIs {
-			if nb := r.Entity(ref.Ref); nb != nil {
-				out = append(out, nb)
-			}
-		}
-		for _, ref := range v.Spec.DependsOn {
-			if nb := r.Entity(ref.Ref); nb != nil {
-				out = append(out, nb)
-			}
-		}
-	case *catalog.API:
-		for _, ref := range v.GetProviders() {
-			if nb := r.Entity(ref.Ref); nb != nil {
-				out = append(out, nb)
-			}
-		}
-	case *catalog.Resource:
-		for _, ref := range v.Spec.DependsOn {
-			if nb := r.Entity(ref.Ref); nb != nil {
+
+	addEntities := func(refs []*catalog.LabelRef) {
+		for _, lr := range refs {
+			if nb := r.Entity(lr.Ref); nb != nil {
 				out = append(out, nb)
 			}
 		}
 	}
-	return out
-}
 
-func backwardNeighbors(r *repo.Repository, e catalog.Entity) []catalog.Entity {
-	var out []catalog.Entity
 	switch v := e.(type) {
 	case *catalog.Component:
-		for _, ref := range v.Spec.ProvidesAPIs {
-			if nb := r.Entity(ref.Ref); nb != nil {
-				out = append(out, nb)
-			}
-		}
-		for _, ref := range v.GetDependents() {
-			if nb := r.Entity(ref.Ref); nb != nil {
-				out = append(out, nb)
-			}
-		}
+		addEntities(v.Spec.ConsumesAPIs)
+		addEntities(v.Spec.DependsOn)
 	case *catalog.API:
-		for _, ref := range v.GetConsumers() {
-			if nb := r.Entity(ref.Ref); nb != nil {
-				out = append(out, nb)
-			}
-		}
+		addEntities(v.GetProviders())
 	case *catalog.Resource:
-		for _, ref := range v.GetDependents() {
-			if nb := r.Entity(ref.Ref); nb != nil {
-				out = append(out, nb)
-			}
-		}
+		addEntities(v.Spec.DependsOn)
 	}
 	return out
 }

@@ -290,9 +290,85 @@ func TestFullyConnectedGraph_Cycle(t *testing.T) {
 		t.Fatalf("Validate(): %v", err)
 	}
 
+	// With one root, compY only reaches compX via a cycle — not a simple path
+	// to another root — so it must be excluded.
 	got := refNames(FullyConnectedGraph(r, []catalog.Entity{compX}))
-	want := []string{"compX", "compY"}
+	if diff := cmp.Diff([]string{"compX"}, got); diff != "" {
+		t.Errorf("FullyConnectedGraph single root in cycle (-want +got):\n%s", diff)
+	}
+
+	// With both nodes as roots, the cycle provides a simple path in each
+	// direction, so both are included.
+	got = refNames(FullyConnectedGraph(r, []catalog.Entity{compX, compY}))
+	if diff := cmp.Diff([]string{"compX", "compY"}, got); diff != "" {
+		t.Errorf("FullyConnectedGraph roots in cycle (-want +got):\n%s", diff)
+	}
+}
+
+func TestFullyConnectedGraph_SideCycleExcluded(t *testing.T) {
+	// r1 → midA → r2 is the only simple path between roots.
+	// midA ↔ side forms a side cycle that must NOT contaminate the result.
+	owner := &catalog.Group{
+		Metadata: &catalog.Metadata{Name: "team"},
+		Spec:     &catalog.GroupSpec{Type: "team"},
+	}
+	domain := &catalog.Domain{
+		Metadata: &catalog.Metadata{Name: "dom"},
+		Spec:     &catalog.DomainSpec{Owner: owner.GetRef()},
+	}
+	system := &catalog.System{
+		Metadata: &catalog.Metadata{Name: "sys"},
+		Spec:     &catalog.SystemSpec{Owner: owner.GetRef(), Domain: domain.GetRef()},
+	}
+
+	r2 := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "r2"},
+		Spec: &catalog.ComponentSpec{
+			Type: "service", Lifecycle: "production",
+			Owner: owner.GetRef(), System: system.GetRef(),
+		},
+	}
+	side := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "side"},
+		Spec: &catalog.ComponentSpec{
+			Type: "service", Lifecycle: "production",
+			Owner: owner.GetRef(), System: system.GetRef(),
+		},
+	}
+	midA := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "midA"},
+		Spec: &catalog.ComponentSpec{
+			Type: "service", Lifecycle: "production",
+			Owner: owner.GetRef(), System: system.GetRef(),
+			DependsOn: []*catalog.LabelRef{
+				{Ref: r2.GetRef()},
+				{Ref: side.GetRef()},
+			},
+		},
+	}
+	side.Spec.DependsOn = []*catalog.LabelRef{{Ref: midA.GetRef()}}
+	r1 := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "r1"},
+		Spec: &catalog.ComponentSpec{
+			Type: "service", Lifecycle: "production",
+			Owner: owner.GetRef(), System: system.GetRef(),
+			DependsOn: []*catalog.LabelRef{{Ref: midA.GetRef()}},
+		},
+	}
+
+	repository := repo.NewRepository()
+	for _, e := range []catalog.Entity{owner, domain, system, r1, midA, side, r2} {
+		if err := repository.AddEntity(e); err != nil {
+			t.Fatalf("AddEntity(%s): %v", e.GetRef(), err)
+		}
+	}
+	if err := repository.Validate(); err != nil {
+		t.Fatalf("Validate(): %v", err)
+	}
+
+	got := refNames(FullyConnectedGraph(repository, []catalog.Entity{r1, r2}))
+	want := []string{"midA", "r1", "r2"}
 	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("FullyConnectedGraph on cycle (-want +got):\n%s", diff)
+		t.Errorf("FullyConnectedGraph side cycle (-want +got):\n%s", diff)
 	}
 }
