@@ -30,6 +30,8 @@
                 </svg>
             </button>
             <div id="session-popover" popover
+                data-popover-placement="top-end"
+                data-popover-focus="#session-prefix-input"
                 class="ui-popover p-3 bg-white rounded-lg shadow-xl border border-gray-200 text-sm w-56">
                 <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">New session</p>
                 <form hx-post='{{ uiURL "sessions" }}' hx-swap="none">
