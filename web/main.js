@@ -185,105 +185,92 @@ function addSVGListener() {
     });
 }
 
-// Positions the session popover above the session button when it opens.
-function initSessionPopover() {
-    const btn = document.getElementById('session-btn');
-    const popover = document.getElementById('session-popover');
-    if (!btn || !popover) return;
+// Placement strategies for popovers. Each returns the CSS positioning props
+// needed to anchor one corner of the popover to one corner of its trigger,
+// given the trigger's bounding rect and a gap (in px).
+//
+// Naming follows CSS Anchor / Floating UI: the value is "<side>-<alignment>",
+// where <side> is which side of the trigger the popover sits on, and
+// <alignment> is which edge of the trigger the popover lines up with.
+// Coordinates are page-relative (CSS fixed/absolute against viewport edges).
+const POPOVER_PLACEMENTS = {
+    'bottom-start': (rect, gap) => ({
+        top: `${rect.bottom + gap}px`,
+        left: `${rect.left}px`,
+    }),
+    'bottom-end': (rect, gap) => ({
+        top: `${rect.bottom + gap}px`,
+        right: `${window.innerWidth - rect.right}px`,
+    }),
+    'top-start': (rect, gap) => ({
+        bottom: `${window.innerHeight - rect.top + gap}px`,
+        left: `${rect.left}px`,
+    }),
+    'top-end': (rect, gap) => ({
+        bottom: `${window.innerHeight - rect.top + gap}px`,
+        right: `${window.innerWidth - rect.right}px`,
+    }),
+};
 
-    popover.addEventListener('beforetoggle', (e) => {
-        if (e.newState === 'open') {
-            const rect = btn.getBoundingClientRect();
-            popover.style.bottom = `${window.innerHeight - rect.top + 4}px`;
-            popover.style.top = 'unset';
-            popover.style.right = `${window.innerWidth - rect.right}px`;
-            popover.style.left = 'unset';
-        }
-    });
-
-    popover.addEventListener('toggle', (e) => {
-        if (e.newState === 'open') {
-            document.getElementById('session-prefix-input')?.focus();
-        }
-    });
-}
-
-// Positions the plugin popover below the plugin button when it opens.
-function initPluginPopover() {
-    const btn = document.getElementById('plugin-btn');
-    const popover = document.getElementById('plugin-popover');
-    if (!btn || !popover) return;
-
-    popover.addEventListener('beforetoggle', (e) => {
-        if (e.newState === 'open') {
-            const rect = btn.getBoundingClientRect();
-            popover.style.top = `${rect.bottom + 4}px`;
-            popover.style.left = `${rect.left}px`;
-        }
-    });
-}
-
-// Positions the "fully connect" popover below its trigger button when it opens.
-// The popover lives inside the OOB-swapped #graph-container, so the element is
-// replaced on each entity change — a dataset flag makes re-init idempotent.
-function initConnectPopover() {
-    const popover = document.getElementById('connect-popover');
-    const btn = document.querySelector('[popovertarget="connect-popover"]');
-    if (!popover || !btn) return;
+// Wires up positioning and optional on-open behavior for a single popover.
+// Reads declarative configuration from data-* attributes on the popover element:
+//   data-popover-placement (default "bottom-start"): see POPOVER_PLACEMENTS
+//   data-popover-offset    (default 4): gap in px between trigger and popover
+//   data-popover-focus     (optional): CSS selector to focus when opened
+//
+// The trigger is located via [popovertarget="<popover-id>"]. Re-running on the
+// same element is a no-op, so this is safe to call after htmx swaps that may
+// replace the popover element with a fresh copy (which clears the flag).
+function initPopover(popover) {
     if (popover.dataset.popoverInit === '1') return;
+    const btn = document.querySelector(`[popovertarget="${popover.id}"]`);
+    if (!btn) return;
     popover.dataset.popoverInit = '1';
 
-    popover.addEventListener('beforetoggle', (e) => {
-        if (e.newState === 'open') {
-            const rect = btn.getBoundingClientRect();
-            popover.style.top = `${rect.bottom + 4}px`;
-            popover.style.left = `${rect.left}px`;
-        }
-    });
-}
-
-// Positions the documents popover below the docs button when it opens.
-function initDocsPopover() {
-    const btn = document.getElementById('docs-btn');
-    const popover = document.getElementById('docs-popover');
-    if (!btn || !popover) return;
+    const placementKey = popover.dataset.popoverPlacement || 'bottom-start';
+    const placement = POPOVER_PLACEMENTS[placementKey];
+    if (!placement) {
+        console.warn(`Unknown popover placement "${placementKey}" on #${popover.id}`);
+        return;
+    }
+    const offset = Number(popover.dataset.popoverOffset || 4);
+    const focusSel = popover.dataset.popoverFocus;
 
     popover.addEventListener('beforetoggle', (e) => {
-        if (e.newState === 'open') {
-            const rect = btn.getBoundingClientRect();
-            popover.style.top = `${rect.bottom + 4}px`;
-            popover.style.left = `${rect.left}px`;
-        }
-    });
-}
-
-// Positions all links-popover-* elements below their corresponding trigger buttons.
-function initLinksPopover() {
-    const popovers = document.querySelectorAll('[id^="links-popover-"]');
-    popovers.forEach(popover => {
-        const btn = document.querySelector(`[popovertarget="${popover.id}"]`);
-        if (!btn) return;
-
-        popover.addEventListener('beforetoggle', (e) => {
-            if (e.newState === 'open') {
-                const rect = btn.getBoundingClientRect();
-                popover.style.top = `${rect.bottom + 4}px`;
-                popover.style.left = `${rect.left}px`;
-            }
+        if (e.newState !== 'open') return;
+        const pos = placement(btn.getBoundingClientRect(), offset);
+        // Reset all sides first so a previous placement can't leak through
+        // (e.g. if the placement attribute is ever swapped at runtime).
+        Object.assign(popover.style, {
+            top: 'unset', bottom: 'unset', left: 'unset', right: 'unset',
+            ...pos,
         });
     });
+
+    if (focusSel) {
+        popover.addEventListener('toggle', (e) => {
+            if (e.newState === 'open') {
+                document.querySelector(focusSel)?.focus();
+            }
+        });
+    }
+}
+
+// Initializes every [popover] element within the given root (defaults to the
+// whole document). Idempotent per element, so calling this repeatedly after
+// htmx swaps will only wire up popovers that have actually been (re)inserted.
+function initAllPopovers(root = document) {
+    root.querySelectorAll('[popover]').forEach(initPopover);
 }
 
 // Runs all initialization functions relevant for the given page identified by pageId.
 async function initPage(pageId) {
-    initSessionPopover();
+    initAllPopovers();
 
     if (['domain', 'system', 'component', 'resource', 'api', 'graph'].includes(pageId)) {
         createTooltip();
         loadSVGMetadata();
         addSVGListener();
-        initPluginPopover();
-        initLinksPopover();
 
         // Reload the page after plugins have completed successfully.
         document.body.addEventListener("pluginsSuccess", () => {
@@ -291,10 +278,13 @@ async function initPage(pageId) {
         });
 
         // Re-run listener registration and SVG metadata parsing after an SVG update
-        // (triggered by a HX-Trigger-After-Swap response header).
+        // (triggered by a HX-Trigger-After-Swap response header). Also re-init
+        // popovers: OOB swaps may have replaced the trigger/popover elements
+        // (e.g. #connect-popover lives inside the swapped #graph-container).
         document.body.addEventListener("svgUpdated", () => {
             loadSVGMetadata();
             addSVGListener();
+            initAllPopovers();
         });
 
         // JSON viewer to render JSON annotations.
@@ -308,8 +298,6 @@ async function initPage(pageId) {
     }
 
     if (pageId === 'graph') {
-        initConnectPopover();
-        document.body.addEventListener("svgUpdated", initConnectPopover);
         await import('./graph.js');
     }
 
@@ -338,10 +326,6 @@ async function initPage(pageId) {
         jsonViewers.forEach(viewer => {
             initJsonViewer(viewer.id);
         });
-    }
-
-    if (pageId === 'documents') {
-        initDocsPopover();
     }
 }
 
