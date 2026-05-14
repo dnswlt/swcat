@@ -223,6 +223,25 @@ function initPluginPopover() {
     });
 }
 
+// Positions the "fully connect" popover below its trigger button when it opens.
+// The popover lives inside the OOB-swapped #graph-container, so the element is
+// replaced on each entity change — a dataset flag makes re-init idempotent.
+function initConnectPopover() {
+    const popover = document.getElementById('connect-popover');
+    const btn = document.querySelector('[popovertarget="connect-popover"]');
+    if (!popover || !btn) return;
+    if (popover.dataset.popoverInit === '1') return;
+    popover.dataset.popoverInit = '1';
+
+    popover.addEventListener('beforetoggle', (e) => {
+        if (e.newState === 'open') {
+            const rect = btn.getBoundingClientRect();
+            popover.style.top = `${rect.bottom + 4}px`;
+            popover.style.left = `${rect.left}px`;
+        }
+    });
+}
+
 // Positions the documents popover below the docs button when it opens.
 function initDocsPopover() {
     const btn = document.getElementById('docs-btn');
@@ -289,6 +308,8 @@ async function initPage(pageId) {
     }
 
     if (pageId === 'graph') {
+        initConnectPopover();
+        document.body.addEventListener("svgUpdated", initConnectPopover);
         await import('./graph.js');
     }
 

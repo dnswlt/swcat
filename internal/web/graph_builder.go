@@ -10,6 +10,7 @@ import (
 
 // FullyConnectedGraph returns all entities on any simple (cycle-free) directed
 // path connecting two entities in roots, including the roots themselves.
+// The path length is limited by maxDepth.
 //
 // A path is defined by the following edges:
 // (a) Component -(consumesApis)-> API
@@ -18,7 +19,7 @@ import (
 //
 // The algorithm uses a Depth-First Search (DFS) from each root to identify
 // all nodes that can reach a root (including themselves) without forming a cycle.
-func FullyConnectedGraph(r *repo.Repository, roots []catalog.Entity) []catalog.Entity {
+func FullyConnectedGraph(r *repo.Repository, roots []catalog.Entity, maxDepth int) []catalog.Entity {
 	if len(roots) == 0 {
 		return nil
 	}
@@ -33,10 +34,14 @@ func FullyConnectedGraph(r *repo.Repository, roots []catalog.Entity) []catalog.E
 	// pathSet tracks the current recursion stack to identify cycles.
 	pathSet := make(map[string]struct{})
 
-	var dfs func(e catalog.Entity) bool
-	dfs = func(e catalog.Entity) bool {
+	var dfs func(e catalog.Entity, depth int) bool
+	dfs = func(e catalog.Entity, depth int) bool {
 		key := e.GetRef().String()
 		if _, ok := pathSet[key]; ok {
+			return false
+		}
+
+		if maxDepth > 0 && depth > maxDepth {
 			return false
 		}
 
@@ -46,7 +51,7 @@ func FullyConnectedGraph(r *repo.Repository, roots []catalog.Entity) []catalog.E
 		// A node is on a valid path if it's a root or if it can reach one.
 		_, found := rootSet[key]
 		for _, nb := range forwardNeighbors(r, e) {
-			if dfs(nb) {
+			if dfs(nb, depth+1) {
 				found = true
 			}
 		}
@@ -58,7 +63,7 @@ func FullyConnectedGraph(r *repo.Repository, roots []catalog.Entity) []catalog.E
 	}
 
 	for _, root := range roots {
-		dfs(root)
+		dfs(root, 0)
 	}
 
 	return slices.Collect(maps.Values(result))

@@ -236,7 +236,7 @@ func TestFullyConnectedGraph(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			roots := pickEntities(t, byName, tc.roots...)
-			got := refNames(FullyConnectedGraph(r, roots))
+			got := refNames(FullyConnectedGraph(r, roots, 0))
 			sort.Strings(tc.want)
 			if diff := cmp.Diff(tc.want, got, opt); diff != "" {
 				t.Errorf("FullyConnectedGraph mismatch (-want +got):\n%s", diff)
@@ -292,14 +292,14 @@ func TestFullyConnectedGraph_Cycle(t *testing.T) {
 
 	// With one root, compY only reaches compX via a cycle — not a simple path
 	// to another root — so it must be excluded.
-	got := refNames(FullyConnectedGraph(r, []catalog.Entity{compX}))
+	got := refNames(FullyConnectedGraph(r, []catalog.Entity{compX}, 0))
 	if diff := cmp.Diff([]string{"compX"}, got); diff != "" {
 		t.Errorf("FullyConnectedGraph single root in cycle (-want +got):\n%s", diff)
 	}
 
 	// With both nodes as roots, the cycle provides a simple path in each
 	// direction, so both are included.
-	got = refNames(FullyConnectedGraph(r, []catalog.Entity{compX, compY}))
+	got = refNames(FullyConnectedGraph(r, []catalog.Entity{compX, compY}, 0))
 	if diff := cmp.Diff([]string{"compX", "compY"}, got); diff != "" {
 		t.Errorf("FullyConnectedGraph roots in cycle (-want +got):\n%s", diff)
 	}
@@ -366,9 +366,92 @@ func TestFullyConnectedGraph_SideCycleExcluded(t *testing.T) {
 		t.Fatalf("Validate(): %v", err)
 	}
 
-	got := refNames(FullyConnectedGraph(repository, []catalog.Entity{r1, r2}))
+	got := refNames(FullyConnectedGraph(repository, []catalog.Entity{r1, r2}, 0))
 	want := []string{"midA", "r1", "r2"}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("FullyConnectedGraph side cycle (-want +got):\n%s", diff)
+	}
+}
+
+func TestFullyConnectedGraph_MaxDepth(t *testing.T) {
+	// r1 → r2 → r3 → r4
+	owner := &catalog.Group{
+		Metadata: &catalog.Metadata{Name: "owner"},
+		Spec:     &catalog.GroupSpec{Type: "team"},
+	}
+	domain := &catalog.Domain{
+		Metadata: &catalog.Metadata{Name: "dom"},
+		Spec:     &catalog.DomainSpec{Owner: owner.GetRef()},
+	}
+	system := &catalog.System{
+		Metadata: &catalog.Metadata{Name: "sys"},
+		Spec: &catalog.SystemSpec{
+			Owner:  owner.GetRef(),
+			Domain: domain.GetRef(),
+		},
+	}
+	r1 := &catalog.Resource{
+		Metadata: &catalog.Metadata{Name: "r1"},
+		Spec: &catalog.ResourceSpec{
+			Type:      "database",
+			Owner:     owner.GetRef(),
+			System:    system.GetRef(),
+			DependsOn: []*catalog.LabelRef{{Ref: &catalog.Ref{Kind: "resource", Name: "r2"}}},
+		},
+	}
+	r2 := &catalog.Resource{
+		Metadata: &catalog.Metadata{Name: "r2"},
+		Spec: &catalog.ResourceSpec{
+			Type:      "database",
+			Owner:     owner.GetRef(),
+			System:    system.GetRef(),
+			DependsOn: []*catalog.LabelRef{{Ref: &catalog.Ref{Kind: "resource", Name: "r3"}}},
+		},
+	}
+	r3 := &catalog.Resource{
+		Metadata: &catalog.Metadata{Name: "r3"},
+		Spec: &catalog.ResourceSpec{
+			Type:      "database",
+			Owner:     owner.GetRef(),
+			System:    system.GetRef(),
+			DependsOn: []*catalog.LabelRef{{Ref: &catalog.Ref{Kind: "resource", Name: "r4"}}},
+		},
+	}
+	r4 := &catalog.Resource{
+		Metadata: &catalog.Metadata{Name: "r4"},
+		Spec: &catalog.ResourceSpec{
+			Type:   "database",
+			Owner:  owner.GetRef(),
+			System: system.GetRef(),
+		},
+	}
+
+	repository := repo.NewRepository()
+	for _, e := range []catalog.Entity{owner, domain, system, r1, r2, r3, r4} {
+		if err := repository.AddEntity(e); err != nil {
+			t.Fatalf("AddEntity(%s): %v", e.GetRef(), err)
+		}
+	}
+	if err := repository.Validate(); err != nil {
+		t.Fatalf("Validate(): %v", err)
+	}
+
+	// r1 -> r2 -> r3 -> r4
+	// Distance r1 to r4 is 3.
+
+	// maxDepth 2: r1 to r3 is 2, but r4 is at depth 3.
+	// So r1 can't reach r4 as a root. Result should only be {r1} (and {r4} if we start from r4).
+	got := refNames(FullyConnectedGraph(repository, []catalog.Entity{r1, r4}, 2))
+	want := []string{"r1", "r4"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FullyConnectedGraph maxDepth=2 (-want +got):\n%s", diff)
+	}
+
+	// maxDepth 3: r1 to r4 is 3. Path is included.
+	got = refNames(FullyConnectedGraph(repository, []catalog.Entity{r1, r4}, 3))
+	want = []string{"r1", "r2", "r3", "r4"}
+	sort.Strings(want)
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FullyConnectedGraph maxDepth=3 (-want +got):\n%s", diff)
 	}
 }

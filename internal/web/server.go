@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1227,7 +1228,8 @@ func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
 	// "Fully connect" action: expand selectedEntities to all entities on any
 	// path connecting two of them, then redirect to the canonical URL.
 	if r.Header.Get("HX-Request") == "true" && q.Get("connect") == "full" {
-		connected := FullyConnectedGraph(data.repo, selectedEntities)
+		maxDepth, _ := strconv.Atoi(q.Get("maxDepth"))
+		connected := FullyConnectedGraph(data.repo, selectedEntities, maxDepth)
 		slices.SortFunc(connected, func(a, b catalog.Entity) int {
 			return a.GetRef().Compare(b.GetRef())
 		})

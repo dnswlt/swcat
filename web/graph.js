@@ -101,6 +101,10 @@ document.body.addEventListener('htmx:configRequest', (event) => {
     // HX-Redirect, so we don't mutate state here — just forward the URL state.
     if (action === 'fully-connect') {
         event.detail.parameters['connect'] = 'full';
+        const maxDepthInput = document.getElementById('max-depth');
+        if (maxDepthInput && maxDepthInput.value && maxDepthInput.value !== '0') {
+            event.detail.parameters['maxDepth'] = maxDepthInput.value;
+        }
     }
 });
 
