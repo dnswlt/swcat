@@ -10,6 +10,8 @@ build/
 web/node_modules/
 web/.vite/
 web/dist/
+# Vite build output — produced fresh in the webbuilder stage.
+static/dist/
 
 # Java / Maven
 **/target/

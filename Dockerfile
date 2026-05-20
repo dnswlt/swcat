@@ -24,11 +24,15 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
-# 2. Copy source (for building) and web assets (for embedding)
+# 2. Copy source (for building) and web assets (for embedding).
+# `static/` contains vendored assets (static/js, static/icons) that aren't
+# processed by Vite — embed.go (//go:embed all:static) needs them too, not
+# just the Vite output under static/dist.
 COPY cmd ./cmd
 COPY templates ./templates
 COPY internal ./internal
 COPY *.go ./
+COPY static ./static
 COPY --from=webbuilder /app/static/dist ./static/dist
 
 # 3. Build with persistent cache mounts
