@@ -63,6 +63,22 @@ test:
 test-integration:
 	$(GO) test $(GOTESTFLAGS) -tags=integration -count=1 -race ./...
 
+# Determine DOCKER_HOST for testcontainers if not set
+ifeq ($(DOCKER_HOST),)
+    RESOLVED_DOCKER_HOST := $(shell docker context inspect --format '{{.Endpoints.docker.Host}}' 2>/dev/null)
+else
+    RESOLVED_DOCKER_HOST := $(DOCKER_HOST)
+endif
+
+# If Colima is detected in the socket path, override the socket path for Ryuk
+ifneq (,$(findstring colima,$(RESOLVED_DOCKER_HOST)))
+    RYUK_ENV := TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
+endif
+
+# Build the docker image and run docker integration tests, no caching.
+test-docker: docker-build
+	DOCKER_HOST="$(RESOLVED_DOCKER_HOST)" $(RYUK_ENV) SWCAT_TEST_IMAGE=swcat-swcat:latest $(GO) test $(GOTESTFLAGS) -tags=docker -count=1 -v ./internal/web/docker_integration_test.go
+
 #
 # Run with Docker compose
 #
