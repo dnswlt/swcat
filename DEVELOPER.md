@@ -7,6 +7,16 @@ This file contains a collection of information relevant to developers of `swcat`
 See <https://dnswlt.github.io/swcat/getting-started/> 
 (or, locally, [docs/getting-started.md](docs/getting-started.md)).
 
+## Running locally
+
+To start the server locally against the bundled `./examples/flights` catalog:
+
+```bash
+make run-examples
+```
+
+This serves the catalog at <http://localhost:9191>.
+
 ## Updating documentation
 
 Documentation is generated using [mkdocs](https://www.mkdocs.org/). 
@@ -35,6 +45,28 @@ make proto
 ```
 
 This requires `protoc`, `protoc-gen-go`, and `protoc-gen-go-grpc` to be installed.
+
+To install the `protoc` compiler:
+
+```bash
+# macOS (Homebrew)
+brew install protobuf
+
+# Debian/Ubuntu
+sudo apt install -y protobuf-compiler
+```
+
+See <https://protobuf.dev/installation/> for more options and details.
+
+To install the Go plugins:
+
+```bash
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+```
+
+`go install` places the binaries in `$(go env GOPATH)/bin`, so make sure that
+directory is on your `PATH`.
 
 ## Testing
 
