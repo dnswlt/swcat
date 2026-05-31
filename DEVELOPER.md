@@ -2,20 +2,57 @@
 
 This file contains a collection of information relevant to developers of `swcat`.
 
-## Building
+## Building and running locally
 
-See <https://dnswlt.github.io/swcat/getting-started/> 
+This section walks you from a fresh checkout to a running dev server.
+For a more user-focused guide (including Docker), see
+<https://dnswlt.github.io/swcat/getting-started/>
 (or, locally, [docs/getting-started.md](docs/getting-started.md)).
 
-## Running locally
+### Prerequisites
 
-To start the server locally against the bundled `./examples/flights` catalog:
+* [Go](https://go.dev/) (>= 1.24.5)
+* `npm` (e.g. via [nvm](https://github.com/nvm-sh/nvm)) — needed to build the frontend assets
+* [Graphviz](https://graphviz.org/download/) — used to render catalog graphs
+
+### Build the frontend assets
+
+The Go server embeds the compiled frontend (Tailwind CSS, JS bundles), so you
+must build the web assets before running or building the server:
+
+```bash
+make build-web
+```
+
+This runs `npm run build` in `web/`. On the very first run, install the npm
+dependencies first:
+
+```bash
+npm install --prefix web
+```
+
+### Run the dev server
+
+Once the web assets are built, start the server against the bundled
+`./examples/flights` catalog:
 
 ```bash
 make run-examples
 ```
 
-This serves the catalog at <http://localhost:9191>.
+Then point your browser at <http://localhost:9191> and explore the example
+catalog.
+
+### Build a binary
+
+To compile a standalone `swcat` binary (with the version stamped in):
+
+```bash
+make build
+```
+
+This produces a `swcat` executable in the repo root. Remember to run
+`make build-web` first whenever the frontend assets have changed.
 
 ## Updating documentation
 
