@@ -36,6 +36,40 @@ make proto
 
 This requires `protoc`, `protoc-gen-go`, and `protoc-gen-go-grpc` to be installed.
 
+## Testing
+
+Tests are run via the `Makefile` targets below.
+
+### Unit tests
+
+```bash
+make test
+```
+
+Runs the full Go unit test suite (`go test ./...`).
+
+### Integration tests
+
+```bash
+make test-integration
+```
+
+Builds and runs the integration tests with the `integration` build tag,
+the race detector enabled, and caching disabled (`-count=1`).
+Pass extra flags via `GOTESTFLAGS`, e.g. `make test-integration GOTESTFLAGS=-v`.
+
+### Docker integration tests
+
+```bash
+make test-docker
+```
+
+Builds the Docker image and runs the Docker-based integration tests
+(`docker` build tag) using [testcontainers](https://testcontainers.com/).
+This requires a running Docker daemon. The target auto-detects the
+`DOCKER_HOST` endpoint (including Colima setups) so it usually works without
+extra configuration.
+
 ## Creating tags and releases
 
 Releases are only created from tags.
