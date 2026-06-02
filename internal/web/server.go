@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"io/fs"
 	"log"
 	"maps"
@@ -24,8 +25,10 @@ import (
 	"github.com/dnswlt/swcat/internal/api"
 	"github.com/dnswlt/swcat/internal/bitbucket"
 	"github.com/dnswlt/swcat/internal/catalog"
+	catalog_pb "github.com/dnswlt/swcat/internal/catalog/pb"
 	"github.com/dnswlt/swcat/internal/comments"
 	"github.com/dnswlt/swcat/internal/config"
+	"github.com/dnswlt/swcat/internal/database"
 	"github.com/dnswlt/swcat/internal/dot"
 	"github.com/dnswlt/swcat/internal/kube"
 	"github.com/dnswlt/swcat/internal/lint"
@@ -1781,6 +1784,159 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 	fmt.Fprintln(w, "OK")
 }
 
+// updateObservation creates or updates a single status observation for an entity.
+//
+// Unlike annotations (which are persisted to the extensions JSON sidecar of the
+// human-edited YAML files via updateAnnotationValue), status observations are
+// short-lived, machine-generated status updates stored in the database. This
+// handler lets external systems push an observation via a REST call, mirroring
+// what the plugin runner does for entities it processes.
+func (s *Server) updateObservation(w http.ResponseWriter, r *http.Request, entityRefStr string, key string) {
+	if s.isReadOnly(r) {
+		http.Error(w, "Cannot update observations in read-only mode", http.StatusPreconditionFailed)
+		return
+	}
+	if s.db == nil {
+		http.Error(w, "No database configured for observations", http.StatusPreconditionFailed)
+		return
+	}
+	if strings.TrimSpace(key) == "" {
+		http.Error(w, "Empty observation key", http.StatusBadRequest)
+		return
+	}
+
+	// Parse the request body as a protobuf Observation (see the Observation
+	// message in proto/swcat/catalog/v1/catalog.proto). Using the generated
+	// proto type means clients have a documented, versioned wire schema instead
+	// of an ad-hoc JSON shape defined here. The observation key is taken from
+	// the URL path, not the body.
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+	var obsPB catalog_pb.Observation
+	if err := protojson.Unmarshal(body, &obsPB); err != nil {
+		http.Error(w, "Failed to parse request body as an Observation", http.StatusBadRequest)
+		return
+	}
+	observation := catalog.ObservationFromPB(&obsPB)
+	if len(observation.Value) == 0 {
+		http.Error(w, "Observation 'value' is required", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(observation.Producer) == "" {
+		http.Error(w, "Observation 'producer' is required", http.StatusBadRequest)
+		return
+	}
+	// updatedAt is server-assigned when the client does not supply one.
+	if observation.UpdatedAt.IsZero() {
+		observation.UpdatedAt = time.Now()
+	}
+
+	// Parse the entity reference string.
+	ref, err := catalog.ParseRef(entityRefStr)
+	if err != nil {
+		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
+		return
+	}
+
+	// Look up the entity in the repository.
+	data := s.getStoreData(r)
+	entity := data.repo.Entity(ref)
+	if entity == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Acquire write lock for the database update.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	obs := map[string]catalog.Observation{key: observation}
+	// Merge into the in-memory entity, then persist the full observation set.
+	// StoreObservations replaces all rows for the entity with its current
+	// in-memory observations, so we must merge before storing.
+	if !catalog.MergeObservations(entity, obs) {
+		http.Error(w, "Entity kind does not support status observations", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	if err := database.StoreObservations(ctx, s.db, entity); err != nil {
+		http.Error(w, "Failed to store observation", http.StatusInternalServerError)
+		log.Printf("Failed to store observation %q for %s: %v", key, ref, err)
+		return
+	}
+
+	// No need to clear storeDataMap: MergeObservations already updated the
+	// in-memory entity in the cached repo, so the change is immediately visible.
+
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintln(w, "OK")
+}
+
+// deleteObservation removes a single status observation (identified by key)
+// from an entity. It is the inverse of updateObservation. Deleting a key that
+// does not exist is a no-op and still returns 200, so the operation is
+// idempotent.
+func (s *Server) deleteObservation(w http.ResponseWriter, r *http.Request, entityRefStr string, key string) {
+	if s.isReadOnly(r) {
+		http.Error(w, "Cannot update observations in read-only mode", http.StatusPreconditionFailed)
+		return
+	}
+	if s.db == nil {
+		http.Error(w, "No database configured for observations", http.StatusPreconditionFailed)
+		return
+	}
+	if strings.TrimSpace(key) == "" {
+		http.Error(w, "Empty observation key", http.StatusBadRequest)
+		return
+	}
+
+	// Parse the entity reference string.
+	ref, err := catalog.ParseRef(entityRefStr)
+	if err != nil {
+		http.Error(w, "Invalid entity reference", http.StatusBadRequest)
+		return
+	}
+
+	// Look up the entity in the repository.
+	data := s.getStoreData(r)
+	entity := data.repo.Entity(ref)
+	if entity == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Acquire write lock for the database update.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Remove from the in-memory entity, then persist the remaining set.
+	// StoreObservations rewrites all rows for the entity from its current
+	// in-memory observations, so we must delete before storing.
+	if !catalog.DeleteObservations(entity, []string{key}) {
+		http.Error(w, "Entity kind does not support status observations", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	if err := database.StoreObservations(ctx, s.db, entity); err != nil {
+		http.Error(w, "Failed to delete observation", http.StatusInternalServerError)
+		log.Printf("Failed to delete observation %q for %s: %v", key, ref, err)
+		return
+	}
+
+	// No need to clear storeDataMap: DeleteObservations already updated the
+	// in-memory entity in the cached repo, so the change is immediately visible.
+
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintln(w, "OK")
+}
+
 func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 	field := r.URL.Query().Get("field")
 	if strings.TrimSpace(field) == "" {
@@ -2421,6 +2577,19 @@ func (s *Server) routes() *http.ServeMux {
 			entityRef := r.PathValue("entityRef")
 			annotationKey := r.PathValue("annotationKey")
 			s.updateAnnotationValue(w, r, entityRef, annotationKey)
+		})))
+
+	root.Handle("POST /catalog/entities/{entityRef}/observations/{key}", s.handleRefDataDispatch(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			entityRef := r.PathValue("entityRef")
+			key := r.PathValue("key")
+			s.updateObservation(w, r, entityRef, key)
+		})))
+	root.Handle("DELETE /catalog/entities/{entityRef}/observations/{key}", s.handleRefDataDispatch(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			entityRef := r.PathValue("entityRef")
+			key := r.PathValue("key")
+			s.deleteObservation(w, r, entityRef, key)
 		})))
 	root.Handle("GET /catalog/autocomplete", s.handleRefDataDispatch(http.HandlerFunc(s.serveAutocomplete)))
 

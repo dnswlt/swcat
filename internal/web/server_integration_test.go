@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	catalog_pb "github.com/dnswlt/swcat/internal/catalog/pb"
+	"github.com/dnswlt/swcat/internal/database"
 	"github.com/dnswlt/swcat/internal/jfrog"
 	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
@@ -106,7 +108,18 @@ func setupIntegrationServer(t *testing.T) (*httptest.Server, *Server) {
 		DocumentsDir: filepath.Join(exampleDir, "documents"),
 	}
 
-	server, err := NewServer(opts, st, WithLinter(linter), WithPluginRegistry(pluginRegistry))
+	// Use an on-disk SQLite DB so status observations can be stored and read
+	// back. A ":memory:" DSN would not work here: the connection pool would
+	// hand out separate in-memory databases per connection, so a write on one
+	// connection wouldn't be visible to a read on another.
+	dbPath := filepath.Join(t.TempDir(), "swcat-test.db")
+	db := database.NewSqlite(dbPath)
+	t.Cleanup(func() { db.Close() })
+	if err := database.RecreateTables(context.Background(), db, false); err != nil {
+		t.Fatalf("Failed to create database tables: %v", err)
+	}
+
+	server, err := NewServer(opts, st, WithLinter(linter), WithPluginRegistry(pluginRegistry), WithDatabase(db))
 	if err != nil {
 		t.Fatalf("Failed to create server: %v", err)
 	}
@@ -387,4 +400,128 @@ func TestIntegration_ServeEntitiesJSON_ProtoJSON(t *testing.T) {
 			t.Errorf("filtered entity[%d] kind = %q, want %q", i, e.Kind, catalog.KindAPI)
 		}
 	}
+}
+
+func TestIntegration_UpdateObservation_WriteThenRead(t *testing.T) {
+	ts, _ := setupIntegrationServer(t)
+	t.Cleanup(func() { ts.Close() })
+
+	client := ts.Client()
+	client.Timeout = 10 * time.Second
+
+	const (
+		entityRef  = "component:flights-search-backend"
+		entityName = "flights-search-backend"
+		obsKey     = "last-build"
+	)
+	reqBody := `{
+		"value": {"status": "green", "artifact": "v1.2.3"},
+		"producer": "ci-pipeline",
+		"version": "1.2.3",
+		"meta": {"buildUrl": "https://ci.example.com/builds/42"}
+	}`
+
+	// Write: POST the observation.
+	postURL := fmt.Sprintf("%s/catalog/entities/%s/observations/%s", ts.URL, entityRef, obsKey)
+	resp, err := client.Post(postURL, "application/json", strings.NewReader(reqBody))
+	if err != nil {
+		t.Fatalf("POST observation: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST %s: status = %d, want 200\nbody: %s", postURL, resp.StatusCode, body)
+	}
+
+	// Read back via the public JSON API, filtering down to the single entity
+	// we just updated, and verify the observation is present in its status.
+	entity := fetchComponentByName(t, client, ts.URL, entityName)
+	got := entity.GetStatus().GetObservations()[obsKey]
+	if got == nil {
+		t.Fatalf("observation %q not found in status of %q", obsKey, entityRef)
+	}
+	if got.GetProducer() != "ci-pipeline" {
+		t.Errorf("Producer = %q, want %q", got.GetProducer(), "ci-pipeline")
+	}
+	if got.GetVersion() != "1.2.3" {
+		t.Errorf("Version = %q, want %q", got.GetVersion(), "1.2.3")
+	}
+	if got.GetMeta()["buildUrl"] != "https://ci.example.com/builds/42" {
+		t.Errorf("Meta[buildUrl] = %q, want %q", got.GetMeta()["buildUrl"], "https://ci.example.com/builds/42")
+	}
+	if !got.GetUpdatedAt().IsValid() || got.GetUpdatedAt().AsTime().IsZero() {
+		t.Error("UpdatedAt is missing/zero, want a server-assigned timestamp")
+	}
+	// The value round-trips through protojson as a native JSON object
+	// (google.protobuf.Value), so assert on the structured fields.
+	valFields := got.GetValue().GetStructValue().GetFields()
+	if valFields == nil {
+		t.Fatalf("observation value is not a JSON object: %v", got.GetValue())
+	}
+	if v := valFields["status"].GetStringValue(); v != "green" {
+		t.Errorf("value.status = %q, want %q", v, "green")
+	}
+	if v := valFields["artifact"].GetStringValue(); v != "v1.2.3" {
+		t.Errorf("value.artifact = %q, want %q", v, "v1.2.3")
+	}
+
+	// Delete the observation and confirm it disappears from the entity's status.
+	delURL := fmt.Sprintf("%s/catalog/entities/%s/observations/%s", ts.URL, entityRef, obsKey)
+	req, err := http.NewRequest(http.MethodDelete, delURL, nil)
+	if err != nil {
+		t.Fatalf("new DELETE request: %v", err)
+	}
+	delResp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE observation: %v", err)
+	}
+	delBody, _ := io.ReadAll(delResp.Body)
+	delResp.Body.Close()
+	if delResp.StatusCode != http.StatusOK {
+		t.Fatalf("DELETE %s: status = %d, want 200\nbody: %s", delURL, delResp.StatusCode, delBody)
+	}
+
+	entity = fetchComponentByName(t, client, ts.URL, entityName)
+	if obs := entity.GetStatus().GetObservations()[obsKey]; obs != nil {
+		t.Errorf("observation %q still present after DELETE: %v", obsKey, obs)
+	}
+}
+
+// fetchComponentByName GETs /catalog/entities filtered to the single component
+// with the given name and returns it as a protojson-decoded Entity.
+func fetchComponentByName(t *testing.T, client *http.Client, baseURL, name string) *catalog_pb.Entity {
+	t.Helper()
+	getURL := fmt.Sprintf("%s/catalog/entities?q=%s", baseURL,
+		url.QueryEscape("kind=component AND name="+name))
+	resp, err := client.Get(getURL)
+	if err != nil {
+		t.Fatalf("GET /catalog/entities: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET %s: status = %d, want 200", getURL, resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+
+	var envelope struct {
+		Entities []json.RawMessage `json:"entities"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		t.Fatalf("decode envelope: %v\nbody: %s", err, body)
+	}
+	if len(envelope.Entities) != 1 {
+		t.Fatalf("filtered query returned %d entities, want exactly 1", len(envelope.Entities))
+	}
+
+	var entity catalog_pb.Entity
+	if err := protojson.Unmarshal(envelope.Entities[0], &entity); err != nil {
+		t.Fatalf("not valid protojson: %v\nraw: %s", err, envelope.Entities[0])
+	}
+	if entity.GetMetadata().GetName() != name {
+		t.Fatalf("got entity %q, want %q", entity.GetMetadata().GetName(), name)
+	}
+	return &entity
 }

@@ -2,8 +2,10 @@ package catalog
 
 import (
 	"encoding/json"
+	"time"
 
 	catalog_pb "github.com/dnswlt/swcat/internal/catalog/pb"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -99,6 +101,39 @@ func observationToPB(o Observation) *catalog_pb.Observation {
 		Value:     observationValueToPB(o.Value),
 		Producer:  o.Producer,
 		UpdatedAt: timestamppb.New(o.UpdatedAt),
+		Version:   o.Version,
+		Meta:      o.Meta,
+	}
+}
+
+// observationValueFromPB renders a structpb.Value back into its native JSON
+// form. It is the inverse of observationValueToPB. A nil value yields nil.
+func observationValueFromPB(v *structpb.Value) json.RawMessage {
+	if v == nil {
+		return nil
+	}
+	b, err := protojson.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	return json.RawMessage(b)
+}
+
+// ObservationFromPB converts a Protobuf Observation into its catalog
+// representation. A nil UpdatedAt yields the zero time, which callers may
+// replace with a default (e.g. time.Now()).
+func ObservationFromPB(o *catalog_pb.Observation) Observation {
+	if o == nil {
+		return Observation{}
+	}
+	var updatedAt time.Time
+	if o.UpdatedAt != nil {
+		updatedAt = o.UpdatedAt.AsTime()
+	}
+	return Observation{
+		Value:     observationValueFromPB(o.Value),
+		Producer:  o.Producer,
+		UpdatedAt: updatedAt,
 		Version:   o.Version,
 		Meta:      o.Meta,
 	}
