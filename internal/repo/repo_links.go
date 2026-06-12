@@ -53,6 +53,25 @@ var linkTemplateFuncs = template.FuncMap{
 		u.RawQuery = q.Encode()
 		return u.String(), nil
 	},
+	"toGVK": func(kind string) string {
+		mapping := map[string]string{
+			"Deployment":       "apps~v1~Deployment",
+			"StatefulSet":      "apps~v1~StatefulSet",
+			"DaemonSet":        "apps~v1~DaemonSet",
+			"ReplicaSet":       "apps~v1~ReplicaSet",
+			"CronJob":          "batch~v1~CronJob",
+			"Job":              "batch~v1~Job",
+			"DeploymentConfig": "apps.openshift.io~v1~DeploymentConfig",
+		}
+
+		// Return exact GVK match if found
+		if gvk, exists := mapping[kind]; exists {
+			return gvk
+		}
+
+		// Fallback for core resources like Pod, Service, ConfigMap
+		return "core~v1~" + kind
+	},
 }
 
 type nameval struct {
