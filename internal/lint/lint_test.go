@@ -26,7 +26,7 @@ func TestCELProtoEntityUX(t *testing.T) {
 	}
 
 	// UX: User writes 'spec.type' directly.
-	ast, iss := env.Compile(`kind == "component" && metadata.name == "my-service" && spec.type == "production"`)
+	ast, iss := env.Compile(`kind == "Component" && metadata.name == "my-service" && spec.type == "production"`)
 	if iss.Err() != nil {
 		t.Fatalf("Compile: %v", iss.Err())
 	}
@@ -98,14 +98,14 @@ func TestLinter(t *testing.T) {
 			{
 				Name:      "component-type-required",
 				Severity:  SeverityError,
-				Condition: "kind == 'component'",
+				Condition: "kind == 'Component'",
 				Check:     "spec.type != ''",
 				Message:   "Component type is required",
 			},
 			{
 				Name:      "production-needs-lifecycle",
 				Severity:  SeverityWarn,
-				Condition: "kind == 'component' && spec.type == 'service'",
+				Condition: "kind == 'Component' && spec.type == 'service'",
 				Check:     "spec.lifecycle == 'production'",
 				Message:   "Services should ideally be in production",
 			},

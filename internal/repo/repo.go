@@ -550,7 +550,7 @@ func validDependsOnRef(ref *catalog.Ref) error {
 	if ref.Kind == "" {
 		return fmt.Errorf("entity kind is missing in DependsOn entity ref %q", ref)
 	}
-	if ref.Kind != "component" && ref.Kind != "resource" {
+	if ref.Kind != catalog.KindComponent && ref.Kind != catalog.KindResource {
 		return fmt.Errorf("invalid entity kind %q for DependsOn entity ref", ref.Kind)
 	}
 	return nil

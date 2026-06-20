@@ -96,7 +96,7 @@ func TestValidateMandatoryComponentFields(t *testing.T) {
 				Metadata: &catalog.Metadata{Name: "test"},
 				Spec: &catalog.ComponentSpec{
 					System:    system.GetRef(),
-					Owner:     &catalog.Ref{Kind: "group", Name: "foo"},
+					Owner:     &catalog.Ref{Kind: catalog.KindGroup, Name: "foo"},
 					Type:      "service",
 					Lifecycle: "production",
 				},
@@ -111,7 +111,7 @@ func TestValidateMandatoryComponentFields(t *testing.T) {
 					Type:      "service",
 					Lifecycle: "production",
 					Owner:     owner.GetRef(),
-					System:    &catalog.Ref{Kind: "system", Name: "bar"},
+					System:    &catalog.Ref{Kind: catalog.KindSystem, Name: "bar"},
 				},
 			},
 			wantErr: true,
@@ -188,7 +188,7 @@ func TestValidateMandatoryDomainFields(t *testing.T) {
 			domain: &catalog.Domain{
 				Metadata: metadata,
 				Spec: &catalog.DomainSpec{
-					Owner: &catalog.Ref{Kind: "group", Name: "foo"},
+					Owner: &catalog.Ref{Kind: catalog.KindGroup, Name: "foo"},
 				},
 			},
 			wantErr: true,
@@ -271,7 +271,7 @@ func TestValidateMandatorySystemFields(t *testing.T) {
 			system: &catalog.System{
 				Metadata: metadata,
 				Spec: &catalog.SystemSpec{
-					Owner:  &catalog.Ref{Kind: "group", Name: "foo"},
+					Owner:  &catalog.Ref{Kind: catalog.KindGroup, Name: "foo"},
 					Domain: domain.GetRef(),
 				},
 			},
@@ -293,7 +293,7 @@ func TestValidateMandatorySystemFields(t *testing.T) {
 				Metadata: metadata,
 				Spec: &catalog.SystemSpec{
 					Owner:  owner.GetRef(),
-					Domain: &catalog.Ref{Kind: "domain", Name: "foo"},
+					Domain: &catalog.Ref{Kind: catalog.KindDomain, Name: "foo"},
 				},
 			},
 			wantErr: true,
@@ -415,7 +415,7 @@ func TestValidateMandatoryApiFields(t *testing.T) {
 				Spec: &catalog.APISpec{
 					Type:      "openapi",
 					Lifecycle: "production",
-					Owner:     &catalog.Ref{Kind: "group", Name: "foo"},
+					Owner:     &catalog.Ref{Kind: catalog.KindGroup, Name: "foo"},
 					System:    system.GetRef(),
 				},
 			},
@@ -441,7 +441,7 @@ func TestValidateMandatoryApiFields(t *testing.T) {
 					Type:      "openapi",
 					Lifecycle: "production",
 					Owner:     owner.GetRef(),
-					System:    &catalog.Ref{Kind: "system", Name: "foo"},
+					System:    &catalog.Ref{Kind: catalog.KindSystem, Name: "foo"},
 				},
 			},
 			wantErr: true,
@@ -547,7 +547,7 @@ func TestValidateMandatoryResourceFields(t *testing.T) {
 				Metadata: metadata,
 				Spec: &catalog.ResourceSpec{
 					Type:   "database",
-					Owner:  &catalog.Ref{Kind: "group", Name: "foo"},
+					Owner:  &catalog.Ref{Kind: catalog.KindGroup, Name: "foo"},
 					System: system.GetRef(),
 				},
 			},
@@ -571,7 +571,7 @@ func TestValidateMandatoryResourceFields(t *testing.T) {
 				Spec: &catalog.ResourceSpec{
 					Type:   "database",
 					Owner:  owner.GetRef(),
-					System: &catalog.Ref{Kind: "system", Name: "foo"},
+					System: &catalog.Ref{Kind: catalog.KindSystem, Name: "foo"},
 				},
 			},
 			wantErr: true,

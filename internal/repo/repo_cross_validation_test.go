@@ -231,7 +231,7 @@ func TestComponentProvidesApiInvalid(t *testing.T) {
 			Owner:     owner.GetRef(),
 			System:    system.GetRef(),
 			ProvidesAPIs: []*catalog.LabelRef{
-				{Ref: &catalog.Ref{Kind: "api", Name: "no-such-api"}},
+				{Ref: &catalog.Ref{Kind: catalog.KindAPI, Name: "no-such-api"}},
 			},
 		},
 	}

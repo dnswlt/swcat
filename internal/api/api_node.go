@@ -11,12 +11,12 @@ import (
 
 var (
 	kindFactories = map[string]func() Entity{
-		YAMLKindDomain:    func() Entity { return &Domain{} },
-		YAMLKindSystem:    func() Entity { return &System{} },
-		YAMLKindComponent: func() Entity { return &Component{} },
-		YAMLKindResource:  func() Entity { return &Resource{} },
-		YAMLKindAPI:       func() Entity { return &API{} },
-		YAMLKindGroup:     func() Entity { return &Group{} },
+		KindDomain:    func() Entity { return &Domain{} },
+		KindSystem:    func() Entity { return &System{} },
+		KindComponent: func() Entity { return &Component{} },
+		KindResource:  func() Entity { return &Resource{} },
+		KindAPI:       func() Entity { return &API{} },
+		KindGroup:     func() Entity { return &Group{} },
 	}
 )
 

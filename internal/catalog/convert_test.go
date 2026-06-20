@@ -86,17 +86,17 @@ func TestNewComponentFromAPI(t *testing.T) {
 		Spec: &api.ComponentSpec{
 			Type:           "service",
 			Lifecycle:      "prod",
-			Owner:          &api.Ref{Name: "owner", Kind: "group"},
-			System:         &api.Ref{Name: "sys", Kind: "system"},
-			SubcomponentOf: &api.Ref{Name: "parent", Kind: "component"},
+			Owner:          &api.Ref{Name: "owner", Kind: "Group"},
+			System:         &api.Ref{Name: "sys", Kind: "System"},
+			SubcomponentOf: &api.Ref{Name: "parent", Kind: "Component"},
 			ProvidesAPIs: []*api.LabelRef{
-				{Ref: &api.Ref{Name: "p1", Kind: "api"}, Label: "lbl1"},
+				{Ref: &api.Ref{Name: "p1", Kind: "API"}, Label: "lbl1"},
 			},
 			ConsumesAPIs: []*api.LabelRef{
-				{Ref: &api.Ref{Name: "c1", Kind: "api"}, Attrs: map[string]string{"v": "1"}},
+				{Ref: &api.Ref{Name: "c1", Kind: "API"}, Attrs: map[string]string{"v": "1"}},
 			},
 			DependsOn: []*api.LabelRef{
-				{Ref: &api.Ref{Name: "d1", Kind: "resource"}},
+				{Ref: &api.Ref{Name: "d1", Kind: "Resource"}},
 			},
 		},
 		SourceInfo: si,
@@ -155,8 +155,8 @@ func TestNewAPIFromAPI(t *testing.T) {
 		Spec: &api.APISpec{
 			Type:       "openapi",
 			Lifecycle:  "stable",
-			Owner:      &api.Ref{Name: "owner", Kind: "group"},
-			System:     &api.Ref{Name: "sys", Kind: "system"},
+			Owner:      &api.Ref{Name: "owner", Kind: "Group"},
+			System:     &api.Ref{Name: "sys", Kind: "System"},
 			Definition: "raw-def",
 			Versions: []*api.APISpecVersion{
 				{Version: api.Version{RawVersion: "v1"}, Lifecycle: "stable"},
@@ -204,8 +204,8 @@ func TestNewSystemFromAPI(t *testing.T) {
 		},
 		Spec: &api.SystemSpec{
 			Type:   "app",
-			Owner:  &api.Ref{Name: "owner", Kind: "group"},
-			Domain: &api.Ref{Name: "domain", Kind: "domain"},
+			Owner:  &api.Ref{Name: "owner", Kind: "Group"},
+			Domain: &api.Ref{Name: "domain", Kind: "Domain"},
 		},
 		SourceInfo: si,
 	}
@@ -244,8 +244,8 @@ func TestNewDomainFromAPI(t *testing.T) {
 		},
 		Spec: &api.DomainSpec{
 			Type:        "business",
-			Owner:       &api.Ref{Name: "owner", Kind: "group"},
-			SubdomainOf: &api.Ref{Name: "parent", Kind: "domain"},
+			Owner:       &api.Ref{Name: "owner", Kind: "Group"},
+			SubdomainOf: &api.Ref{Name: "parent", Kind: "Domain"},
 		},
 		SourceInfo: si,
 	}
@@ -284,10 +284,10 @@ func TestNewResourceFromAPI(t *testing.T) {
 		},
 		Spec: &api.ResourceSpec{
 			Type:   "database",
-			Owner:  &api.Ref{Name: "owner", Kind: "group"},
-			System: &api.Ref{Name: "sys", Kind: "system"},
+			Owner:  &api.Ref{Name: "owner", Kind: "Group"},
+			System: &api.Ref{Name: "sys", Kind: "System"},
 			DependsOn: []*api.LabelRef{
-				{Ref: &api.Ref{Name: "other-db", Kind: "resource"}},
+				{Ref: &api.Ref{Name: "other-db", Kind: "Resource"}},
 			},
 		},
 		SourceInfo: si,
@@ -335,9 +335,9 @@ func TestNewGroupFromAPI(t *testing.T) {
 				Email:       "g@example.com",
 				Picture:     "pic.png",
 			},
-			Parent: &api.Ref{Name: "parent", Kind: "group"},
+			Parent: &api.Ref{Name: "parent", Kind: "Group"},
 			Children: []*api.Ref{
-				{Name: "child", Kind: "group"},
+				{Name: "child", Kind: "Group"},
 			},
 			Members: []string{"user1", "user2"},
 		},

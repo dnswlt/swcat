@@ -33,14 +33,14 @@ func TestParseLabelRef(t *testing.T) {
 			name:  "kind, namespace, and name",
 			input: "api:my-namespace/my-name",
 			want: &LabelRef{
-				Ref: &Ref{Kind: "api", Namespace: "my-namespace", Name: "my-name"},
+				Ref: &Ref{Kind: "API", Namespace: "my-namespace", Name: "my-name"},
 			},
 		},
 		{
 			name:  "ref with leading/trailing space",
 			input: "  api:my-namespace/my-name  ",
 			want: &LabelRef{
-				Ref: &Ref{Kind: "api", Namespace: "my-namespace", Name: "my-name"},
+				Ref: &Ref{Kind: "API", Namespace: "my-namespace", Name: "my-name"},
 			},
 		},
 		{
@@ -71,7 +71,7 @@ func TestParseLabelRef(t *testing.T) {
 			name:  "ref with attached version and label",
 			input: `api:foo/bar@v2 "yankee"`,
 			want: &LabelRef{
-				Ref:   &Ref{Kind: "api", Namespace: "foo", Name: "bar"},
+				Ref:   &Ref{Kind: "API", Namespace: "foo", Name: "bar"},
 				Attrs: map[string]string{VersionAttrKey: "v2"},
 				Label: "yankee",
 			},
@@ -80,7 +80,7 @@ func TestParseLabelRef(t *testing.T) {
 			name:  "ref with spaced version and label",
 			input: `api:foo/bar @v1 "yankee"`,
 			want: &LabelRef{
-				Ref:   &Ref{Kind: "api", Namespace: "foo", Name: "bar"},
+				Ref:   &Ref{Kind: "API", Namespace: "foo", Name: "bar"},
 				Attrs: map[string]string{VersionAttrKey: "v1"},
 				Label: "yankee",
 			},
@@ -165,12 +165,12 @@ func TestEntityRef_UnmarshalYAML(t *testing.T) {
 		{
 			name: "Simple String with Namespace",
 			yaml: `ref: component:my-namespace/my-component`,
-			want: Ref{Kind: "component", Namespace: "my-namespace", Name: "my-component"},
+			want: Ref{Kind: "Component", Namespace: "my-namespace", Name: "my-component"},
 		},
 		{
 			name: "Simple String without Namespace",
 			yaml: `ref: resource:my-resource`,
-			want: Ref{Kind: "resource", Namespace: DefaultNamespace, Name: "my-resource"},
+			want: Ref{Kind: "Resource", Namespace: DefaultNamespace, Name: "my-resource"},
 		},
 		{
 			name: "Invalid String Format (no colon)",
@@ -216,7 +216,7 @@ func TestLabelRef_UnmarshalYAML(t *testing.T) {
 			name: "Simple String without label",
 			yaml: `ref: component:my-namespace/my-component`,
 			want: LabelRef{
-				Ref:   &Ref{Kind: "component", Namespace: "my-namespace", Name: "my-component"},
+				Ref:   &Ref{Kind: "Component", Namespace: "my-namespace", Name: "my-component"},
 				Label: "",
 			},
 		},
@@ -232,7 +232,7 @@ func TestLabelRef_UnmarshalYAML(t *testing.T) {
 			name: "String with Quoted Label",
 			yaml: `ref: component:default/frontend "Main Web App"`,
 			want: LabelRef{
-				Ref:   &Ref{Kind: "component", Namespace: "default", Name: "frontend"},
+				Ref:   &Ref{Kind: "Component", Namespace: "default", Name: "frontend"},
 				Label: "Main Web App",
 			},
 		},
@@ -240,7 +240,7 @@ func TestLabelRef_UnmarshalYAML(t *testing.T) {
 			name: "String with Version",
 			yaml: `ref: component:default/frontend @v1.2`,
 			want: LabelRef{
-				Ref:   &Ref{Kind: "component", Namespace: "default", Name: "frontend"},
+				Ref:   &Ref{Kind: "Component", Namespace: "default", Name: "frontend"},
 				Attrs: map[string]string{VersionAttrKey: "v1.2"},
 			},
 		},
@@ -248,7 +248,7 @@ func TestLabelRef_UnmarshalYAML(t *testing.T) {
 			name: "String with Version (no space)",
 			yaml: `ref: component:default/frontend@v1.2`,
 			want: LabelRef{
-				Ref:   &Ref{Kind: "component", Namespace: "default", Name: "frontend"},
+				Ref:   &Ref{Kind: "Component", Namespace: "default", Name: "frontend"},
 				Attrs: map[string]string{VersionAttrKey: "v1.2"},
 			},
 		},
@@ -256,7 +256,7 @@ func TestLabelRef_UnmarshalYAML(t *testing.T) {
 			name: "String with Version and Label",
 			yaml: `ref: component:default/frontend @v1.2 "foo"`,
 			want: LabelRef{
-				Ref:   &Ref{Kind: "component", Namespace: "default", Name: "frontend"},
+				Ref:   &Ref{Kind: "Component", Namespace: "default", Name: "frontend"},
 				Label: "foo",
 				Attrs: map[string]string{VersionAttrKey: "v1.2"},
 			},
@@ -269,7 +269,7 @@ ref:
   label: Main API Gateway
 `,
 			want: LabelRef{
-				Ref:   &Ref{Kind: "component", Namespace: "production", Name: "api-gateway"},
+				Ref:   &Ref{Kind: "Component", Namespace: "production", Name: "api-gateway"},
 				Label: "Main API Gateway",
 			},
 		},
@@ -298,7 +298,7 @@ ref:
   label: Jane Doe's Group Record
 `,
 			want: LabelRef{
-				Ref:   &Ref{Kind: "group", Namespace: DefaultNamespace, Name: "jane-doe"},
+				Ref:   &Ref{Kind: "Group", Namespace: DefaultNamespace, Name: "jane-doe"},
 				Label: "Jane Doe's Group Record",
 			},
 		},

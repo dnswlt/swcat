@@ -339,8 +339,8 @@ func TestIntegration_ServeEntitiesJSON_ProtoJSON(t *testing.T) {
 		if err := protojson.Unmarshal(raw, &e); err != nil {
 			t.Fatalf("entity[%d] not valid protojson: %v\nraw: %s", i, err, raw)
 		}
-		// Kinds must be the canonical lowercase form (i.e. catalog.KindXxx),
-		// not the YAML-cased form ("Component", "API", ...).
+		// PB exposes the canonical kind form (i.e. catalog.KindXxx,
+		// "Component", "API", ...), matching the YAML "kind:" field.
 		switch catalog.Kind(e.Kind) {
 		case catalog.KindComponent, catalog.KindSystem, catalog.KindDomain,
 			catalog.KindAPI, catalog.KindResource, catalog.KindGroup:
@@ -356,20 +356,20 @@ func TestIntegration_ServeEntitiesJSON_ProtoJSON(t *testing.T) {
 	}
 
 	// Spot-check a known component and a known API from the flights example.
-	comp, ok := parsed["component:flights-search-backend"]
+	comp, ok := parsed["Component:flights-search-backend"]
 	if !ok {
-		t.Fatalf("expected component:flights-search-backend in response")
+		t.Fatalf("expected Component:flights-search-backend in response")
 	}
 	if comp.GetComponentSpec() == nil {
-		t.Errorf("component:flights-search-backend missing component_spec oneof")
+		t.Errorf("Component:flights-search-backend missing component_spec oneof")
 	}
 
-	apiEntity, ok := parsed["api:flights-search-api"]
+	apiEntity, ok := parsed["API:flights-search-api"]
 	if !ok {
-		t.Fatalf("expected api:flights-search-api in response")
+		t.Fatalf("expected API:flights-search-api in response")
 	}
 	if apiEntity.GetApiSpec() == nil {
-		t.Errorf("api:flights-search-api missing api_spec oneof")
+		t.Errorf("API:flights-search-api missing api_spec oneof")
 	}
 
 	// Now verify the kind filter still works post-conversion.

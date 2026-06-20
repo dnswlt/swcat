@@ -23,10 +23,6 @@ var (
 	tagRegex = regexp.MustCompile(`^[a-z0-9:+#]+(-[a-z0-9:+#]+)*$`)
 )
 
-func IsValidKind(kind string) bool {
-	return api.IsValidRefKind(kind)
-}
-
 func IsValidName(s string) bool {
 	return api.IsValidName(s)
 }

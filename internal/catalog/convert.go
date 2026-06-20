@@ -15,41 +15,45 @@ func APIRef(r *Ref) *api.Ref {
 	}
 }
 
-// NewRefFromAPI creates a new catalog.Ref from the given api.Ref.
-// All fields must be present and valid. In particular, an empty Kind
-// field is not allowed.
+// NewRefFromAPI creates a new catalog.Ref from the given api.Ref, taking the
+// kind from r.Kind. An empty or unknown kind is rejected.
 func NewRefFromAPI(r *api.Ref) (*Ref, error) {
 	if r == nil {
 		return nil, fmt.Errorf("nil reference")
 	}
-	if !IsValidKind(r.Kind) {
+	if !api.IsValidKind(r.Kind) {
 		return nil, fmt.Errorf("invalid kind: %q", r.Kind)
 	}
-	return NewRefFromAPIWithKind(Kind(r.Kind), r)
+	return validatedRef(Kind(r.Kind), r)
 }
 
-// NewRefFromAPIWithKindcreate creates a new catalog.Ref from the given api.Ref.
-// It expects the Kind field of r either to be empty or to be equal to the given kind.
-// If r.Kind is empty, kind is assigned to the returned Ref.
+// NewRefFromAPIWithKind creates a new catalog.Ref from the given api.Ref using
+// the supplied kind. r.Kind must be either empty or equal to kind.
 func NewRefFromAPIWithKind(kind Kind, r *api.Ref) (*Ref, error) {
 	if r == nil {
 		return nil, fmt.Errorf("nil reference for kind %q", kind)
 	}
-	if !IsValidKind(string(kind)) {
+	if !api.IsValidKind(string(kind)) {
 		return nil, fmt.Errorf("invalid kind: %q", kind)
-	}
-	if !IsValidName(r.Name) {
-		return nil, fmt.Errorf("invalid name: %q", r.Name)
-	}
-	namespace := DefaultNamespace
-	if r.Namespace != "" {
-		namespace = r.Namespace
-	}
-	if !IsValidNamespace(namespace) {
-		return nil, fmt.Errorf("invalid namespace: %q", namespace)
 	}
 	if r.Kind != "" && r.Kind != string(kind) {
 		return nil, fmt.Errorf("kind mismatch in ref conversion: got %q, want %q", r.Kind, kind)
+	}
+	return validatedRef(kind, r)
+}
+
+// validatedRef builds a Ref with an already-resolved canonical kind, validating
+// the name and defaulting/validating the namespace.
+func validatedRef(kind Kind, r *api.Ref) (*Ref, error) {
+	if !IsValidName(r.Name) {
+		return nil, fmt.Errorf("invalid name: %q", r.Name)
+	}
+	namespace := r.Namespace
+	if namespace == "" {
+		namespace = DefaultNamespace
+	}
+	if !IsValidNamespace(namespace) {
+		return nil, fmt.Errorf("invalid namespace: %q", namespace)
 	}
 	return &Ref{
 		Kind:      kind,
@@ -139,11 +143,11 @@ func NewResourceSpecFromAPI(r *api.ResourceSpec) (*ResourceSpec, error) {
 	if r == nil {
 		return nil, fmt.Errorf("ResourceSpec is nil")
 	}
-	owner, err := NewRefFromAPIWithKind(api.KindGroup, r.Owner)
+	owner, err := NewRefFromAPIWithKind(KindGroup, r.Owner)
 	if err != nil {
 		return nil, fmt.Errorf("invalid owner ref: %v", err)
 	}
-	system, err := NewRefFromAPIWithKind(api.KindSystem, r.System)
+	system, err := NewRefFromAPIWithKind(KindSystem, r.System)
 	if err != nil {
 		return nil, fmt.Errorf("invalid system ref: %v", err)
 	}
@@ -206,11 +210,11 @@ func NewAPISpecFromAPI(a *api.APISpec) (*APISpec, error) {
 	if a == nil {
 		return nil, fmt.Errorf("APISpec is nil")
 	}
-	owner, err := NewRefFromAPIWithKind(api.KindGroup, a.Owner)
+	owner, err := NewRefFromAPIWithKind(KindGroup, a.Owner)
 	if err != nil {
 		return nil, fmt.Errorf("invalid owner ref: %v", err)
 	}
-	system, err := NewRefFromAPIWithKind(api.KindSystem, a.System)
+	system, err := NewRefFromAPIWithKind(KindSystem, a.System)
 	if err != nil {
 		return nil, fmt.Errorf("invalid system ref: %v", err)
 	}
@@ -256,11 +260,11 @@ func NewSystemSpecFromAPI(s *api.SystemSpec) (*SystemSpec, error) {
 	if s == nil {
 		return nil, fmt.Errorf("SystemSpec is nil")
 	}
-	owner, err := NewRefFromAPIWithKind(api.KindGroup, s.Owner)
+	owner, err := NewRefFromAPIWithKind(KindGroup, s.Owner)
 	if err != nil {
 		return nil, fmt.Errorf("invalid owner ref: %v", err)
 	}
-	domain, err := NewRefFromAPIWithKind(api.KindDomain, s.Domain)
+	domain, err := NewRefFromAPIWithKind(KindDomain, s.Domain)
 	if err != nil {
 		return nil, fmt.Errorf("invalid domain ref: %v", err)
 	}
@@ -296,11 +300,11 @@ func NewComponentSpecFromAPI(c *api.ComponentSpec) (*ComponentSpec, error) {
 	if c == nil {
 		return nil, fmt.Errorf("ComponentSpec is nil")
 	}
-	owner, err := NewRefFromAPIWithKind(api.KindGroup, c.Owner)
+	owner, err := NewRefFromAPIWithKind(KindGroup, c.Owner)
 	if err != nil {
 		return nil, fmt.Errorf("invalid owner ref: %v", err)
 	}
-	system, err := NewRefFromAPIWithKind(api.KindSystem, c.System)
+	system, err := NewRefFromAPIWithKind(KindSystem, c.System)
 	if err != nil {
 		return nil, fmt.Errorf("invalid system ref: %v", err)
 	}
@@ -311,21 +315,21 @@ func NewComponentSpecFromAPI(c *api.ComponentSpec) (*ComponentSpec, error) {
 		Lifecycle: c.Lifecycle,
 	}
 	if c.SubcomponentOf != nil {
-		parent, err := NewRefFromAPIWithKind(api.KindComponent, c.SubcomponentOf)
+		parent, err := NewRefFromAPIWithKind(KindComponent, c.SubcomponentOf)
 		if err != nil {
 			return nil, fmt.Errorf("invalid subcomponentof ref: %v", err)
 		}
 		spec.SubcomponentOf = parent
 	}
 	for _, r := range c.ProvidesAPIs {
-		ref, err := NewLabelRefFromAPIWithKind(api.KindAPI, r)
+		ref, err := NewLabelRefFromAPIWithKind(KindAPI, r)
 		if err != nil {
 			return nil, fmt.Errorf("invalid providesApis ref: %v", err)
 		}
 		spec.ProvidesAPIs = append(spec.ProvidesAPIs, ref)
 	}
 	for _, r := range c.ConsumesAPIs {
-		ref, err := NewLabelRefFromAPIWithKind(api.KindAPI, r)
+		ref, err := NewLabelRefFromAPIWithKind(KindAPI, r)
 		if err != nil {
 			return nil, fmt.Errorf("invalid consumesApis ref: %v", err)
 		}
@@ -365,7 +369,7 @@ func NewDomainSpecFromAPI(d *api.DomainSpec) (*DomainSpec, error) {
 	if d == nil {
 		return nil, fmt.Errorf("DomainSpec is nil")
 	}
-	owner, err := NewRefFromAPIWithKind(api.KindGroup, d.Owner)
+	owner, err := NewRefFromAPIWithKind(KindGroup, d.Owner)
 	if err != nil {
 		return nil, fmt.Errorf("invalid owner ref: %v", err)
 	}
@@ -374,7 +378,7 @@ func NewDomainSpecFromAPI(d *api.DomainSpec) (*DomainSpec, error) {
 		Type:  d.Type,
 	}
 	if d.SubdomainOf != nil {
-		parent, err := NewRefFromAPIWithKind(api.KindDomain, d.SubdomainOf)
+		parent, err := NewRefFromAPIWithKind(KindDomain, d.SubdomainOf)
 		if err != nil {
 			return nil, fmt.Errorf("invalid subdomainof ref: %v", err)
 		}
@@ -422,14 +426,14 @@ func NewGroupSpecFromAPI(g *api.GroupSpec) (*GroupSpec, error) {
 	copy(spec.Members, g.Members)
 
 	if g.Parent != nil {
-		parent, err := NewRefFromAPIWithKind(api.KindGroup, g.Parent)
+		parent, err := NewRefFromAPIWithKind(KindGroup, g.Parent)
 		if err != nil {
 			return nil, fmt.Errorf("invalid parent ref: %v", err)
 		}
 		spec.Parent = parent
 	}
 	for _, c := range g.Children {
-		child, err := NewRefFromAPIWithKind(api.KindGroup, c)
+		child, err := NewRefFromAPIWithKind(KindGroup, c)
 		if err != nil {
 			return nil, fmt.Errorf("invalid child ref: %v", err)
 		}

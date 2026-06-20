@@ -104,8 +104,9 @@ type attributeAccessor func(e catalog.Entity) (values []string, ok bool)
 
 // attributeAccessors maps query attribute names to functions that can retrieve them from an entity.
 var attributeAccessors = map[string]attributeAccessor{
-	"*":           fulltextAccessor,
-	"meta":        metadataAccessor,
+	"*":    fulltextAccessor,
+	"meta": metadataAccessor,
+	// Canonical kind ("Component"); matching is case-insensitive so kind:component still works.
 	"kind":        func(e catalog.Entity) ([]string, bool) { return []string{string(e.GetKind())}, true },
 	"name":        func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Name}, true },
 	"namespace":   func(e catalog.Entity) ([]string, bool) { return []string{e.GetMetadata().Namespace}, true },

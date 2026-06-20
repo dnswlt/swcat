@@ -113,7 +113,7 @@ func TestRepository_Entity(t *testing.T) {
 	}
 
 	t.Run("non-existing ref", func(t *testing.T) {
-		e := repo.Entity(&catalog.Ref{Kind: "component", Name: "s1"})
+		e := repo.Entity(&catalog.Ref{Kind: catalog.KindComponent, Name: "s1"})
 		if e != nil {
 			t.Error("Entity() returned non-nil for non-existing ref")
 		}

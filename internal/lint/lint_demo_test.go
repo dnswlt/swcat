@@ -41,10 +41,10 @@ func TestCELDemo(t *testing.T) {
 	// documentation of the CEL lanaguage.
 	celExamples := []string{
 		// Case matters:
-		`kind == 'component'`,
-		`kind != 'Component'`,
+		`kind == 'Component'`,
+		`kind != 'component'`,
 		// Refs are structured objects in CEL
-		`spec.owner.kind == "group" && spec.owner.namespace == "default" && spec.owner.name == "billing-team"`,
+		`spec.owner.kind == "Group" && spec.owner.namespace == "default" && spec.owner.name == "billing-team"`,
 		// Access labels (or annotations)
 		`metadata.labels['tier'] == 'critical'`,
 		// Check for presence of a map key

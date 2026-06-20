@@ -25,6 +25,9 @@ const (
 	VersionAttrKey = api.VersionAttrKey
 )
 
+// Kind is the canonical entity kind label (e.g. "Component"), as used in the
+// YAML "kind:" field and returned by Entity.GetKind. The lowercase form used in
+// entity reference strings is obtained via Kind.RefKind.
 type Kind string
 
 const (
@@ -35,6 +38,12 @@ const (
 	KindAPI       Kind = api.KindAPI
 	KindGroup     Kind = api.KindGroup
 )
+
+// RefKind returns the lowercase kind used in entity reference strings
+// (e.g. "component"). It is the form emitted by Ref.String.
+func (k Kind) RefKind() string {
+	return api.RefKindOf(string(k))
+}
 
 // Well-known annotation, label and status observation names with defined interpretations.
 const (
@@ -577,7 +586,7 @@ func (e *Ref) Equal(other *Ref) bool {
 func (e *Ref) String() string {
 	var sb strings.Builder
 	if e.Kind != "" {
-		sb.WriteString(string(e.Kind) + ":")
+		sb.WriteString(e.Kind.RefKind() + ":")
 	}
 	if e.Namespace != "" && e.Namespace != DefaultNamespace {
 		sb.WriteString(e.Namespace + "/")

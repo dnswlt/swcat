@@ -12,31 +12,44 @@ import (
 )
 
 const (
-	// Uppercase kind names, as used in YAML (e.g, "kind: Component")
-	YAMLKindDomain    = "Domain"
-	YAMLKindSystem    = "System"
-	YAMLKindComponent = "Component"
-	YAMLKindResource  = "Resource"
-	YAMLKindAPI       = "API"
-	YAMLKindGroup     = "Group"
-	// Lowercase kind names, as used in entity references (e.g. "resource:ns1/foo")
-	KindDomain    = "domain"
-	KindSystem    = "system"
-	KindComponent = "component"
-	KindResource  = "resource"
-	KindAPI       = "api"
-	KindGroup     = "group"
+	// Canonical kind names, as used in the YAML "kind:" field and as the
+	// in-memory entity kind label (e.g. "kind: Component").
+	KindDomain    = "Domain"
+	KindSystem    = "System"
+	KindComponent = "Component"
+	KindResource  = "Resource"
+	KindAPI       = "API"
+	KindGroup     = "Group"
+	// Lowercase kind names, as they appear in the textual form of entity
+	// references only (e.g. "resource:ns1/foo"). Stored Ref.Kind values are
+	// always canonical; lowercase exists solely at the (de)serialization
+	// boundary (ParseRef / Ref.String).
+	RefKindDomain    = "domain"
+	RefKindSystem    = "system"
+	RefKindComponent = "component"
+	RefKindResource  = "resource"
+	RefKindAPI       = "api"
+	RefKindGroup     = "group"
 )
 
 var (
-	// Valid entity kinds for use in entity references
-	validRefKinds = map[string]bool{
-		KindDomain:    true,
-		KindSystem:    true,
-		KindComponent: true,
-		KindResource:  true,
-		KindAPI:       true,
-		KindGroup:     true,
+	// kindByRefKind maps a lowercase ref kind ("component") to its canonical
+	// kind ("Component"); refKindByKind is the inverse.
+	kindByRefKind = map[string]string{
+		RefKindDomain:    KindDomain,
+		RefKindSystem:    KindSystem,
+		RefKindComponent: KindComponent,
+		RefKindResource:  KindResource,
+		RefKindAPI:       KindAPI,
+		RefKindGroup:     KindGroup,
+	}
+	refKindByKind = map[string]string{
+		KindDomain:    RefKindDomain,
+		KindSystem:    RefKindSystem,
+		KindComponent: RefKindComponent,
+		KindResource:  RefKindResource,
+		KindAPI:       RefKindAPI,
+		KindGroup:     RefKindGroup,
 	}
 
 	// Regexp defining valid entity names and namespaces
@@ -44,9 +57,27 @@ var (
 	validNameRE = regexp.MustCompile("^[A-Za-z]([A-Za-z0-9-]*[A-Za-z0-9])?$")
 )
 
-func IsValidRefKind(kind string) bool {
-	_, ok := validRefKinds[kind]
+// IsValidKind reports whether kind is a known canonical entity kind ("Component").
+func IsValidKind(kind string) bool {
+	_, ok := refKindByKind[kind]
 	return ok
+}
+
+// KindFromRefKind maps a lowercase ref kind ("component") to its canonical kind
+// ("Component"). ok reports whether refKind is a valid ref kind.
+func KindFromRefKind(refKind string) (kind string, ok bool) {
+	kind, ok = kindByRefKind[refKind]
+	return
+}
+
+// RefKindOf returns the lowercase ref kind for a canonical kind ("Component" ->
+// "component"). Unknown kinds (which should not occur for validated refs) degrade
+// to a lower-cased rendering so that Ref.String stays usable in error messages.
+func RefKindOf(kind string) string {
+	if rk, ok := refKindByKind[kind]; ok {
+		return rk
+	}
+	return strings.ToLower(kind)
 }
 
 func IsValidName(s string) bool {
@@ -61,10 +92,11 @@ func ParseRef(s string) (*Ref, error) {
 	// --- Parse the EntityRef part (refStr) ---
 	kind, qname, found := strings.Cut(s, ":")
 	if found {
-		if !IsValidRefKind(kind) {
+		canonical, ok := KindFromRefKind(kind)
+		if !ok {
 			return nil, fmt.Errorf("invalid entity kind %q", kind)
 		}
-		ref.Kind = kind
+		ref.Kind = canonical
 	} else {
 		// No kind: specified
 		qname = s

@@ -2,7 +2,7 @@
 <div class="flex items-center space-x-2">
     {{ $entity := .Entity }}
     {{ $readOnly := .ReadOnly }}
-    {{ $isSystem := eq $entity.GetKind "system" }}
+    {{ $isSystem := eq $entity.GetKind "System" }}
     {{ $matching := $entity | matchingPlugins }}
 
     {{ if or $matching $isSystem }}

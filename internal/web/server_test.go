@@ -456,8 +456,8 @@ func TestServeEntitiesJSON_WithQuery(t *testing.T) {
 		if !ok {
 			t.Fatalf("entity does not have a 'kind' field")
 		}
-		if kind != "component" {
-			t.Fatalf("expected only entities of kind 'component', got %q", kind)
+		if kind != "Component" {
+			t.Fatalf("expected only entities of kind 'Component', got %q", kind)
 		}
 	}
 }

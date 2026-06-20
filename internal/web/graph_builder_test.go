@@ -396,7 +396,7 @@ func TestFullyConnectedGraph_MaxDepth(t *testing.T) {
 			Type:      "database",
 			Owner:     owner.GetRef(),
 			System:    system.GetRef(),
-			DependsOn: []*catalog.LabelRef{{Ref: &catalog.Ref{Kind: "resource", Name: "r2"}}},
+			DependsOn: []*catalog.LabelRef{{Ref: &catalog.Ref{Kind: catalog.KindResource, Name: "r2"}}},
 		},
 	}
 	r2 := &catalog.Resource{
@@ -405,7 +405,7 @@ func TestFullyConnectedGraph_MaxDepth(t *testing.T) {
 			Type:      "database",
 			Owner:     owner.GetRef(),
 			System:    system.GetRef(),
-			DependsOn: []*catalog.LabelRef{{Ref: &catalog.Ref{Kind: "resource", Name: "r3"}}},
+			DependsOn: []*catalog.LabelRef{{Ref: &catalog.Ref{Kind: catalog.KindResource, Name: "r3"}}},
 		},
 	}
 	r3 := &catalog.Resource{
@@ -414,7 +414,7 @@ func TestFullyConnectedGraph_MaxDepth(t *testing.T) {
 			Type:      "database",
 			Owner:     owner.GetRef(),
 			System:    system.GetRef(),
-			DependsOn: []*catalog.LabelRef{{Ref: &catalog.Ref{Kind: "resource", Name: "r4"}}},
+			DependsOn: []*catalog.LabelRef{{Ref: &catalog.Ref{Kind: catalog.KindResource, Name: "r4"}}},
 		},
 	}
 	r4 := &catalog.Resource{
