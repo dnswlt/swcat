@@ -15,8 +15,10 @@ This is **not** the same as the YAML you write to author the catalog. In
 particular, the JSON representation follows protobuf's
 [JSON conventions](https://protobuf.dev/programming-guides/json/):
 
-- `kind` is the canonical lowercase form (`component`, `system`, `domain`,
-  `api`, `resource`, `group`) — not the YAML-cased `Component`/`API`.
+- `kind` uses the canonical proper-case form (`Component`, `System`, `Domain`,
+  `API`, `Resource`, `Group`) — the same casing as the YAML `kind:` field. The
+  lowercase form (`component`, `api`, …) appears only inside entity *reference
+  strings* such as `component:default/my-component` (e.g. in URL paths).
 - There is no `apiVersion` field.
 - The spec is carried in a kind-specific field (`componentSpec`, `systemSpec`,
   `domainSpec`, `apiSpec`, `resourceSpec`, `groupSpec`) rather than a generic
@@ -54,7 +56,7 @@ element is an entity encoded according to the schema described above:
 {
   "entities": [
     {
-      "kind": "component",
+      "kind": "Component",
       "metadata": {
         "name": "my-component",
         "namespace": "default"
@@ -63,11 +65,11 @@ element is an entity encoded according to the schema described above:
         "type": "service",
         "lifecycle": "production",
         "owner": {
-          "kind": "group",
+          "kind": "Group",
           "name": "my-team"
         },
         "system": {
-          "kind": "system",
+          "kind": "System",
           "name": "my-system"
         }
       },
@@ -179,3 +181,118 @@ not exist is a no-op and still succeeds, so the operation is idempotent.
 curl -X DELETE \
   'http://localhost:9191/catalog/entities/component%3Amy-component/observations/swcat.io%2Flast-build'
 ```
+
+## Reporting observed dependencies
+
+External tools (for example a runtime-traffic or message-bus scanner) can report
+the dependencies they *observe* between entities. These are tentative,
+machine-detected dependencies — distinct from the dependencies declared in an
+entity's spec — and swcat stores them as a
+[status observation](#status-observations) on the source entity under the
+well-known key `swcat-deps/<detectedBy>`.
+
+Send a `POST` request to `/catalog/observed-dependencies` with an
+[`ObservedDependencies`](https://github.com/dnswlt/swcat/blob/main/proto/swcat/catalog/v1/catalog.proto)
+JSON body:
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `source` | yes | Reference to the entity the dependencies originate from. |
+| `detectedBy` | yes | Label of the reporting tool. Must be a hyphen-separated identifier of lowercase alphanumeric segments (e.g. `kafka-scanner`), since it forms the observation key `swcat-deps/<detectedBy>`. |
+| `observedAt` | no | RFC 3339 timestamp of when the dependencies were observed; defaults to "now" when omitted. |
+| `dependencies` | no | The list of observed dependencies (see below). An empty list clears the dependencies previously reported by this tool. |
+
+Each entry in `dependencies` is an `ObservedDependency`:
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `target` | yes | Reference to the entity that `source` depends on. |
+| `relation` | no | The nature of the dependency: `DEPENDENCY_RELATION_CALLS` (synchronous calls, e.g. REST/gRPC/GraphQL), `DEPENDENCY_RELATION_PRODUCES` (sends messages/events to the target), or `DEPENDENCY_RELATION_CONSUMES` (receives messages/events from the target). Defaults to a generic dependency when omitted. |
+| `evidence` | no | Strings describing what the detection was based on, e.g. topic names or an RPC `Service.Method`. |
+
+Both `source` and every `target` must reference entities that exist in the
+catalog; otherwise the request fails with `404 Not Found`. Malformed input
+(missing required fields, an invalid `detectedBy`, or an unknown reference kind)
+fails with `400 Bad Request`.
+
+Re-posting with the same `detectedBy` overwrites that tool's previously reported
+dependencies, so each tool owns a single `swcat-deps/<detectedBy>` observation.
+The resulting observation records `external/<detectedBy>` as its `producer` and
+the receive time as its `updatedAt`.
+
+**Note:** Like status observations, this operation is not available when the
+server is running in read-only mode, or when the server has no database
+configured.
+
+### Reporting example
+
+Report that `flights-search-backend` calls `cache-server` and consumes events
+from `flights-inmem-cache`:
+
+```bash
+curl -X POST 'http://localhost:9191/catalog/observed-dependencies' \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "source": {"kind": "Component", "name": "flights-search-backend"},
+        "detectedBy": "kafka-scanner",
+        "dependencies": [
+          {
+            "target": {"kind": "Component", "name": "cache-server"},
+            "relation": "DEPENDENCY_RELATION_CALLS",
+            "evidence": ["GET /cache/{id}"]
+          },
+          {
+            "target": {"kind": "Resource", "name": "flights-inmem-cache"},
+            "relation": "DEPENDENCY_RELATION_CONSUMES",
+            "evidence": ["topic:flights.updates"]
+          }
+        ]
+      }'
+```
+
+The reported dependencies then appear in the source entity's `status` under the
+`swcat-deps/kafka-scanner` observation when you query it:
+
+```json
+{
+  "status": {
+    "observations": {
+      "swcat-deps/kafka-scanner": {
+        "value": {
+          "detectedBy": "kafka-scanner",
+          "observedAt": "2026-06-22T21:00:00Z",
+          "dependencies": [
+            {
+              "target": {"kind": "Component", "namespace": "default", "name": "cache-server"},
+              "relation": "calls",
+              "evidence": ["GET /cache/{id}"]
+            },
+            {
+              "target": {"kind": "Resource", "namespace": "default", "name": "flights-inmem-cache"},
+              "relation": "consumes",
+              "evidence": ["topic:flights.updates"]
+            }
+          ]
+        },
+        "producer": "external/kafka-scanner",
+        "updatedAt": "2026-06-22T21:00:05Z"
+      }
+    }
+  }
+}
+```
+
+What is stored is swcat's **internal representation** of the dependency
+candidates, not a verbatim copy of the request payload. The endpoint normalizes
+the input as it ingests it, so the stored observation differs from what you sent
+in a few expected ways:
+
+- `relation` is stored as a short, stable label (`dependency`, `calls`,
+  `produces`, `consumes`) rather than the `DEPENDENCY_RELATION_*` enum name from
+  the request. An omitted or unspecified relation is stored as `dependency`.
+- `detectedBy` and `observedAt` are folded into the observation envelope as the
+  server-assigned `producer` (`external/<detectedBy>`) and `updatedAt` (the
+  receive time), while `observedAt` is also retained in the value (defaulted to
+  "now" when the request omitted it).
+- Each `target` is resolved to a fully-qualified reference, so its `namespace`
+  is filled in (e.g. `default`) even when the request left it out.

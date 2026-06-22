@@ -107,6 +107,55 @@ message Observation {
   map<string, string> meta = 5;
 }
 
+// --- Observed dependencies ---
+
+// ObservedDependencies is the schema external tools must comply with when
+// reporting the dependencies they observed for a single source entity. swcat
+// stores these tentative, "observed" dependencies in the source entity's
+// Status observations, kept separate from the declared dependencies in the
+// entity's spec.
+message ObservedDependencies {
+  // Reference to the source entity that the observed dependencies originate
+  // from. Required.
+  Ref source = 1;
+  // Label of the external tool that detected these dependencies. Required.
+  string detected_by = 2;
+  // When the dependencies were observed. If unset, the server populates it
+  // with the receive timestamp.
+  google.protobuf.Timestamp observed_at = 3;
+  // The dependencies observed for the source entity. Reporting an empty list
+  // clears the previously observed dependencies for this source/detected_by
+  // pair.
+  repeated ObservedDependency dependencies = 4;
+}
+
+// ObservedDependency is a single dependency from a source entity to a target
+// entity, as detected by an external tool.
+message ObservedDependency {
+  // Reference to the entity that the source entity depends on. Required.
+  Ref target = 1;
+  // The nature of the dependency relationship.
+  DependencyRelation relation = 2;
+  // The evidence on which the detection was based, e.g. a list of topic names,
+  // an RPC Service.Method name, or other relevant detail.
+  repeated string evidence = 3;
+}
+
+// DependencyRelation classifies the nature of an observed dependency.
+enum DependencyRelation {
+  // Unknown relation; treated as a generic dependency.
+  DEPENDENCY_RELATION_UNSPECIFIED = 0;
+  // The source entity makes synchronous calls to the target, e.g. via REST,
+  // gRPC or GraphQL.
+  DEPENDENCY_RELATION_CALLS = 1;
+  // The source entity produces messages/events to the target, e.g. a pub/sub
+  // topic or message queue.
+  DEPENDENCY_RELATION_PRODUCES = 2;
+  // The source entity consumes messages/events from the target, e.g. as a
+  // pub/sub subscriber or queue consumer.
+  DEPENDENCY_RELATION_CONSUMES = 3;
+}
+
 // --- Domain ---
 
 message DomainSpec {

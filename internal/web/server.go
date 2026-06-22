@@ -1800,8 +1800,8 @@ func (s *Server) updateObservation(w http.ResponseWriter, r *http.Request, entit
 		http.Error(w, "No database configured for observations", http.StatusPreconditionFailed)
 		return
 	}
-	if strings.TrimSpace(key) == "" {
-		http.Error(w, "Empty observation key", http.StatusBadRequest)
+	if !catalog.IsValidObservationKey(key) {
+		http.Error(w, "Invalid observation key", http.StatusBadRequest)
 		return
 	}
 
@@ -1932,6 +1932,118 @@ func (s *Server) deleteObservation(w http.ResponseWriter, r *http.Request, entit
 
 	// No need to clear storeDataMap: DeleteObservations already updated the
 	// in-memory entity in the cached repo, so the change is immediately visible.
+
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintln(w, "OK")
+}
+
+// updateObservedDependencies lets external tools push the dependencies they
+// observed for a source entity (see the ObservedDependencies message in
+// proto/swcat/catalog/v1/catalog.proto). The reported dependencies are stored
+// as a single status observation under the key "swcat-deps/<detected_by>", so
+// each detecting tool owns one observation and re-reporting replaces it.
+func (s *Server) updateObservedDependencies(w http.ResponseWriter, r *http.Request) {
+	if s.isReadOnly(r) {
+		http.Error(w, "Cannot update observations in read-only mode", http.StatusPreconditionFailed)
+		return
+	}
+	if s.db == nil {
+		http.Error(w, "No database configured for observations", http.StatusPreconditionFailed)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+	var depsPB catalog_pb.ObservedDependencies
+	if err := protojson.Unmarshal(body, &depsPB); err != nil {
+		http.Error(w, "Failed to parse request body as ObservedDependencies", http.StatusBadRequest)
+		return
+	}
+
+	// detected_by is required and, because it forms the status observation key
+	// "swcat-deps/<detected_by>", must be a hyphen-separated source identifier.
+	detectedBy := strings.TrimSpace(depsPB.DetectedBy)
+	if detectedBy == "" {
+		http.Error(w, "'detected_by' is required", http.StatusBadRequest)
+		return
+	}
+	key, ok := catalog.ObservedDepsKey(detectedBy)
+	if !ok {
+		http.Error(w, "'detected_by' must be a hyphen-separated identifier, e.g. \"kafka-scanner\"", http.StatusBadRequest)
+		return
+	}
+
+	// Resolve the source entity reference and verify it exists.
+	if depsPB.Source == nil {
+		http.Error(w, "'source' is required", http.StatusBadRequest)
+		return
+	}
+	srcRef, err := catalog.RefFromPB(depsPB.Source)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid 'source' reference: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Convert and validate the payload (parses and validates every target ref).
+	observed, err := catalog.ObservedDependenciesFromPB(&depsPB)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid observed dependencies: %v", err), http.StatusBadRequest)
+		return
+	}
+	// observed_at defaults to the receive time when the client omits it.
+	now := time.Now()
+	if observed.ObservedAt.IsZero() {
+		observed.ObservedAt = now
+	}
+
+	data := s.getStoreData(r)
+	srcEntity := data.repo.Entity(srcRef)
+	if srcEntity == nil {
+		http.Error(w, fmt.Sprintf("Source entity %s not found", srcRef), http.StatusNotFound)
+		return
+	}
+
+	// Reference integrity: every target must exist in the catalog.
+	for i, d := range observed.Dependencies {
+		if data.repo.Entity(d.Target) == nil {
+			http.Error(w, fmt.Sprintf("dependencies[%d]: target entity %s not found", i, d.Target), http.StatusNotFound)
+			return
+		}
+	}
+
+	value, err := json.Marshal(observed)
+	if err != nil {
+		http.Error(w, "Failed to encode observed dependencies", http.StatusInternalServerError)
+		return
+	}
+	observation := catalog.Observation{
+		Value:     value,
+		Producer:  "external/" + detectedBy,
+		UpdatedAt: now,
+	}
+
+	// Acquire write lock for the database update.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Merge into the in-memory entity, then persist the full observation set.
+	// StoreObservations replaces all rows for the entity with its current
+	// in-memory observations, so we must merge before storing.
+	if !catalog.MergeObservations(srcEntity, map[string]catalog.Observation{key: observation}) {
+		http.Error(w, "Entity kind does not support status observations", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	if err := database.StoreObservations(ctx, s.db, srcEntity); err != nil {
+		http.Error(w, "Failed to store observed dependencies", http.StatusInternalServerError)
+		log.Printf("Failed to store observed dependencies %q for %s: %v", key, srcRef, err)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w, "OK")
@@ -2591,6 +2703,11 @@ func (s *Server) routes() *http.ServeMux {
 			key := r.PathValue("key")
 			s.deleteObservation(w, r, entityRef, key)
 		})))
+	// Lets external tools push observed (machine-detected) dependencies for a
+	// source entity. The source entity is named in the request body.
+	root.Handle("POST /catalog/observed-dependencies", s.handleRefDataDispatch(
+		http.HandlerFunc(s.updateObservedDependencies)))
+
 	root.Handle("GET /catalog/autocomplete", s.handleRefDataDispatch(http.HandlerFunc(s.serveAutocomplete)))
 
 	root.HandleFunc("POST /catalog/reload", s.reloadCatalog)

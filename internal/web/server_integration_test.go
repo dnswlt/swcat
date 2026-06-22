@@ -487,6 +487,237 @@ func TestIntegration_UpdateObservation_WriteThenRead(t *testing.T) {
 	}
 }
 
+func TestIntegration_UpdateObservedDependencies_WriteThenRead(t *testing.T) {
+	ts, _ := setupIntegrationServer(t)
+	t.Cleanup(func() { ts.Close() })
+
+	client := ts.Client()
+	client.Timeout = 10 * time.Second
+
+	const (
+		sourceName = "flights-search-backend"
+		detectedBy = "kafka-scanner"
+		obsKey     = "swcat-deps/kafka-scanner"
+	)
+
+	// Build the request via the generated proto type and protojson, so the
+	// wire schema (field names, enum spellings) is exercised exactly as a real
+	// external tool would produce it. observed_at is intentionally omitted to
+	// verify the server defaults it.
+	reqPB := &catalog_pb.ObservedDependencies{
+		Source:     &catalog_pb.Ref{Kind: "Component", Name: sourceName},
+		DetectedBy: detectedBy,
+		Dependencies: []*catalog_pb.ObservedDependency{
+			{
+				Target:   &catalog_pb.Ref{Kind: "Component", Name: "cache-server"},
+				Relation: catalog_pb.DependencyRelation_DEPENDENCY_RELATION_CALLS,
+				Evidence: []string{"GET /cache/{id}"},
+			},
+			{
+				Target:   &catalog_pb.Ref{Kind: "Resource", Name: "flights-inmem-cache"},
+				Relation: catalog_pb.DependencyRelation_DEPENDENCY_RELATION_CONSUMES,
+				Evidence: []string{"topic:flights.updates"},
+			},
+		},
+	}
+	reqBody, err := protojson.Marshal(reqPB)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	// Write: POST the observed dependencies.
+	postURL := ts.URL + "/catalog/observed-dependencies"
+	resp, err := client.Post(postURL, "application/json", strings.NewReader(string(reqBody)))
+	if err != nil {
+		t.Fatalf("POST observed dependencies: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST %s: status = %d, want 200\nbody: %s", postURL, resp.StatusCode, body)
+	}
+
+	// Read back via the public JSON API and locate the observation written
+	// under the well-known "swcat-deps/<detected_by>" key.
+	entity := fetchComponentByName(t, client, ts.URL, sourceName)
+	got := entity.GetStatus().GetObservations()[obsKey]
+	if got == nil {
+		t.Fatalf("observation %q not found in status of %q", obsKey, sourceName)
+	}
+
+	// Envelope metadata: producer is namespaced with "external/", and the
+	// server assigns the record's UpdatedAt.
+	if want := "external/" + detectedBy; got.GetProducer() != want {
+		t.Errorf("Producer = %q, want %q", got.GetProducer(), want)
+	}
+	if !got.GetUpdatedAt().IsValid() || got.GetUpdatedAt().AsTime().IsZero() {
+		t.Error("UpdatedAt is missing/zero, want a server-assigned timestamp")
+	}
+
+	// The stored value is a catalog.ObservedDependencies serialized as JSON.
+	// Round-trip it back through the domain parser (proto Value -> JSON ->
+	// ParseObservedDependencies) and assert on the typed result.
+	valJSON, err := protojson.Marshal(got.GetValue())
+	if err != nil {
+		t.Fatalf("marshal observation value: %v", err)
+	}
+	od, err := catalog.ParseObservedDependencies(valJSON)
+	if err != nil {
+		t.Fatalf("ParseObservedDependencies: %v\nvalue: %s", err, valJSON)
+	}
+	if od.DetectedBy != detectedBy {
+		t.Errorf("DetectedBy = %q, want %q", od.DetectedBy, detectedBy)
+	}
+	if od.ObservedAt.IsZero() {
+		t.Error("ObservedAt is zero, want a server-defaulted timestamp")
+	}
+	if len(od.Dependencies) != 2 {
+		t.Fatalf("got %d dependencies, want 2: %+v", len(od.Dependencies), od.Dependencies)
+	}
+
+	byTarget := make(map[string]catalog.ObservedDependency, len(od.Dependencies))
+	for _, d := range od.Dependencies {
+		if d.Target == nil {
+			t.Fatalf("dependency with nil target: %+v", d)
+		}
+		byTarget[d.Target.Name] = d
+	}
+
+	if d, ok := byTarget["cache-server"]; !ok {
+		t.Error("missing dependency on cache-server")
+	} else {
+		if d.Target.Kind != catalog.KindComponent {
+			t.Errorf("cache-server target kind = %q, want %q", d.Target.Kind, catalog.KindComponent)
+		}
+		if d.Relation != "calls" {
+			t.Errorf("cache-server relation = %q, want %q", d.Relation, "calls")
+		}
+		if len(d.Evidence) != 1 || d.Evidence[0] != "GET /cache/{id}" {
+			t.Errorf("cache-server evidence = %v, want [GET /cache/{id}]", d.Evidence)
+		}
+	}
+
+	if d, ok := byTarget["flights-inmem-cache"]; !ok {
+		t.Error("missing dependency on flights-inmem-cache")
+	} else {
+		if d.Target.Kind != catalog.KindResource {
+			t.Errorf("flights-inmem-cache target kind = %q, want %q", d.Target.Kind, catalog.KindResource)
+		}
+		if d.Relation != "consumes" {
+			t.Errorf("flights-inmem-cache relation = %q, want %q", d.Relation, "consumes")
+		}
+	}
+}
+
+func TestIntegration_UpdateObservedDependencies_Validation(t *testing.T) {
+	ts, _ := setupIntegrationServer(t)
+	t.Cleanup(func() { ts.Close() })
+
+	client := ts.Client()
+	client.Timeout = 10 * time.Second
+
+	validSource := &catalog_pb.Ref{Kind: "Component", Name: "flights-search-backend"}
+	validTarget := func() *catalog_pb.ObservedDependency {
+		return &catalog_pb.ObservedDependency{
+			Target:   &catalog_pb.Ref{Kind: "Component", Name: "cache-server"},
+			Relation: catalog_pb.DependencyRelation_DEPENDENCY_RELATION_CALLS,
+		}
+	}
+
+	tests := []struct {
+		name       string
+		req        *catalog_pb.ObservedDependencies
+		wantStatus int
+	}{
+		{
+			name: "empty detected_by",
+			req: &catalog_pb.ObservedDependencies{
+				Source:       validSource,
+				DetectedBy:   "",
+				Dependencies: []*catalog_pb.ObservedDependency{validTarget()},
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "non hyphenated detected_by",
+			req: &catalog_pb.ObservedDependencies{
+				Source:       validSource,
+				DetectedBy:   "Bad_Source", // uppercase + underscore: not a valid key segment
+				Dependencies: []*catalog_pb.ObservedDependency{validTarget()},
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "missing source",
+			req: &catalog_pb.ObservedDependencies{
+				DetectedBy:   "kafka-scanner",
+				Dependencies: []*catalog_pb.ObservedDependency{validTarget()},
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "invalid source kind",
+			req: &catalog_pb.ObservedDependencies{
+				Source:       &catalog_pb.Ref{Kind: "Banana", Name: "flights-search-backend"},
+				DetectedBy:   "kafka-scanner",
+				Dependencies: []*catalog_pb.ObservedDependency{validTarget()},
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "invalid target kind",
+			req: &catalog_pb.ObservedDependencies{
+				Source:     validSource,
+				DetectedBy: "kafka-scanner",
+				Dependencies: []*catalog_pb.ObservedDependency{{
+					Target: &catalog_pb.Ref{Kind: "Banana", Name: "cache-server"},
+				}},
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "unknown source entity",
+			req: &catalog_pb.ObservedDependencies{
+				Source:       &catalog_pb.Ref{Kind: "Component", Name: "does-not-exist"},
+				DetectedBy:   "kafka-scanner",
+				Dependencies: []*catalog_pb.ObservedDependency{validTarget()},
+			},
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name: "unknown target entity",
+			req: &catalog_pb.ObservedDependencies{
+				Source:     validSource,
+				DetectedBy: "kafka-scanner",
+				Dependencies: []*catalog_pb.ObservedDependency{{
+					Target:   &catalog_pb.Ref{Kind: "Component", Name: "does-not-exist"},
+					Relation: catalog_pb.DependencyRelation_DEPENDENCY_RELATION_CALLS,
+				}},
+			},
+			wantStatus: http.StatusNotFound,
+		},
+	}
+
+	postURL := ts.URL + "/catalog/observed-dependencies"
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			reqBody, err := protojson.Marshal(tc.req)
+			if err != nil {
+				t.Fatalf("marshal request: %v", err)
+			}
+			resp, err := client.Post(postURL, "application/json", strings.NewReader(string(reqBody)))
+			if err != nil {
+				t.Fatalf("POST: %v", err)
+			}
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if resp.StatusCode != tc.wantStatus {
+				t.Errorf("status = %d, want %d\nbody: %s", resp.StatusCode, tc.wantStatus, body)
+			}
+		})
+	}
+}
+
 // fetchComponentByName GETs /catalog/entities filtered to the single component
 // with the given name and returns it as a protojson-decoded Entity.
 func fetchComponentByName(t *testing.T, client *http.Client, baseURL, name string) *catalog_pb.Entity {

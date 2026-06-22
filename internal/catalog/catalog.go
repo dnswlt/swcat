@@ -60,10 +60,16 @@ const (
 	AnnotMavenGroupID = "maven.apache.org/groupId"
 )
 
+// Ref references another catalog entity. The json tags keep its encoding/json
+// form consistent with the protojson ref encoding used across the API
+// (lowerCamel "kind"/"namespace"/"name"): a Ref is serialized with encoding/json
+// when it is embedded in a status observation value (e.g. the target of an
+// observed dependency), so without these tags it would round-trip as the
+// Go-default "Kind"/"Namespace"/"Name", clashing with how refs appear elsewhere.
 type Ref struct {
-	Kind      Kind
-	Namespace string
-	Name      string
+	Kind      Kind   `json:"kind"`
+	Namespace string `json:"namespace,omitempty"`
+	Name      string `json:"name"`
 }
 
 type LabelRef struct {

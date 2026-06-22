@@ -2,8 +2,10 @@ package catalog
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
+	"github.com/dnswlt/swcat/internal/api"
 	catalog_pb "github.com/dnswlt/swcat/internal/catalog/pb"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -40,6 +42,36 @@ func refToPB(r *Ref) *catalog_pb.Ref {
 		Kind:      string(r.Kind),
 		Namespace: r.Namespace,
 		Name:      r.Name,
+	}
+}
+
+// RefFromPB converts a Protobuf Ref into a catalog Ref, validating the kind,
+// name and namespace. The kind must be a canonical kind (e.g. "Component").
+// An empty namespace defaults to the default namespace.
+func RefFromPB(r *catalog_pb.Ref) (*Ref, error) {
+	if r == nil {
+		return nil, fmt.Errorf("nil reference")
+	}
+	return NewRefFromAPI(&api.Ref{
+		Kind:      r.Kind,
+		Namespace: r.Namespace,
+		Name:      r.Name,
+	})
+}
+
+// DependencyRelationLabel returns the short, stable string form of a
+// DependencyRelation, suitable for storing and displaying. An unspecified
+// relation degrades to the generic "dependency".
+func DependencyRelationLabel(r catalog_pb.DependencyRelation) string {
+	switch r {
+	case catalog_pb.DependencyRelation_DEPENDENCY_RELATION_CALLS:
+		return "calls"
+	case catalog_pb.DependencyRelation_DEPENDENCY_RELATION_PRODUCES:
+		return "produces"
+	case catalog_pb.DependencyRelation_DEPENDENCY_RELATION_CONSUMES:
+		return "consumes"
+	default:
+		return "dependency"
 	}
 }
 

@@ -21,7 +21,27 @@ var (
 	// tagRegex validates the tag format. It must consist of one or more
 	// segments of [a-z0-9:+#], separated by single hyphens.
 	tagRegex = regexp.MustCompile(`^[a-z0-9:+#]+(-[a-z0-9:+#]+)*$`)
+
+	// observedDepsSourceRegex restricts the <detected_by> source identifier of
+	// observed dependencies to lowercase, hyphen-separated alphanumeric
+	// segments, so that the resulting status observation key
+	// "swcat-deps/<detected_by>" is a valid status field key (see isValidKey).
+	observedDepsSourceRegex = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 )
+
+// ObservedDepsKeyPrefix is the status observation key prefix under which
+// machine-detected ("observed") dependencies are stored, one observation per
+// detecting tool, keyed as "swcat-deps/<detected_by>".
+const ObservedDepsKeyPrefix = "swcat-deps"
+
+// ObservedDepsKey returns the status observation key for dependencies observed
+// by detectedBy, and reports whether detectedBy is a valid source identifier.
+func ObservedDepsKey(detectedBy string) (key string, ok bool) {
+	if !observedDepsSourceRegex.MatchString(detectedBy) {
+		return "", false
+	}
+	return ObservedDepsKeyPrefix + "/" + detectedBy, true
+}
 
 func IsValidName(s string) bool {
 	return api.IsValidName(s)
@@ -41,6 +61,13 @@ func IsValidLabel(key string, value string) bool {
 // Validation follows the rules outlined in
 // https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
 func IsValidAnnotation(key string, value string) bool {
+	return isValidKey(key)
+}
+
+// IsValidObservationKey reports whether key is a valid status observation key.
+// Observation keys follow the same naming conventions as annotation keys (an
+// optional DNS-subdomain prefix and a required name, e.g. "swcat-deps/foo").
+func IsValidObservationKey(key string) bool {
 	return isValidKey(key)
 }
 
