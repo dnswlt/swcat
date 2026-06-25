@@ -314,7 +314,7 @@ func (s *Server) getFindings(data *storeData, e catalog.Entity) []lint.Finding {
 		return findings
 	}
 
-	findings := s.linter.Lint(e)
+	findings := s.linter.LintWithResolver(e, data.repo)
 	data.findingsCache.Add(ref, findings)
 	return findings
 }

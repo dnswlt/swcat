@@ -1,3 +1,10 @@
+# Compare each Component's observed dependencies (reported via the
+# /catalog/observed-dependencies API and stored as "swcat-deps/*" status
+# observations) against its actual neighbors, and warn about observed
+# dependencies that are neither declared nor reachable through a shared API.
+# See scripts/add-observed-deps.sh for a way to populate observations.
+checkDependencyCandidates: true
+
 celRules:
   - name: has-description
     severity: warn
