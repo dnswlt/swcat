@@ -55,8 +55,28 @@ function hideTooltip() {
 }
 
 function updateTooltipPosition(event) {
-    tooltip.style.left = (event.pageX + 15) + 'px';
-    tooltip.style.top = (event.pageY + 15) + 'px';
+    const offset = 15;
+    const margin = 8; // keep this much gap from the viewport edge
+    const rect = tooltip.getBoundingClientRect();
+
+    // Horizontal: place to the right of the cursor, but flip to the left if it
+    // would overflow the visible right edge of the viewport.
+    let left = event.pageX + offset;
+    if (event.clientX + offset + rect.width > window.innerWidth - margin) {
+        left = event.pageX - offset - rect.width;
+    }
+    // Clamp so we never push past the left edge either.
+    left = Math.max(window.scrollX + margin, left);
+
+    // Vertical: same flip logic against the bottom edge.
+    let top = event.pageY + offset;
+    if (event.clientY + offset + rect.height > window.innerHeight - margin) {
+        top = event.pageY - offset - rect.height;
+    }
+    top = Math.max(window.scrollY + margin, top);
+
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
 }
 
 // Fetches the #relationships-svg-meta <script> element, parses its content as JSON,
