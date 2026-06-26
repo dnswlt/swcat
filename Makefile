@@ -49,6 +49,7 @@ run-examples-git:
 		-git-ref main \
 		-git-root-dir examples/flights \
 		-comments-dir /tmp/swcat-comments \
+		-database-dsn "file:./data/swcat.db" \
 		-git-user-name "swcat" \
 		-git-user-email "nobody@example.com"
 

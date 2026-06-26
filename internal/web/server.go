@@ -58,6 +58,10 @@ const (
 	FindingsCacheSize = 128 // Maximum number of elements to hold in the lint findings cache.
 )
 
+// isReadOnly reports whether catalog (YAML) entities are read-only for this
+// request. Editing entities means writing them back to a Git branch, so it is
+// only allowed inside an edit session. For status observations, which live in
+// the database independently of Git, use canEditObservations instead.
 func (s *Server) isReadOnly(r *http.Request) bool {
 	if s.opts.ReadOnly {
 		return true
@@ -67,6 +71,15 @@ func (s *Server) isReadOnly(r *http.Request) bool {
 		return g.IsReadOnly() || !g.IsSession(ref)
 	}
 	return false
+}
+
+// canEditObservations reports whether status observations may be mutated.
+// Unlike catalog entity edits (see isReadOnly), observations are stored in the
+// database and are independent of the Git working branch, so they are writable
+// on any ref (including the main branch), provided the server is not globally
+// read-only and a database is configured.
+func (s *Server) canEditObservations() bool {
+	return !s.opts.ReadOnly && s.db != nil
 }
 
 func (s *Server) canStartSession(r *http.Request) bool {
@@ -1404,7 +1417,54 @@ func (s *Server) serveEntityYAML(w http.ResponseWriter, r *http.Request, entityR
 		}
 	}
 
+	// Add status observations, rendered as structured fields with the
+	// Value field pretty-printed as JSON.
+	if status := entity.GetStatus(); status != nil && len(status.Observations) > 0 {
+		params["Observations"] = observationViews(entity.GetRef(), status.Observations)
+		params["CanEditObservations"] = s.canEditObservations()
+	}
+
 	s.serveHTMLPage(w, r, templateFile, params)
+}
+
+// observationView is a single status observation prepared for HTML rendering.
+type observationView struct {
+	Name      string
+	Producer  string
+	UpdatedAt time.Time
+	Version   string
+	Meta      map[string]string
+	ValueJSON string // Observation.Value, pretty-printed as JSON.
+	DeleteURL string // Endpoint for the DELETE request that removes this observation.
+}
+
+// observationViews turns the observation map into a slice sorted by name,
+// pretty-printing each Value as indented JSON for display.
+func observationViews(ref *catalog.Ref, obs map[string]catalog.Observation) []observationView {
+	views := make([]observationView, 0, len(obs))
+	for name, o := range obs {
+		var vb bytes.Buffer
+		if err := json.Indent(&vb, o.Value, "", "  "); err != nil {
+			// Not valid JSON: fall back to the raw value.
+			vb.Reset()
+			vb.Write(o.Value)
+		}
+		views = append(views, observationView{
+			Name:      name,
+			Producer:  o.Producer,
+			UpdatedAt: o.UpdatedAt,
+			Version:   o.Version,
+			Meta:      o.Meta,
+			ValueJSON: vb.String(),
+			// The key may contain a '/', so escape it as a single path segment.
+			DeleteURL: fmt.Sprintf("/catalog/entities/%s/observations/%s",
+				url.PathEscape(ref.String()), url.PathEscape(name)),
+		})
+	}
+	slices.SortFunc(views, func(a, b observationView) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	return views
 }
 
 func (s *Server) serveEntityClone(w http.ResponseWriter, r *http.Request, entityRef string) {
@@ -1792,12 +1852,8 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 // handler lets external systems push an observation via a REST call, mirroring
 // what the plugin runner does for entities it processes.
 func (s *Server) updateObservation(w http.ResponseWriter, r *http.Request, entityRefStr string, key string) {
-	if s.isReadOnly(r) {
-		http.Error(w, "Cannot update observations in read-only mode", http.StatusPreconditionFailed)
-		return
-	}
-	if s.db == nil {
-		http.Error(w, "No database configured for observations", http.StatusPreconditionFailed)
+	if !s.canEditObservations() {
+		http.Error(w, "Cannot edit observations", http.StatusPreconditionFailed)
 		return
 	}
 	if !catalog.IsValidObservationKey(key) {
@@ -1882,12 +1938,8 @@ func (s *Server) updateObservation(w http.ResponseWriter, r *http.Request, entit
 // does not exist is a no-op and still returns 200, so the operation is
 // idempotent.
 func (s *Server) deleteObservation(w http.ResponseWriter, r *http.Request, entityRefStr string, key string) {
-	if s.isReadOnly(r) {
-		http.Error(w, "Cannot update observations in read-only mode", http.StatusPreconditionFailed)
-		return
-	}
-	if s.db == nil {
-		http.Error(w, "No database configured for observations", http.StatusPreconditionFailed)
+	if !s.canEditObservations() {
+		http.Error(w, "Cannot edit observations", http.StatusPreconditionFailed)
 		return
 	}
 	if strings.TrimSpace(key) == "" {
@@ -1943,12 +1995,8 @@ func (s *Server) deleteObservation(w http.ResponseWriter, r *http.Request, entit
 // as a single status observation under the key "swcat-deps/<detected_by>", so
 // each detecting tool owns one observation and re-reporting replaces it.
 func (s *Server) updateObservedDependencies(w http.ResponseWriter, r *http.Request) {
-	if s.isReadOnly(r) {
-		http.Error(w, "Cannot update observations in read-only mode", http.StatusPreconditionFailed)
-		return
-	}
-	if s.db == nil {
-		http.Error(w, "No database configured for observations", http.StatusPreconditionFailed)
+	if !s.canEditObservations() {
+		http.Error(w, "Cannot edit observations", http.StatusPreconditionFailed)
 		return
 	}
 
