@@ -3,7 +3,6 @@ package catalog
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	catalog_pb "github.com/dnswlt/swcat/internal/catalog/pb"
 )
@@ -14,14 +13,11 @@ import (
 // and is the shape that downstream consumers (e.g. dependency validation)
 // decode via ParseObservedDependencies.
 //
-// The source entity is implicit (it owns the observation) and is therefore not
-// part of this struct.
+// This struct holds only the dependency payload. The observation envelope owns
+// the rest: the source entity owns the observation, the detecting tool lives in
+// Observation.Producer (the detected_by value), and the observation time in
+// Observation.UpdatedAt.
 type ObservedDependencies struct {
-	// DetectedBy is the label of the external tool that detected the
-	// dependencies. It also forms the observation key "swcat-deps/<DetectedBy>".
-	DetectedBy string `json:"detectedBy"`
-	// ObservedAt is when the dependencies were observed.
-	ObservedAt time.Time `json:"observedAt"`
 	// Dependencies are the observed dependencies of the source entity.
 	Dependencies []ObservedDependency `json:"dependencies"`
 }
@@ -39,11 +35,12 @@ type ObservedDependency struct {
 	Evidence []string `json:"evidence,omitempty"`
 }
 
-// ObservedDependenciesFromPB converts and validates a wire ObservedDependencies
-// message into its catalog-domain form. It parses and validates every target
-// reference (kind/name/namespace), but does not check that the referenced
-// entities exist in the catalog. ObservedAt is left at its zero value when the
-// message omits it; callers may default it (e.g. to time.Now()).
+// ObservedDependenciesFromPB converts and validates the dependency payload of a
+// wire ObservedDependencies message into its catalog-domain form. It parses and
+// validates every target reference (kind/name/namespace), but does not check
+// that the referenced entities exist in the catalog. Envelope fields
+// (detected_by, observed_at) are handled by the caller, which maps them onto the
+// enclosing Observation.
 func ObservedDependenciesFromPB(pb *catalog_pb.ObservedDependencies) (*ObservedDependencies, error) {
 	if pb == nil {
 		return nil, fmt.Errorf("nil ObservedDependencies")
@@ -60,13 +57,7 @@ func ObservedDependenciesFromPB(pb *catalog_pb.ObservedDependencies) (*ObservedD
 			Evidence: d.Evidence,
 		})
 	}
-	var observedAt time.Time
-	if pb.ObservedAt != nil {
-		observedAt = pb.ObservedAt.AsTime()
-	}
 	return &ObservedDependencies{
-		DetectedBy:   pb.DetectedBy,
-		ObservedAt:   observedAt,
 		Dependencies: deps,
 	}, nil
 }

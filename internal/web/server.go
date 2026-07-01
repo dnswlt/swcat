@@ -2041,10 +2041,11 @@ func (s *Server) updateObservedDependencies(w http.ResponseWriter, r *http.Reque
 		http.Error(w, fmt.Sprintf("Invalid observed dependencies: %v", err), http.StatusBadRequest)
 		return
 	}
-	// observed_at defaults to the receive time when the client omits it.
-	now := time.Now()
-	if observed.ObservedAt.IsZero() {
-		observed.ObservedAt = now
+	// observed_at maps to Observation.UpdatedAt; default to the receive time
+	// when the client omits it.
+	observedAt := time.Now()
+	if depsPB.ObservedAt != nil {
+		observedAt = depsPB.ObservedAt.AsTime()
 	}
 
 	data := s.getStoreData(r)
@@ -2069,8 +2070,10 @@ func (s *Server) updateObservedDependencies(w http.ResponseWriter, r *http.Reque
 	}
 	observation := catalog.Observation{
 		Value:     value,
-		Producer:  "external/" + detectedBy,
-		UpdatedAt: now,
+		Producer:  detectedBy,
+		UpdatedAt: observedAt,
+		Version:   strings.TrimSpace(depsPB.Version),
+		Meta:      depsPB.Meta,
 	}
 
 	// Acquire write lock for the database update.

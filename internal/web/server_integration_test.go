@@ -545,10 +545,10 @@ func TestIntegration_UpdateObservedDependencies_WriteThenRead(t *testing.T) {
 		t.Fatalf("observation %q not found in status of %q", obsKey, sourceName)
 	}
 
-	// Envelope metadata: producer is namespaced with "external/", and the
-	// server assigns the record's UpdatedAt.
-	if want := "external/" + detectedBy; got.GetProducer() != want {
-		t.Errorf("Producer = %q, want %q", got.GetProducer(), want)
+	// Envelope metadata: producer is the detecting tool, and the server assigns
+	// the record's UpdatedAt.
+	if got.GetProducer() != detectedBy {
+		t.Errorf("Producer = %q, want %q", got.GetProducer(), detectedBy)
 	}
 	if !got.GetUpdatedAt().IsValid() || got.GetUpdatedAt().AsTime().IsZero() {
 		t.Error("UpdatedAt is missing/zero, want a server-assigned timestamp")
@@ -564,12 +564,6 @@ func TestIntegration_UpdateObservedDependencies_WriteThenRead(t *testing.T) {
 	od, err := catalog.ParseObservedDependencies(valJSON)
 	if err != nil {
 		t.Fatalf("ParseObservedDependencies: %v\nvalue: %s", err, valJSON)
-	}
-	if od.DetectedBy != detectedBy {
-		t.Errorf("DetectedBy = %q, want %q", od.DetectedBy, detectedBy)
-	}
-	if od.ObservedAt.IsZero() {
-		t.Error("ObservedAt is zero, want a server-defaulted timestamp")
 	}
 	if len(od.Dependencies) != 2 {
 		t.Fatalf("got %d dependencies, want 2: %+v", len(od.Dependencies), od.Dependencies)

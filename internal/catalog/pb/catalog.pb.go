@@ -845,12 +845,18 @@ type ObservedDependencies struct {
 	// Label of the external tool that detected these dependencies. Required.
 	DetectedBy string `protobuf:"bytes,2,opt,name=detected_by,json=detectedBy,proto3" json:"detected_by,omitempty"`
 	// When the dependencies were observed. If unset, the server populates it
-	// with the receive timestamp.
+	// with the receive timestamp. Maps to Observation.updated_at.
 	ObservedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
 	// The dependencies observed for the source entity. Reporting an empty list
 	// clears the previously observed dependencies for this source/detected_by
 	// pair.
-	Dependencies  []*ObservedDependency `protobuf:"bytes,4,rep,name=dependencies,proto3" json:"dependencies,omitempty"`
+	Dependencies []*ObservedDependency `protobuf:"bytes,4,rep,name=dependencies,proto3" json:"dependencies,omitempty"`
+	// Optional: the version of the source entity these dependencies were
+	// observed for, e.g. "1.4.2". Maps to Observation.version.
+	Version string `protobuf:"bytes,5,opt,name=version,proto3" json:"version,omitempty"`
+	// Optional: additional metadata about this observation, for display in
+	// custom content. Maps to Observation.meta.
+	Meta          map[string]string `protobuf:"bytes,6,rep,name=meta,proto3" json:"meta,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -909,6 +915,20 @@ func (x *ObservedDependencies) GetObservedAt() *timestamppb.Timestamp {
 func (x *ObservedDependencies) GetDependencies() []*ObservedDependency {
 	if x != nil {
 		return x.Dependencies
+	}
+	return nil
+}
+
+func (x *ObservedDependencies) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *ObservedDependencies) GetMeta() map[string]string {
+	if x != nil {
+		return x.Meta
 	}
 	return nil
 }
@@ -1718,14 +1738,19 @@ const file_swcat_catalog_v1_catalog_proto_rawDesc = "" +
 	"\x04meta\x18\x05 \x03(\v2'.swcat.catalog.v1.Observation.MetaEntryR\x04meta\x1a7\n" +
 	"\tMetaEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xed\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x86\x03\n" +
 	"\x14ObservedDependencies\x12-\n" +
 	"\x06source\x18\x01 \x01(\v2\x15.swcat.catalog.v1.RefR\x06source\x12\x1f\n" +
 	"\vdetected_by\x18\x02 \x01(\tR\n" +
 	"detectedBy\x12;\n" +
 	"\vobserved_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"observedAt\x12H\n" +
-	"\fdependencies\x18\x04 \x03(\v2$.swcat.catalog.v1.ObservedDependencyR\fdependencies\"\xa1\x01\n" +
+	"\fdependencies\x18\x04 \x03(\v2$.swcat.catalog.v1.ObservedDependencyR\fdependencies\x12\x18\n" +
+	"\aversion\x18\x05 \x01(\tR\aversion\x12D\n" +
+	"\x04meta\x18\x06 \x03(\v20.swcat.catalog.v1.ObservedDependencies.MetaEntryR\x04meta\x1a7\n" +
+	"\tMetaEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa1\x01\n" +
 	"\x12ObservedDependency\x12-\n" +
 	"\x06target\x18\x01 \x01(\v2\x15.swcat.catalog.v1.RefR\x06target\x12@\n" +
 	"\brelation\x18\x02 \x01(\x0e2$.swcat.catalog.v1.DependencyRelationR\brelation\x12\x1a\n" +
@@ -1816,7 +1841,7 @@ func file_swcat_catalog_v1_catalog_proto_rawDescGZIP() []byte {
 }
 
 var file_swcat_catalog_v1_catalog_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_swcat_catalog_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_swcat_catalog_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_swcat_catalog_v1_catalog_proto_goTypes = []any{
 	(DependencyRelation)(0),       // 0: swcat.catalog.v1.DependencyRelation
 	(*Metadata)(nil),              // 1: swcat.catalog.v1.Metadata
@@ -1843,8 +1868,9 @@ var file_swcat_catalog_v1_catalog_proto_goTypes = []any{
 	nil,                           // 22: swcat.catalog.v1.LabelRef.AttrsEntry
 	nil,                           // 23: swcat.catalog.v1.Status.ObservationsEntry
 	nil,                           // 24: swcat.catalog.v1.Observation.MetaEntry
-	(*structpb.Value)(nil),        // 25: google.protobuf.Value
-	(*timestamppb.Timestamp)(nil), // 26: google.protobuf.Timestamp
+	nil,                           // 25: swcat.catalog.v1.ObservedDependencies.MetaEntry
+	(*structpb.Value)(nil),        // 26: google.protobuf.Value
+	(*timestamppb.Timestamp)(nil), // 27: google.protobuf.Timestamp
 }
 var file_swcat_catalog_v1_catalog_proto_depIdxs = []int32{
 	20, // 0: swcat.catalog.v1.Metadata.labels:type_name -> swcat.catalog.v1.Metadata.LabelsEntry
@@ -1862,52 +1888,53 @@ var file_swcat_catalog_v1_catalog_proto_depIdxs = []int32{
 	18, // 12: swcat.catalog.v1.Entity.group_spec:type_name -> swcat.catalog.v1.GroupSpec
 	8,  // 13: swcat.catalog.v1.Entity.status:type_name -> swcat.catalog.v1.Status
 	23, // 14: swcat.catalog.v1.Status.observations:type_name -> swcat.catalog.v1.Status.ObservationsEntry
-	25, // 15: swcat.catalog.v1.Observation.value:type_name -> google.protobuf.Value
-	26, // 16: swcat.catalog.v1.Observation.updated_at:type_name -> google.protobuf.Timestamp
+	26, // 15: swcat.catalog.v1.Observation.value:type_name -> google.protobuf.Value
+	27, // 16: swcat.catalog.v1.Observation.updated_at:type_name -> google.protobuf.Timestamp
 	24, // 17: swcat.catalog.v1.Observation.meta:type_name -> swcat.catalog.v1.Observation.MetaEntry
 	4,  // 18: swcat.catalog.v1.ObservedDependencies.source:type_name -> swcat.catalog.v1.Ref
-	26, // 19: swcat.catalog.v1.ObservedDependencies.observed_at:type_name -> google.protobuf.Timestamp
+	27, // 19: swcat.catalog.v1.ObservedDependencies.observed_at:type_name -> google.protobuf.Timestamp
 	11, // 20: swcat.catalog.v1.ObservedDependencies.dependencies:type_name -> swcat.catalog.v1.ObservedDependency
-	4,  // 21: swcat.catalog.v1.ObservedDependency.target:type_name -> swcat.catalog.v1.Ref
-	0,  // 22: swcat.catalog.v1.ObservedDependency.relation:type_name -> swcat.catalog.v1.DependencyRelation
-	4,  // 23: swcat.catalog.v1.DomainSpec.owner:type_name -> swcat.catalog.v1.Ref
-	4,  // 24: swcat.catalog.v1.DomainSpec.subdomain_of:type_name -> swcat.catalog.v1.Ref
-	4,  // 25: swcat.catalog.v1.DomainSpec.systems:type_name -> swcat.catalog.v1.Ref
-	4,  // 26: swcat.catalog.v1.SystemSpec.owner:type_name -> swcat.catalog.v1.Ref
-	4,  // 27: swcat.catalog.v1.SystemSpec.domain:type_name -> swcat.catalog.v1.Ref
-	4,  // 28: swcat.catalog.v1.SystemSpec.components:type_name -> swcat.catalog.v1.Ref
-	4,  // 29: swcat.catalog.v1.SystemSpec.apis:type_name -> swcat.catalog.v1.Ref
-	4,  // 30: swcat.catalog.v1.SystemSpec.resources:type_name -> swcat.catalog.v1.Ref
-	4,  // 31: swcat.catalog.v1.ComponentSpec.owner:type_name -> swcat.catalog.v1.Ref
-	4,  // 32: swcat.catalog.v1.ComponentSpec.system:type_name -> swcat.catalog.v1.Ref
-	4,  // 33: swcat.catalog.v1.ComponentSpec.domain:type_name -> swcat.catalog.v1.Ref
-	4,  // 34: swcat.catalog.v1.ComponentSpec.subcomponent_of:type_name -> swcat.catalog.v1.Ref
-	5,  // 35: swcat.catalog.v1.ComponentSpec.provides_apis:type_name -> swcat.catalog.v1.LabelRef
-	5,  // 36: swcat.catalog.v1.ComponentSpec.consumes_apis:type_name -> swcat.catalog.v1.LabelRef
-	5,  // 37: swcat.catalog.v1.ComponentSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
-	5,  // 38: swcat.catalog.v1.ComponentSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
-	4,  // 39: swcat.catalog.v1.ComponentSpec.subcomponents:type_name -> swcat.catalog.v1.Ref
-	4,  // 40: swcat.catalog.v1.ResourceSpec.owner:type_name -> swcat.catalog.v1.Ref
-	4,  // 41: swcat.catalog.v1.ResourceSpec.system:type_name -> swcat.catalog.v1.Ref
-	4,  // 42: swcat.catalog.v1.ResourceSpec.domain:type_name -> swcat.catalog.v1.Ref
-	5,  // 43: swcat.catalog.v1.ResourceSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
-	5,  // 44: swcat.catalog.v1.ResourceSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
-	4,  // 45: swcat.catalog.v1.ApiSpec.owner:type_name -> swcat.catalog.v1.Ref
-	4,  // 46: swcat.catalog.v1.ApiSpec.system:type_name -> swcat.catalog.v1.Ref
-	4,  // 47: swcat.catalog.v1.ApiSpec.domain:type_name -> swcat.catalog.v1.Ref
-	17, // 48: swcat.catalog.v1.ApiSpec.versions:type_name -> swcat.catalog.v1.ApiSpecVersion
-	5,  // 49: swcat.catalog.v1.ApiSpec.providers:type_name -> swcat.catalog.v1.LabelRef
-	5,  // 50: swcat.catalog.v1.ApiSpec.consumers:type_name -> swcat.catalog.v1.LabelRef
-	6,  // 51: swcat.catalog.v1.ApiSpecVersion.version:type_name -> swcat.catalog.v1.Version
-	19, // 52: swcat.catalog.v1.GroupSpec.profile:type_name -> swcat.catalog.v1.GroupSpecProfile
-	4,  // 53: swcat.catalog.v1.GroupSpec.parent:type_name -> swcat.catalog.v1.Ref
-	4,  // 54: swcat.catalog.v1.GroupSpec.children:type_name -> swcat.catalog.v1.Ref
-	9,  // 55: swcat.catalog.v1.Status.ObservationsEntry.value:type_name -> swcat.catalog.v1.Observation
-	56, // [56:56] is the sub-list for method output_type
-	56, // [56:56] is the sub-list for method input_type
-	56, // [56:56] is the sub-list for extension type_name
-	56, // [56:56] is the sub-list for extension extendee
-	0,  // [0:56] is the sub-list for field type_name
+	25, // 21: swcat.catalog.v1.ObservedDependencies.meta:type_name -> swcat.catalog.v1.ObservedDependencies.MetaEntry
+	4,  // 22: swcat.catalog.v1.ObservedDependency.target:type_name -> swcat.catalog.v1.Ref
+	0,  // 23: swcat.catalog.v1.ObservedDependency.relation:type_name -> swcat.catalog.v1.DependencyRelation
+	4,  // 24: swcat.catalog.v1.DomainSpec.owner:type_name -> swcat.catalog.v1.Ref
+	4,  // 25: swcat.catalog.v1.DomainSpec.subdomain_of:type_name -> swcat.catalog.v1.Ref
+	4,  // 26: swcat.catalog.v1.DomainSpec.systems:type_name -> swcat.catalog.v1.Ref
+	4,  // 27: swcat.catalog.v1.SystemSpec.owner:type_name -> swcat.catalog.v1.Ref
+	4,  // 28: swcat.catalog.v1.SystemSpec.domain:type_name -> swcat.catalog.v1.Ref
+	4,  // 29: swcat.catalog.v1.SystemSpec.components:type_name -> swcat.catalog.v1.Ref
+	4,  // 30: swcat.catalog.v1.SystemSpec.apis:type_name -> swcat.catalog.v1.Ref
+	4,  // 31: swcat.catalog.v1.SystemSpec.resources:type_name -> swcat.catalog.v1.Ref
+	4,  // 32: swcat.catalog.v1.ComponentSpec.owner:type_name -> swcat.catalog.v1.Ref
+	4,  // 33: swcat.catalog.v1.ComponentSpec.system:type_name -> swcat.catalog.v1.Ref
+	4,  // 34: swcat.catalog.v1.ComponentSpec.domain:type_name -> swcat.catalog.v1.Ref
+	4,  // 35: swcat.catalog.v1.ComponentSpec.subcomponent_of:type_name -> swcat.catalog.v1.Ref
+	5,  // 36: swcat.catalog.v1.ComponentSpec.provides_apis:type_name -> swcat.catalog.v1.LabelRef
+	5,  // 37: swcat.catalog.v1.ComponentSpec.consumes_apis:type_name -> swcat.catalog.v1.LabelRef
+	5,  // 38: swcat.catalog.v1.ComponentSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
+	5,  // 39: swcat.catalog.v1.ComponentSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
+	4,  // 40: swcat.catalog.v1.ComponentSpec.subcomponents:type_name -> swcat.catalog.v1.Ref
+	4,  // 41: swcat.catalog.v1.ResourceSpec.owner:type_name -> swcat.catalog.v1.Ref
+	4,  // 42: swcat.catalog.v1.ResourceSpec.system:type_name -> swcat.catalog.v1.Ref
+	4,  // 43: swcat.catalog.v1.ResourceSpec.domain:type_name -> swcat.catalog.v1.Ref
+	5,  // 44: swcat.catalog.v1.ResourceSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
+	5,  // 45: swcat.catalog.v1.ResourceSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
+	4,  // 46: swcat.catalog.v1.ApiSpec.owner:type_name -> swcat.catalog.v1.Ref
+	4,  // 47: swcat.catalog.v1.ApiSpec.system:type_name -> swcat.catalog.v1.Ref
+	4,  // 48: swcat.catalog.v1.ApiSpec.domain:type_name -> swcat.catalog.v1.Ref
+	17, // 49: swcat.catalog.v1.ApiSpec.versions:type_name -> swcat.catalog.v1.ApiSpecVersion
+	5,  // 50: swcat.catalog.v1.ApiSpec.providers:type_name -> swcat.catalog.v1.LabelRef
+	5,  // 51: swcat.catalog.v1.ApiSpec.consumers:type_name -> swcat.catalog.v1.LabelRef
+	6,  // 52: swcat.catalog.v1.ApiSpecVersion.version:type_name -> swcat.catalog.v1.Version
+	19, // 53: swcat.catalog.v1.GroupSpec.profile:type_name -> swcat.catalog.v1.GroupSpecProfile
+	4,  // 54: swcat.catalog.v1.GroupSpec.parent:type_name -> swcat.catalog.v1.Ref
+	4,  // 55: swcat.catalog.v1.GroupSpec.children:type_name -> swcat.catalog.v1.Ref
+	9,  // 56: swcat.catalog.v1.Status.ObservationsEntry.value:type_name -> swcat.catalog.v1.Observation
+	57, // [57:57] is the sub-list for method output_type
+	57, // [57:57] is the sub-list for method input_type
+	57, // [57:57] is the sub-list for extension type_name
+	57, // [57:57] is the sub-list for extension extendee
+	0,  // [0:57] is the sub-list for field type_name
 }
 
 func init() { file_swcat_catalog_v1_catalog_proto_init() }
@@ -1929,7 +1956,7 @@ func file_swcat_catalog_v1_catalog_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_swcat_catalog_v1_catalog_proto_rawDesc), len(file_swcat_catalog_v1_catalog_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   24,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -82,7 +82,7 @@ func checkDependencyCandidates(e catalog.Entity, resolver Resolver) []Finding {
 				missing[target] = m
 			}
 			addNonEmpty(m.evidence, d.Evidence...)
-			addNonEmpty(m.tools, od.DetectedBy)
+			addNonEmpty(m.tools, obs.Producer)
 		}
 	}
 

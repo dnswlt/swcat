@@ -121,12 +121,18 @@ message ObservedDependencies {
   // Label of the external tool that detected these dependencies. Required.
   string detected_by = 2;
   // When the dependencies were observed. If unset, the server populates it
-  // with the receive timestamp.
+  // with the receive timestamp. Maps to Observation.updated_at.
   google.protobuf.Timestamp observed_at = 3;
   // The dependencies observed for the source entity. Reporting an empty list
   // clears the previously observed dependencies for this source/detected_by
   // pair.
   repeated ObservedDependency dependencies = 4;
+  // Optional: the version of the source entity these dependencies were
+  // observed for, e.g. "1.4.2". Maps to Observation.version.
+  string version = 5;
+  // Optional: additional metadata about this observation, for display in
+  // custom content. Maps to Observation.meta.
+  map<string, string> meta = 6;
 }
 
 // ObservedDependency is a single dependency from a source entity to a target

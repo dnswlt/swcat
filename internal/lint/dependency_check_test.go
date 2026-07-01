@@ -28,13 +28,13 @@ func setObservedDeps(t *testing.T, c *catalog.Component, tool string, targets ..
 // specified dependencies (including evidence) to c.
 func setObservedDepDetails(t *testing.T, c *catalog.Component, tool string, deps ...catalog.ObservedDependency) {
 	t.Helper()
-	od := catalog.ObservedDependencies{DetectedBy: tool, Dependencies: deps}
+	od := catalog.ObservedDependencies{Dependencies: deps}
 	val, err := json.Marshal(od)
 	if err != nil {
 		t.Fatalf("marshal observed deps: %v", err)
 	}
 	if !catalog.MergeObservations(c, map[string]catalog.Observation{
-		catalog.ObservedDepsKeyPrefix + "/" + tool: {Value: val, Producer: "external/" + tool},
+		catalog.ObservedDepsKeyPrefix + "/" + tool: {Value: val, Producer: tool},
 	}) {
 		t.Fatal("MergeObservations returned false")
 	}
