@@ -195,16 +195,9 @@ func (s *Server) serveKubeWorkloads(w http.ResponseWriter, r *http.Request) {
 		return annotatedNames[w.Name]
 	}
 
-	excluded := make(map[string]bool)
-	if s.linter != nil {
-		for _, name := range s.linter.Kube().ExcludedWorkloads {
-			excluded[name] = true
-		}
-	}
-
 	var workloads []kubeWorkloadView
 	for _, w := range allWorkloads {
-		if excluded[w.Name] {
+		if s.linter != nil && s.linter.IsExcludedKubeWorkload(w.Name) {
 			continue
 		}
 		workloads = append(workloads, kubeWorkloadView{

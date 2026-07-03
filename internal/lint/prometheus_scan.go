@@ -3,7 +3,6 @@ package lint
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/dnswlt/swcat/internal/prometheus"
 )
@@ -26,7 +25,7 @@ func (l *Linter) ScanPrometheusWorkloads(ctx context.Context, client prometheus.
 	for _, sample := range samples {
 		name := sample.Labels[l.config.Prometheus.WorkloadNameLabel]
 
-		if slices.Contains(l.config.Prometheus.ExcludedWorkloads, name) {
+		if l.IsExcludedPrometheusWorkload(name) {
 			continue
 		}
 

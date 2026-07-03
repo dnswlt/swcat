@@ -105,6 +105,39 @@ type DisplayLabel struct {
 	Label string `yaml:"label"`
 }
 
+// Regexp is a regexp.Regexp that unmarshals from a YAML string as a full match:
+// the pattern is anchored with ^(?:...)$ so it must match the entire input.
+type Regexp regexp.Regexp
+
+// UnmarshalYAML compiles the YAML string value into a full-match regular expression.
+func (r *Regexp) UnmarshalYAML(value *yaml.Node) error {
+	var s string
+	if err := value.Decode(&s); err != nil {
+		return err
+	}
+	re, err := regexp.Compile("^(?:" + s + ")$")
+	if err != nil {
+		return fmt.Errorf("failed to compile regexp %q: %w", s, err)
+	}
+	*r = Regexp(*re)
+	return nil
+}
+
+// MatchString reports whether s is fully matched by the regexp.
+func (r *Regexp) MatchString(s string) bool {
+	return (*regexp.Regexp)(r).MatchString(s)
+}
+
+// matchesAny reports whether s is matched by any of the given regexps.
+func matchesAny(res []*Regexp, s string) bool {
+	for _, re := range res {
+		if re.MatchString(s) {
+			return true
+		}
+	}
+	return false
+}
+
 // PrometheusConfig holds lint-level configuration for Prometheus workload scanning.
 type PrometheusConfig struct {
 	// Enabled controls whether the workload scan is active. Defaults to false.
@@ -117,8 +150,9 @@ type PrometheusConfig struct {
 	DisplayLabels []DisplayLabel `yaml:"displayLabels"`
 	// Whether to show the numeric value of the metric in the UI.
 	ShowMetrics bool `yaml:"showMetrics"`
-	// ExcludedWorkloads lists workload names to ignore.
-	ExcludedWorkloads []string `yaml:"excludedWorkloads,omitempty"`
+	// ExcludedWorkloads lists regular expressions matching workload names to
+	// ignore. Each pattern must match the whole workload name, not a substring.
+	ExcludedWorkloads []*Regexp `yaml:"excludedWorkloads,omitempty"`
 	// WorkloadNameAnnotation is the catalog annotation used to match workload names.
 	// Defaults to catalog.AnnotKubeName if empty.
 	WorkloadNameAnnotation string `yaml:"workloadNameAnnotation,omitempty"`
@@ -128,8 +162,10 @@ type PrometheusConfig struct {
 type KubeConfig struct {
 	// Enabled controls whether the workload scan is active. Defaults to false.
 	Enabled bool `yaml:"enabled"`
-	// ExcludedWorkloads lists workload names to ignore across all namespaces.
-	ExcludedWorkloads []string `yaml:"excludedWorkloads,omitempty"`
+	// ExcludedWorkloads lists regular expressions matching workload names to
+	// ignore across all namespaces. Each pattern must match the whole workload
+	// name, not a substring.
+	ExcludedWorkloads []*Regexp `yaml:"excludedWorkloads,omitempty"`
 }
 
 // BitbucketPathQuery configures a single Bitbucket scan for a specific
@@ -305,6 +341,18 @@ func (l *Linter) Prometheus() PrometheusConfig {
 
 func (l *Linter) Bitbucket() BitbucketConfig {
 	return l.config.Bitbucket
+}
+
+// IsExcludedKubeWorkload reports whether the given Kubernetes workload name
+// matches any of the configured Kube.ExcludedWorkloads regexes.
+func (l *Linter) IsExcludedKubeWorkload(name string) bool {
+	return matchesAny(l.config.Kube.ExcludedWorkloads, name)
+}
+
+// IsExcludedPrometheusWorkload reports whether the given Prometheus workload name
+// matches any of the configured Prometheus.ExcludedWorkloads regexes.
+func (l *Linter) IsExcludedPrometheusWorkload(name string) bool {
+	return matchesAny(l.config.Prometheus.ExcludedWorkloads, name)
 }
 
 func (l *Linter) NumRules() int {
