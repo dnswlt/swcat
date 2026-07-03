@@ -1,7 +1,7 @@
 # --- Base Image Definitions ---
 ARG NODE_BASE=node:20-alpine
-ARG GO_BASE=golang:1.25.7-alpine
-ARG RUNTIME_BASE=alpine:3.21
+ARG GO_BASE=golang:1.26.4-alpine
+ARG RUNTIME_BASE=alpine:3.24
 
 # --- Stage 1: build web assets ---
 FROM ${NODE_BASE} AS webbuilder

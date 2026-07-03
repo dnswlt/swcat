@@ -146,6 +146,19 @@ const (
 	NSEllipse
 )
 
+func (s NodeShape) String() string {
+	switch s {
+	case NSRoundedBox:
+		return "RoundedBox"
+	case NSBox:
+		return "Box"
+	case NSEllipse:
+		return "Ellipse"
+	default:
+		return fmt.Sprintf("NodeShape(%d)", int(s))
+	}
+}
+
 type Node struct {
 	ID     string // ID of this node in the dot graph.
 	Layout NodeLayout
