@@ -118,6 +118,10 @@ func (l *Linter) FindBitbucketFiles(ctx context.Context, bbClient bitbucket.Sear
 			continue
 		}
 		for _, repo := range repos {
+			// Always skip archived repositories.
+			if repo.Archived {
+				continue
+			}
 			exclude := false
 			for _, ex := range excludeREs {
 				if ex.MatchString(repo.Slug) {

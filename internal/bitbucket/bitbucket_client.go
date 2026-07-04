@@ -250,9 +250,10 @@ type Project struct {
 
 // Repository represents a Bitbucket repository.
 type Repository struct {
-	Slug    string  `json:"slug"`
-	Name    string  `json:"name"`
-	Project Project `json:"project"`
+	Slug     string  `json:"slug"`
+	Name     string  `json:"name"`
+	Project  Project `json:"project"`
+	Archived bool    `json:"archived"`
 }
 
 // ListRepositories returns all repositories for the given project,
