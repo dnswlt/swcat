@@ -49,8 +49,10 @@ curl -G 'http://localhost:9191/catalog/entities' \
   --data-urlencode 'q=kind:component OR kind:api'
 ```
 
-The response is a JSON object containing an `entities` array, where each
-element is an entity encoded according to the schema described above:
+The response body is a
+[`ListEntitiesResponse`](https://github.com/dnswlt/swcat/blob/main/proto/swcat/catalog/v1/catalog.proto):
+a JSON object containing an `entities` array, where each element is an entity
+encoded according to the schema described above:
 
 ```json
 {

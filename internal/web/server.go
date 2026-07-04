@@ -2281,26 +2281,20 @@ func (s *Server) serveEntitiesJSON(w http.ResponseWriter, r *http.Request) {
 	data := s.getStoreData(r)
 	entities := s.finder.FindEntities(data.repo, query)
 
-	result := make([]json.RawMessage, 0, len(entities))
+	resp := &catalog_pb.ListEntitiesResponse{
+		Entities: make([]*catalog_pb.Entity, 0, len(entities)),
+	}
 	for _, e := range entities {
 		pb := catalog.ToPB(e)
 		if pb == nil {
 			continue
 		}
-		b, err := protojson.Marshal(pb)
-		if err != nil {
-			log.Printf("Failed to marshal entity %v to protojson: %v", e.GetRef(), err)
-			http.Error(w, "JSON marshalling error", http.StatusInternalServerError)
-			return
-		}
-		result = append(result, json.RawMessage(b))
+		resp.Entities = append(resp.Entities, pb)
 	}
 
-	output, err := json.Marshal(map[string]any{
-		"entities": result,
-	})
+	output, err := protojson.Marshal(resp)
 	if err != nil {
-		log.Printf("Failed to encode map as JSON: %v", err)
+		log.Printf("Failed to marshal ListEntitiesResponse to protojson: %v", err)
 		http.Error(w, "JSON marshalling error", http.StatusInternalServerError)
 		return
 	}

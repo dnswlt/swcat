@@ -86,6 +86,11 @@ message Entity {
   Status status = 9;
 }
 
+// ListEntitiesResponse is the response body of GET /catalog/entities.
+message ListEntitiesResponse {
+  repeated Entity entities = 1;
+}
+
 // Status holds runtime observations attached to an entity by plugins.
 message Status {
   // Map from observation name (following annotation naming conventions) to

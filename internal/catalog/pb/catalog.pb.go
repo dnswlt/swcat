@@ -703,6 +703,51 @@ func (*Entity_ApiSpec) isEntity_Spec() {}
 
 func (*Entity_GroupSpec) isEntity_Spec() {}
 
+// ListEntitiesResponse is the response body of GET /catalog/entities.
+type ListEntitiesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entities      []*Entity              `protobuf:"bytes,1,rep,name=entities,proto3" json:"entities,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListEntitiesResponse) Reset() {
+	*x = ListEntitiesResponse{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListEntitiesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListEntitiesResponse) ProtoMessage() {}
+
+func (x *ListEntitiesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListEntitiesResponse.ProtoReflect.Descriptor instead.
+func (*ListEntitiesResponse) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ListEntitiesResponse) GetEntities() []*Entity {
+	if x != nil {
+		return x.Entities
+	}
+	return nil
+}
+
 // Status holds runtime observations attached to an entity by plugins.
 type Status struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -715,7 +760,7 @@ type Status struct {
 
 func (x *Status) Reset() {
 	*x = Status{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[7]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -727,7 +772,7 @@ func (x *Status) String() string {
 func (*Status) ProtoMessage() {}
 
 func (x *Status) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[7]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -740,7 +785,7 @@ func (x *Status) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Status.ProtoReflect.Descriptor instead.
 func (*Status) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{7}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Status) GetObservations() map[string]*Observation {
@@ -769,7 +814,7 @@ type Observation struct {
 
 func (x *Observation) Reset() {
 	*x = Observation{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[8]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -781,7 +826,7 @@ func (x *Observation) String() string {
 func (*Observation) ProtoMessage() {}
 
 func (x *Observation) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[8]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -794,7 +839,7 @@ func (x *Observation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Observation.ProtoReflect.Descriptor instead.
 func (*Observation) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{8}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Observation) GetValue() *structpb.Value {
@@ -863,7 +908,7 @@ type ObservedDependencies struct {
 
 func (x *ObservedDependencies) Reset() {
 	*x = ObservedDependencies{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[9]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -875,7 +920,7 @@ func (x *ObservedDependencies) String() string {
 func (*ObservedDependencies) ProtoMessage() {}
 
 func (x *ObservedDependencies) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[9]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -888,7 +933,7 @@ func (x *ObservedDependencies) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObservedDependencies.ProtoReflect.Descriptor instead.
 func (*ObservedDependencies) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{9}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ObservedDependencies) GetSource() *Ref {
@@ -950,7 +995,7 @@ type ObservedDependency struct {
 
 func (x *ObservedDependency) Reset() {
 	*x = ObservedDependency{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[10]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -962,7 +1007,7 @@ func (x *ObservedDependency) String() string {
 func (*ObservedDependency) ProtoMessage() {}
 
 func (x *ObservedDependency) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[10]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -975,7 +1020,7 @@ func (x *ObservedDependency) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObservedDependency.ProtoReflect.Descriptor instead.
 func (*ObservedDependency) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{10}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ObservedDependency) GetTarget() *Ref {
@@ -1012,7 +1057,7 @@ type DomainSpec struct {
 
 func (x *DomainSpec) Reset() {
 	*x = DomainSpec{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[11]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1024,7 +1069,7 @@ func (x *DomainSpec) String() string {
 func (*DomainSpec) ProtoMessage() {}
 
 func (x *DomainSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[11]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1037,7 +1082,7 @@ func (x *DomainSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainSpec.ProtoReflect.Descriptor instead.
 func (*DomainSpec) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{11}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DomainSpec) GetOwner() *Ref {
@@ -1083,7 +1128,7 @@ type SystemSpec struct {
 
 func (x *SystemSpec) Reset() {
 	*x = SystemSpec{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[12]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1095,7 +1140,7 @@ func (x *SystemSpec) String() string {
 func (*SystemSpec) ProtoMessage() {}
 
 func (x *SystemSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[12]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1108,7 +1153,7 @@ func (x *SystemSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SystemSpec.ProtoReflect.Descriptor instead.
 func (*SystemSpec) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{12}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *SystemSpec) GetOwner() *Ref {
@@ -1173,7 +1218,7 @@ type ComponentSpec struct {
 
 func (x *ComponentSpec) Reset() {
 	*x = ComponentSpec{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[13]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1185,7 +1230,7 @@ func (x *ComponentSpec) String() string {
 func (*ComponentSpec) ProtoMessage() {}
 
 func (x *ComponentSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[13]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1198,7 +1243,7 @@ func (x *ComponentSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentSpec.ProtoReflect.Descriptor instead.
 func (*ComponentSpec) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{13}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ComponentSpec) GetType() string {
@@ -1293,7 +1338,7 @@ type ResourceSpec struct {
 
 func (x *ResourceSpec) Reset() {
 	*x = ResourceSpec{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[14]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1305,7 +1350,7 @@ func (x *ResourceSpec) String() string {
 func (*ResourceSpec) ProtoMessage() {}
 
 func (x *ResourceSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[14]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1318,7 +1363,7 @@ func (x *ResourceSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceSpec.ProtoReflect.Descriptor instead.
 func (*ResourceSpec) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{14}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ResourceSpec) GetType() string {
@@ -1381,7 +1426,7 @@ type ApiSpec struct {
 
 func (x *ApiSpec) Reset() {
 	*x = ApiSpec{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[15]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1393,7 +1438,7 @@ func (x *ApiSpec) String() string {
 func (*ApiSpec) ProtoMessage() {}
 
 func (x *ApiSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[15]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1406,7 +1451,7 @@ func (x *ApiSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApiSpec.ProtoReflect.Descriptor instead.
 func (*ApiSpec) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{15}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ApiSpec) GetType() string {
@@ -1482,7 +1527,7 @@ type ApiSpecVersion struct {
 
 func (x *ApiSpecVersion) Reset() {
 	*x = ApiSpecVersion{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[16]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1494,7 +1539,7 @@ func (x *ApiSpecVersion) String() string {
 func (*ApiSpecVersion) ProtoMessage() {}
 
 func (x *ApiSpecVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[16]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1507,7 +1552,7 @@ func (x *ApiSpecVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApiSpecVersion.ProtoReflect.Descriptor instead.
 func (*ApiSpecVersion) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{16}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ApiSpecVersion) GetVersion() *Version {
@@ -1537,7 +1582,7 @@ type GroupSpec struct {
 
 func (x *GroupSpec) Reset() {
 	*x = GroupSpec{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[17]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1549,7 +1594,7 @@ func (x *GroupSpec) String() string {
 func (*GroupSpec) ProtoMessage() {}
 
 func (x *GroupSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[17]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1562,7 +1607,7 @@ func (x *GroupSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupSpec.ProtoReflect.Descriptor instead.
 func (*GroupSpec) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{17}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GroupSpec) GetType() string {
@@ -1611,7 +1656,7 @@ type GroupSpecProfile struct {
 
 func (x *GroupSpecProfile) Reset() {
 	*x = GroupSpecProfile{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[18]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1623,7 +1668,7 @@ func (x *GroupSpecProfile) String() string {
 func (*GroupSpecProfile) ProtoMessage() {}
 
 func (x *GroupSpecProfile) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[18]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1636,7 +1681,7 @@ func (x *GroupSpecProfile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupSpecProfile.ProtoReflect.Descriptor instead.
 func (*GroupSpecProfile) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{18}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GroupSpecProfile) GetDisplayName() string {
@@ -1723,7 +1768,9 @@ const file_swcat_catalog_v1_catalog_proto_rawDesc = "" +
 	"\n" +
 	"group_spec\x18\b \x01(\v2\x1b.swcat.catalog.v1.GroupSpecH\x00R\tgroupSpec\x120\n" +
 	"\x06status\x18\t \x01(\v2\x18.swcat.catalog.v1.StatusR\x06statusB\x06\n" +
-	"\x04spec\"\xb8\x01\n" +
+	"\x04spec\"L\n" +
+	"\x14ListEntitiesResponse\x124\n" +
+	"\bentities\x18\x01 \x03(\v2\x18.swcat.catalog.v1.EntityR\bentities\"\xb8\x01\n" +
 	"\x06Status\x12N\n" +
 	"\fobservations\x18\x01 \x03(\v2*.swcat.catalog.v1.Status.ObservationsEntryR\fobservations\x1a^\n" +
 	"\x11ObservationsEntry\x12\x10\n" +
@@ -1841,7 +1888,7 @@ func file_swcat_catalog_v1_catalog_proto_rawDescGZIP() []byte {
 }
 
 var file_swcat_catalog_v1_catalog_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_swcat_catalog_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_swcat_catalog_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_swcat_catalog_v1_catalog_proto_goTypes = []any{
 	(DependencyRelation)(0),       // 0: swcat.catalog.v1.DependencyRelation
 	(*Metadata)(nil),              // 1: swcat.catalog.v1.Metadata
@@ -1851,90 +1898,92 @@ var file_swcat_catalog_v1_catalog_proto_goTypes = []any{
 	(*LabelRef)(nil),              // 5: swcat.catalog.v1.LabelRef
 	(*Version)(nil),               // 6: swcat.catalog.v1.Version
 	(*Entity)(nil),                // 7: swcat.catalog.v1.Entity
-	(*Status)(nil),                // 8: swcat.catalog.v1.Status
-	(*Observation)(nil),           // 9: swcat.catalog.v1.Observation
-	(*ObservedDependencies)(nil),  // 10: swcat.catalog.v1.ObservedDependencies
-	(*ObservedDependency)(nil),    // 11: swcat.catalog.v1.ObservedDependency
-	(*DomainSpec)(nil),            // 12: swcat.catalog.v1.DomainSpec
-	(*SystemSpec)(nil),            // 13: swcat.catalog.v1.SystemSpec
-	(*ComponentSpec)(nil),         // 14: swcat.catalog.v1.ComponentSpec
-	(*ResourceSpec)(nil),          // 15: swcat.catalog.v1.ResourceSpec
-	(*ApiSpec)(nil),               // 16: swcat.catalog.v1.ApiSpec
-	(*ApiSpecVersion)(nil),        // 17: swcat.catalog.v1.ApiSpecVersion
-	(*GroupSpec)(nil),             // 18: swcat.catalog.v1.GroupSpec
-	(*GroupSpecProfile)(nil),      // 19: swcat.catalog.v1.GroupSpecProfile
-	nil,                           // 20: swcat.catalog.v1.Metadata.LabelsEntry
-	nil,                           // 21: swcat.catalog.v1.Metadata.AnnotationsEntry
-	nil,                           // 22: swcat.catalog.v1.LabelRef.AttrsEntry
-	nil,                           // 23: swcat.catalog.v1.Status.ObservationsEntry
-	nil,                           // 24: swcat.catalog.v1.Observation.MetaEntry
-	nil,                           // 25: swcat.catalog.v1.ObservedDependencies.MetaEntry
-	(*structpb.Value)(nil),        // 26: google.protobuf.Value
-	(*timestamppb.Timestamp)(nil), // 27: google.protobuf.Timestamp
+	(*ListEntitiesResponse)(nil),  // 8: swcat.catalog.v1.ListEntitiesResponse
+	(*Status)(nil),                // 9: swcat.catalog.v1.Status
+	(*Observation)(nil),           // 10: swcat.catalog.v1.Observation
+	(*ObservedDependencies)(nil),  // 11: swcat.catalog.v1.ObservedDependencies
+	(*ObservedDependency)(nil),    // 12: swcat.catalog.v1.ObservedDependency
+	(*DomainSpec)(nil),            // 13: swcat.catalog.v1.DomainSpec
+	(*SystemSpec)(nil),            // 14: swcat.catalog.v1.SystemSpec
+	(*ComponentSpec)(nil),         // 15: swcat.catalog.v1.ComponentSpec
+	(*ResourceSpec)(nil),          // 16: swcat.catalog.v1.ResourceSpec
+	(*ApiSpec)(nil),               // 17: swcat.catalog.v1.ApiSpec
+	(*ApiSpecVersion)(nil),        // 18: swcat.catalog.v1.ApiSpecVersion
+	(*GroupSpec)(nil),             // 19: swcat.catalog.v1.GroupSpec
+	(*GroupSpecProfile)(nil),      // 20: swcat.catalog.v1.GroupSpecProfile
+	nil,                           // 21: swcat.catalog.v1.Metadata.LabelsEntry
+	nil,                           // 22: swcat.catalog.v1.Metadata.AnnotationsEntry
+	nil,                           // 23: swcat.catalog.v1.LabelRef.AttrsEntry
+	nil,                           // 24: swcat.catalog.v1.Status.ObservationsEntry
+	nil,                           // 25: swcat.catalog.v1.Observation.MetaEntry
+	nil,                           // 26: swcat.catalog.v1.ObservedDependencies.MetaEntry
+	(*structpb.Value)(nil),        // 27: google.protobuf.Value
+	(*timestamppb.Timestamp)(nil), // 28: google.protobuf.Timestamp
 }
 var file_swcat_catalog_v1_catalog_proto_depIdxs = []int32{
-	20, // 0: swcat.catalog.v1.Metadata.labels:type_name -> swcat.catalog.v1.Metadata.LabelsEntry
-	21, // 1: swcat.catalog.v1.Metadata.annotations:type_name -> swcat.catalog.v1.Metadata.AnnotationsEntry
+	21, // 0: swcat.catalog.v1.Metadata.labels:type_name -> swcat.catalog.v1.Metadata.LabelsEntry
+	22, // 1: swcat.catalog.v1.Metadata.annotations:type_name -> swcat.catalog.v1.Metadata.AnnotationsEntry
 	2,  // 2: swcat.catalog.v1.Metadata.links:type_name -> swcat.catalog.v1.Link
 	3,  // 3: swcat.catalog.v1.Link.group_info:type_name -> swcat.catalog.v1.LinkGroupInfo
 	4,  // 4: swcat.catalog.v1.LabelRef.ref:type_name -> swcat.catalog.v1.Ref
-	22, // 5: swcat.catalog.v1.LabelRef.attrs:type_name -> swcat.catalog.v1.LabelRef.AttrsEntry
+	23, // 5: swcat.catalog.v1.LabelRef.attrs:type_name -> swcat.catalog.v1.LabelRef.AttrsEntry
 	1,  // 6: swcat.catalog.v1.Entity.metadata:type_name -> swcat.catalog.v1.Metadata
-	12, // 7: swcat.catalog.v1.Entity.domain_spec:type_name -> swcat.catalog.v1.DomainSpec
-	13, // 8: swcat.catalog.v1.Entity.system_spec:type_name -> swcat.catalog.v1.SystemSpec
-	14, // 9: swcat.catalog.v1.Entity.component_spec:type_name -> swcat.catalog.v1.ComponentSpec
-	15, // 10: swcat.catalog.v1.Entity.resource_spec:type_name -> swcat.catalog.v1.ResourceSpec
-	16, // 11: swcat.catalog.v1.Entity.api_spec:type_name -> swcat.catalog.v1.ApiSpec
-	18, // 12: swcat.catalog.v1.Entity.group_spec:type_name -> swcat.catalog.v1.GroupSpec
-	8,  // 13: swcat.catalog.v1.Entity.status:type_name -> swcat.catalog.v1.Status
-	23, // 14: swcat.catalog.v1.Status.observations:type_name -> swcat.catalog.v1.Status.ObservationsEntry
-	26, // 15: swcat.catalog.v1.Observation.value:type_name -> google.protobuf.Value
-	27, // 16: swcat.catalog.v1.Observation.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 17: swcat.catalog.v1.Observation.meta:type_name -> swcat.catalog.v1.Observation.MetaEntry
-	4,  // 18: swcat.catalog.v1.ObservedDependencies.source:type_name -> swcat.catalog.v1.Ref
-	27, // 19: swcat.catalog.v1.ObservedDependencies.observed_at:type_name -> google.protobuf.Timestamp
-	11, // 20: swcat.catalog.v1.ObservedDependencies.dependencies:type_name -> swcat.catalog.v1.ObservedDependency
-	25, // 21: swcat.catalog.v1.ObservedDependencies.meta:type_name -> swcat.catalog.v1.ObservedDependencies.MetaEntry
-	4,  // 22: swcat.catalog.v1.ObservedDependency.target:type_name -> swcat.catalog.v1.Ref
-	0,  // 23: swcat.catalog.v1.ObservedDependency.relation:type_name -> swcat.catalog.v1.DependencyRelation
-	4,  // 24: swcat.catalog.v1.DomainSpec.owner:type_name -> swcat.catalog.v1.Ref
-	4,  // 25: swcat.catalog.v1.DomainSpec.subdomain_of:type_name -> swcat.catalog.v1.Ref
-	4,  // 26: swcat.catalog.v1.DomainSpec.systems:type_name -> swcat.catalog.v1.Ref
-	4,  // 27: swcat.catalog.v1.SystemSpec.owner:type_name -> swcat.catalog.v1.Ref
-	4,  // 28: swcat.catalog.v1.SystemSpec.domain:type_name -> swcat.catalog.v1.Ref
-	4,  // 29: swcat.catalog.v1.SystemSpec.components:type_name -> swcat.catalog.v1.Ref
-	4,  // 30: swcat.catalog.v1.SystemSpec.apis:type_name -> swcat.catalog.v1.Ref
-	4,  // 31: swcat.catalog.v1.SystemSpec.resources:type_name -> swcat.catalog.v1.Ref
-	4,  // 32: swcat.catalog.v1.ComponentSpec.owner:type_name -> swcat.catalog.v1.Ref
-	4,  // 33: swcat.catalog.v1.ComponentSpec.system:type_name -> swcat.catalog.v1.Ref
-	4,  // 34: swcat.catalog.v1.ComponentSpec.domain:type_name -> swcat.catalog.v1.Ref
-	4,  // 35: swcat.catalog.v1.ComponentSpec.subcomponent_of:type_name -> swcat.catalog.v1.Ref
-	5,  // 36: swcat.catalog.v1.ComponentSpec.provides_apis:type_name -> swcat.catalog.v1.LabelRef
-	5,  // 37: swcat.catalog.v1.ComponentSpec.consumes_apis:type_name -> swcat.catalog.v1.LabelRef
-	5,  // 38: swcat.catalog.v1.ComponentSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
-	5,  // 39: swcat.catalog.v1.ComponentSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
-	4,  // 40: swcat.catalog.v1.ComponentSpec.subcomponents:type_name -> swcat.catalog.v1.Ref
-	4,  // 41: swcat.catalog.v1.ResourceSpec.owner:type_name -> swcat.catalog.v1.Ref
-	4,  // 42: swcat.catalog.v1.ResourceSpec.system:type_name -> swcat.catalog.v1.Ref
-	4,  // 43: swcat.catalog.v1.ResourceSpec.domain:type_name -> swcat.catalog.v1.Ref
-	5,  // 44: swcat.catalog.v1.ResourceSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
-	5,  // 45: swcat.catalog.v1.ResourceSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
-	4,  // 46: swcat.catalog.v1.ApiSpec.owner:type_name -> swcat.catalog.v1.Ref
-	4,  // 47: swcat.catalog.v1.ApiSpec.system:type_name -> swcat.catalog.v1.Ref
-	4,  // 48: swcat.catalog.v1.ApiSpec.domain:type_name -> swcat.catalog.v1.Ref
-	17, // 49: swcat.catalog.v1.ApiSpec.versions:type_name -> swcat.catalog.v1.ApiSpecVersion
-	5,  // 50: swcat.catalog.v1.ApiSpec.providers:type_name -> swcat.catalog.v1.LabelRef
-	5,  // 51: swcat.catalog.v1.ApiSpec.consumers:type_name -> swcat.catalog.v1.LabelRef
-	6,  // 52: swcat.catalog.v1.ApiSpecVersion.version:type_name -> swcat.catalog.v1.Version
-	19, // 53: swcat.catalog.v1.GroupSpec.profile:type_name -> swcat.catalog.v1.GroupSpecProfile
-	4,  // 54: swcat.catalog.v1.GroupSpec.parent:type_name -> swcat.catalog.v1.Ref
-	4,  // 55: swcat.catalog.v1.GroupSpec.children:type_name -> swcat.catalog.v1.Ref
-	9,  // 56: swcat.catalog.v1.Status.ObservationsEntry.value:type_name -> swcat.catalog.v1.Observation
-	57, // [57:57] is the sub-list for method output_type
-	57, // [57:57] is the sub-list for method input_type
-	57, // [57:57] is the sub-list for extension type_name
-	57, // [57:57] is the sub-list for extension extendee
-	0,  // [0:57] is the sub-list for field type_name
+	13, // 7: swcat.catalog.v1.Entity.domain_spec:type_name -> swcat.catalog.v1.DomainSpec
+	14, // 8: swcat.catalog.v1.Entity.system_spec:type_name -> swcat.catalog.v1.SystemSpec
+	15, // 9: swcat.catalog.v1.Entity.component_spec:type_name -> swcat.catalog.v1.ComponentSpec
+	16, // 10: swcat.catalog.v1.Entity.resource_spec:type_name -> swcat.catalog.v1.ResourceSpec
+	17, // 11: swcat.catalog.v1.Entity.api_spec:type_name -> swcat.catalog.v1.ApiSpec
+	19, // 12: swcat.catalog.v1.Entity.group_spec:type_name -> swcat.catalog.v1.GroupSpec
+	9,  // 13: swcat.catalog.v1.Entity.status:type_name -> swcat.catalog.v1.Status
+	7,  // 14: swcat.catalog.v1.ListEntitiesResponse.entities:type_name -> swcat.catalog.v1.Entity
+	24, // 15: swcat.catalog.v1.Status.observations:type_name -> swcat.catalog.v1.Status.ObservationsEntry
+	27, // 16: swcat.catalog.v1.Observation.value:type_name -> google.protobuf.Value
+	28, // 17: swcat.catalog.v1.Observation.updated_at:type_name -> google.protobuf.Timestamp
+	25, // 18: swcat.catalog.v1.Observation.meta:type_name -> swcat.catalog.v1.Observation.MetaEntry
+	4,  // 19: swcat.catalog.v1.ObservedDependencies.source:type_name -> swcat.catalog.v1.Ref
+	28, // 20: swcat.catalog.v1.ObservedDependencies.observed_at:type_name -> google.protobuf.Timestamp
+	12, // 21: swcat.catalog.v1.ObservedDependencies.dependencies:type_name -> swcat.catalog.v1.ObservedDependency
+	26, // 22: swcat.catalog.v1.ObservedDependencies.meta:type_name -> swcat.catalog.v1.ObservedDependencies.MetaEntry
+	4,  // 23: swcat.catalog.v1.ObservedDependency.target:type_name -> swcat.catalog.v1.Ref
+	0,  // 24: swcat.catalog.v1.ObservedDependency.relation:type_name -> swcat.catalog.v1.DependencyRelation
+	4,  // 25: swcat.catalog.v1.DomainSpec.owner:type_name -> swcat.catalog.v1.Ref
+	4,  // 26: swcat.catalog.v1.DomainSpec.subdomain_of:type_name -> swcat.catalog.v1.Ref
+	4,  // 27: swcat.catalog.v1.DomainSpec.systems:type_name -> swcat.catalog.v1.Ref
+	4,  // 28: swcat.catalog.v1.SystemSpec.owner:type_name -> swcat.catalog.v1.Ref
+	4,  // 29: swcat.catalog.v1.SystemSpec.domain:type_name -> swcat.catalog.v1.Ref
+	4,  // 30: swcat.catalog.v1.SystemSpec.components:type_name -> swcat.catalog.v1.Ref
+	4,  // 31: swcat.catalog.v1.SystemSpec.apis:type_name -> swcat.catalog.v1.Ref
+	4,  // 32: swcat.catalog.v1.SystemSpec.resources:type_name -> swcat.catalog.v1.Ref
+	4,  // 33: swcat.catalog.v1.ComponentSpec.owner:type_name -> swcat.catalog.v1.Ref
+	4,  // 34: swcat.catalog.v1.ComponentSpec.system:type_name -> swcat.catalog.v1.Ref
+	4,  // 35: swcat.catalog.v1.ComponentSpec.domain:type_name -> swcat.catalog.v1.Ref
+	4,  // 36: swcat.catalog.v1.ComponentSpec.subcomponent_of:type_name -> swcat.catalog.v1.Ref
+	5,  // 37: swcat.catalog.v1.ComponentSpec.provides_apis:type_name -> swcat.catalog.v1.LabelRef
+	5,  // 38: swcat.catalog.v1.ComponentSpec.consumes_apis:type_name -> swcat.catalog.v1.LabelRef
+	5,  // 39: swcat.catalog.v1.ComponentSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
+	5,  // 40: swcat.catalog.v1.ComponentSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
+	4,  // 41: swcat.catalog.v1.ComponentSpec.subcomponents:type_name -> swcat.catalog.v1.Ref
+	4,  // 42: swcat.catalog.v1.ResourceSpec.owner:type_name -> swcat.catalog.v1.Ref
+	4,  // 43: swcat.catalog.v1.ResourceSpec.system:type_name -> swcat.catalog.v1.Ref
+	4,  // 44: swcat.catalog.v1.ResourceSpec.domain:type_name -> swcat.catalog.v1.Ref
+	5,  // 45: swcat.catalog.v1.ResourceSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
+	5,  // 46: swcat.catalog.v1.ResourceSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
+	4,  // 47: swcat.catalog.v1.ApiSpec.owner:type_name -> swcat.catalog.v1.Ref
+	4,  // 48: swcat.catalog.v1.ApiSpec.system:type_name -> swcat.catalog.v1.Ref
+	4,  // 49: swcat.catalog.v1.ApiSpec.domain:type_name -> swcat.catalog.v1.Ref
+	18, // 50: swcat.catalog.v1.ApiSpec.versions:type_name -> swcat.catalog.v1.ApiSpecVersion
+	5,  // 51: swcat.catalog.v1.ApiSpec.providers:type_name -> swcat.catalog.v1.LabelRef
+	5,  // 52: swcat.catalog.v1.ApiSpec.consumers:type_name -> swcat.catalog.v1.LabelRef
+	6,  // 53: swcat.catalog.v1.ApiSpecVersion.version:type_name -> swcat.catalog.v1.Version
+	20, // 54: swcat.catalog.v1.GroupSpec.profile:type_name -> swcat.catalog.v1.GroupSpecProfile
+	4,  // 55: swcat.catalog.v1.GroupSpec.parent:type_name -> swcat.catalog.v1.Ref
+	4,  // 56: swcat.catalog.v1.GroupSpec.children:type_name -> swcat.catalog.v1.Ref
+	10, // 57: swcat.catalog.v1.Status.ObservationsEntry.value:type_name -> swcat.catalog.v1.Observation
+	58, // [58:58] is the sub-list for method output_type
+	58, // [58:58] is the sub-list for method input_type
+	58, // [58:58] is the sub-list for extension type_name
+	58, // [58:58] is the sub-list for extension extendee
+	0,  // [0:58] is the sub-list for field type_name
 }
 
 func init() { file_swcat_catalog_v1_catalog_proto_init() }
@@ -1956,7 +2005,7 @@ func file_swcat_catalog_v1_catalog_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_swcat_catalog_v1_catalog_proto_rawDesc), len(file_swcat_catalog_v1_catalog_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   25,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
