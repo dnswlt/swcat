@@ -1844,6 +1844,38 @@ func (s *Server) updateAnnotationValue(w http.ResponseWriter, r *http.Request, e
 	fmt.Fprintln(w, "OK")
 }
 
+// mergeAndStoreObservation merges observation under key into entity and
+// persists the entity's full observation set to the database. It acquires the
+// server write lock, writes an HTTP error response on failure, and reports
+// whether the update succeeded.
+//
+// StoreObservations replaces all rows for the entity with its current in-memory
+// observations, so we must merge before storing. There is no need to clear
+// storeDataMap afterwards: MergeObservations updates the in-memory entity in the
+// cached repo, so the change is immediately visible.
+func (s *Server) mergeAndStoreObservation(w http.ResponseWriter, r *http.Request, data *storeData, entity catalog.Entity, key string, observation catalog.Observation) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !catalog.MergeObservations(entity, map[string]catalog.Observation{key: observation}) {
+		http.Error(w, "Entity kind does not support status observations", http.StatusBadRequest)
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	if err := database.StoreObservations(ctx, s.db, entity); err != nil {
+		http.Error(w, "Failed to store observation", http.StatusInternalServerError)
+		log.Printf("Failed to store observation %q for %s: %v", key, entity.GetRef(), err)
+		return false
+	}
+
+	// Observations can affect lint findings, so drop this entity's cached
+	// findings; they will be recomputed on the next getFindings call.
+	data.findingsCache.Remove(entity.GetRef().String())
+	return true
+}
+
 // updateObservation creates or updates a single status observation for an entity.
 //
 // Unlike annotations (which are persisted to the extensions JSON sidecar of the
@@ -1905,29 +1937,9 @@ func (s *Server) updateObservation(w http.ResponseWriter, r *http.Request, entit
 		return
 	}
 
-	// Acquire write lock for the database update.
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	obs := map[string]catalog.Observation{key: observation}
-	// Merge into the in-memory entity, then persist the full observation set.
-	// StoreObservations replaces all rows for the entity with its current
-	// in-memory observations, so we must merge before storing.
-	if !catalog.MergeObservations(entity, obs) {
-		http.Error(w, "Entity kind does not support status observations", http.StatusBadRequest)
+	if !s.mergeAndStoreObservation(w, r, data, entity, key, observation) {
 		return
 	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-	if err := database.StoreObservations(ctx, s.db, entity); err != nil {
-		http.Error(w, "Failed to store observation", http.StatusInternalServerError)
-		log.Printf("Failed to store observation %q for %s: %v", key, ref, err)
-		return
-	}
-
-	// No need to clear storeDataMap: MergeObservations already updated the
-	// in-memory entity in the cached repo, so the change is immediately visible.
 
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w, "OK")
@@ -1984,6 +1996,8 @@ func (s *Server) deleteObservation(w http.ResponseWriter, r *http.Request, entit
 
 	// No need to clear storeDataMap: DeleteObservations already updated the
 	// in-memory entity in the cached repo, so the change is immediately visible.
+	// Observations can affect lint findings, so drop this entity's cached ones.
+	data.findingsCache.Remove(ref.String())
 
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w, "OK")
@@ -2076,23 +2090,7 @@ func (s *Server) updateObservedDependencies(w http.ResponseWriter, r *http.Reque
 		Meta:      depsPB.Meta,
 	}
 
-	// Acquire write lock for the database update.
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Merge into the in-memory entity, then persist the full observation set.
-	// StoreObservations replaces all rows for the entity with its current
-	// in-memory observations, so we must merge before storing.
-	if !catalog.MergeObservations(srcEntity, map[string]catalog.Observation{key: observation}) {
-		http.Error(w, "Entity kind does not support status observations", http.StatusBadRequest)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-	if err := database.StoreObservations(ctx, s.db, srcEntity); err != nil {
-		http.Error(w, "Failed to store observed dependencies", http.StatusInternalServerError)
-		log.Printf("Failed to store observed dependencies %q for %s: %v", key, srcRef, err)
+	if !s.mergeAndStoreObservation(w, r, data, srcEntity, key, observation) {
 		return
 	}
 
@@ -2142,6 +2140,8 @@ func (s *Server) deleteObservedDependencies(w http.ResponseWriter, r *http.Reque
 			log.Printf("Failed to delete observation %q for %s: %v", key, entity.GetRef(), err)
 			return
 		}
+		// Observations can affect lint findings, so drop this entity's cached ones.
+		data.findingsCache.Remove(entity.GetRef().String())
 		deleted++
 	}
 
