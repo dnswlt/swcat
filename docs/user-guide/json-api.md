@@ -298,3 +298,24 @@ in a few expected ways:
   "now" when the request omitted it).
 - Each `target` is resolved to a fully-qualified reference, so its `namespace`
   is filled in (e.g. `default`) even when the request left it out.
+
+### Deleting all dependencies from a tool
+
+When a reporting tool misbehaves and leaves stale dependencies behind, you can
+administratively wipe everything it reported with a single `DELETE` request to
+`/catalog/observed-dependencies/{detectedBy}`. This removes the
+`swcat-deps/<detectedBy>` observation from **every** entity that carries it.
+
+- `detectedBy`: The reporting tool's label (e.g. `kafka-scanner`), same value
+  used when the dependencies were reported.
+
+```bash
+curl -X DELETE 'http://localhost:9191/catalog/observed-dependencies/solace-graph'
+```
+
+Deleting a `detectedBy` that reported nothing is a no-op and still succeeds. The
+response reports how many entities were affected.
+
+**Note:** Like the other observation operations, this is not available when the
+server is running in read-only mode, or when the server has no database
+configured.

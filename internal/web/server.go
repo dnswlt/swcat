@@ -2100,6 +2100,58 @@ func (s *Server) updateObservedDependencies(w http.ResponseWriter, r *http.Reque
 	fmt.Fprintln(w, "OK")
 }
 
+// deleteObservedDependencies removes the observed-dependencies observation
+// reported by a single tool ("swcat-deps/<detected_by>") from every entity that
+// carries it. This is an administrative escape hatch for cleaning up after a
+// misbehaving external scanner that left stale dependencies behind.
+func (s *Server) deleteObservedDependencies(w http.ResponseWriter, r *http.Request, detectedBy string) {
+	if !s.canEditObservations() {
+		http.Error(w, "Cannot edit observations", http.StatusPreconditionFailed)
+		return
+	}
+
+	key, ok := catalog.ObservedDepsKey(strings.TrimSpace(detectedBy))
+	if !ok {
+		http.Error(w, "'detectedBy' must be a hyphen-separated identifier, e.g. \"kafka-scanner\"", http.StatusBadRequest)
+		return
+	}
+
+	// Acquire write lock for the database updates.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data := s.getStoreData(r)
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	// Delete the observation from each entity that carries it, persisting the
+	// remaining set per entity. StoreObservations rewrites all rows for the
+	// entity from its current in-memory observations, so we delete before store.
+	deleted := 0
+	for _, entity := range data.repo.AllEntities() {
+		status := entity.GetStatus()
+		if status == nil {
+			continue
+		}
+		if _, present := status.Observations[key]; !present {
+			continue
+		}
+		catalog.DeleteObservations(entity, []string{key})
+		if err := database.StoreObservations(ctx, s.db, entity); err != nil {
+			http.Error(w, "Failed to delete observed dependencies", http.StatusInternalServerError)
+			log.Printf("Failed to delete observation %q for %s: %v", key, entity.GetRef(), err)
+			return
+		}
+		deleted++
+	}
+
+	// No need to clear storeDataMap: DeleteObservations already updated the
+	// in-memory entities in the cached repo, so the change is immediately visible.
+
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, "OK, deleted %q from %d entities\n", key, deleted)
+}
+
 func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 	field := r.URL.Query().Get("field")
 	if strings.TrimSpace(field) == "" {
@@ -2752,6 +2804,12 @@ func (s *Server) routes() *http.ServeMux {
 	// source entity. The source entity is named in the request body.
 	root.Handle("POST /catalog/observed-dependencies", s.handleRefDataDispatch(
 		http.HandlerFunc(s.updateObservedDependencies)))
+	// Administratively remove all dependencies reported by a single tool
+	// ("swcat-deps/<detectedBy>") across every entity that carries them.
+	root.Handle("DELETE /catalog/observed-dependencies/{detectedBy}", s.handleRefDataDispatch(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			s.deleteObservedDependencies(w, r, r.PathValue("detectedBy"))
+		})))
 
 	root.Handle("GET /catalog/autocomplete", s.handleRefDataDispatch(http.HandlerFunc(s.serveAutocomplete)))
 
