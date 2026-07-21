@@ -1,14 +1,26 @@
 import './style.css'; // Make sure Tailwind CSS gets included by vite.
 import './custom-content.css';
 
-// Self-hosted Noto Sans, latin + latin-ext only. Used solely by the SVG graph
-// (via .graphviz-svg text) — node labels render at 400, edge labels at 400
-// italic. The rest of the UI uses the system font stack, so no other weights
-// are needed here.
-import '@fontsource/noto-sans/latin-400.css';
-import '@fontsource/noto-sans/latin-400-italic.css';
-import '@fontsource/noto-sans/latin-ext-400.css';
-import '@fontsource/noto-sans/latin-ext-400-italic.css';
+// Self-hosted Inter, latin + latin-ext only. Drives both the UI (via
+// fontFamily.sans in tailwind.config.js) and the SVG graph (via
+// .graphviz-svg text).
+//
+// Weights track what the templates actually use: 400 body, 500 font-medium,
+// 600 font-semibold, 700 font-bold. Italic is 400 only — the graph's edge
+// labels are the main user; bold italic is left to the browser to synthesize.
+//
+// Each subset ships its own unicode-range, so latin-ext is only fetched when a
+// label actually contains one of its glyphs.
+import '@fontsource/inter/latin-400.css';
+import '@fontsource/inter/latin-500.css';
+import '@fontsource/inter/latin-600.css';
+import '@fontsource/inter/latin-700.css';
+import '@fontsource/inter/latin-400-italic.css';
+import '@fontsource/inter/latin-ext-400.css';
+import '@fontsource/inter/latin-ext-500.css';
+import '@fontsource/inter/latin-ext-600.css';
+import '@fontsource/inter/latin-ext-700.css';
+import '@fontsource/inter/latin-ext-400-italic.css';
 
 // Metadata parsed from the JSON sidecar returned together with the SVG graph.
 let svgMeta = {};

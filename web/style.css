@@ -81,11 +81,11 @@
         cursor: pointer;
     }
 
-    /* Pin SVG text to Noto Sans. Graphviz uses the same font (via font-noto in
+    /* Pin SVG text to Inter. Graphviz uses the same font (via font-inter in
        the container) so glyph widths stay in sync between the layout pass and
        the browser render, and labels fit their nodes. */
     .graphviz-svg text {
-        font-family: "Noto Sans", Arial, sans-serif;
+        font-family: "Inter", Arial, sans-serif;
     }
 
     /* Edge labels: smaller, italic, muted. */

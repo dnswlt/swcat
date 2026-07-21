@@ -39,9 +39,9 @@ func TestLoadViteManifest(t *testing.T) {
 			"src": "graph.js",
 			"isDynamicEntry": true
 		},
-		"node_modules/@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff2": {
-			"file": "noto-sans-latin-400-normal-BTkUljjl.woff2",
-			"src": "node_modules/@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff2"
+		"node_modules/@fontsource/inter/files/inter-latin-400-normal.woff2": {
+			"file": "inter-latin-400-normal-BTkUljjl.woff2",
+			"src": "node_modules/@fontsource/inter/files/inter-latin-400-normal.woff2"
 		}
 	}`)
 
