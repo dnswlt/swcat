@@ -60,6 +60,9 @@ type layouter struct {
 	// natural width of each column item and of the focal system's nodes.
 	itemWidth  float64
 	focalWidth float64
+
+	// number of edges attaching to each side of each box, including frames.
+	ports map[portKey]int
 }
 
 type portKey struct {
@@ -77,11 +80,20 @@ func (l *layouter) index() {
 			l.nodeByID[n.ID] = n
 			l.isFocal[n.ID] = true
 		}
+		if f := l.d.Focal.Frame; f != nil {
+			l.nodeByID[f.ID] = f
+			l.isFocal[f.ID] = true
+		}
 	}
 	for _, it := range l.d.Externals {
 		for _, n := range it.nodes() {
 			l.nodeByID[n.ID] = n
 			l.itemOf[n.ID] = it
+		}
+		if it.Group != nil && it.Group.Frame != nil {
+			f := it.Group.Frame
+			l.nodeByID[f.ID] = f
+			l.itemOf[f.ID] = it
 		}
 	}
 
@@ -102,6 +114,34 @@ func (l *layouter) index() {
 		kept = append(kept, e)
 	}
 	l.d.Edges = kept
+}
+
+// syncFrames puts every group's frame anchor back onto the group's outline.
+// Frames carry no geometry of their own, so this runs whenever group positions
+// or sizes have changed and before anything reads a frame's ports.
+func (l *layouter) syncFrames() {
+	if l.d.Focal != nil && l.d.Focal.Frame != nil {
+		l.d.Focal.Frame.geom = l.d.Focal.geom
+	}
+	for _, it := range l.d.Externals {
+		if it.Group != nil && it.Group.Frame != nil {
+			it.Group.Frame.geom = it.Group.geom
+		}
+	}
+}
+
+// focalPositions maps the focal system's nodes to their position in the stack,
+// for the barycenter passes. A frame spans all of them, so it counts as sitting
+// in the middle.
+func (l *layouter) focalPositions() map[*Node]float64 {
+	if l.d.Focal == nil {
+		return map[*Node]float64{}
+	}
+	pos := indexOf(l.d.Focal.Nodes)
+	if f := l.d.Focal.Frame; f != nil {
+		pos[f] = float64(len(l.d.Focal.Nodes)-1) / 2
+	}
+	return pos
 }
 
 // focalNode returns the edge's endpoint inside the focal system, and the one
@@ -127,6 +167,7 @@ func (l *layouter) measure() {
 	// A box has to be tall enough for its text, and tall enough that the edges
 	// arriving at one of its sides stay far enough apart to be told apart.
 	ports := l.portCounts()
+	l.ports = ports
 	nodeSize := func(n *Node) (w, h float64) {
 		for _, lbl := range n.Labels {
 			w = max(w, TextWidth(lbl.Text, st.fontSize(lbl)))
@@ -219,6 +260,17 @@ func wrapLabel(label string, st Style) []string {
 	return out
 }
 
+// frameHeight returns the height a group needs for the edges attaching to its
+// frame, or 0 if it has none. Frames have no size of their own, so the group has
+// to provide the room its ports need.
+func (l *layouter) frameHeight(g *Group) float64 {
+	if g == nil || g.Frame == nil {
+		return 0
+	}
+	busiest := max(l.ports[portKey{g.Frame, portLeft}], l.ports[portKey{g.Frame, portRight}])
+	return float64(busiest)*l.st.MinPortPitch + 2*l.st.PortInset
+}
+
 func (l *layouter) itemHeight(it *Item) float64 {
 	if it.Group == nil {
 		return it.Node.h
@@ -230,8 +282,8 @@ func (l *layouter) itemHeight(it *Item) float64 {
 		}
 		h += n.h
 	}
-	it.Group.h = h
-	return h
+	it.Group.h = max(h, l.frameHeight(it.Group))
+	return it.Group.h
 }
 
 // assignSides puts every external system in the column that its edges argue
@@ -297,7 +349,7 @@ func (l *layouter) orderLayers() {
 		if it.Group == nil {
 			continue
 		}
-		pos := indexOf(focal)
+		pos := l.focalPositions()
 		sortStable(it.Group.Nodes, func(n *Node) float64 {
 			return l.barycenter(l.partnersOf(n), pos)
 		})
@@ -319,7 +371,7 @@ func (l *layouter) partnersOf(n *Node) []*Node {
 }
 
 func (l *layouter) sortItemsByBarycenter(items []*Item, focal []*Node) {
-	pos := indexOf(focal)
+	pos := l.focalPositions()
 	sortStable(items, func(it *Item) float64 {
 		var partners []*Node
 		for _, n := range it.nodes() {
@@ -367,7 +419,7 @@ func (l *layouter) barycenter(partners []*Node, pos map[*Node]float64) float64 {
 }
 
 func (l *layouter) countCrossings(focal []*Node, left, right []*Item) int {
-	pos := indexOf(focal)
+	pos := l.focalPositions()
 	count := func(items []*Item) int {
 		itemPos := map[*Item]int{}
 		for i, it := range items {
@@ -413,8 +465,9 @@ func (l *layouter) placeY() {
 			y -= st.NodeVGap
 		}
 		l.d.Focal.y = 0
-		l.d.Focal.h = y + st.GroupPadBottom
+		l.d.Focal.h = max(y+st.GroupPadBottom, l.frameHeight(l.d.Focal))
 	}
+	l.syncFrames()
 
 	l.placeColumnY(l.left)
 	l.placeColumnY(l.right)
@@ -594,6 +647,7 @@ func (l *layouter) portCounts() map[portKey]int {
 // side are spread over the box's height — which measure() already made tall
 // enough to keep them apart.
 func (l *layouter) assignPorts() {
+	l.syncFrames()
 	l.portEdges = map[portKey][]*Edge{}
 
 	for _, e := range l.d.Edges {
@@ -770,6 +824,9 @@ func (l *layouter) placeX(leftTracks, rightTracks int) {
 			}
 		}
 	}
+
+	// Columns have moved, so frames need to follow before ports are read off them.
+	l.syncFrames()
 
 	laneX := func(gutterStart, laneOffset float64) func(int) float64 {
 		return func(i int) float64 {

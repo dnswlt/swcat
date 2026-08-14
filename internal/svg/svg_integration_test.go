@@ -75,51 +75,6 @@ func TestGenerateComponentSVG_WithDot(t *testing.T) {
 	}
 }
 
-func TestSystemExternalGraph_WithDot(t *testing.T) {
-	repo, err := repo.Load(store.NewDiskStore("../../testdata/test2"), nil, repo.Config{})
-	if err != nil {
-		t.Fatalf("failed to load repository: %v", err)
-	}
-
-	system1 := repo.System(&catalog.Ref{Name: "test-system-1"})
-	if system1 == nil {
-		t.Fatalf("test-system-1 not found in repo")
-	}
-	system2 := repo.System(&catalog.Ref{Name: "test-system-2"})
-	if system2 == nil {
-		t.Fatalf("test-system-2 not found in repo")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	cfg := DefaultConfig()
-	renderer := NewRenderer(repo, dot.NewRunner("dot"), cfg)
-	viewOpts := NewSystemViewOptions(repo, system1, nil, []*catalog.Ref{system2.GetRef()}, nil)
-	res, err := renderer.SystemExternalGraph(ctx, system1, viewOpts)
-	if err != nil {
-		t.Fatalf("GenerateSystemSVG failed: %v", err)
-	}
-	if !bytes.Contains(res.SVG, []byte("<svg")) {
-		t.Fatalf("SVG output missing <svg> tag:\n%s", string(res.SVG))
-	}
-
-	// Structural checks on the produced SVG
-	ids, err := testutil.ExtractSVGIDs(res.SVG)
-	if err != nil {
-		t.Fatalf("extractIDs: %v", err)
-	}
-
-	// Expect the component node id to be present
-	// NOTE: the system itself is not present, since it is represented as a "cluster",
-	// not a node.
-	foundComp := slices.Contains(ids, "component:test-component")
-	if !foundComp {
-		t.Fatalf("expected node id %q not found; all ids: %v", "test-component", ids)
-	}
-
-}
-
 func TestGraph_WithDot_SystemsAsClusters(t *testing.T) {
 	repo, err := repo.Load(store.NewDiskStore("../../testdata/test2"), nil, repo.Config{})
 	if err != nil {

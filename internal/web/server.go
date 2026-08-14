@@ -658,33 +658,22 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	params["SystemURL"] = systemURL
 
 	// Parse view options from query params:
-	// - c= (context): systems to show in detail
-	// - x= (exclude): systems to hide
-	// - o= (only): show only these systems (exclusive, overrides x=)
+	// - s= (select): narrow the view to these systems, shown with their parts
+	// - detail= (systems|apis|all): how far into a system the view goes
 	q := r.URL.Query()
-	var onlySystems, contextSystems, excludedSystems []*catalog.Ref
-
-	for _, v := range q["c"] {
+	var selectedSystems []*catalog.Ref
+	for _, v := range q["s"] {
 		if ref, err := catalog.ParseRefAs(catalog.KindSystem, v); err == nil {
-			contextSystems = append(contextSystems, ref)
-		}
-	}
-	for _, v := range q["o"] {
-		if ref, err := catalog.ParseRefAs(catalog.KindSystem, v); err == nil {
-			onlySystems = append(onlySystems, ref)
-		}
-	}
-	for _, v := range q["x"] {
-		if ref, err := catalog.ParseRefAs(catalog.KindSystem, v); err == nil {
-			excludedSystems = append(excludedSystems, ref)
+			selectedSystems = append(selectedSystems, ref)
 		}
 	}
 
-	// Create view options with pre-computed exclusions
-	viewOpts := svg.NewSystemViewOptions(data.repo, system, onlySystems, contextSystems, excludedSystems)
+	detail := svg.ParseDetailLevel(q.Get("detail"))
+	viewOpts := svg.NewSystemViewOptions(selectedSystems, detail)
 
 	internalView := r.URL.Query().Get("view") == "internal"
-	cacheKey := fmt.Sprintf("%s?c=%s&x=%s&i=%t", system.GetRef(), refsKey(viewOpts.ContextSystems), refsKey(viewOpts.ExcludedSystems), internalView)
+	cacheKey := fmt.Sprintf("%s?s=%s&i=%t&d=%s", system.GetRef(),
+		refsKey(viewOpts.SelectedSystems), internalView, viewOpts.Detail)
 
 	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
@@ -707,35 +696,43 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 
 	// For the external view, we also want to show chips for all external systems.
 	if !internalView {
-		// Use pre-computed exclusions for chip state
-		excludedIDs := map[string]bool{}
-		for _, r := range viewOpts.ExcludedSystems {
-			excludedIDs[r.String()] = true
-		}
-
-		contextIDs := map[string]bool{}
-		for _, r := range viewOpts.ContextSystems {
-			contextIDs[r.String()] = true
+		selectedIDs := map[string]bool{}
+		for _, r := range viewOpts.SelectedSystems {
+			selectedIDs[r.String()] = true
 		}
 
 		type systemChip struct {
-			Name      string
-			Ref       string // System reference for data-system-ref attribute
-			Excluded  bool   // Whether system is excluded (x= param)
-			InContext bool   // Whether system detail view is enabled (c= param)
+			Name     string
+			Ref      string // System reference for data-system-ref attribute
+			Selected bool   // Whether the system is shown; all of them are when nothing is selected
+			Sole     bool   // Whether it is the only selected system, so clicking it shows all again
 		}
 
+		// Selecting nothing selects everything.
+		narrowed := len(selectedIDs) > 0
 		surroundingSystems := data.repo.SurroundingSystems(system)
 		var chips []systemChip
 		for _, sys := range surroundingSystems {
+			selected := selectedIDs[sys.GetRef().String()]
 			chips = append(chips, systemChip{
-				Name:      sys.GetQName(),
-				Ref:       sys.GetRef().String(),
-				Excluded:  excludedIDs[sys.GetRef().String()],
-				InContext: contextIDs[sys.GetRef().String()],
+				Name:     sys.GetQName(),
+				Ref:      sys.GetRef().String(),
+				Selected: !narrowed || selected,
+				Sole:     selected && len(selectedIDs) == 1,
 			})
 		}
 		params["ExternalSystemChips"] = chips
+
+		type detailOption struct {
+			Value  string
+			Name   string
+			Active bool
+		}
+		params["DetailOptions"] = []detailOption{
+			{Value: "systems", Name: "Systems", Active: detail == svg.DetailSystems},
+			{Value: "apis", Name: "APIs", Active: detail == svg.DetailAPIs},
+			{Value: "all", Name: "All", Active: detail == svg.DetailAll},
+		}
 	}
 	params["SVGTabs"] = []struct {
 		Active bool

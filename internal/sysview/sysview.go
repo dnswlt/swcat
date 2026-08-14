@@ -63,6 +63,17 @@ type Group struct {
 	ID    string
 	Label string
 	Nodes []*Node
+	// Frame, if set, is what edges attach to that concern the system as a whole
+	// rather than one of its parts — the case when components are hidden and
+	// their dependencies are attributed to the system containing them. It is
+	// never drawn: it borrows the group's own outline, so those edges start and
+	// end on the system's border.
+	Frame *Node
+	// Fill and Border, when set, paint the group like a box instead of a
+	// container. That is what a system with no parts to show is: a box, and it
+	// should look like the other system boxes rather than like an empty frame.
+	Fill   string
+	Border string
 
 	geom
 }

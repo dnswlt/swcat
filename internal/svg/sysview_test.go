@@ -6,36 +6,35 @@ import (
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/dot"
 	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/testutil"
 )
 
-// nativeRenderer returns a renderer configured for the built-in system external
-// layout. It needs no dot binary, so it can run as a plain unit test.
-func nativeRenderer(t *testing.T, dir string) (*Renderer, *repo.Repository) {
+// externalRenderer returns a renderer for the system external view. That view
+// is laid out in process, so it needs no dot binary and these run as plain unit
+// tests.
+func externalRenderer(t *testing.T, dir string) (*Renderer, *repo.Repository) {
 	t.Helper()
 	r, err := repo.Load(store.NewDiskStore(dir), nil, repo.Config{})
 	if err != nil {
 		t.Fatalf("failed to load repository: %v", err)
 	}
-	cfg := DefaultConfig()
-	cfg.SystemExternalRenderer = RendererNative
-	return NewRenderer(r, nil, cfg), r
+	return NewRenderer(r, nil, DefaultConfig()), r
 }
 
 // The frontend resolves clicks, tooltips and routes from the SVG's ids and
-// classes, so the native renderer has to produce the same shape as the
-// dot-based one.
-func TestNativeSystemExternalGraph_FrontendContract(t *testing.T) {
-	renderer, r := nativeRenderer(t, "../../testdata/test2")
+// classes, which have to keep the shape graphviz produces for the other views.
+func TestSystemExternalGraph_FrontendContract(t *testing.T) {
+	renderer, r := externalRenderer(t, "../../testdata/test2")
 	system1 := r.System(&catalog.Ref{Name: "test-system-1"})
 	system2 := r.System(&catalog.Ref{Name: "test-system-2"})
 	if system1 == nil || system2 == nil {
 		t.Fatal("test systems not found")
 	}
 
-	viewOpts := NewSystemViewOptions(r, system1, nil, []*catalog.Ref{system2.GetRef()}, nil)
+	viewOpts := NewSystemViewOptions([]*catalog.Ref{system2.GetRef()}, DetailAll)
 	res, err := renderer.SystemExternalGraph(context.Background(), system1, viewOpts)
 	if err != nil {
 		t.Fatalf("SystemExternalGraph failed: %v", err)
@@ -90,42 +89,78 @@ func TestNativeSystemExternalGraph_FrontendContract(t *testing.T) {
 	}
 }
 
-// Both renderers are fed by the same traversal, so they must show the same
-// entities and relationships — only their geometry differs.
-func TestNativeAndDotShowTheSameContent(t *testing.T) {
-	renderer, r := nativeRenderer(t, "../../testdata/test2")
+// At the APIs level no component or resource is drawn: their relationships are
+// attributed to the system containing them, and duplicates collapse.
+func TestDetailAPIsHidesComponentsBehindTheirSystem(t *testing.T) {
+	renderer, r := externalRenderer(t, "../../testdata/test2")
 	system1 := r.System(&catalog.Ref{Name: "test-system-1"})
 	system2 := r.System(&catalog.Ref{Name: "test-system-2"})
 	if system1 == nil || system2 == nil {
 		t.Fatal("test systems not found")
 	}
-	viewOpts := NewSystemViewOptions(r, system1, nil, []*catalog.Ref{system2.GetRef()}, nil)
 
-	rd := &render{Renderer: renderer, kind: DiagramSystem, focalEntity: system1}
-	m := rd.collectSystemExternal(system1, viewOpts)
-	_, nativeMeta := rd.buildSystemExternalDiagram(m)
-	dotMeta := rd.generateSystemExternalDotSource(system1, viewOpts).Metadata
-
-	if len(nativeMeta.Nodes) != len(dotMeta.Nodes) {
-		t.Errorf("node count differs: native %d, dot %d", len(nativeMeta.Nodes), len(dotMeta.Nodes))
+	opts := NewSystemViewOptions([]*catalog.Ref{system2.GetRef()}, DetailAll)
+	withComponents, err := renderer.SystemExternalGraph(context.Background(), system1, opts)
+	if err != nil {
+		t.Fatalf("SystemExternalGraph failed: %v", err)
 	}
-	for id := range dotMeta.Nodes {
-		if _, ok := nativeMeta.Nodes[id]; !ok {
-			t.Errorf("node %q missing from the native rendering", id)
+	if !hasComponent(withComponents.Metadata.Nodes) {
+		t.Fatal("expected components to be drawn at the default level")
+	}
+
+	opts.Detail = DetailAPIs
+	res, err := renderer.SystemExternalGraph(context.Background(), system1, opts)
+	if err != nil {
+		t.Fatalf("SystemExternalGraph failed: %v", err)
+	}
+	if hasComponent(res.Metadata.Nodes) {
+		t.Errorf("components are still drawn: %v", res.Metadata.Nodes)
+	}
+	for _, prefix := range []string{`id="component:`, `id="resource:`} {
+		if strings.Contains(string(res.SVG), prefix) {
+			t.Errorf("SVG still contains a %s element", strings.TrimSuffix(prefix, ":`"))
 		}
 	}
-	if len(nativeMeta.Edges) != len(dotMeta.Edges) {
-		t.Errorf("edge count differs: native %d, dot %d", len(nativeMeta.Edges), len(dotMeta.Edges))
+	// The relationships survive, attributed to a system.
+	if len(res.Metadata.Edges) == 0 {
+		t.Fatal("hiding components dropped every edge")
 	}
-	dotLinks := map[string]bool{}
-	for _, e := range dotMeta.Edges {
-		dotLinks[e.From+" -> "+e.To] = true
-	}
-	for _, e := range nativeMeta.Edges {
-		if !dotLinks[e.From+" -> "+e.To] {
-			t.Errorf("edge %s -> %s is not in the dot rendering", e.From, e.To)
+	sawSystemEnd := false
+	for _, e := range res.Metadata.Edges {
+		if strings.HasPrefix(e.From, "component:") || strings.HasPrefix(e.To, "component:") {
+			t.Errorf("edge %s -> %s still ends at a component", e.From, e.To)
+		}
+		if strings.HasPrefix(e.From, "system:") || strings.HasPrefix(e.To, "system:") {
+			sawSystemEnd = true
 		}
 	}
+	if !sawSystemEnd {
+		t.Error("expected at least one edge to end at a system")
+	}
+	// Frames are layout anchors, not entities, so they get no metadata entry of
+	// their own — every metadata node still has to exist in the SVG.
+	ids, err := testutil.ExtractSVGIDs(res.SVG)
+	if err != nil {
+		t.Fatalf("ExtractSVGIDs: %v", err)
+	}
+	idSet := map[string]bool{}
+	for _, id := range ids {
+		idSet[id] = true
+	}
+	for id := range res.Metadata.Nodes {
+		if !idSet[id] {
+			t.Errorf("metadata node %q has no element in the SVG", id)
+		}
+	}
+}
+
+func hasComponent(nodes map[string]*dot.NodeInfo) bool {
+	for id := range nodes {
+		if strings.HasPrefix(id, "component:") {
+			return true
+		}
+	}
+	return false
 }
 
 func containsClass(classes []string, want string) bool {

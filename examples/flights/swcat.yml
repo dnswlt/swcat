@@ -37,7 +37,6 @@ ui:
       template: |
         <p>{{ . }}</p>
 svg:
-  systemExternalRenderer: native   # "dot" (default) | "native"
   # Show the (programming) language label as a <<stereotype>> on nodes.
   stereotypeLabels:
     - foobar.dev/language

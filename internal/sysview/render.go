@@ -59,12 +59,22 @@ type renderer struct {
 
 func (r *renderer) group(g *Group) {
 	fmt.Fprintf(r.b, `<g id="%s" class="cluster graphviz-svg">`+"\n", html.EscapeString(g.ID))
+	fill, border := r.st.GroupFill, r.st.GroupBorder
+	if g.Fill != "" {
+		fill, border = g.Fill, g.Border
+	}
 	fmt.Fprintf(r.b, `<rect fill="%s" stroke="%s" x="%s" y="%s" width="%s" height="%s"/>`+"\n",
-		r.st.GroupFill, r.st.GroupBorder, num(g.x), num(g.y), num(g.w), num(g.h))
+		fill, border, num(g.x), num(g.y), num(g.w), num(g.h))
 	if g.Label != "" {
-		// Baseline sits inside the top padding, centered over the box.
+		// Baseline sits inside the top padding, centered over the box. A group
+		// with nothing in it — every relationship is with the system as a whole
+		// — is all title, so that gets centered instead.
+		baseline := g.y + r.st.GroupPadTop - 14
+		if len(g.Nodes) == 0 {
+			baseline = g.centerY() + r.st.GroupFontSize*0.35
+		}
 		fmt.Fprintf(r.b, `<text text-anchor="middle" x="%s" y="%s" font-size="%s" fill="%s">%s</text>`+"\n",
-			num(g.x+g.w/2), num(g.y+r.st.GroupPadTop-14), num(r.st.GroupFontSize), r.st.GroupLabel,
+			num(g.x+g.w/2), num(baseline), num(r.st.GroupFontSize), r.st.GroupLabel,
 			html.EscapeString(g.Label))
 	}
 	r.b.WriteString("</g>\n")

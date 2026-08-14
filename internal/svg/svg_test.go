@@ -84,72 +84,82 @@ func setupRepo(t *testing.T) *repo.Repository {
 	return r
 }
 
-func TestSystemExternalGraph_Topology(t *testing.T) {
+// externalView renders the external view of sys-a and returns what it shows:
+// the entities as node ids, and the relationships as "from -> to".
+func externalView(t *testing.T, opts *SystemViewOptions) (nodes map[string]bool, edges map[string]bool) {
+	t.Helper()
 	r := setupRepo(t)
-	runner := &mockRunner{}
-	cfg := DefaultConfig()
-	renderer := NewRenderer(r, runner, cfg)
+	renderer := NewRenderer(r, &mockRunner{}, DefaultConfig())
 
 	sysA := r.System(&catalog.Ref{Name: "sys-a"})
 	if sysA == nil {
 		t.Fatal("sys-a not found")
 	}
-
-	// Generate graph for System A
-	viewOpts := NewSystemViewOptions(r, sysA, nil, nil, nil)
-	_, err := renderer.SystemExternalGraph(context.Background(), sysA, viewOpts)
+	res, err := renderer.SystemExternalGraph(context.Background(), sysA, opts)
 	if err != nil {
 		t.Fatalf("SystemExternalGraph failed: %v", err)
 	}
 
-	dot := runner.lastDotSource
-
-	// 1. Verify Nodes
-	// Should contain comp-a
-	if !strings.Contains(dot, `"component:comp-a"[`) {
-		t.Errorf("DOT missing node for comp-a")
+	nodes = map[string]bool{}
+	for id := range res.Metadata.Nodes {
+		nodes[id] = true
 	}
-	// Should contain sys-b (collapsed node)
-	if !strings.Contains(dot, `"system:sys-b"[`) {
-		t.Errorf("DOT missing node for sys-b")
+	edges = map[string]bool{}
+	for _, e := range res.Metadata.Edges {
+		edges[e.From+" -> "+e.To] = true
 	}
+	return nodes, edges
+}
 
-	// 2. Verify Edges
-	expectedEdge := `"component:comp-a" -> "system:sys-b"`
-	if !strings.Contains(dot, expectedEdge) {
-		t.Errorf("DOT missing edge: %s", expectedEdge)
+func TestSystemExternalGraph_Topology(t *testing.T) {
+	nodes, edges := externalView(t, NewSystemViewOptions(nil, DetailAll))
+
+	if !nodes["component:comp-a"] {
+		t.Errorf("missing node for comp-a; got %v", nodes)
+	}
+	// With everything selected, sys-b is shown with the API comp-a consumes.
+	if !nodes["api:api-b"] {
+		t.Errorf("missing node for api-b; got %v", nodes)
+	}
+	if !edges["component:comp-a -> api:api-b"] {
+		t.Errorf("missing edge comp-a -> api-b; got %v", edges)
 	}
 }
 
-func TestSystemExternalGraph_Excluded(t *testing.T) {
-	r := setupRepo(t)
-	runner := &mockRunner{}
-	cfg := DefaultConfig()
-	renderer := NewRenderer(r, runner, cfg)
+// At the systems level nothing inside a system is drawn, so a neighbor is a
+// single box again and the relationship is between the two systems.
+func TestSystemExternalGraph_DetailSystems(t *testing.T) {
+	nodes, edges := externalView(t, NewSystemViewOptions(nil, DetailSystems))
 
-	sysA := r.System(&catalog.Ref{Name: "sys-a"})
-	sysB := r.System(&catalog.Ref{Name: "sys-b"})
-
-	// Generate graph for System A, but exclude System B
-	viewOpts := NewSystemViewOptions(r, sysA, nil, nil, []*catalog.Ref{sysB.GetRef()})
-	_, err := renderer.SystemExternalGraph(context.Background(), sysA, viewOpts)
-	if err != nil {
-		t.Fatalf("SystemExternalGraph failed: %v", err)
+	if !nodes["system:sys-b"] {
+		t.Errorf("missing node for sys-b; got %v", nodes)
 	}
-
-	dot := runner.lastDotSource
-
-	// Should NOT contain comp-a because its only external dependency is excluded
-	if strings.Contains(dot, `"component:comp-a"[`) {
-		t.Errorf("DOT should not contain node for comp-a")
+	if nodes["api:api-b"] || nodes["component:comp-a"] {
+		t.Errorf("parts should not be drawn at the systems level; got %v", nodes)
 	}
-	// Should NOT contain sys-b
-	if strings.Contains(dot, `"system:sys-b"[`) {
-		t.Errorf("DOT should not contain node for sys-b")
+	if !edges["system:sys-a -> system:sys-b"] {
+		t.Errorf("missing edge sys-a -> sys-b; got %v", edges)
 	}
-	// Should NOT contain edge to sys-b
-	if strings.Contains(dot, `"system:sys-b"`) {
-		t.Errorf("DOT should not mention sys-b")
+}
+
+// A selection narrows the view to the systems in it: everything else drops out,
+// which is how a neighbor gets left out now that there is no exclude control.
+func TestSystemExternalGraph_UnselectedSystemsAreLeftOut(t *testing.T) {
+	// Select a system that is not sys-a's neighbor, so sys-b falls outside.
+	other := &catalog.Ref{Kind: catalog.KindSystem, Name: "sys-other"}
+	nodes, edges := externalView(t, NewSystemViewOptions([]*catalog.Ref{other}, DetailAll))
+
+	for id := range nodes {
+		if strings.Contains(id, "sys-b") || strings.Contains(id, "api-b") {
+			t.Errorf("unselected system should not appear; got %v", nodes)
+		}
+	}
+	// comp-a's only external dependency is gone, so it has nothing to show either.
+	if nodes["component:comp-a"] {
+		t.Errorf("comp-a should not appear without its dependency; got %v", nodes)
+	}
+	if len(edges) != 0 {
+		t.Errorf("expected no edges, got %v", edges)
 	}
 }
 
@@ -401,5 +411,20 @@ func TestGraph_Topology(t *testing.T) {
 	// 3. Verify something NOT present (e.g. sys-b was not included)
 	if strings.Contains(dot, "sys-b") {
 		t.Errorf("DOT should not contain sys-b")
+	}
+}
+
+// The external view leads with the contracts between systems: the internal view
+// already covers what a system is made of.
+func TestDefaultDetailLevelIsAPIs(t *testing.T) {
+	for _, s := range []string{"", "unknown"} {
+		if got := ParseDetailLevel(s); got != DetailAPIs {
+			t.Errorf("ParseDetailLevel(%q) = %v, want %v", s, got, DetailAPIs)
+		}
+	}
+	for s, want := range map[string]DetailLevel{"systems": DetailSystems, "apis": DetailAPIs, "all": DetailAll} {
+		if got := ParseDetailLevel(s); got != want {
+			t.Errorf("ParseDetailLevel(%q) = %v, want %v", s, got, want)
+		}
 	}
 }

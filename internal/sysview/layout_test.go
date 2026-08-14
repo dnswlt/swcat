@@ -380,6 +380,63 @@ func TestLabelsStayInsideTheDrawing(t *testing.T) {
 	}
 }
 
+// Edges that concern a system as a whole attach to its frame, which is the
+// group's own outline rather than a box of its own.
+func TestFrameAnchoredEdgesStartOnTheGroupOutline(t *testing.T) {
+	d := diagram([]string{"api"}, []string{"target"}, []string{"api->target"})
+	frame := &Node{ID: "system:focal"}
+	d.Focal.Frame = frame
+	d.Edges = append(d.Edges, &Edge{ID: "svg-edge-1", From: "system:focal", To: "target"})
+	Layout(d, DefaultStyle())
+
+	e := edgeByID(d, "svg-edge-1")
+	if e == nil {
+		t.Fatal("frame-anchored edge was dropped")
+	}
+	// It leaves the focal system on the side facing the target's column.
+	if e.x1 != d.Focal.right() {
+		t.Errorf("edge starts at x=%.1f, want the group's right edge %.1f", e.x1, d.Focal.right())
+	}
+	if e.y1 < d.Focal.y || e.y1 > d.Focal.bottom() {
+		t.Errorf("edge starts at y=%.1f, outside the group [%.1f, %.1f]",
+			e.y1, d.Focal.y, d.Focal.bottom())
+	}
+	// The frame is not a box of its own: it carries the group's geometry.
+	if frame.geom != d.Focal.geom {
+		t.Errorf("frame geometry %+v does not match the group's %+v", frame.geom, d.Focal.geom)
+	}
+}
+
+// A frame carrying many edges needs the same port spacing as a box, which only
+// the group can provide.
+func TestGroupGrowsForItsFramePorts(t *testing.T) {
+	st := DefaultStyle()
+	d := diagram([]string{"api"}, nil, nil)
+	d.Focal.Frame = &Node{ID: "system:focal"}
+	for i := range 10 {
+		name := fmt.Sprintf("t%02d", i)
+		d.Externals = append(d.Externals, &Item{Node: &Node{ID: name, Labels: []Label{{Text: name}}}})
+		d.Edges = append(d.Edges, &Edge{
+			ID: fmt.Sprintf("svg-edge-%d", i), From: "system:focal", To: name,
+		})
+	}
+	Layout(d, st)
+
+	if want := 10*st.MinPortPitch + 2*st.PortInset; d.Focal.h < want {
+		t.Errorf("focal group is %.1f tall for 10 frame ports, needs %.1f", d.Focal.h, want)
+	}
+	ys := make([]float64, 0, len(d.Edges))
+	for _, e := range d.Edges {
+		ys = append(ys, e.y1)
+	}
+	slices.Sort(ys)
+	for i := 1; i < len(ys); i++ {
+		if gap := ys[i] - ys[i-1]; gap < st.MinPortPitch-0.01 {
+			t.Errorf("frame ports are only %.1f apart, want %.1f", gap, st.MinPortPitch)
+		}
+	}
+}
+
 func TestLayoutIsDeterministic(t *testing.T) {
 	build := func() *Diagram {
 		return diagram(

@@ -72,37 +72,71 @@ type Result struct {
 	Metadata *dot.SVGGraphMetadata
 }
 
-// SystemViewOptions configures which systems to show/hide in a system external view.
-type SystemViewOptions struct {
-	// ContextSystems: show these systems in detail
-	ContextSystems []*catalog.Ref
-	// ExcludedSystems: exclude these systems from the graph
-	ExcludedSystems []*catalog.Ref
+// DetailLevel says how far into its systems a view goes. Entities of a kind
+// that is not drawn are represented by the system containing them, so their
+// relationships survive as system-level ones.
+type DetailLevel int
+
+const (
+	// DetailSystems draws systems only — the context view.
+	DetailSystems DetailLevel = iota
+	// DetailAPIs adds the APIs systems expose, leaving out what implements them.
+	DetailAPIs
+	// DetailAll adds components and resources.
+	DetailAll
+)
+
+// ParseDetailLevel maps the "detail" query parameter to a level. Anything
+// unknown or empty gives DetailAPIs: the internal view already covers what a
+// system is made of, so the external one leads with the contracts between
+// systems, and it is the only level that stays legible on a large catalog.
+func ParseDetailLevel(s string) DetailLevel {
+	switch s {
+	case "systems":
+		return DetailSystems
+	case "all":
+		return DetailAll
+	default:
+		return DetailAPIs
+	}
 }
 
-// NewSystemViewOptions creates SystemViewOptions and computes the actual exclusions once.
-func NewSystemViewOptions(repo *repo.Repository, system *catalog.System, onlySystems, contextSystems, excludedSystems []*catalog.Ref) *SystemViewOptions {
-	// Compute actual exclusions once
-	var actualExcludedSystems []*catalog.Ref
-	if len(onlySystems) > 0 {
-		// o= overrides x= - exclude all surrounding systems except the "only" ones
-		surroundingSystems := repo.SurroundingSystems(system)
-		onlySet := make(map[string]bool)
-		for _, ref := range onlySystems {
-			onlySet[ref.String()] = true
-		}
-		for _, sys := range surroundingSystems {
-			if !onlySet[sys.GetRef().String()] {
-				actualExcludedSystems = append(actualExcludedSystems, sys.GetRef())
-			}
-		}
-	} else {
-		actualExcludedSystems = excludedSystems
+func (d DetailLevel) String() string {
+	switch d {
+	case DetailSystems:
+		return "systems"
+	case DetailAPIs:
+		return "apis"
+	default:
+		return "all"
 	}
+}
 
+// draws reports whether entities of the given kind get a box of their own.
+// APIs are the interface layer and survive one level longer than the
+// components and resources behind them.
+func (d DetailLevel) draws(kind catalog.Kind) bool {
+	if kind == catalog.KindAPI {
+		return d >= DetailAPIs
+	}
+	return d >= DetailAll
+}
+
+// SystemViewOptions configures a system's external view: which neighbors it
+// covers, and how deep it goes into them.
+type SystemViewOptions struct {
+	// SelectedSystems narrows the view to these neighbors, shown with their
+	// parts. When empty, every neighbor is shown, each as a single box.
+	SelectedSystems []*catalog.Ref
+	// Detail is the level of detail for the focal system and the selected ones.
+	Detail DetailLevel
+}
+
+// NewSystemViewOptions creates the options for a system's external view.
+func NewSystemViewOptions(selectedSystems []*catalog.Ref, detail DetailLevel) *SystemViewOptions {
 	return &SystemViewOptions{
-		ContextSystems:  contextSystems,
-		ExcludedSystems: actualExcludedSystems,
+		SelectedSystems: selectedSystems,
+		Detail:          detail,
 	}
 }
 
@@ -113,25 +147,29 @@ const (
 	DirOutgoing
 )
 
-// extSysPartDep represents a dependency on an external system in a system diagram.
-type extSysDep struct {
-	source       catalog.Entity
-	targetSystem *catalog.System
-	direction    DependencyDir
-}
-
-// extSysPartDep represents an external dependency in a system diagram.
-// In contrast to extSysDep, it points to a SystemPart of the target system,
-// not the target system itself.
+// extSysPartDep represents one relationship between the focal system and a
+// neighboring one.
+//
+// source and target are the entities the edge is drawn between. They are the
+// system parts involved, except where the detail level leaves a part out, in
+// which case they are the system containing it.
 type extSysPartDep struct {
 	source    catalog.Entity
-	target    catalog.SystemPart
+	target    catalog.Entity
 	ref       *catalog.LabelRef
 	direction DependencyDir
 }
 
-func (e extSysDep) String() string {
-	return fmt.Sprintf("%s -> %s / %v", e.source.GetRef().String(), e.targetSystem.GetRef().String(), e.direction)
+// key identifies the relationship as drawn. Two dependencies that end up
+// between the same entities, in the same direction and with the same label are
+// one arrow in the diagram.
+func (e extSysPartDep) key() string {
+	var label string
+	if e.ref != nil {
+		label = e.ref.Label
+	}
+	return fmt.Sprintf("%s -> %s / %v / %s",
+		e.source.GetRef(), e.target.GetRef(), e.direction, label)
 }
 
 func (r *render) generateDomainDotSource(domain *catalog.Domain) *dot.DotSource {
@@ -228,16 +266,17 @@ type externalSystemGroup struct {
 
 // systemExternalModel is what a system's external view consists of, independent
 // of how it is drawn: the focal system's parts that have external
-// relationships, the neighboring systems shown collapsed as a single node, and
-// the ones expanded into their individual parts.
+// relationships, and the neighboring systems it relates to.
+//
+// Whether a neighbor ends up as a box or as a frame with parts inside is left
+// to the renderer: it depends on whether the detail level left it anything to
+// show.
 type systemExternalModel struct {
 	system *catalog.System
 	// focalParts are the parts of the focal system that have at least one
 	// external relationship, in the order components, APIs, resources.
 	focalParts []catalog.Entity
-	// extDeps are dependencies on collapsed systems, duplicates removed.
-	extDeps []extSysDep
-	// groups are the expanded systems, in the order they were encountered.
+	// groups are the neighboring systems, in the order they were encountered.
 	groups []*externalSystemGroup
 }
 
@@ -245,51 +284,64 @@ type systemExternalModel struct {
 // the external view shows. Both the dot-based and the native renderer build on
 // it, so that they always show the same content.
 func (r *render) collectSystemExternal(system *catalog.System, opts *SystemViewOptions) *systemExternalModel {
-	// Potential neighboring systems for which a detailed view is requested.
-	ctxSysMap := map[string]bool{}
-	for _, ctxSys := range opts.ContextSystems {
-		ctxSysMap[ctxSys.QName()] = true
+	// The selected neighbors are the ones the view covers, each shown with its
+	// parts. Selecting nothing selects everything.
+	selected := map[string]bool{}
+	for _, sel := range opts.SelectedSystems {
+		selected[sel.QName()] = true
 	}
-
-	// Systems that should be excluded from the view.
-	exclSysMap := map[string]bool{}
-	for _, exclSys := range opts.ExcludedSystems {
-		exclSysMap[exclSys.QName()] = true
-	}
+	allSelected := len(selected) == 0
 
 	m := &systemExternalModel{system: system}
 
-	var extDeps []extSysDep
+	// endpoint returns the entity an edge end is drawn as: the part itself, or
+	// the system containing it when the detail level leaves that kind of part
+	// out. That is what turns a pile of process-level links into a handful of
+	// system-level ones.
+	endpoint := func(sp catalog.SystemPart) catalog.Entity {
+		if opts.Detail.draws(sp.GetKind()) {
+			return sp
+		}
+		if sys := r.repo.System(sp.GetSystem()); sys != nil {
+			return sys
+		}
+		return sp
+	}
+
 	extSPDeps := map[string]*externalSystemGroup{}
-	// Adds the src->dst dependency to either extDeps or extSPDeps, depending on whether
-	// full context was requested for dst.
-	// Ignores intra-system dependencies and excluded systems.
+	// seenDeps drops dependencies that have become indistinguishable: several
+	// components of the focal system talking to the same neighbor collapse into
+	// one relationship as soon as the components themselves are not drawn.
+	seenDeps := map[string]bool{}
+
+	// Adds the src->dst dependency to the group of dst's system.
+	// Ignores intra-system dependencies and unselected systems.
 	// Returns true if the dependency was added.
 	addExtDep := func(src, dst catalog.SystemPart, ref *catalog.LabelRef, dir DependencyDir) bool {
 		if dst.GetSystem().Equal(src.GetSystem()) {
 			return false
 		}
 		dstSysRef := dst.GetSystem()
-		if exclSysMap[dstSysRef.QName()] {
+		if !allSelected && !selected[dstSysRef.QName()] {
+			// A selection narrows the view to the systems in it.
 			return false
 		}
 
-		if ctxSysMap[dstSysRef.QName()] {
-			// dst is part of a system for which we want to show full context.
-			g, ok := extSPDeps[dstSysRef.QName()]
-			if !ok {
-				g = &externalSystemGroup{sysRef: dstSysRef}
-				extSPDeps[dstSysRef.QName()] = g
-				m.groups = append(m.groups, g)
-			}
-			g.deps = append(g.deps, extSysPartDep{source: src, target: dst, ref: ref, direction: dir})
-		} else {
-			// dst is part of a system for which no context was requested.
-			dstSys := r.repo.System(dstSysRef)
-			extDeps = append(extDeps, extSysDep{
-				source: src, targetSystem: dstSys, direction: dir,
-			})
+		dep := extSysPartDep{
+			source: endpoint(src), target: endpoint(dst), ref: ref, direction: dir,
 		}
+		if seenDeps[dep.key()] {
+			return true
+		}
+		seenDeps[dep.key()] = true
+
+		g, ok := extSPDeps[dstSysRef.QName()]
+		if !ok {
+			g = &externalSystemGroup{sysRef: dstSysRef}
+			extSPDeps[dstSysRef.QName()] = g
+			m.groups = append(m.groups, g)
+		}
+		g.deps = append(g.deps, dep)
 		return true
 	}
 
@@ -320,7 +372,9 @@ func (r *render) collectSystemExternal(system *catalog.System, opts *SystemViewO
 				hasEdges = hasEdges || addExtDep(comp, sp, ref, DirIncoming)
 			}
 		}
-		if hasEdges {
+		// A part the detail level leaves out gets no box; its relationships were
+		// already attributed to this system by endpoint().
+		if hasEdges && opts.Detail.draws(comp.GetKind()) {
 			m.focalParts = append(m.focalParts, comp)
 		}
 	}
@@ -336,7 +390,7 @@ func (r *render) collectSystemExternal(system *catalog.System, opts *SystemViewO
 				hasEdges = true
 			}
 		}
-		if hasEdges {
+		if hasEdges && opts.Detail.draws(ap.GetKind()) {
 			m.focalParts = append(m.focalParts, ap)
 		}
 	}
@@ -364,60 +418,12 @@ func (r *render) collectSystemExternal(system *catalog.System, opts *SystemViewO
 				}
 			}
 		}
-		if hasEdges {
+		if hasEdges && opts.Detail.draws(resource.GetKind()) {
 			m.focalParts = append(m.focalParts, resource)
 		}
 	}
 
-	// Drop duplicate dependencies on collapsed systems: several parts of the
-	// focal system may point at the same neighbor.
-	seenDeps := map[string]bool{}
-	for _, dep := range extDeps {
-		if seenDeps[dep.String()] {
-			continue
-		}
-		seenDeps[dep.String()] = true
-		m.extDeps = append(m.extDeps, dep)
-	}
-
 	return m
-}
-
-func (r *render) generateSystemExternalDotSource(system *catalog.System, opts *SystemViewOptions) *dot.DotSource {
-	m := r.collectSystemExternal(system, opts)
-
-	dw := dot.New(dot.WriterConfig{EdgeMinLen: r.config.NormalEdgeMinLen})
-	dw.Start()
-
-	dw.StartCluster(system.GetRef().QName())
-	for _, e := range m.focalParts {
-		dw.AddNode(r.entityNode(e))
-	}
-	dw.EndCluster()
-
-	for _, dep := range m.extDeps {
-		dw.AddNode(r.entityNode(dep.targetSystem))
-		if dep.direction == DirOutgoing {
-			dw.AddEdge(r.entityEdge(dep.source, dep.targetSystem, dot.ESSystemLink))
-		} else {
-			dw.AddEdge(r.entityEdge(dep.targetSystem, dep.source, dot.ESSystemLink))
-		}
-	}
-
-	for _, g := range m.groups {
-		dw.StartCluster(g.sysRef.QName())
-		for _, dep := range g.deps {
-			dw.AddNode(r.entityNode(dep.target))
-			if dep.direction == DirOutgoing {
-				dw.AddEdge(r.entityEdgeLabel(dep.source, dep.target, dep.ref, dot.ESNormal))
-			} else {
-				dw.AddEdge(r.entityEdgeLabel(dep.target, dep.source, dep.ref, dot.ESNormal))
-			}
-		}
-		dw.EndCluster()
-	}
-	dw.End()
-	return dw.Result()
 }
 
 func (r *render) generateSystemInternalDotSource(system *catalog.System) *dot.DotSource {
@@ -498,18 +504,19 @@ func (r *render) generateSystemInternalDotSource(system *catalog.System) *dot.Do
 	return dw.Result()
 }
 
-// SystemExternalGraph generates an SVG for an "external" view of the given system.
-// opts configures which systems to show, hide, or expand in detail.
-func (r *Renderer) SystemExternalGraph(ctx context.Context, system *catalog.System, opts *SystemViewOptions) (*Result, error) {
+// SystemExternalGraph generates an SVG for an "external" view of the given
+// system: the systems around it and how they relate to it. opts configures
+// which of them the view covers and how far into them it goes.
+//
+// Unlike the other views this one is laid out in process (see internal/sysview)
+// rather than by graphviz, which is why it needs no context.
+func (r *Renderer) SystemExternalGraph(_ context.Context, system *catalog.System, opts *SystemViewOptions) (*Result, error) {
 	rd := &render{Renderer: r, kind: DiagramSystem, focalEntity: system}
-	if r.config.SystemExternalRenderer == RendererNative {
-		d, meta := rd.buildSystemExternalDiagram(rd.collectSystemExternal(system, opts))
-		return &Result{
-			SVG:      sysview.Render(d, sysview.DefaultStyle()),
-			Metadata: meta,
-		}, nil
-	}
-	return runDot(ctx, r.runner, rd.generateSystemExternalDotSource(system, opts))
+	d, meta := rd.buildSystemExternalDiagram(rd.collectSystemExternal(system, opts))
+	return &Result{
+		SVG:      sysview.Render(d, sysview.DefaultStyle()),
+		Metadata: meta,
+	}, nil
 }
 
 // SystemInternalGraph generates an SVG for an "internal" view of the given system.

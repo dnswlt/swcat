@@ -26,6 +26,7 @@ func (r *render) buildSystemExternalDiagram(m *systemExternalModel) (*sysview.Di
 	}
 
 	// The focal system.
+	b.focalRef = m.system.GetRef().String()
 	b.d.Focal = &sysview.Group{
 		ID:    b.clusterID(m.system.GetRef().QName()),
 		Label: m.system.GetRef().QName(),
@@ -33,40 +34,38 @@ func (r *render) buildSystemExternalDiagram(m *systemExternalModel) (*sysview.Di
 	for _, e := range m.focalParts {
 		b.d.Focal.Nodes = append(b.d.Focal.Nodes, b.node(e))
 	}
-
-	// Neighboring systems shown as a single box.
-	collapsed := map[string]*sysview.Item{}
-	for _, dep := range m.extDeps {
-		key := dep.targetSystem.GetRef().String()
-		if _, ok := collapsed[key]; !ok {
-			it := &sysview.Item{Node: b.node(dep.targetSystem)}
-			collapsed[key] = it
-			b.d.Externals = append(b.d.Externals, it)
-		}
-		if dep.direction == DirOutgoing {
-			b.edge(dep.source, dep.targetSystem, nil, "system-link-edge")
-		} else {
-			b.edge(dep.targetSystem, dep.source, nil, "system-link-edge")
-		}
+	if len(b.d.Focal.Nodes) == 0 {
+		// Nothing to frame: at this detail level the focal system is a box like
+		// every other system in the picture, so it is painted like one.
+		layout := b.nodeLayout(m.system)
+		b.d.Focal.Fill, b.d.Focal.Border = layout.FillColor, layout.BorderColor
 	}
 
-	// Neighboring systems shown with their parts.
+	// Neighboring systems: a frame with parts inside, or a single box when the
+	// detail level left them nothing to show.
 	for _, g := range m.groups {
-		group := &sysview.Group{
-			ID:    b.clusterID(g.sysRef.QName()),
-			Label: g.sysRef.QName(),
+		item := &sysview.Item{}
+		class := ""
+		if groupHasParts(g) {
+			item.Group = &sysview.Group{
+				ID:    b.clusterID(g.sysRef.QName()),
+				Label: g.sysRef.QName(),
+			}
+		} else {
+			item.Node = b.node(b.repo.System(g.sysRef))
+			class = "system-link-edge"
 		}
-		b.d.Externals = append(b.d.Externals, &sysview.Item{Group: group})
+		b.d.Externals = append(b.d.Externals, item)
 		seen := map[string]bool{}
 		for _, dep := range g.deps {
-			if key := dep.target.GetRef().String(); !seen[key] {
+			if key := dep.target.GetRef().String(); !seen[key] && item.Group != nil {
 				seen[key] = true
-				group.Nodes = append(group.Nodes, b.node(dep.target))
+				b.anchor(item.Group, dep.target)
 			}
 			if dep.direction == DirOutgoing {
-				b.edge(dep.source, dep.target, dep.ref, "")
+				b.edge(dep.source, dep.target, dep.ref, class)
 			} else {
-				b.edge(dep.target, dep.source, dep.ref, "")
+				b.edge(dep.target, dep.source, dep.ref, class)
 			}
 		}
 	}
@@ -74,10 +73,52 @@ func (r *render) buildSystemExternalDiagram(m *systemExternalModel) (*sysview.Di
 	return b.d, b.meta
 }
 
+// groupHasParts reports whether an expanded system still has anything to show
+// inside its frame. It does not once all of its relationships are with the
+// system as a whole, which is what hiding components does to a system whose
+// only involvement is through them.
+func groupHasParts(g *externalSystemGroup) bool {
+	for _, dep := range g.deps {
+		if _, isSystem := dep.target.(*catalog.System); !isSystem {
+			return true
+		}
+	}
+	return false
+}
+
+// focalAnchor gives the focal system a frame if this edge end is the system
+// itself rather than one of its parts.
+func (b *diagramBuilder) focalAnchor(e catalog.Entity) {
+	sys, isSystem := e.(*catalog.System)
+	if !isSystem || b.d.Focal == nil || b.d.Focal.Frame != nil {
+		return
+	}
+	if sys.GetRef().String() == b.focalRef {
+		b.d.Focal.Frame = &sysview.Node{ID: b.focalRef}
+	}
+}
+
+// anchor gives the group whatever the edge end e needs to attach to: a box for
+// a part, or the group's frame when the end is the system itself — which is how
+// a hidden component's dependencies are drawn.
+func (b *diagramBuilder) anchor(group *sysview.Group, e catalog.Entity) {
+	sys, isSystem := e.(*catalog.System)
+	if !isSystem {
+		group.Nodes = append(group.Nodes, b.node(e))
+		return
+	}
+	if group.Frame == nil {
+		group.Frame = &sysview.Node{ID: sys.GetRef().String()}
+	}
+}
+
 type diagramBuilder struct {
 	*render
 	meta *dot.SVGGraphMetadata
 	d    *sysview.Diagram
+	// focalRef is the ref of the system the view is about, used to recognize
+	// edge ends that are the focal system itself rather than one of its parts.
+	focalRef string
 }
 
 func (b *diagramBuilder) clusterID(label string) string {
@@ -122,6 +163,9 @@ func (b *diagramBuilder) node(e catalog.Entity) *sysview.Node {
 // edge adds an edge from src to dst. ref may be nil for unlabelled links
 // between the focal system and a collapsed neighbor.
 func (b *diagramBuilder) edge(src, dst catalog.Entity, ref *catalog.LabelRef, class string) {
+	b.focalAnchor(src)
+	b.focalAnchor(dst)
+
 	id := fmt.Sprintf("svg-edge-%d", len(b.meta.Edges))
 	e := &sysview.Edge{
 		ID:    id,
