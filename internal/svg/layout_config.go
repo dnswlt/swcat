@@ -2,6 +2,7 @@ package svg
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 
 	"gopkg.in/yaml.v3"
@@ -30,7 +31,17 @@ type Config struct {
 	NormalEdgeMinLen int `yaml:"normalEdgeMinLen"`
 	// Minimum edge length (graphviz minlen) for dense graph views (system internal, ad-hoc). Default: 3.
 	CompactEdgeMinLen int `yaml:"compactEdgeMinLen"`
+	// Renderer for system external views: RendererDot (default) lays them out
+	// with graphviz, RendererNative uses the built-in column layout.
+	SystemExternalRenderer string `yaml:"systemExternalRenderer"`
 }
+
+const (
+	// RendererDot lays a diagram out by shelling out to graphviz.
+	RendererDot = "dot"
+	// RendererNative lays a diagram out in-process (see internal/sysview).
+	RendererNative = "native"
+)
 
 func DefaultConfig() Config {
 	c := Config{}
@@ -44,6 +55,16 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.CompactEdgeMinLen == 0 {
 		c.CompactEdgeMinLen = 1
+	}
+	switch c.SystemExternalRenderer {
+	case RendererDot, RendererNative:
+		// valid
+	case "":
+		c.SystemExternalRenderer = RendererDot
+	default:
+		log.Printf("Invalid systemExternalRenderer %q, falling back to %q",
+			c.SystemExternalRenderer, RendererDot)
+		c.SystemExternalRenderer = RendererDot
 	}
 }
 

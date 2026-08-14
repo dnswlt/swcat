@@ -7,6 +7,7 @@ import (
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/dot"
 	"github.com/dnswlt/swcat/internal/repo"
+	"github.com/dnswlt/swcat/internal/sysview"
 )
 
 // Renderer is the stateless top-level entry point for rendering catalog SVGs.
@@ -218,7 +219,32 @@ func (r *Renderer) DomainGraph(ctx context.Context, domain *catalog.Domain) (*Re
 	return runDot(ctx, r.runner, rd.generateDomainDotSource(domain))
 }
 
-func (r *render) generateSystemExternalDotSource(system *catalog.System, opts *SystemViewOptions) *dot.DotSource {
+// externalSystemGroup collects the dependencies on one external system for
+// which a detailed ("expanded") view was requested.
+type externalSystemGroup struct {
+	sysRef *catalog.Ref
+	deps   []extSysPartDep
+}
+
+// systemExternalModel is what a system's external view consists of, independent
+// of how it is drawn: the focal system's parts that have external
+// relationships, the neighboring systems shown collapsed as a single node, and
+// the ones expanded into their individual parts.
+type systemExternalModel struct {
+	system *catalog.System
+	// focalParts are the parts of the focal system that have at least one
+	// external relationship, in the order components, APIs, resources.
+	focalParts []catalog.Entity
+	// extDeps are dependencies on collapsed systems, duplicates removed.
+	extDeps []extSysDep
+	// groups are the expanded systems, in the order they were encountered.
+	groups []*externalSystemGroup
+}
+
+// collectSystemExternal walks the focal system's parts and gathers everything
+// the external view shows. Both the dot-based and the native renderer build on
+// it, so that they always show the same content.
+func (r *render) collectSystemExternal(system *catalog.System, opts *SystemViewOptions) *systemExternalModel {
 	// Potential neighboring systems for which a detailed view is requested.
 	ctxSysMap := map[string]bool{}
 	for _, ctxSys := range opts.ContextSystems {
@@ -231,11 +257,10 @@ func (r *render) generateSystemExternalDotSource(system *catalog.System, opts *S
 		exclSysMap[exclSys.QName()] = true
 	}
 
-	dw := dot.New(dot.WriterConfig{EdgeMinLen: r.config.NormalEdgeMinLen})
-	dw.Start()
+	m := &systemExternalModel{system: system}
 
 	var extDeps []extSysDep
-	extSPDeps := map[string][]extSysPartDep{}
+	extSPDeps := map[string]*externalSystemGroup{}
 	// Adds the src->dst dependency to either extDeps or extSPDeps, depending on whether
 	// full context was requested for dst.
 	// Ignores intra-system dependencies and excluded systems.
@@ -251,9 +276,13 @@ func (r *render) generateSystemExternalDotSource(system *catalog.System, opts *S
 
 		if ctxSysMap[dstSysRef.QName()] {
 			// dst is part of a system for which we want to show full context.
-			extSPDeps[dstSysRef.QName()] = append(extSPDeps[dstSysRef.QName()],
-				extSysPartDep{source: src, target: dst, ref: ref, direction: dir},
-			)
+			g, ok := extSPDeps[dstSysRef.QName()]
+			if !ok {
+				g = &externalSystemGroup{sysRef: dstSysRef}
+				extSPDeps[dstSysRef.QName()] = g
+				m.groups = append(m.groups, g)
+			}
+			g.deps = append(g.deps, extSysPartDep{source: src, target: dst, ref: ref, direction: dir})
 		} else {
 			// dst is part of a system for which no context was requested.
 			dstSys := r.repo.System(dstSysRef)
@@ -263,8 +292,6 @@ func (r *render) generateSystemExternalDotSource(system *catalog.System, opts *S
 		}
 		return true
 	}
-
-	dw.StartCluster(system.GetRef().QName())
 
 	// Components
 	for _, c := range system.GetComponents() {
@@ -294,7 +321,7 @@ func (r *render) generateSystemExternalDotSource(system *catalog.System, opts *S
 			}
 		}
 		if hasEdges {
-			dw.AddNode(r.entityNode(comp))
+			m.focalParts = append(m.focalParts, comp)
 		}
 	}
 
@@ -310,7 +337,7 @@ func (r *render) generateSystemExternalDotSource(system *catalog.System, opts *S
 			}
 		}
 		if hasEdges {
-			dw.AddNode(r.entityNode(ap))
+			m.focalParts = append(m.focalParts, ap)
 		}
 	}
 
@@ -338,19 +365,37 @@ func (r *render) generateSystemExternalDotSource(system *catalog.System, opts *S
 			}
 		}
 		if hasEdges {
-			dw.AddNode(r.entityNode(resource))
+			m.focalParts = append(m.focalParts, resource)
 		}
 	}
 
-	dw.EndCluster()
-
-	// Draw edges for all collected external dependencies, removing duplicates.
+	// Drop duplicate dependencies on collapsed systems: several parts of the
+	// focal system may point at the same neighbor.
 	seenDeps := map[string]bool{}
 	for _, dep := range extDeps {
 		if seenDeps[dep.String()] {
 			continue
 		}
 		seenDeps[dep.String()] = true
+		m.extDeps = append(m.extDeps, dep)
+	}
+
+	return m
+}
+
+func (r *render) generateSystemExternalDotSource(system *catalog.System, opts *SystemViewOptions) *dot.DotSource {
+	m := r.collectSystemExternal(system, opts)
+
+	dw := dot.New(dot.WriterConfig{EdgeMinLen: r.config.NormalEdgeMinLen})
+	dw.Start()
+
+	dw.StartCluster(system.GetRef().QName())
+	for _, e := range m.focalParts {
+		dw.AddNode(r.entityNode(e))
+	}
+	dw.EndCluster()
+
+	for _, dep := range m.extDeps {
 		dw.AddNode(r.entityNode(dep.targetSystem))
 		if dep.direction == DirOutgoing {
 			dw.AddEdge(r.entityEdge(dep.source, dep.targetSystem, dot.ESSystemLink))
@@ -359,9 +404,9 @@ func (r *render) generateSystemExternalDotSource(system *catalog.System, opts *S
 		}
 	}
 
-	for systemID, deps := range extSPDeps {
-		dw.StartCluster(systemID)
-		for _, dep := range deps {
+	for _, g := range m.groups {
+		dw.StartCluster(g.sysRef.QName())
+		for _, dep := range g.deps {
 			dw.AddNode(r.entityNode(dep.target))
 			if dep.direction == DirOutgoing {
 				dw.AddEdge(r.entityEdgeLabel(dep.source, dep.target, dep.ref, dot.ESNormal))
@@ -457,6 +502,13 @@ func (r *render) generateSystemInternalDotSource(system *catalog.System) *dot.Do
 // opts configures which systems to show, hide, or expand in detail.
 func (r *Renderer) SystemExternalGraph(ctx context.Context, system *catalog.System, opts *SystemViewOptions) (*Result, error) {
 	rd := &render{Renderer: r, kind: DiagramSystem, focalEntity: system}
+	if r.config.SystemExternalRenderer == RendererNative {
+		d, meta := rd.buildSystemExternalDiagram(rd.collectSystemExternal(system, opts))
+		return &Result{
+			SVG:      sysview.Render(d, sysview.DefaultStyle()),
+			Metadata: meta,
+		}, nil
+	}
 	return runDot(ctx, r.runner, rd.generateSystemExternalDotSource(system, opts))
 }
 
