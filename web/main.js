@@ -163,6 +163,45 @@ function onClickNode(node, shiftKey) {
     window.location.href = url;
 }
 
+// Id of the edge kept highlighted by a click, or null if none is pinned. The
+// highlight itself is the .pinned CSS class; this only records which edge
+// carries it, so it can be taken off again.
+let pinnedEdgeId = null;
+
+function clearPinnedEdge() {
+    if (!pinnedEdgeId) return;
+    document.getElementById(pinnedEdgeId)?.classList.remove('pinned');
+    pinnedEdgeId = null;
+}
+
+// Pins the given edge, or unpins it if it was already pinned. Only one edge is
+// pinned at a time.
+function togglePinnedEdge(edge) {
+    const wasPinned = edge.id === pinnedEdgeId;
+    clearPinnedEdge();
+    if (!wasPinned && edge.id) {
+        edge.classList.add('pinned');
+        pinnedEdgeId = edge.id;
+    }
+}
+
+// Registers the document-level ways of dropping a pinned edge: clicking outside
+// the diagram, or pressing Escape. Clicks inside the diagram are handled by
+// addSVGListener. Called once per page, unlike addSVGListener, which re-runs
+// after htmx swaps the SVG.
+function initEdgePinning() {
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('#relationships-svg')) {
+            clearPinnedEdge();
+        }
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            clearPinnedEdge();
+        }
+    });
+}
+
 // Adds all relevant listeners to the top-level SVG element
 // (clicking, hovering).
 function addSVGListener() {
@@ -175,6 +214,13 @@ function addSVGListener() {
             onClickNode(node, e.shiftKey);
             return;
         }
+        const edge = e.target.closest("g.edge");
+        if (edge) {
+            togglePinnedEdge(edge);
+            return;
+        }
+        // A click on the diagram background drops the pin.
+        clearPinnedEdge();
     });
 
     svg.addEventListener('mouseover', (event) => {
@@ -291,6 +337,7 @@ async function initPage(pageId) {
         createTooltip();
         loadSVGMetadata();
         addSVGListener();
+        initEdgePinning();
 
         // Reload the page after plugins have completed successfully.
         document.body.addEventListener("pluginsSuccess", () => {
@@ -302,6 +349,8 @@ async function initPage(pageId) {
         // popovers: OOB swaps may have replaced the trigger/popover elements
         // (e.g. #connect-popover lives inside the swapped #graph-container).
         document.body.addEventListener("svgUpdated", () => {
+            // The old SVG (and with it any pinned edge) is gone.
+            pinnedEdgeId = null;
             loadSVGMetadata();
             addSVGListener();
             initAllPopovers();

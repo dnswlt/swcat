@@ -95,13 +95,16 @@
         fill: #374151;
     }
 
-    /* Hover over edges */
-    .graphviz-svg .edge:hover path {
+    /* Hover over edges, and edges kept highlighted by a click (.pinned), so a
+       single edge stays followable while scrolling a large diagram. */
+    .graphviz-svg .edge:hover path,
+    .graphviz-svg .edge.pinned path {
         /* Arrow line */
         stroke: #8493A5;
         stroke-width: 3;
     }
-    .graphviz-svg .edge:hover polygon {
+    .graphviz-svg .edge:hover polygon,
+    .graphviz-svg .edge.pinned polygon {
         /* Arrow head */
         fill: #8493A5;
         stroke: #8493A5;
