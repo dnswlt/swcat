@@ -225,6 +225,9 @@ func (l *layouter) measure() {
 	}
 
 	for _, e := range l.d.Edges {
+		if !st.ShowEdgeLabels {
+			continue // nothing to measure, and no gutter space to reserve
+		}
 		e.labelLines = wrapLabel(e.Label, st)
 		for _, line := range e.labelLines {
 			e.labelW = max(e.labelW, TextWidth(line, st.EdgeFontSize))

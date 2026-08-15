@@ -144,8 +144,14 @@ func (r *renderer) edge(e *Edge) {
 	// short of the port.
 	tipX := e.x2
 	lineEndX := tipX - e.dir*r.st.ArrowLength
+	outline := r.path(e, lineEndX)
+	// An invisible fat stroke along the same route, so the edge can be hovered
+	// and clicked without having to hit a one point line. pointer-events makes
+	// it a target even though it paints nothing.
+	fmt.Fprintf(r.b, `<path class="edge-hit" fill="none" stroke="none" stroke-width="%s" pointer-events="stroke" d="%s"/>`+"\n",
+		num(r.st.EdgeHitWidth), outline)
 	fmt.Fprintf(r.b, `<path fill="none" stroke="%s" d="%s"/>`+"\n",
-		r.st.EdgeColor, r.path(e, lineEndX))
+		r.st.EdgeColor, outline)
 	fmt.Fprintf(r.b, `<polygon fill="%s" stroke="%s" points="%s"/>`+"\n",
 		r.st.EdgeColor, r.st.EdgeColor, r.arrow(tipX, e.y2, e.dir))
 

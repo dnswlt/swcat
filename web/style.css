@@ -96,9 +96,11 @@
     }
 
     /* Hover over edges, and edges kept highlighted by a click (.pinned), so a
-       single edge stays followable while scrolling a large diagram. */
-    .graphviz-svg .edge:hover path,
-    .graphviz-svg .edge.pinned path {
+       single edge stays followable while scrolling a large diagram.
+       .edge-hit is the invisible stroke that makes thin edges easy to hit; it
+       must stay unpainted. Edges from graphviz carry no class, so they match. */
+    .graphviz-svg .edge:hover path:not(.edge-hit),
+    .graphviz-svg .edge.pinned path:not(.edge-hit) {
         /* Arrow line */
         stroke: #8493A5;
         stroke-width: 3;

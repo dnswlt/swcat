@@ -27,6 +27,11 @@ type Style struct {
 	GroupPadBottom float64
 	GroupVGap      float64 // vertical gap between stacked external items
 
+	// ShowEdgeLabels draws the labels of labelled edges. Off by default: on a
+	// large diagram they clutter the picture and, since gutters have to be wide
+	// enough to fit them, widen it as well. The frontend shows them on hover
+	// instead, from the metadata that ships with the SVG.
+	ShowEdgeLabels      bool
 	EdgeLabelLineHeight float64 // baseline distance between edge label lines
 	EdgeLabelPadX       float64 // clearance between an edge label and the boxes it runs between
 	EdgeLabelMaxWidth   float64 // label lines wider than this are wrapped at spaces
@@ -39,6 +44,11 @@ type Style struct {
 	SnapY       float64 // endpoints closer than this vertically are made collinear
 	ArrowLength float64
 	ArrowWidth  float64
+	// EdgeHitWidth is the width of the invisible stroke that makes an edge easy
+	// to hover and click; the drawn line is far too thin to hit. Keep it below
+	// MinPortPitch: edges converging on a box are that far apart, and hit areas
+	// wider than the gap between them would steal each other's pointer events.
+	EdgeHitWidth float64
 
 	EdgeColor      string
 	EdgeLabelColor string
@@ -80,14 +90,15 @@ func DefaultStyle() Style {
 		EdgeLabelPadX:       8,
 		EdgeLabelMaxWidth:   130,
 
-		ColumnGap:   72,
-		TrackGap:    14,
-		TrackInset:  16,
-		Margin:      6,
-		CornerRad:   8,
-		SnapY:       4,
-		ArrowLength: 10,
-		ArrowWidth:  7,
+		ColumnGap:    72,
+		TrackGap:     14,
+		TrackInset:   16,
+		Margin:       6,
+		CornerRad:    8,
+		SnapY:        4,
+		ArrowLength:  10,
+		ArrowWidth:   7,
+		EdgeHitWidth: 8,
 
 		EdgeColor:      "#8493A5",
 		EdgeLabelColor: "#374151",

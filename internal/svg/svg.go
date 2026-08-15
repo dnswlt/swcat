@@ -53,6 +53,9 @@ func (r *render) entityEdge(from, to catalog.Entity, style dot.EdgeStyle) dot.Ed
 		To:   to.GetRef().String(),
 		Layout: dot.EdgeLayout{
 			Style: style,
+			// Every edge gets a tooltip title, so that hovering any of them
+			// says what it connects even when it carries no label.
+			TooltipTitle: from.GetQName() + " → " + to.GetQName(),
 		},
 	}
 }

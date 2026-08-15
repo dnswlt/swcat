@@ -224,10 +224,11 @@ function addSVGListener() {
     });
 
     svg.addEventListener('mouseover', (event) => {
-        const edgeLabel = event.target.closest('g.edge text');
-        if (edgeLabel) {
-            const edgeGroup = edgeLabel.closest('g.edge');
-            const edgeInfo = edgeGroup && svgMeta.edges && svgMeta.edges[edgeGroup.id];
+        // Anywhere on the edge, not just its label: the system view draws no
+        // edge labels and shows what an edge connects on hover instead.
+        const edge = event.target.closest('g.edge');
+        if (edge) {
+            const edgeInfo = svgMeta.edges && svgMeta.edges[edge.id];
             if (edgeInfo) showTooltip(edgeInfo, event);
             return;
         }
@@ -239,7 +240,7 @@ function addSVGListener() {
     });
 
     svg.addEventListener('mouseout', (event) => {
-        if (event.target.closest('g.edge text') || event.target.closest('.clickable-node')) {
+        if (event.target.closest('g.edge') || event.target.closest('.clickable-node')) {
             hideTooltip();
         }
     });

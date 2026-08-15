@@ -173,7 +173,13 @@ func (b *diagramBuilder) edge(src, dst catalog.Entity, ref *catalog.LabelRef, cl
 		To:    dst.GetRef().String(),
 		Class: class,
 	}
-	info := &dot.EdgeInfo{From: e.From, To: e.To}
+	// The title makes every edge hoverable, labelled or not; a labelled one adds
+	// its label and attributes below it.
+	info := &dot.EdgeInfo{
+		From:  e.From,
+		To:    e.To,
+		Title: src.GetQName() + " → " + dst.GetQName(),
+	}
 	if ref != nil {
 		layout := b.edgeLabelLayout(src, dst, ref, dot.ESNormal)
 		e.Label = layout.Label

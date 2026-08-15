@@ -28,6 +28,14 @@ func diagram(focalParts []string, externals []string, edges []string) *Diagram {
 	return d
 }
 
+// labelStyle turns on edge labels, which are off by default: the frontend shows
+// them on hover instead.
+func labelStyle() Style {
+	st := DefaultStyle()
+	st.ShowEdgeLabels = true
+	return st
+}
+
 func itemByID(d *Diagram, id string) *Item {
 	for _, it := range d.Externals {
 		for _, n := range it.nodes() {
@@ -255,7 +263,7 @@ func TestOverlappingEdgesGetSeparateTracks(t *testing.T) {
 // An edge label must fit on the horizontal run it is drawn on, so the gutter
 // between the columns has to be sized for it.
 func TestEdgeLabelsGetRoomOnTheirRun(t *testing.T) {
-	st := DefaultStyle()
+	st := labelStyle()
 	for _, label := range []string{
 		"short",
 		"With a veryveryvery long label",
@@ -301,7 +309,7 @@ func TestLabelsAvoidTheCrowdedEndOfTheEdge(t *testing.T) {
 		[]string{"a->target", "b->target", "lonely->target"},
 	)
 	crowdedTarget.Edges[2].Label = "with a label"
-	Layout(crowdedTarget, DefaultStyle())
+	Layout(crowdedTarget, labelStyle())
 	if !crowdedTarget.Edges[2].labelAtSource {
 		t.Error("label should sit at the uncrowded source end")
 	}
@@ -314,7 +322,7 @@ func TestLabelsAvoidTheCrowdedEndOfTheEdge(t *testing.T) {
 		[]string{"hub->t1", "hub->t2", "hub->t3"},
 	)
 	crowdedSource.Edges[2].Label = "with a label"
-	Layout(crowdedSource, DefaultStyle())
+	Layout(crowdedSource, labelStyle())
 	if crowdedSource.Edges[2].labelAtSource {
 		t.Error("label should sit at the uncrowded target end")
 	}
@@ -324,7 +332,7 @@ func TestLabelsAvoidTheCrowdedEndOfTheEdge(t *testing.T) {
 // run sits on the other side of the lanes. The gutter has to make room there,
 // not on the side a left-to-right edge would use.
 func TestReverseEdgeLabelGetsRoomOnItsOwnSide(t *testing.T) {
-	st := DefaultStyle()
+	st := labelStyle()
 	d := diagram(
 		[]string{"api", "comp"},
 		[]string{"both", "other"},
@@ -372,7 +380,7 @@ func TestLabelsStayInsideTheDrawing(t *testing.T) {
 		[]string{"comp->target"},
 	)
 	d.Edges[0].Label = "a label on the topmost edge"
-	Layout(d, DefaultStyle())
+	Layout(d, labelStyle())
 
 	e := d.Edges[0]
 	if top := math.Min(e.y1, e.y2) - 5 - e.labelH; top < 0 {
@@ -450,5 +458,57 @@ func TestLayoutIsDeterministic(t *testing.T) {
 		if got := string(Render(build(), DefaultStyle())); got != first {
 			t.Fatal("Render is not deterministic across runs")
 		}
+	}
+}
+
+// Edge labels stay out of the drawing unless asked for, and cost no width when
+// they are left out.
+func TestEdgeLabelsAreNotDrawnByDefault(t *testing.T) {
+	build := func() *Diagram {
+		d := diagram([]string{"comp"}, []string{"target"}, []string{"comp->target"})
+		d.Edges[0].Label = "a rather long edge label"
+		return d
+	}
+	plain, labelled := build(), build()
+	svg := string(Render(plain, DefaultStyle()))
+	Render(labelled, labelStyle())
+
+	if strings.Contains(svg, "a rather long edge label") {
+		t.Error("edge label was drawn although ShowEdgeLabels is off")
+	}
+	if plain.width >= labelled.width {
+		t.Errorf("labels should cost width: %.1f without, %.1f with", plain.width, labelled.width)
+	}
+}
+
+// The drawn line is a point wide, so edges carry an invisible stroke to be
+// hovered and clicked by.
+func TestEdgesHaveAHitArea(t *testing.T) {
+	st := DefaultStyle()
+	d := diagram([]string{"comp"}, []string{"target"}, []string{"comp->target"})
+	svg := string(Render(d, st))
+
+	if !strings.Contains(svg, `class="edge-hit"`) {
+		t.Fatal("edge has no hit area")
+	}
+	if !strings.Contains(svg, `pointer-events="stroke"`) {
+		t.Error("hit area is not hit-testable")
+	}
+	if !strings.Contains(svg, fmt.Sprintf(`stroke-width="%s"`, num(st.EdgeHitWidth))) {
+		t.Errorf("hit area is not %.0f wide", st.EdgeHitWidth)
+	}
+	// It must not paint anything, or it would show up as a fat line.
+	if !strings.Contains(svg, `class="edge-hit" fill="none" stroke="none"`) {
+		t.Error("hit area should paint neither fill nor stroke")
+	}
+}
+
+// Hit areas of edges arriving at the same box must not overlap, or pointing at
+// one edge would select its neighbor.
+func TestHitAreasDoNotOverlap(t *testing.T) {
+	st := DefaultStyle()
+	if st.EdgeHitWidth > st.MinPortPitch {
+		t.Errorf("hit area is %.0f wide but edges can be %.0f apart",
+			st.EdgeHitWidth, st.MinPortPitch)
 	}
 }
