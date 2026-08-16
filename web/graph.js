@@ -1,112 +1,69 @@
-// State management: URL is the single source of truth
-// We read from URL params, not from DOM state
+// Controls of the interactive graph page. Every one of them sends the page's
+// state to the graph endpoint, so requests are recognized by where they go
+// rather than by what triggered them: the search form has no action attribute,
+// but its request carries the same state as the entity buttons do.
+import { onConfigRequest, samePath } from './url-params.js';
 
-/**
- * Gets all currently selected entity refs from URL
- * @returns {string[]} Array of entity refs
- */
-function getSelectedEntities() {
-    const url = new URL(window.location);
-    return url.searchParams.getAll('e');
+/** The graph endpoint, which the page tells us about. */
+function graphURL() {
+    return document.querySelector('[data-graph-url]')?.dataset.graphUrl;
 }
 
-/**
- * Gets current search query from URL
- * @returns {string} Current query
- */
-function getSearchQuery() {
-    const url = new URL(window.location);
-    return url.searchParams.get('q') || '';
+/** Returns the entity selection after applying an add or remove action. */
+export function nextEntities(entities, action, ref) {
+    if (action === 'add-entity' && ref && !entities.includes(ref)) {
+        return entities.concat(ref);
+    }
+    if (action === 'remove-entity' && ref) {
+        return entities.filter(e => e !== ref);
+    }
+    return entities;
 }
 
-/**
- * Gets current clusters setting from URL
- * @returns {string} '1' if clusters enabled, '' otherwise
- */
-function getClusters() {
-    const url = new URL(window.location);
-    return url.searchParams.get('clusters') || '';
-}
+/** Builds the params for a request to the graph endpoint. */
+export function graphParams(params, elt) {
+    const action = elt.dataset.graphAction;
+    const entities = nextEntities(params.getAll('e'), action, elt.dataset.entityRef);
 
-/**
- * Configures htmx requests to dynamically build query params based on current URL state
- * and the action being performed (add/remove entity).
- *
- * This handler intercepts ALL requests to /ui/graph to ensure query params are always
- * built from the URL (single source of truth), avoiding stale hidden input values.
- */
-document.body.addEventListener('htmx:configRequest', (event) => {
-    const elt = event.detail.elt;
-    const path = event.detail.path;
-
-    // Only intercept requests to the graph endpoint
-    // Handles both /ui/graph and /ui/ref/<ref>/-/graph
-    if (!path.endsWith('/graph') && !path.match(/\/graph\?/)) {
-        return;
+    let query = params.get('q') || '';
+    if (!action) {
+        // No action means this is the search form submitting itself.
+        query = elt.closest('form')?.querySelector('input[name="q"]')?.value ?? query;
     }
 
-    const action = elt.getAttribute('data-graph-action');
-    const entityRef = elt.getAttribute('data-entity-ref');
-
-    // Get current state from URL
-    let selectedEntities = getSelectedEntities();
-    let query = getSearchQuery();
-    let clusters = getClusters();
-
-    // Apply action (if any)
-    if (action === 'add-entity' && entityRef) {
-        // Add entity if not already present
-        if (!selectedEntities.includes(entityRef)) {
-            selectedEntities.push(entityRef);
-        }
-    } else if (action === 'remove-entity' && entityRef) {
-        // Remove entity
-        selectedEntities = selectedEntities.filter(e => e !== entityRef);
-    } else if (action === 'toggle-clusters') {
+    let clusters = params.get('clusters') || '';
+    if (action === 'toggle-clusters') {
         clusters = elt.checked ? '1' : '';
-    } else if (!action) {
-        // This is a search request - read query from the form input
-        const form = elt.closest('form');
-        if (form) {
-            const queryInput = form.querySelector('input[name="q"]');
-            if (queryInput) {
-                query = queryInput.value || '';
-            }
-        }
     }
 
-    // Build query params for the request
-    // Clear existing params and rebuild from computed state
-    event.detail.parameters = {};
+    const out = {};
+    if (query) out.q = query;
+    if (entities.length > 0) out.e = entities;
+    if (clusters) out.clusters = clusters;
 
-    if (query) {
-        event.detail.parameters['q'] = query;
-    }
-
-    // Add all selected entities
-    if (selectedEntities.length > 0) {
-        event.detail.parameters['e'] = selectedEntities;
-    }
-
-    if (clusters) {
-        event.detail.parameters['clusters'] = clusters;
-    }
-
-    // Signal to backend that this is an entity change operation (not just search)
+    // Tell the backend that the entity set changed, rather than just the query.
     if (action === 'add-entity' || action === 'remove-entity' || action === 'toggle-clusters') {
-        event.detail.parameters['refresh'] = 'full';
+        out.refresh = 'full';
     }
 
-    // "Fully connect" expands selectedEntities server-side and returns an
-    // HX-Redirect, so we don't mutate state here — just forward the URL state.
+    // "Fully connect" expands the selection server-side and answers with an
+    // HX-Redirect, so nothing is changed here — the current state is forwarded.
     if (action === 'fully-connect') {
-        event.detail.parameters['connect'] = 'full';
-        const maxDepthInput = document.getElementById('max-depth');
-        if (maxDepthInput && maxDepthInput.value && maxDepthInput.value !== '0') {
-            event.detail.parameters['maxDepth'] = maxDepthInput.value;
+        out.connect = 'full';
+        const maxDepth = document.getElementById('max-depth')?.value;
+        if (maxDepth && maxDepth !== '0') {
+            out.maxDepth = maxDepth;
         }
     }
-});
+    return out;
+}
 
-// Note: svgUpdated event is already handled in main.js (initPage function)
-// for all pages that render SVGs, including the graph page.
+/**
+ * Whether an htmx request belongs to the graph page: it is one that goes to the
+ * graph endpoint, whatever triggered it.
+ */
+export function isGraphRequest(event) {
+    return samePath(event.detail.path, graphURL());
+}
+
+onConfigRequest((elt, event) => isGraphRequest(event), graphParams);

@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "test": "node --test",
     "dev": "vite build --watch"
   },
   "devDependencies": {

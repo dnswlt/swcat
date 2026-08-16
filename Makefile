@@ -5,7 +5,7 @@ ROOT_DIR ?= ./examples/flights
 VERSION ?= $(shell git describe --tags --always --dirty)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
 
-.PHONY: proto test test-integration test-race build build-web build-windows release-windows run-examples run-examples-git
+.PHONY: proto test test-web test-integration test-race build build-web build-windows release-windows run-examples run-examples-git
 
 #
 # Building
@@ -58,8 +58,12 @@ run-examples-git:
 # Testing
 #
 
-test:
+test: test-web
 	$(GO) test ./...
+
+# Unit tests for the frontend logic (node's built-in runner, no dependencies).
+test-web:
+	npm test --prefix web
 
 # Build and run integration tests, no caching.
 test-integration:

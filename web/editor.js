@@ -1,3 +1,4 @@
+import { claim } from './dom.js';
 import { EditorView } from 'codemirror';
 import { basicSetup } from 'codemirror';
 import { yaml, yamlLanguage } from '@codemirror/lang-yaml';
@@ -178,7 +179,7 @@ const yamlAutoCompleteExtension = yamlLanguage.data.of({
 // Initializes the CodeMirror EditorView for the YAML editor (read-only mode).
 export function initYamlViewer() {
     const viewerEl = document.getElementById("yaml-viewer");
-    if (!viewerEl) {
+    if (!viewerEl || !claim(viewerEl, "editorInit")) {
         return;
     }
 
@@ -195,10 +196,11 @@ export function initYamlViewer() {
     viewerEl.style.display = "none";
 }
 
-// Initializes the CodeMirror EditorView for the YAML editor.
+// Initializes the CodeMirror EditorView for the YAML editor. Mounting is
+// guarded, so a second call cannot put a second editor next to the first.
 export function initYamlEditor() {
     const editorEl = document.getElementById("yaml-editor");
-    if (!editorEl) {
+    if (!editorEl || !claim(editorEl, "editorInit")) {
         return;
     }
 
@@ -224,7 +226,7 @@ export function initYamlEditor() {
 // Initializes the CodeMirror EditorView to display read-only JSON.
 export function initJsonViewer(elementId) {
     const viewerEl = document.getElementById(elementId);
-    if (!viewerEl) {
+    if (!viewerEl || !claim(viewerEl, "editorInit")) {
         return;
     }
 
