@@ -235,7 +235,9 @@ type SystemSpec struct {
 	// [required]
 	Owner *Ref
 	// An entity reference to the domain that the system belongs to.
-	// [optional]
+	// An optional field in the backstage.io schema, but we require it:
+	// a catalog whose systems have no domain fails validation.
+	// [required]
 	Domain *Ref
 	// The type of system. There is currently no enforced set of values for this field,
 	// so it is left up to the adopting organization to choose a nomenclature that matches

@@ -126,9 +126,9 @@ func (r *render) collectDomainExternal(domain *catalog.Domain, opts *DomainViewO
 			if own[other.GetRef().String()] {
 				continue // internal to the domain
 			}
-			// The container is the neighbor's domain when it has one; a system
-			// without a domain stands for itself. It gets no chip either — the
-			// chips list domains — so it shows up in the unnarrowed view only.
+			// Neighbors are grouped by their domain. Validation requires every
+			// system to have one; the fallback only keeps this from panicking
+			// on a repository that never went through it.
 			container := catalog.Entity(other)
 			if domRef := other.GetDomain(); domRef != nil {
 				if d := r.repo.Domain(domRef); d != nil {

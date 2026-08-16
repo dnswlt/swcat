@@ -312,8 +312,7 @@ func (r *Repository) SurroundingSystems(system *catalog.System) []*catalog.Syste
 }
 
 // SurroundingDomains returns the domains that the given domain's systems
-// exchange data with, excluding the domain itself. Systems without a domain are
-// not represented, since there is nothing to name them by.
+// exchange data with, excluding the domain itself.
 func (r *Repository) SurroundingDomains(domain *catalog.Domain) []*catalog.Domain {
 	own := map[string]bool{}
 	for _, sRef := range domain.GetSystems() {
