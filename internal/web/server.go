@@ -572,6 +572,29 @@ func (s *Server) serveSystems(w http.ResponseWriter, r *http.Request) {
 	s.serveHTMLPage(w, r, "systems.html", params)
 }
 
+// externalChip is one selectable neighbor in a relationship view: a system on a
+// system page, a domain on a domain page.
+type externalChip struct {
+	Name     string
+	Ref      string // entity reference for the data-entity-ref attribute
+	Selected bool   // whether it is shown; all of them are when nothing is selected
+	Sole     bool   // whether it is the only selected one, so clicking it shows all again
+}
+
+// detailOption is one step of the detail control.
+type detailOption struct {
+	Value  string
+	Name   string
+	Active bool
+}
+
+// svgTab is one of the internal/external tabs above a relationship view.
+type svgTab struct {
+	Active bool
+	Name   string
+	Href   string
+}
+
 type svgRoutes struct {
 	// Maps each fully qualified entity reference to its /ui URL.
 	Entities map[string]string `json:"entities"`
@@ -655,7 +678,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		log.Printf("Failed to build system URL: %v", err)
 		return
 	}
-	params["SystemURL"] = systemURL
+	params["EntityURL"] = systemURL
 
 	// Parse view options from query params:
 	// - s= (select): narrow the view to these systems, shown with their parts
@@ -668,7 +691,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 		}
 	}
 
-	detail := svg.ParseDetailLevel(q.Get("detail"))
+	detail := svg.ParseDetailLevel(q.Get("detail"), svg.DetailAPIs)
 	viewOpts := svg.NewSystemViewOptions(selectedSystems, detail)
 
 	internalView := r.URL.Query().Get("view") == "internal"
@@ -701,44 +724,27 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 			selectedIDs[r.String()] = true
 		}
 
-		type systemChip struct {
-			Name     string
-			Ref      string // System reference for data-system-ref attribute
-			Selected bool   // Whether the system is shown; all of them are when nothing is selected
-			Sole     bool   // Whether it is the only selected system, so clicking it shows all again
-		}
-
 		// Selecting nothing selects everything.
 		narrowed := len(selectedIDs) > 0
 		surroundingSystems := data.repo.SurroundingSystems(system)
-		var chips []systemChip
+		var chips []externalChip
 		for _, sys := range surroundingSystems {
 			selected := selectedIDs[sys.GetRef().String()]
-			chips = append(chips, systemChip{
+			chips = append(chips, externalChip{
 				Name:     sys.GetQName(),
 				Ref:      sys.GetRef().String(),
 				Selected: !narrowed || selected,
 				Sole:     selected && len(selectedIDs) == 1,
 			})
 		}
-		params["ExternalSystemChips"] = chips
-
-		type detailOption struct {
-			Value  string
-			Name   string
-			Active bool
-		}
+		params["ExternalChips"] = chips
 		params["DetailOptions"] = []detailOption{
 			{Value: "systems", Name: "Systems", Active: detail == svg.DetailSystems},
 			{Value: "apis", Name: "APIs", Active: detail == svg.DetailAPIs},
 			{Value: "all", Name: "All", Active: detail == svg.DetailAll},
 		}
 	}
-	params["SVGTabs"] = []struct {
-		Active bool
-		Name   string
-		Href   string
-	}{
+	params["SVGTabs"] = []svgTab{
 		{Active: !internalView, Name: "External", Href: setQueryParam(r, "view", "external").RequestURI()},
 		{Active: internalView, Name: "Internal", Href: setQueryParam(r, "view", "internal").RequestURI()},
 	}
@@ -763,7 +769,7 @@ func (s *Server) serveSystem(w http.ResponseWriter, r *http.Request, systemID st
 	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Target") == "svg-wrapper" {
 		// Only replace the SVG div. Trigger an svgUpdated event so the frontend can re-scan the SVG metadata JSON.
 		w.Header().Set("HX-Trigger-After-Swap", "svgUpdated")
-		s.serveHTMLPage(w, r, "system_svg.html", params)
+		s.serveHTMLPage(w, r, "relationships_svg.html", params)
 		return
 	}
 
@@ -1061,19 +1067,72 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 		"Domain":    domain,
 	}
 
-	cacheKey := domain.GetRef().String()
+	// Same two controls as the system view, one level up: s= selects
+	// neighboring domains, detail= draws their systems or just the domains.
+	q := r.URL.Query()
+	var selectedDomains []*catalog.Ref
+	for _, v := range q["s"] {
+		if ref, err := catalog.ParseRefAs(catalog.KindDomain, v); err == nil {
+			selectedDomains = append(selectedDomains, ref)
+		}
+	}
+	detail := svg.ParseDetailLevel(q.Get("detail"), svg.DetailSystems)
+	viewOpts := svg.NewDomainViewOptions(selectedDomains, detail)
+
+	internalView := q.Get("view") == "internal"
+	cacheKey := fmt.Sprintf("%s?s=%s&i=%t&d=%s", domain.GetRef(),
+		refsKey(viewOpts.SelectedDomains), internalView, viewOpts.Detail)
+
 	svgResult, ok := data.lookupSVG(cacheKey)
 	if !ok {
 		var err error
 		ctx, cancel := s.withDotTimeout(r.Context())
 		defer cancel()
-		svgResult, err = s.svgRenderer(data).DomainGraph(ctx, domain)
+		renderer := s.svgRenderer(data)
+		if internalView {
+			svgResult, err = renderer.DomainInternalGraph(ctx, domain)
+		} else {
+			svgResult, err = renderer.DomainExternalGraph(ctx, domain, viewOpts)
+		}
 		if err != nil {
 			http.Error(w, "Failed to render SVG", http.StatusInternalServerError)
 			log.Printf("Failed to render SVG: %v", err)
 			return
 		}
 		data.storeSVG(cacheKey, svgResult)
+	}
+
+	if !internalView {
+		selectedIDs := map[string]bool{}
+		for _, r := range viewOpts.SelectedDomains {
+			selectedIDs[r.String()] = true
+		}
+		narrowed := len(selectedIDs) > 0
+		var chips []externalChip
+		for _, dom := range data.repo.SurroundingDomains(domain) {
+			selected := selectedIDs[dom.GetRef().String()]
+			chips = append(chips, externalChip{
+				Name:     dom.GetQName(),
+				Ref:      dom.GetRef().String(),
+				Selected: !narrowed || selected,
+				Sole:     selected && len(selectedIDs) == 1,
+			})
+		}
+		params["ExternalChips"] = chips
+		params["DetailOptions"] = []detailOption{
+			{Value: "domains", Name: "Domains", Active: detail == svg.DetailDomains},
+			{Value: "systems", Name: "Systems", Active: detail == svg.DetailSystems},
+		}
+	}
+	params["EntityURL"], err = toURLWithContext(r.Context(), domain)
+	if err != nil {
+		http.Error(w, "Failed to build domain URL", http.StatusInternalServerError)
+		log.Printf("Failed to build domain URL: %v", err)
+		return
+	}
+	params["SVGTabs"] = []svgTab{
+		{Active: !internalView, Name: "External", Href: setQueryParam(r, "view", "external").RequestURI()},
+		{Active: internalView, Name: "Internal", Href: setQueryParam(r, "view", "internal").RequestURI()},
 	}
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"], err = s.svgMetadataJSON(r, svgResult.Metadata)
@@ -1092,6 +1151,12 @@ func (s *Server) serveDomain(w http.ResponseWriter, r *http.Request, domainID st
 	params["Findings"] = s.getFindings(data, domain)
 
 	s.setCustomContent(domain, &data.config.UI, params)
+
+	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Target") == "svg-wrapper" {
+		w.Header().Set("HX-Trigger-After-Swap", "svgUpdated")
+		s.serveHTMLPage(w, r, "relationships_svg.html", params)
+		return
+	}
 
 	s.serveHTMLPage(w, r, "domain_detail.html", params)
 }

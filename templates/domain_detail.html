@@ -86,14 +86,7 @@
         <p class="text-center text-gray-500">Domain not found</p>
         {{ end }}
 
-        {{ if .SVG }}
-        <div id="relationships-svg">
-            {{ .SVG }}
-        </div>
-        <script type="application/json" id="relationships-svg-meta">
-                    {{ .SVGMetadataJSON }}
-                        </script>
-        {{ end }}
+        {{ template "relationships_svg.html" . }}
 
         {{ template "findings.html" $findings }}
 

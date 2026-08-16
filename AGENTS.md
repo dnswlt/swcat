@@ -54,9 +54,12 @@ must emit:
 - cluster `<g>`: id is `svg-cluster-N`, class `cluster`
 - wrapping `<g>`: class `graphviz-svg`, which pins the font
 
-Most views go through graphviz. The system external view does not: it is two
-columns of systems around a focal one, so `internal/sysview` lays it out directly
-— aligned columns, orthogonal routing, no subprocess per request.
+Most views go through graphviz. The **external** views of a system and of a
+domain do not: both are two columns of neighbors around a focal entity, so
+`internal/sysview` lays them out directly — aligned columns, orthogonal routing,
+no subprocess per request. Their **internal** views (what a system or domain is
+made of, and how those parts relate) are general graphs, which is what graphviz
+is good at, so they stay with `dot`.
 
 Before changing `internal/sysview`:
 
@@ -66,9 +69,12 @@ Before changing `internal/sysview`:
 - Coordinates are points (`width="600pt"` with a matching viewBox), so the browser
   scales by 4/3 as it did for graphviz output.
 
-The view takes two params: `s=` selects systems (none selected = all), `detail=`
-is `systems`, `apis` (default) or `all`. Entities a level omits are represented
-by their system, and their edges attach to that system's frame.
+An external view takes two params: `s=` selects neighbors (none selected = all),
+and `detail=` picks a rung of one ladder — `domains`, `systems`, `apis`, `all` —
+of which each view offers the part that makes sense for it: a domain view
+`domains | systems` (default `systems`), a system view `systems | apis | all`
+(default `apis`). Entities a level omits are represented by whatever contains
+them, and their edges attach to that container's frame.
 
 ## Conventions
 

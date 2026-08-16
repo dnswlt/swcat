@@ -371,8 +371,10 @@ async function initPage(pageId) {
         await import('./graph.js');
     }
 
-    if (pageId === 'system') {
-        await import('./system.js');
+    // Chip and detail controls of the relationship views, which the system and
+    // domain pages both have.
+    if (['system', 'domain'].includes(pageId)) {
+        await import('./relationships.js');
     }
 
     // YAML editor

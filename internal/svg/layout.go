@@ -124,8 +124,9 @@ func (r *render) labels(e catalog.Entity) []dot.NodeLabel {
 		})
 	}
 
-	// Domain name for system entities.
-	if s, ok := e.(*catalog.System); ok {
+	// Domain name for system entities. A domain diagram groups its systems in
+	// frames named after their domain, so repeating it on every box is noise.
+	if s, ok := e.(*catalog.System); ok && r.kind != DiagramDomain {
 		if d := s.GetDomain(); d != nil && d.QName() != "" {
 			labels = append(labels, dot.NodeLabel{
 				Text:  d.QName(),

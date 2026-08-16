@@ -311,6 +311,45 @@ func (r *Repository) SurroundingSystems(system *catalog.System) []*catalog.Syste
 	return result
 }
 
+// SurroundingDomains returns the domains that the given domain's systems
+// exchange data with, excluding the domain itself. Systems without a domain are
+// not represented, since there is nothing to name them by.
+func (r *Repository) SurroundingDomains(domain *catalog.Domain) []*catalog.Domain {
+	own := map[string]bool{}
+	for _, sRef := range domain.GetSystems() {
+		own[sRef.String()] = true
+	}
+
+	domains := map[string]*catalog.Domain{}
+	for _, sRef := range domain.GetSystems() {
+		sys := r.System(sRef)
+		if sys == nil {
+			continue
+		}
+		for _, other := range r.SurroundingSystems(sys) {
+			if own[other.GetRef().String()] {
+				continue
+			}
+			domRef := other.GetDomain()
+			if domRef == nil || domRef.Equal(domain.GetRef()) {
+				continue
+			}
+			if d := r.Domain(domRef); d != nil {
+				domains[d.GetRef().String()] = d
+			}
+		}
+	}
+
+	var result []*catalog.Domain
+	for _, d := range domains {
+		result = append(result, d)
+	}
+	slices.SortFunc(result, func(a, b *catalog.Domain) int {
+		return strings.Compare(a.GetQName(), b.GetQName())
+	})
+	return result
+}
+
 func (r *Repository) Extensions(ref *catalog.Ref) *api.MetadataExtensions {
 	return r.extensions.Get(ref.String())
 }

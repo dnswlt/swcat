@@ -75,37 +75,48 @@ type Result struct {
 	Metadata *dot.SVGGraphMetadata
 }
 
-// DetailLevel says how far into its systems a view goes. Entities of a kind
-// that is not drawn are represented by the system containing them, so their
-// relationships survive as system-level ones.
+// DetailLevel says how far into the catalog's nesting a view goes. An entity of
+// a kind that is not drawn is represented by whatever contains it, so its
+// relationships survive at that coarser level.
+//
+// The ladder spans both views: a domain view offers its lower half (domains,
+// systems), a system view its upper half (systems, apis, all).
 type DetailLevel int
 
 const (
-	// DetailSystems draws systems only — the context view.
-	DetailSystems DetailLevel = iota
+	// DetailDomains draws domains only.
+	DetailDomains DetailLevel = iota
+	// DetailSystems adds the systems inside them.
+	DetailSystems
 	// DetailAPIs adds the APIs systems expose, leaving out what implements them.
 	DetailAPIs
 	// DetailAll adds components and resources.
 	DetailAll
 )
 
-// ParseDetailLevel maps the "detail" query parameter to a level. Anything
-// unknown or empty gives DetailAPIs: the internal view already covers what a
-// system is made of, so the external one leads with the contracts between
-// systems, and it is the only level that stays legible on a large catalog.
-func ParseDetailLevel(s string) DetailLevel {
+// ParseDetailLevel maps the "detail" query parameter to a level, falling back to
+// the given default for anything unknown or empty. Each view has its own
+// default: one level into the focal entity, since what it is made of is what its
+// internal view is for.
+func ParseDetailLevel(s string, fallback DetailLevel) DetailLevel {
 	switch s {
+	case "domains":
+		return DetailDomains
 	case "systems":
 		return DetailSystems
+	case "apis":
+		return DetailAPIs
 	case "all":
 		return DetailAll
 	default:
-		return DetailAPIs
+		return fallback
 	}
 }
 
 func (d DetailLevel) String() string {
 	switch d {
+	case DetailDomains:
+		return "domains"
 	case DetailSystems:
 		return "systems"
 	case DetailAPIs:
@@ -116,13 +127,17 @@ func (d DetailLevel) String() string {
 }
 
 // draws reports whether entities of the given kind get a box of their own.
-// APIs are the interface layer and survive one level longer than the
-// components and resources behind them.
+// APIs are the interface layer and survive one level longer than the components
+// and resources behind them.
 func (d DetailLevel) draws(kind catalog.Kind) bool {
-	if kind == catalog.KindAPI {
+	switch kind {
+	case catalog.KindSystem:
+		return d >= DetailSystems
+	case catalog.KindAPI:
 		return d >= DetailAPIs
+	default:
+		return d >= DetailAll
 	}
-	return d >= DetailAll
 }
 
 // SystemViewOptions configures a system's external view: which neighbors it
@@ -175,118 +190,35 @@ func (e extSysPartDep) key() string {
 		e.source.GetRef(), e.target.GetRef(), e.direction, label)
 }
 
-func (r *render) generateDomainDotSource(domain *catalog.Domain) *dot.DotSource {
-	dw := dot.New(dot.WriterConfig{EdgeMinLen: r.config.NormalEdgeMinLen})
-	dw.Start()
-
-	dw.StartCluster(domain.GetQName())
-
-	for _, s := range domain.GetSystems() {
-		system := r.repo.System(s)
-		dw.AddNode(r.entityNode(system))
-	}
-
-	dw.EndCluster()
-
-	// Find relationships of components and resources in this domain to systems of other domains.
-	type sysLink struct {
-		src *catalog.System
-		tgt *catalog.System
-	}
-	var systemLinks []sysLink
-	seenLinks := make(map[string]bool)
-	for _, ref := range domain.GetSystems() {
-		s := r.repo.System(ref)
-
-		var outgoing []*catalog.LabelRef
-		var incoming []*catalog.LabelRef
-		for _, cRef := range s.GetComponents() {
-			c := r.repo.Component(cRef)
-			outgoing = append(outgoing, c.Spec.DependsOn...)
-			outgoing = append(outgoing, c.Spec.ConsumesAPIs...)
-			incoming = append(incoming, c.GetDependents()...)
-		}
-		for _, aRef := range s.GetAPIs() {
-			a := r.repo.API(aRef)
-			incoming = append(incoming, a.GetConsumers()...)
-		}
-		for _, rRef := range s.GetResources() {
-			res := r.repo.Resource(rRef)
-			incoming = append(incoming, res.GetDependents()...)
-		}
-		addLink := func(ref *catalog.Ref, incoming bool) {
-			e := r.repo.Entity(ref)
-			if sp, ok := e.(catalog.SystemPart); ok {
-				s2 := r.repo.System(sp.GetSystem())
-				if s == s2 {
-					return // Don't create self-links
-				}
-				var src, tgt *catalog.System
-				if incoming {
-					src, tgt = s2, s
-				} else {
-					src, tgt = s, s2
-				}
-				link := fmt.Sprintf("%s -> %s", src.GetRef(), tgt.GetRef())
-				if _, ok := seenLinks[link]; !ok {
-					systemLinks = append(systemLinks, sysLink{src: src, tgt: tgt})
-				}
-				seenLinks[link] = true
-			}
-
-		}
-		for _, dRef := range outgoing {
-			addLink(dRef.Ref, false)
-		}
-		for _, dRef := range incoming {
-			addLink(dRef.Ref, true)
-		}
-
-	}
-	for _, link := range systemLinks {
-		dw.AddNode(r.entityNode(link.src))
-		dw.AddNode(r.entityNode(link.tgt))
-		dw.AddEdge(r.entityEdge(link.src, link.tgt, dot.ESNormal))
-	}
-
-	dw.End()
-
-	return dw.Result()
+// externalGroup collects the relationships with one neighboring container: the
+// system a part belongs to in a system view, the domain a system belongs to in
+// a domain view.
+type externalGroup struct {
+	container catalog.Entity
+	deps      []extSysPartDep
 }
 
-// DomainGraph generates an SVG for the given domain.
-func (r *Renderer) DomainGraph(ctx context.Context, domain *catalog.Domain) (*Result, error) {
-	rd := &render{Renderer: r, kind: DiagramDomain, focalEntity: domain}
-	return runDot(ctx, r.runner, rd.generateDomainDotSource(domain))
-}
-
-// externalSystemGroup collects the dependencies on one external system for
-// which a detailed ("expanded") view was requested.
-type externalSystemGroup struct {
-	sysRef *catalog.Ref
-	deps   []extSysPartDep
-}
-
-// systemExternalModel is what a system's external view consists of, independent
-// of how it is drawn: the focal system's parts that have external
-// relationships, and the neighboring systems it relates to.
+// externalModel is what an "external" view consists of, independent of how it is
+// drawn: the focal entity, the parts of it that have relationships reaching
+// outside, and the neighbors those relationships lead to.
 //
-// Whether a neighbor ends up as a box or as a frame with parts inside is left
-// to the renderer: it depends on whether the detail level left it anything to
-// show.
-type systemExternalModel struct {
-	system *catalog.System
-	// focalParts are the parts of the focal system that have at least one
-	// external relationship, in the order components, APIs, resources.
+// It describes a system's view of the systems around it, and a domain's view of
+// the domains around it, which are the same picture one level apart. Whether a
+// neighbor ends up as a box or as a frame with parts inside is left to the
+// renderer: it depends on whether the detail level left it anything to show.
+type externalModel struct {
+	focal catalog.Entity
+	// focalParts are the parts of the focal entity that have at least one
+	// external relationship, in the order they are drawn.
 	focalParts []catalog.Entity
-	// groups are the neighboring systems, in the order they were encountered.
-	groups []*externalSystemGroup
+	// groups are the neighbors, in the order they were encountered.
+	groups []*externalGroup
 }
 
 // collectSystemExternal walks the focal system's parts and gathers everything
 // the external view shows. Both the dot-based and the native renderer build on
 // it, so that they always show the same content.
-func (r *render) collectSystemExternal(system *catalog.System, opts *SystemViewOptions) *systemExternalModel {
+func (r *render) collectSystemExternal(system *catalog.System, opts *SystemViewOptions) *externalModel {
 	// The selected neighbors are the ones the view covers, each shown with its
 	// parts. Selecting nothing selects everything.
 	selected := map[string]bool{}
@@ -295,7 +227,7 @@ func (r *render) collectSystemExternal(system *catalog.System, opts *SystemViewO
 	}
 	allSelected := len(selected) == 0
 
-	m := &systemExternalModel{system: system}
+	m := &externalModel{focal: system}
 
 	// endpoint returns the entity an edge end is drawn as: the part itself, or
 	// the system containing it when the detail level leaves that kind of part
@@ -311,7 +243,7 @@ func (r *render) collectSystemExternal(system *catalog.System, opts *SystemViewO
 		return sp
 	}
 
-	extSPDeps := map[string]*externalSystemGroup{}
+	extSPDeps := map[string]*externalGroup{}
 	// seenDeps drops dependencies that have become indistinguishable: several
 	// components of the focal system talking to the same neighbor collapse into
 	// one relationship as soon as the components themselves are not drawn.
@@ -340,7 +272,7 @@ func (r *render) collectSystemExternal(system *catalog.System, opts *SystemViewO
 
 		g, ok := extSPDeps[dstSysRef.QName()]
 		if !ok {
-			g = &externalSystemGroup{sysRef: dstSysRef}
+			g = &externalGroup{container: r.repo.System(dstSysRef)}
 			extSPDeps[dstSysRef.QName()] = g
 			m.groups = append(m.groups, g)
 		}
@@ -515,7 +447,7 @@ func (r *render) generateSystemInternalDotSource(system *catalog.System) *dot.Do
 // rather than by graphviz, which is why it needs no context.
 func (r *Renderer) SystemExternalGraph(_ context.Context, system *catalog.System, opts *SystemViewOptions) (*Result, error) {
 	rd := &render{Renderer: r, kind: DiagramSystem, focalEntity: system}
-	d, meta := rd.buildSystemExternalDiagram(rd.collectSystemExternal(system, opts))
+	d, meta := rd.buildExternalDiagram(rd.collectSystemExternal(system, opts))
 	return &Result{
 		SVG:      sysview.Render(d, sysview.DefaultStyle()),
 		Metadata: meta,

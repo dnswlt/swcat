@@ -417,13 +417,19 @@ func TestGraph_Topology(t *testing.T) {
 // The external view leads with the contracts between systems: the internal view
 // already covers what a system is made of.
 func TestDefaultDetailLevelIsAPIs(t *testing.T) {
+	// Each view passes its own fallback; the system view leads with APIs.
 	for _, s := range []string{"", "unknown"} {
-		if got := ParseDetailLevel(s); got != DetailAPIs {
+		if got := ParseDetailLevel(s, DetailAPIs); got != DetailAPIs {
 			t.Errorf("ParseDetailLevel(%q) = %v, want %v", s, got, DetailAPIs)
 		}
+		if got := ParseDetailLevel(s, DetailSystems); got != DetailSystems {
+			t.Errorf("ParseDetailLevel(%q) = %v, want %v", s, got, DetailSystems)
+		}
 	}
-	for s, want := range map[string]DetailLevel{"systems": DetailSystems, "apis": DetailAPIs, "all": DetailAll} {
-		if got := ParseDetailLevel(s); got != want {
+	for s, want := range map[string]DetailLevel{
+		"domains": DetailDomains, "systems": DetailSystems, "apis": DetailAPIs, "all": DetailAll,
+	} {
+		if got := ParseDetailLevel(s, DetailAll); got != want {
 			t.Errorf("ParseDetailLevel(%q) = %v, want %v", s, got, want)
 		}
 	}

@@ -24,15 +24,15 @@
         {{ end }}
 
         {{ if .DetailOptions }}
-        <!-- How far into a system the view goes. Kinds that are left out have
-             their relationships attributed to the system containing them. -->
+        <!-- How far into its neighbors the view goes. Entities that are left
+             out have their relationships attributed to whatever contains them. -->
         <div class="ml-auto mb-1 flex items-center gap-2 text-sm text-gray-500">
             Detail
             <div class="inline-flex rounded-full bg-gray-100 p-0.5" role="group">
                 {{ range $.DetailOptions }}
                 <a role="button"
                    aria-pressed="{{ if .Active }}true{{ else }}false{{ end }}"
-                   hx-get="{{ $.SystemURL }}"
+                   hx-get="{{ $.EntityURL }}"
                    hx-target="#svg-wrapper"
                    hx-swap="outerHTML"
                    hx-push-url="true"
@@ -47,20 +47,21 @@
         {{ end }}
     </div>
 
-    {{ if .ExternalSystemChips }}
-    <!-- Neighboring systems. Selecting narrows the view to the selected ones;
-         selecting none covers all of them. Click selects one, Cmd/Ctrl-click
-         adds to the selection, and clicking the only selected one clears it. -->
+    {{ if .ExternalChips }}
+    <!-- Neighbors: systems on a system page, domains on a domain page.
+         Selecting narrows the view to the selected ones; selecting none covers
+         all of them. Click selects one, Cmd/Ctrl-click adds to the selection,
+         and clicking the only selected one clears it. -->
     <div id="external-systems" class="flex flex-wrap gap-2 items-center">
-        {{ range .ExternalSystemChips }}
+        {{ range .ExternalChips }}
         <a role="button"
            aria-pressed="{{ if .Selected }}true{{ else }}false{{ end }}"
-           hx-get="{{ $.SystemURL }}"
+           hx-get="{{ $.EntityURL }}"
            hx-target="#svg-wrapper"
            hx-swap="outerHTML"
            hx-push-url="true"
            data-chip-action="select"
-           data-system-ref="{{ .Ref }}"
+           data-entity-ref="{{ .Ref }}"
            class="px-3 py-1 rounded-full text-xs cursor-pointer transition-colors {{ if .Selected }}bg-blue-100 text-blue-700 hover:bg-blue-200{{ else }}bg-gray-100 text-gray-500 hover:bg-gray-200{{ end }}"
            title="{{ if .Sole }}Show all systems{{ else }}Show only {{ .Name }} (Cmd/Ctrl-click to add to the selection){{ end }}">
             {{ .Name }}

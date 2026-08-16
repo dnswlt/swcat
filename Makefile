@@ -1,6 +1,7 @@
 SHELL := /bin/sh
 
 GO ?= go
+ROOT_DIR ?= ./examples/flights
 VERSION ?= $(shell git describe --tags --always --dirty)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
 
@@ -37,7 +38,7 @@ release-windows:
 run-examples:
 	$(GO) run $(LDFLAGS) ./cmd/swcat \
 		-addr localhost:9191 \
-		-root-dir ./examples/flights \
+		-root-dir "$(ROOT_DIR)" \
 		-database-dsn "file:./data/swcat.db" \
 		-documents-dir ./examples/flights/documents
 
