@@ -438,6 +438,47 @@ type LinkGroup struct {
 	Links   []*catalog.Link
 }
 
+// EntityKindGroup is a named, ordered group of entities of the same kind for
+// rendering compact entity lists.
+type EntityKindGroup struct {
+	Label    string
+	Entities []catalog.Entity
+}
+
+// groupOwnedEntities returns entities owned by owner, grouped in catalog
+// hierarchy order. Comparing refs directly keeps ownership scoped to the
+// correct namespace.
+func groupOwnedEntities(entities []catalog.Entity, owner *catalog.Ref) []EntityKindGroup {
+	kinds := []struct {
+		kind  catalog.Kind
+		label string
+	}{
+		{catalog.KindDomain, "Domains"},
+		{catalog.KindSystem, "Systems"},
+		{catalog.KindComponent, "Components"},
+		{catalog.KindAPI, "APIs"},
+		{catalog.KindResource, "Resources"},
+	}
+
+	ownedByKind := make(map[catalog.Kind][]catalog.Entity, len(kinds))
+	for _, entity := range entities {
+		if entity.GetOwner().Equal(owner) {
+			ownedByKind[entity.GetKind()] = append(ownedByKind[entity.GetKind()], entity)
+		}
+	}
+
+	result := make([]EntityKindGroup, 0, len(kinds))
+	for _, k := range kinds {
+		owned := ownedByKind[k.kind]
+		if len(owned) == 0 {
+			continue
+		}
+		slices.SortFunc(owned, catalog.CompareEntityByRef)
+		result = append(result, EntityKindGroup{Label: k.label, Entities: owned})
+	}
+	return result
+}
+
 // groupLinks partitions links into LinkGroups. Links with a non-empty GroupInfo.Group
 // are collected into a shared group (preserving first-occurrence order). All other
 // links each become their own single-entry group.

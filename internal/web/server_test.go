@@ -363,6 +363,24 @@ func TestGroupDetail_OK_NoSVG(t *testing.T) {
 		t.Fatalf("expected text %q not found; body (truncated):\n%s",
 			"test-group", body[:min(600, len(body))])
 	}
+
+	for _, want := range []string{
+		"Owned entities",
+		"Domains",
+		`href="/ui/domains/test-domain"`,
+		"Systems",
+		`href="/ui/systems/test-system"`,
+		"Components",
+		`href="/ui/components/test-component"`,
+		"APIs",
+		`href="/ui/apis/test-api"`,
+		"Resources",
+		`href="/ui/resources/test-resource"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expected %q in group detail page", want)
+		}
+	}
 }
 
 func TestServeEntitiesJSON_OK(t *testing.T) {

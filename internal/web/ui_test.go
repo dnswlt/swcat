@@ -144,6 +144,53 @@ func TestFormatLabels(t *testing.T) {
 	}
 }
 
+func TestGroupOwnedEntities(t *testing.T) {
+	owner := catalog.MustParseRef("group:owners/platform")
+	otherOwner := catalog.MustParseRef("group:other/platform")
+	entities := []catalog.Entity{
+		&catalog.Component{
+			Metadata: &catalog.Metadata{Name: "worker", Namespace: "apps"},
+			Spec:     &catalog.ComponentSpec{Owner: owner},
+		},
+		&catalog.API{
+			Metadata: &catalog.Metadata{Name: "events", Namespace: "apps"},
+			Spec:     &catalog.APISpec{Owner: owner},
+		},
+		&catalog.Component{
+			Metadata: &catalog.Metadata{Name: "api", Namespace: "apps"},
+			Spec:     &catalog.ComponentSpec{Owner: owner},
+		},
+		&catalog.Domain{
+			Metadata: &catalog.Metadata{Name: "commerce"},
+			Spec:     &catalog.DomainSpec{Owner: owner},
+		},
+		&catalog.System{
+			Metadata: &catalog.Metadata{Name: "not-owned"},
+			Spec:     &catalog.SystemSpec{Owner: otherOwner},
+		},
+		&catalog.Resource{
+			Metadata: &catalog.Metadata{Name: "unowned"},
+			Spec:     &catalog.ResourceSpec{},
+		},
+	}
+
+	var got []string
+	for _, group := range groupOwnedEntities(entities, owner) {
+		got = append(got, group.Label)
+		for _, entity := range group.Entities {
+			got = append(got, entity.GetRef().String())
+		}
+	}
+	want := []string{
+		"Domains", "domain:commerce",
+		"Components", "component:apps/api", "component:apps/worker",
+		"APIs", "api:apps/events",
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("groupOwnedEntities() mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestSetQueryParam(t *testing.T) {
 	tests := []struct {
 		name       string

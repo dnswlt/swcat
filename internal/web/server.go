@@ -1133,8 +1133,9 @@ func (s *Server) serveGroup(w http.ResponseWriter, r *http.Request, groupID stri
 		return
 	}
 	params := map[string]any{
-		"PageTitle": group.GetQName(),
-		"Group":     group,
+		"PageTitle":         group.GetQName(),
+		"Group":             group,
+		"OwnedEntityGroups": groupOwnedEntities(data.repo.AllEntities(), group.GetRef()),
 	}
 
 	activeComments, err := s.getActiveComments(group.GetRef())
