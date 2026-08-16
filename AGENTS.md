@@ -13,7 +13,8 @@ Correct what goes stale rather than appending to it.
 ```
 make build          # go build ./cmd/swcat
 make build-web      # vite build -> static/dist (gitignored)
-make test           # go test ./...
+make test           # go test ./... plus the frontend tests
+make test-web       # the frontend tests, on node's runner (no dependencies)
 make test-integration  # -tags=integration; needs graphviz `dot` on PATH
 ```
 
@@ -28,7 +29,7 @@ first. `-base-dir .` serves both from disk during development.
 - `internal/web` — HTTP handlers, templates, session/edit flows
 - `internal/svg` — builds diagrams from the catalog
 - `internal/dot` — writes graphviz source and runs `dot`
-- `internal/sysview` — lays out and renders the system external view in process
+- `internal/sysview` — lays out and renders the external views in process
 - `internal/plugins`, `internal/lint`, `internal/query` — extensions, checks, search
 
 ## Frontend
@@ -40,8 +41,19 @@ Go `html/template` + HTMX + vanilla JS. No component framework.
   Repeat utilities rather than adding component classes; extract a template
   partial if the duplication becomes real.
 - Tailwind scans `templates/`, so a new utility class needs `make build-web`.
-- `web/main.js` dispatches per-page setup on `document.body.dataset.page`.
 - Assets are content-hashed and resolved through the `asset` template function.
+
+**Behavior is keyed to markup, not to pages.** `web/features.js` lists, per
+feature, the selector it needs; a page gets a diagram or an editor by containing
+one. Adding a feature to a page is a template change. The scan runs again on
+every `svgUpdated` event, because a swap can bring in markup the page did not
+have — so everything it starts has to be safe to run twice, which is what
+`claim()` in `web/dom.js` is for. Only genuinely page-specific behavior (see
+`document.body.dataset.page` in `web/diagram.js`) asks what page it is on.
+
+htmx requests that carry view state rebuild their query params from the URL, so
+the URL stays the single source of truth: see `onConfigRequest` in
+`web/url-params.js`, used by the graph page and the relationship views.
 
 ## Diagrams
 
