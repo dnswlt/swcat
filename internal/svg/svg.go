@@ -165,29 +165,31 @@ const (
 	DirOutgoing
 )
 
-// extSysPartDep represents one relationship between the focal system and a
-// neighboring one.
+// relationship is one relationship from the catalog, between the entities that
+// actually declare it — which are not always the ones drawn.
+type relationship struct {
+	src catalog.Entity
+	dst catalog.Entity
+	ref *catalog.LabelRef
+}
+
+// extSysPartDep is one arrow between the focal entity and a neighboring one.
 //
-// source and target are the entities the edge is drawn between. They are the
-// system parts involved, except where the detail level leaves a part out, in
-// which case they are the system containing it.
+// source and target are what the arrow is drawn between. They are the system
+// parts involved, except where the detail level leaves a part out, in which case
+// they are whatever contains it — and then a single arrow stands for several
+// relationships at once, all of them in rels.
 type extSysPartDep struct {
 	source    catalog.Entity
 	target    catalog.Entity
-	ref       *catalog.LabelRef
 	direction DependencyDir
+	rels      []relationship
 }
 
-// key identifies the relationship as drawn. Two dependencies that end up
-// between the same entities, in the same direction and with the same label are
-// one arrow in the diagram.
+// key identifies the arrow: everything between the same two boxes, pointing the
+// same way, is one arrow.
 func (e extSysPartDep) key() string {
-	var label string
-	if e.ref != nil {
-		label = e.ref.Label
-	}
-	return fmt.Sprintf("%s -> %s / %v / %s",
-		e.source.GetRef(), e.target.GetRef(), e.direction, label)
+	return fmt.Sprintf("%s -> %s / %v", e.source.GetRef(), e.target.GetRef(), e.direction)
 }
 
 // externalGroup collects the relationships with one neighboring container: the
@@ -195,7 +197,7 @@ func (e extSysPartDep) key() string {
 // a domain view.
 type externalGroup struct {
 	container catalog.Entity
-	deps      []extSysPartDep
+	deps      []*extSysPartDep
 }
 
 // externalModel is what an "external" view consists of, independent of how it is
@@ -244,10 +246,9 @@ func (r *render) collectSystemExternal(system *catalog.System, opts *SystemViewO
 	}
 
 	extSPDeps := map[string]*externalGroup{}
-	// seenDeps drops dependencies that have become indistinguishable: several
-	// components of the focal system talking to the same neighbor collapse into
-	// one relationship as soon as the components themselves are not drawn.
-	seenDeps := map[string]bool{}
+	// The arrows collected so far, by key. A relationship landing between boxes
+	// that are already connected joins that arrow.
+	arrows := map[string]*extSysPartDep{}
 
 	// Adds the src->dst dependency to the group of dst's system.
 	// Ignores intra-system dependencies and unselected systems.
@@ -262,13 +263,16 @@ func (r *render) collectSystemExternal(system *catalog.System, opts *SystemViewO
 			return false
 		}
 
-		dep := extSysPartDep{
-			source: endpoint(src), target: endpoint(dst), ref: ref, direction: dir,
+		dep := &extSysPartDep{
+			source: endpoint(src), target: endpoint(dst), direction: dir,
 		}
-		if seenDeps[dep.key()] {
+		rel := relationship{src: src, dst: dst, ref: ref}
+		if existing, ok := arrows[dep.key()]; ok {
+			existing.rels = append(existing.rels, rel)
 			return true
 		}
-		seenDeps[dep.key()] = true
+		dep.rels = []relationship{rel}
+		arrows[dep.key()] = dep
 
 		g, ok := extSPDeps[dstSysRef.QName()]
 		if !ok {

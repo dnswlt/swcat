@@ -159,8 +159,8 @@ function addDiagramListeners() {
     });
 
     svg.addEventListener('mouseover', (event) => {
-        // Anywhere on the edge, not just its label: the system view draws no
-        // edge labels and shows what an edge connects on hover instead.
+        // Anywhere on the edge: an external view draws no edge labels, so
+        // hovering the line is how an edge is read.
         const edge = event.target.closest('g.edge');
         if (edge) {
             showTooltip(meta.edges[edge.id], event);

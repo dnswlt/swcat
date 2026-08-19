@@ -88,6 +88,10 @@ of which each view offers the part that makes sense for it: a domain view
 (default `apis`). Entities a level omits are represented by whatever contains
 them, and their edges attach to that container's frame.
 
+Two boxes are connected by **one** arrow, whatever number of relationships it
+stands for: several arrows between the same pair would be indistinguishable once
+the entities that told them apart are no longer drawn.
+
 ## Conventions
 
 - Never commit unless asked to. Finished work stays in the working tree until

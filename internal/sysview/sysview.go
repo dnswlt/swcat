@@ -1,6 +1,6 @@
-// Package sysview lays out and renders the "external view" of a system: one
-// focal system in the middle, the systems it talks to in a column left and
-// right of it.
+// Package sysview lays out and renders an "external view": one focal entity in
+// the middle — a system or a domain — and the neighbors it talks to in a column
+// left and right of it.
 //
 // That diagram is structured enough that a general-purpose layout engine like
 // graphviz gives away more than it buys. Doing it directly lets us align the
@@ -41,8 +41,8 @@ const (
 	ShapeRect
 )
 
-// Node is a single box: a part of the focal system, a collapsed external
-// system, or a part of an expanded external system.
+// Node is a single box: a part of the focal entity, a neighbor shown as one
+// box, or a part of a neighbor shown with its parts.
 type Node struct {
 	// ID becomes the SVG element id and is what the frontend resolves to a
 	// route, so it must be the entity ref (e.g. "component:ns/foo").
@@ -55,31 +55,30 @@ type Node struct {
 	geom
 }
 
-// Group is a box drawn around a set of nodes: the focal system, or an external
-// system shown with its parts.
+// Group is a box drawn around a set of nodes: the focal entity, or a neighbor
+// shown with its parts.
 type Group struct {
 	// ID becomes the SVG element id; the caller assigns cluster ids so that
 	// they match the metadata it ships alongside the SVG.
 	ID    string
 	Label string
 	Nodes []*Node
-	// Frame, if set, is what edges attach to that concern the system as a whole
-	// rather than one of its parts — the case when components are hidden and
-	// their dependencies are attributed to the system containing them. It is
-	// never drawn: it borrows the group's own outline, so those edges start and
-	// end on the system's border.
+	// Frame, if set, is what edges attach to that concern the group as a whole
+	// rather than one of its parts, which is where the relationships of parts
+	// that are not drawn end up. It is never drawn itself: it borrows the
+	// group's outline, so those edges start and end on its border.
 	Frame *Node
-	// Fill and Border, when set, paint the group like a box instead of a
-	// container. That is what a system with no parts to show is: a box, and it
-	// should look like the other system boxes rather than like an empty frame.
+	// Fill and Border, when set, paint the group like a box rather than like a
+	// container: an entity with no parts to show is a box, and should look like
+	// the other boxes around it.
 	Fill   string
 	Border string
 
 	geom
 }
 
-// Item is one entry of an external column: either a collapsed system (Node) or
-// a system shown in detail (Group).
+// Item is one entry of a column: a neighbor shown as one box (Node), or one
+// shown with its parts (Group).
 type Item struct {
 	Node  *Node
 	Group *Group
@@ -88,8 +87,8 @@ type Item struct {
 	geom
 }
 
-// Edge connects two nodes by their IDs. One endpoint is always a node of the
-// focal system.
+// Edge connects two nodes by their IDs. One endpoint always belongs to the
+// focal entity.
 type Edge struct {
 	// ID becomes the SVG element id and the key of the edge's metadata entry.
 	ID    string
@@ -114,7 +113,7 @@ type labelBox struct {
 	labelAtSource bool
 }
 
-// Side is which column an external item is placed in.
+// Side is which column an item is placed in.
 type Side int
 
 const (
@@ -122,9 +121,9 @@ const (
 	SideRight
 )
 
-// Diagram is the input to layout and rendering: the focal system, the external
-// systems around it, and the edges between them. Sides, sizes and positions are
-// all computed by Layout.
+// Diagram is the input to layout and rendering: the focal entity, the neighbors
+// around it, and the edges between them. Sides, sizes and positions are all
+// computed by Layout.
 type Diagram struct {
 	Focal     *Group
 	Externals []*Item

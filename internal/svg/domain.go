@@ -113,7 +113,7 @@ func (r *render) collectDomainExternal(domain *catalog.Domain, opts *DomainViewO
 
 	m := &externalModel{focal: domain}
 	groups := map[string]*externalGroup{}
-	seenDeps := map[string]bool{}
+	arrows := map[string]*extSysPartDep{}
 
 	for _, sRef := range domain.GetSystems() {
 		s := r.repo.System(sRef)
@@ -145,11 +145,16 @@ func (r *render) collectDomainExternal(domain *catalog.Domain, opts *DomainViewO
 			if !opts.Detail.draws(catalog.KindSystem) {
 				target = container
 			}
-			dep := extSysPartDep{source: s, target: target, direction: dir}
-			if seenDeps[dep.key()] {
+			dep := &extSysPartDep{source: s, target: target, direction: dir}
+			rel := relationship{src: s, dst: other}
+			if existing, ok := arrows[dep.key()]; ok {
+				// Same two boxes: at the domains level every system of a
+				// neighboring domain is behind one arrow.
+				existing.rels = append(existing.rels, rel)
 				continue
 			}
-			seenDeps[dep.key()] = true
+			dep.rels = []relationship{rel}
+			arrows[dep.key()] = dep
 
 			key := container.GetRef().String()
 			g, ok := groups[key]

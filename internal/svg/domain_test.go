@@ -169,3 +169,29 @@ func TestDomainInternalGraphIsDeterministic(t *testing.T) {
 		}
 	}
 }
+
+// At the domains level one arrow stands for every system behind a neighboring
+// domain, rather than one arrow per system.
+func TestDomainArrowsAggregatePerBoxPair(t *testing.T) {
+	r := flightsRepo(t)
+	dom := r.Domain(&catalog.Ref{Name: "flights"})
+	res, err := NewRenderer(r, nil, DefaultConfig()).
+		DomainExternalGraph(context.Background(), dom, NewDomainViewOptions(nil, DetailDomains))
+	if err != nil {
+		t.Fatalf("DomainExternalGraph failed: %v", err)
+	}
+
+	pairs := map[string]int{}
+	for _, e := range res.Metadata.Edges {
+		pairs[e.From+" -> "+e.To]++
+	}
+	for pair, n := range pairs {
+		if n > 1 {
+			t.Errorf("%s is drawn %d times, want once", pair, n)
+		}
+	}
+	// The payments domain holds two systems, both reached, but it is one arrow.
+	if n := pairs["system:flights-tickets -> domain:payments"]; n != 1 {
+		t.Errorf("arrow to payments drawn %d times, want once", n)
+	}
+}

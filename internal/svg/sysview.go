@@ -2,6 +2,7 @@ package svg
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
@@ -66,9 +67,9 @@ func (r *render) buildExternalDiagram(m *externalModel) (*sysview.Diagram, *dot.
 				b.anchor(item.Group, g.container, dep.target)
 			}
 			if dep.direction == DirOutgoing {
-				b.edge(dep.source, dep.target, dep.ref, class)
+				b.edge(dep.source, dep.target, dep, class)
 			} else {
-				b.edge(dep.target, dep.source, dep.ref, class)
+				b.edge(dep.target, dep.source, dep, class)
 			}
 		}
 	}
@@ -160,9 +161,8 @@ func (b *diagramBuilder) node(e catalog.Entity) *sysview.Node {
 	return n
 }
 
-// edge adds an edge from src to dst. ref may be nil for unlabelled links
-// between the focal system and a collapsed neighbor.
-func (b *diagramBuilder) edge(src, dst catalog.Entity, ref *catalog.LabelRef, class string) {
+// edge adds the arrow for dep, drawn from src to dst.
+func (b *diagramBuilder) edge(src, dst catalog.Entity, dep *extSysPartDep, class string) {
 	b.focalAnchor(src)
 	b.focalAnchor(dst)
 
@@ -173,22 +173,45 @@ func (b *diagramBuilder) edge(src, dst catalog.Entity, ref *catalog.LabelRef, cl
 		To:    dst.GetRef().String(),
 		Class: class,
 	}
-	// The title makes every edge hoverable, labelled or not; a labelled one adds
-	// its label and attributes below it.
+	// The title makes every arrow hoverable, whether or not it says more.
 	info := &dot.EdgeInfo{
 		From:  e.From,
 		To:    e.To,
 		Title: src.GetQName() + " → " + dst.GetQName(),
 	}
-	if ref != nil {
-		layout := b.edgeLabelLayout(src, dst, ref, dot.ESNormal)
+
+	// A label describes a relationship between two particular entities, so it
+	// belongs on the arrow only while those entities are the ones drawn.
+	if rel, ok := dep.singleDrawnRel(); ok && rel.ref != nil {
+		layout := b.edgeLabelLayout(src, dst, rel.ref, dot.ESNormal)
 		e.Label = layout.Label
 		info.Label = layout.Label
 		info.Title = layout.TooltipTitle
 		info.TooltipAttrs = layout.TooltipAttrs
+	} else {
+		// The arrow stands for relationships between entities that are not
+		// drawn, so it reports how many of them it covers.
+		info.TooltipAttrs = []dot.TooltipAttr{
+			{Key: "relationships", Value: strconv.Itoa(len(dep.rels))},
+		}
 	}
+
 	b.meta.Edges[id] = info
 	b.d.Edges = append(b.d.Edges, e)
+}
+
+// singleDrawnRel returns the relationship this arrow stands for, if it stands
+// for exactly one and that one is between the very entities the arrow is drawn
+// between.
+func (d *extSysPartDep) singleDrawnRel() (relationship, bool) {
+	if len(d.rels) != 1 {
+		return relationship{}, false
+	}
+	rel := d.rels[0]
+	if !rel.src.GetRef().Equal(d.source.GetRef()) || !rel.dst.GetRef().Equal(d.target.GetRef()) {
+		return relationship{}, false
+	}
+	return rel, true
 }
 
 func labelStyle(s dot.LabelStyle) sysview.LabelStyle {

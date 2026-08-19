@@ -2,6 +2,7 @@ package svg
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -172,4 +173,116 @@ func containsClass(classes []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// Two boxes are connected by one arrow, whatever number of relationships it
+// stands for: at a coarser level the entities that told them apart are not
+// drawn, so several arrows between one pair would be indistinguishable.
+func TestArrowsAggregatePerBoxPair(t *testing.T) {
+	r := flightsRepo(t)
+	sys := r.System(&catalog.Ref{Name: "flights-tickets"})
+	renderer := NewRenderer(r, nil, DefaultConfig())
+
+	for _, detail := range []DetailLevel{DetailSystems, DetailAPIs, DetailAll} {
+		res, err := renderer.SystemExternalGraph(context.Background(), sys,
+			NewSystemViewOptions(nil, detail))
+		if err != nil {
+			t.Fatalf("SystemExternalGraph failed: %v", err)
+		}
+		pairs := map[string]int{}
+		for _, e := range res.Metadata.Edges {
+			pairs[e.From+" -> "+e.To]++
+		}
+		for pair, n := range pairs {
+			if n > 1 {
+				t.Errorf("detail=%v: %s is drawn %d times, want once", detail, pair, n)
+			}
+		}
+	}
+}
+
+// A label describes a relationship between two particular entities. It belongs
+// on the arrow while those entities are the ones drawn, and nowhere else: at a
+// coarser level the arrow connects something the label was never about.
+func TestLabelsOnlyWhereTheirEntitiesAreDrawn(t *testing.T) {
+	r := flightsRepo(t)
+	sys := r.System(&catalog.Ref{Name: "flights-tickets"})
+	renderer := NewRenderer(r, nil, DefaultConfig())
+
+	for _, detail := range []DetailLevel{DetailSystems, DetailAPIs} {
+		res, err := renderer.SystemExternalGraph(context.Background(), sys,
+			NewSystemViewOptions(nil, detail))
+		if err != nil {
+			t.Fatalf("SystemExternalGraph failed: %v", err)
+		}
+		for _, e := range res.Metadata.Edges {
+			if e.Label != "" {
+				t.Errorf("detail=%v: arrow %s -> %s carries the label %q, "+
+					"but the entities it describes are not drawn",
+					detail, e.From, e.To, e.Label)
+			}
+			// A count of what it covers is not a claim about what it is.
+			for _, a := range e.TooltipAttrs {
+				if a.Key != "relationships" {
+					t.Errorf("detail=%v: arrow %s -> %s carries %q: %q",
+						detail, e.From, e.To, a.Key, a.Value)
+				}
+			}
+		}
+	}
+}
+
+// With the parts themselves on screen, a labelled relationship describes itself.
+func TestSingleRelationshipKeepsItsLabel(t *testing.T) {
+	r := flightsRepo(t)
+	sys := r.System(&catalog.Ref{Name: "flights-tickets"})
+	renderer := NewRenderer(r, nil, DefaultConfig())
+
+	res, err := renderer.SystemExternalGraph(context.Background(), sys,
+		NewSystemViewOptions(nil, DetailAll))
+	if err != nil {
+		t.Fatalf("SystemExternalGraph failed: %v", err)
+	}
+	for _, e := range res.Metadata.Edges {
+		if e.Label != "" {
+			return // a labelled arrow survived aggregation
+		}
+	}
+	t.Error("no arrow kept its label")
+}
+
+// Every arrow whose relationships are not drawn reports how many it stands for,
+// one included: an arrow that said nothing could not be told apart from one that
+// is the relationship it draws.
+func TestCollapsedArrowsAlwaysSayHowMany(t *testing.T) {
+	r := flightsRepo(t)
+	sys := r.System(&catalog.Ref{Name: "flights-tickets"})
+	renderer := NewRenderer(r, nil, DefaultConfig())
+
+	res, err := renderer.SystemExternalGraph(context.Background(), sys,
+		NewSystemViewOptions(nil, DetailAPIs))
+	if err != nil {
+		t.Fatalf("SystemExternalGraph failed: %v", err)
+	}
+
+	ones, more := 0, 0
+	for _, e := range res.Metadata.Edges {
+		if len(e.TooltipAttrs) != 1 || e.TooltipAttrs[0].Key != "relationships" {
+			t.Fatalf("arrow %s -> %s reports %v, want a relationship count",
+				e.From, e.To, e.TooltipAttrs)
+		}
+		n, err := strconv.Atoi(e.TooltipAttrs[0].Value)
+		if err != nil || n < 1 {
+			t.Errorf("arrow %s -> %s reports %q relationships", e.From, e.To, e.TooltipAttrs[0].Value)
+		}
+		if n == 1 {
+			ones++
+		} else {
+			more++
+		}
+	}
+	if ones == 0 || more == 0 {
+		t.Errorf("expected both kinds of arrow at this level, got %d single and %d collapsed",
+			ones, more)
+	}
 }

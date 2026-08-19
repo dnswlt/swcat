@@ -59,9 +59,9 @@ type Style struct {
 	SmallColor     string // color of StyleLight label lines
 }
 
-// DefaultStyle returns the style used for system external views. Font sizes and
-// paddings match what graphviz produced, so the switch does not change how
-// dense the diagrams look.
+// DefaultStyle returns the style used for external views. Font sizes and
+// paddings match what graphviz produces, so these diagrams are no denser than
+// the ones it still draws.
 func DefaultStyle() Style {
 	return Style{
 		FontSize:      11,

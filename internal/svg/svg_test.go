@@ -142,8 +142,7 @@ func TestSystemExternalGraph_DetailSystems(t *testing.T) {
 	}
 }
 
-// A selection narrows the view to the systems in it: everything else drops out,
-// which is how a neighbor gets left out now that there is no exclude control.
+// A selection narrows the view to the systems in it; everything else drops out.
 func TestSystemExternalGraph_UnselectedSystemsAreLeftOut(t *testing.T) {
 	// Select a system that is not sys-a's neighbor, so sys-b falls outside.
 	other := &catalog.Ref{Kind: catalog.KindSystem, Name: "sys-other"}
