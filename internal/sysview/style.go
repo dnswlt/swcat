@@ -21,6 +21,10 @@ type Style struct {
 	NodeRadius    float64 // corner radius of rounded nodes
 	PortInset     float64 // distance between a box's edge and its outermost port
 	MinPortPitch  float64 // smallest vertical distance between two ports on a box
+	// PortSlack is how far an arrow may sit from the middle of a box that has
+	// that side of itself to itself. It buys straight arrows where the boxes
+	// nearly line up, and keeps arrows off the corners where they do not.
+	PortSlack float64
 
 	GroupPadX      float64
 	GroupPadTop    float64 // includes room for the cluster title
@@ -41,7 +45,6 @@ type Style struct {
 	TrackInset  float64 // clearance between a column and the nearest track
 	Margin      float64 // padding around the whole drawing
 	CornerRad   float64 // corner radius of orthogonal edge bends
-	SnapY       float64 // endpoints closer than this vertically are made collinear
 	ArrowLength float64
 	ArrowWidth  float64
 	// EdgeHitWidth is the width of the invisible stroke that makes an edge easy
@@ -80,6 +83,7 @@ func DefaultStyle() Style {
 		NodeRadius:    6,
 		PortInset:     8,
 		MinPortPitch:  10,
+		PortSlack:     5,
 
 		GroupPadX:      12,
 		GroupPadTop:    30,
@@ -95,7 +99,6 @@ func DefaultStyle() Style {
 		TrackInset:   16,
 		Margin:       6,
 		CornerRad:    8,
-		SnapY:        4,
 		ArrowLength:  10,
 		ArrowWidth:   7,
 		EdgeHitWidth: 8,

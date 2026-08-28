@@ -17,8 +17,12 @@ const (
 //
 // The pipeline is a stripped-down Sugiyama: three fixed layers (left column,
 // focal system, right column), crossing reduction by barycenter sweeps,
-// coordinate assignment that pulls each external box level with the boxes it
-// connects to, and finally orthogonal edge routing through vertical tracks.
+// coordinate assignment that pulls each box level with the boxes it connects
+// to, port assignment that pulls each arrow level with the box at its other
+// end, and finally orthogonal routing of what is left through vertical tracks.
+//
+// The three placements are the same problem — values that want to be somewhere
+// and have to keep out of each other's way — and separate() solves all three.
 func Layout(d *Diagram, st Style) {
 	l := &layouter{d: d, st: st}
 	l.index()
@@ -29,15 +33,10 @@ func Layout(d *Diagram, st Style) {
 	l.measure()
 	l.orderLayers()
 	l.placeY()
+	// Which side of a box an edge leaves by and in what order, then — with the
+	// boxes settled — where along that side each port sits.
 	l.assignPorts()
-	// Boxes were placed level with the centers of the boxes they connect to,
-	// which is only an approximation of where the edges actually attach. Now
-	// that the ports are known, nudge the columns so the edges line up with
-	// them, and re-derive the ports from the new positions.
-	for range 3 {
-		l.alignToPorts()
-		l.assignPorts()
-	}
+	l.levelEdges()
 	l.chooseLabelRuns()
 	leftTracks, rightTracks := l.assignTracks()
 	l.placeX(leftTracks, rightTracks)
@@ -51,6 +50,7 @@ type layouter struct {
 	nodeByID map[string]*Node
 	itemOf   map[string]*Item // external node id -> its column item
 	isFocal  map[string]bool
+	isFrame  map[*Node]bool
 
 	left, right []*Item
 
@@ -74,6 +74,7 @@ func (l *layouter) index() {
 	l.nodeByID = map[string]*Node{}
 	l.itemOf = map[string]*Item{}
 	l.isFocal = map[string]bool{}
+	l.isFrame = map[*Node]bool{}
 
 	if l.d.Focal != nil {
 		for _, n := range l.d.Focal.Nodes {
@@ -83,6 +84,7 @@ func (l *layouter) index() {
 		if f := l.d.Focal.Frame; f != nil {
 			l.nodeByID[f.ID] = f
 			l.isFocal[f.ID] = true
+			l.isFrame[f] = true
 		}
 	}
 	for _, it := range l.d.Externals {
@@ -93,6 +95,7 @@ func (l *layouter) index() {
 		if it.Group != nil && it.Group.Frame != nil {
 			f := it.Group.Frame
 			l.nodeByID[f.ID] = f
+			l.isFrame[f] = true
 			l.itemOf[f.ID] = it
 		}
 	}
@@ -531,77 +534,23 @@ func (l *layouter) placeColumnY(items []*Item) {
 	}
 }
 
-// alignToPorts moves each external box by the average offset between its own
-// ports and the ports they connect to, which turns near misses into properly
-// horizontal edges.
-func (l *layouter) alignToPorts() {
-	for _, items := range [][]*Item{l.left, l.right} {
-		desired := make([]float64, len(items))
-		weight := make([]int, len(items))
-		for i, it := range items {
-			var sum float64
-			var cnt int
-			for _, e := range l.d.Edges {
-				if l.item(e) != it {
-					continue
-				}
-				own, partner := e.y2, e.y1 // external end is the edge's target
-				if l.isFocal[e.To] {
-					own, partner = e.y1, e.y2
-				}
-				sum += partner - own
-				cnt++
-			}
-			weight[i] = cnt
-			desired[i] = it.y
-			if cnt > 0 {
-				desired[i] += sum / float64(cnt)
-			}
-		}
-		l.arrangeColumn(items, desired, weight)
-	}
-	l.normalizeY()
-}
-
 // arrangeColumn places items as close to their desired positions as the
 // required vertical spacing allows, giving priority to the best connected ones.
+// An item nothing connects to has no position of its own to defend and simply
+// follows its neighbors.
 func (l *layouter) arrangeColumn(items []*Item, desired []float64, weight []int) {
 	if len(items) == 0 {
 		return
 	}
-	st := l.st
-
-	// Initial feasible placement: top down, never overlapping.
-	y := make([]float64, len(items))
-	for i := range items {
-		y[i] = desired[i]
-		if i > 0 {
-			y[i] = max(y[i], y[i-1]+items[i-1].h+st.GroupVGap)
-		}
+	gaps := make([]float64, max(len(items)-1, 0))
+	for i := range gaps {
+		gaps[i] = items[i].h + l.st.GroupVGap
 	}
-
-	// Relax towards the desired positions, best-connected boxes first.
-	order := make([]int, len(items))
-	for i := range order {
-		order[i] = i
+	w := make([]float64, len(items))
+	for i, cnt := range weight {
+		w[i] = float64(cnt)
 	}
-	sort.SliceStable(order, func(a, b int) bool { return weight[order[a]] > weight[order[b]] })
-	for range 8 {
-		for _, i := range order {
-			lo := math.Inf(-1)
-			hi := math.Inf(1)
-			if i > 0 {
-				lo = y[i-1] + items[i-1].h + st.GroupVGap
-			}
-			if i < len(items)-1 {
-				hi = y[i+1] - items[i].h - st.GroupVGap
-			}
-			if weight[i] == 0 {
-				continue
-			}
-			y[i] = math.Min(math.Max(desired[i], lo), math.Max(lo, hi))
-		}
-	}
+	y := separate(desired, w, gaps, math.Inf(-1), math.Inf(1))
 	for i, it := range items {
 		it.y = y[i]
 	}
@@ -645,10 +594,11 @@ func (l *layouter) portCounts() map[portKey]int {
 	return counts
 }
 
-// assignPorts decides where on a box each edge attaches. Edges always leave and
-// enter through the side facing the other box, and several edges on the same
-// side are spread over the box's height — which measure() already made tall
-// enough to keep them apart.
+// assignPorts decides which side of a box each edge attaches to and in what
+// order the edges on a side run, leaving it to levelEdges to say where along
+// the side each one attaches. Edges always leave and enter through the side
+// facing the other box, and measure() has already made that side long enough
+// to hold them all a pitch apart.
 func (l *layouter) assignPorts() {
 	l.syncFrames()
 	l.portEdges = map[portKey][]*Edge{}
@@ -659,19 +609,52 @@ func (l *layouter) assignPorts() {
 		l.portEdges[portKey{e.dstNode, e.dstSide}] = append(l.portEdges[portKey{e.dstNode, e.dstSide}], e)
 	}
 
-	// Order the ports of each side by where the other end sits, then spread
-	// them over the box, keeping clear of its rounded corners.
+	// Order the ports of each side by where the other end sits, which is the
+	// order that keeps edges from crossing on their way into the box. Where
+	// along the side they end up is levelEdges' business.
 	for key, edges := range l.portEdges {
 		sort.SliceStable(edges, func(a, b int) bool {
 			return l.otherEnd(edges[a], key.node).centerY() < l.otherEnd(edges[b], key.node).centerY()
 		})
-		n := len(edges)
-		span := math.Max(key.node.h-2*l.st.PortInset, 0)
+	}
+}
+
+// portBand returns the range a port on this side of a box may occupy, which
+// keeps it clear of the box's rounded corners.
+func (l *layouter) portBand(n *Node) (lo, hi float64) {
+	span := math.Max(n.h-2*l.st.PortInset, 0)
+	return n.centerY() - span/2, n.centerY() + span/2
+}
+
+// levelEdges puts every port where its edge wants it, so that arrows come out
+// as horizontal runs wherever the boxes allow it.
+//
+// Two things stop a port from simply going where its edge wants it. Its own box
+// holds it: ports keep their order and a pitch apart, inside the box's band.
+// And the gutter holds it: two arrows that would run at the same height are one
+// arrow to the eye, so the heights on offer in a gutter are pulled a pitch apart
+// before the ports are asked to take them. An edge whose two ends both come out
+// on its height is a straight arrow; one where a box had other plans for a port
+// keeps the jog it had, and routing gives it a lane.
+func (l *layouter) levelEdges() {
+	want := l.corridors()
+	for key, edges := range l.portEdges {
+		aim := make([]float64, len(edges))
 		for i, e := range edges {
-			y := key.node.centerY()
-			if n > 1 {
-				y += span * ((float64(i)+0.5)/float64(n) - 0.5)
-			}
+			aim[i] = want[e]
+		}
+		lo, hi := l.portBand(key.node)
+		if c, holds := l.holdY(key.node, key.side); holds {
+			// A box that has this side to itself is met in the middle, give or
+			// take the slack that lets two arrows in one gutter keep apart. An
+			// arrow that would have to reach further than that for a level run
+			// keeps its jog instead: an arrow into the corner of a box says
+			// less about which box it means than a bend says about anything.
+			lo, hi = math.Max(lo, c-l.st.PortSlack), math.Min(hi, c+l.st.PortSlack)
+		}
+		gaps := evenGaps(len(aim), l.st.MinPortPitch)
+		for i, y := range separate(aim, ones(len(aim)), gaps, lo, hi) {
+			e := edges[i]
 			if e.srcNode == key.node && e.srcSide == key.side {
 				e.y1 = y
 			} else {
@@ -679,20 +662,149 @@ func (l *layouter) assignPorts() {
 			}
 		}
 	}
+}
 
-	// Where both ends are the only edge on their side, nudge them onto a common
-	// height if they are nearly level: a straight line reads better than a
-	// barely visible jog.
+// corridors returns the height every edge would like to run at, with the edges
+// of one gutter pulled a pitch apart wherever they would otherwise land on top
+// of each other.
+//
+// An arrow should meet a box in the middle of its side, so an end that has that
+// side of a real box to itself holds the edge at the box's center. The other
+// kinds of end give way: a frame has no height of its own to hold on to, and a
+// side carrying several ports has to spread them out however its edges run. An
+// edge between two ends that both hold takes the height between them; one
+// between two that both give way has nothing to hold it either, and takes the
+// height between the boxes it joins.
+func (l *layouter) corridors() map[*Edge]float64 {
+	aim := map[*Edge]float64{}
+	byItem := map[*Item][]*Edge{}
 	for _, e := range l.d.Edges {
-		if len(l.portEdges[portKey{e.srcNode, e.srcSide}]) != 1 ||
-			len(l.portEdges[portKey{e.dstNode, e.dstSide}]) != 1 {
-			continue
+		srcY, srcHolds := l.holdY(e.srcNode, e.srcSide)
+		dstY, dstHolds := l.holdY(e.dstNode, e.dstSide)
+		switch {
+		case srcHolds && dstHolds:
+			aim[e] = (srcY + dstY) / 2
+		case srcHolds:
+			aim[e] = srcY
+		case dstHolds:
+			aim[e] = dstY
+		default:
+			aim[e] = (e.srcNode.centerY() + e.dstNode.centerY()) / 2
 		}
-		if math.Abs(e.y1-e.y2) <= l.st.SnapY {
-			mid := (e.y1 + e.y2) / 2
-			e.y1, e.y2 = mid, mid
+		it := l.item(e)
+		byItem[it] = append(byItem[it], e)
+	}
+
+	for _, edges := range byItem {
+		edges = slices.Clone(edges)
+		sortStable(edges, func(e *Edge) float64 { return aim[e] })
+		heights := make([]float64, len(edges))
+		for i, e := range edges {
+			heights[i] = aim[e]
+		}
+		gaps := evenGaps(len(edges), l.st.MinPortPitch)
+		spread := separate(heights, ones(len(edges)), gaps, math.Inf(-1), math.Inf(1))
+		for i, e := range edges {
+			aim[e] = spread[i]
 		}
 	}
+	return aim
+}
+
+// holdY reports whether this end of an edge holds it at a height of its own,
+// and which height that is.
+func (l *layouter) holdY(n *Node, side int) (float64, bool) {
+	if l.isFrame[n] || len(l.portEdges[portKey{n, side}]) != 1 {
+		return 0, false
+	}
+	return n.centerY(), true
+}
+
+// separate places values as close to want as it can while keeping them in the
+// given order, at least gaps[i] apart from their successor, and within
+// [lo, hi]. Weights say who gives way when two values pull against each other.
+//
+// This is the layout's one placement primitive: rows of boxes in a column,
+// ports down the side of a box and the heights on offer in a gutter are all the
+// same problem, of values that want to be somewhere and have to keep out of
+// each other's way.
+//
+// Taking the gaps out of the values turns "far enough apart and in order" into
+// plain "in order", and what is left is a weighted isotonic fit, solved by
+// pooling neighbors that come out in the wrong order onto their common average
+// — the classic pool-adjacent-violators algorithm. Blocks of pooled values move
+// as one, which is what "give way as a row" looks like.
+func separate(want, weight, gaps []float64, lo, hi float64) []float64 {
+	n := len(want)
+	if n == 0 {
+		return nil
+	}
+	offset := make([]float64, n)
+	for i := 1; i < n; i++ {
+		offset[i] = offset[i-1] + gaps[i-1]
+	}
+	out := make([]float64, 0, n)
+	// Ordered values are spaced by at least the offsets, so it is enough to
+	// hold the first inside [lo, hi] and the last inside what is left of it.
+	zLo, zHi := lo, hi-offset[n-1]
+	if zLo > zHi {
+		// The room does not stretch to the gaps — measure() sizes boxes so that
+		// it should not happen — so the values share out what there is.
+		for i := range n {
+			out = append(out, lo+(hi-lo)*(float64(i)+0.5)/float64(n))
+		}
+		return out
+	}
+
+	type block struct {
+		wsum, wysum float64
+	}
+	blocks := make([]block, 0, n)
+	counts := make([]int, 0, n)
+	for i, w := range want {
+		z := math.Min(math.Max(w-offset[i], zLo), zHi)
+		wt := math.Max(weight[i], 1e-6)
+		b, c := block{wsum: wt, wysum: wt * z}, 1
+		for len(blocks) > 0 {
+			prev := blocks[len(blocks)-1]
+			if prev.wysum/prev.wsum <= b.wysum/b.wsum {
+				break
+			}
+			b = block{wsum: prev.wsum + b.wsum, wysum: prev.wysum + b.wysum}
+			c += counts[len(counts)-1]
+			blocks, counts = blocks[:len(blocks)-1], counts[:len(counts)-1]
+		}
+		blocks, counts = append(blocks, b), append(counts, c)
+	}
+	for i, b := range blocks {
+		for range counts[i] {
+			out = append(out, b.wysum/b.wsum+offset[len(out)])
+		}
+	}
+	return out
+}
+
+// evenGaps returns the gaps for n values that all have to keep the same
+// distance from their neighbor.
+func evenGaps(n int, gap float64) []float64 {
+	if n < 2 {
+		return nil
+	}
+	gaps := make([]float64, n-1)
+	for i := range gaps {
+		gaps[i] = gap
+	}
+	return gaps
+}
+
+// ones returns n weights of equal weight, for values that have no reason to
+// give way to each other.
+func ones(n int) []float64 {
+	w := make([]float64, n)
+	for i := range w {
+		w[i] = 1
+	}
+	return w
 }
 
 // chooseLabelRuns decides, for each labelled edge, whether its label goes on

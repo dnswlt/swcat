@@ -512,3 +512,138 @@ func TestHitAreasDoNotOverlap(t *testing.T) {
 			st.EdgeHitWidth, st.MinPortPitch)
 	}
 }
+
+// Two systems that consume each other's APIs face each other with one arrow
+// each way per pair of boxes. One end of each arrow is a box, the other its
+// neighbor's frame, and the two sit a few points apart — close enough that
+// routing each one on its own leaves two tiny jogs next to each other in the
+// gutter, which reads as a single squiggle rather than as two arrows. They have
+// to come out as parallel runs.
+func TestFacingEdgesRunParallelInsteadOfJogging(t *testing.T) {
+	for _, pairs := range []int{1, 3} {
+		t.Run(fmt.Sprintf("%dpairs", pairs), func(t *testing.T) {
+			st := DefaultStyle()
+			d := &Diagram{Focal: &Group{
+				ID:    "svg-cluster-0",
+				Label: "focal",
+				Frame: &Node{ID: "system:focal"},
+			}}
+			peer := &Group{ID: "svg-cluster-1", Label: "peer", Frame: &Node{ID: "system:peer"}}
+			d.Externals = []*Item{{Group: peer}}
+			for i := range pairs {
+				focalAPI := fmt.Sprintf("focal-api-%d", i)
+				peerAPI := fmt.Sprintf("peer-api-%d", i)
+				d.Focal.Nodes = append(d.Focal.Nodes, &Node{ID: focalAPI, Labels: []Label{{Text: focalAPI}}})
+				peer.Nodes = append(peer.Nodes, &Node{ID: peerAPI, Labels: []Label{{Text: peerAPI}}})
+				d.Edges = append(d.Edges,
+					&Edge{ID: fmt.Sprintf("svg-edge-%d-out", i), From: "system:focal", To: peerAPI},
+					&Edge{ID: fmt.Sprintf("svg-edge-%d-in", i), From: "system:peer", To: focalAPI},
+				)
+			}
+			Layout(d, st)
+
+			for _, e := range d.Edges {
+				if math.Abs(e.y1-e.y2) > 0.01 {
+					t.Errorf("edge %s is not horizontal: y1=%.2f y2=%.2f", e.ID, e.y1, e.y2)
+				}
+				if e.track != -1 {
+					t.Errorf("edge %s should not need a track", e.ID)
+				}
+			}
+			ys := make([]float64, 0, len(d.Edges))
+			for _, e := range d.Edges {
+				ys = append(ys, e.y1)
+			}
+			slices.Sort(ys)
+			for i := 1; i < len(ys); i++ {
+				if gap := ys[i] - ys[i-1]; gap < st.MinPortPitch-0.01 {
+					t.Errorf("two arrows run %.1f apart, want at least %.1f", gap, st.MinPortPitch)
+				}
+			}
+		})
+	}
+}
+
+// An arrow should meet a box in the middle of its side. A box that carries
+// several of them has to spread them out, but a box at the quiet end of a fan
+// keeps its arrow centered, however far the other end had to move.
+func TestArrowsMeetAQuietBoxInTheMiddle(t *testing.T) {
+	var targets, edges []string
+	for i := range 8 {
+		name := fmt.Sprintf("target%02d", i)
+		targets = append(targets, name)
+		edges = append(edges, "src->"+name)
+	}
+	d := diagram([]string{"src"}, targets, edges)
+	Layout(d, DefaultStyle())
+
+	for _, e := range d.Edges {
+		target := itemByID(d, e.To)
+		if math.Abs(e.y2-target.centerY()) > 0.01 {
+			t.Errorf("arrow enters %q at y=%.2f, want its center %.2f",
+				e.To, e.y2, target.centerY())
+		}
+	}
+}
+
+// separate is the layout's one placement primitive, so its promises are worth
+// pinning down: order kept, gaps kept, bounds kept, and no one moved who did
+// not have to.
+func TestSeparate(t *testing.T) {
+	const inf = math.MaxFloat64
+
+	t.Run("leaves values that already fit alone", func(t *testing.T) {
+		got := separate([]float64{0, 20, 40}, ones(3), evenGaps(3, 10), -inf, inf)
+		for i, want := range []float64{0, 20, 40} {
+			if math.Abs(got[i]-want) > 1e-9 {
+				t.Errorf("value %d moved to %.2f, want %.2f", i, got[i], want)
+			}
+		}
+	})
+
+	t.Run("pushes colliding values apart around their center", func(t *testing.T) {
+		got := separate([]float64{50, 50}, ones(2), evenGaps(2, 10), -inf, inf)
+		if math.Abs(got[0]-45) > 1e-9 || math.Abs(got[1]-55) > 1e-9 {
+			t.Errorf("got %v, want [45 55]", got)
+		}
+	})
+
+	t.Run("makes the lighter value give way", func(t *testing.T) {
+		got := separate([]float64{50, 50}, []float64{9, 1}, evenGaps(2, 10), -inf, inf)
+		if math.Abs(got[0]-49) > 1e-9 || math.Abs(got[1]-59) > 1e-9 {
+			t.Errorf("got %v, want [49 59]", got)
+		}
+	})
+
+	t.Run("keeps everything within bounds", func(t *testing.T) {
+		got := separate([]float64{-100, 0, 100}, ones(3), evenGaps(3, 10), 0, 40)
+		for i, y := range got {
+			if y < 0 || y > 40 {
+				t.Errorf("value %d at %.2f is outside [0, 40]", i, y)
+			}
+			if i > 0 && got[i]-got[i-1] < 10-1e-9 {
+				t.Errorf("values %d and %d are %.2f apart, want 10", i-1, i, got[i]-got[i-1])
+			}
+		}
+	})
+
+	t.Run("shares out room too small for the gaps", func(t *testing.T) {
+		got := separate([]float64{0, 0, 0}, ones(3), evenGaps(3, 10), 0, 6)
+		for i, y := range got {
+			if y < 0 || y > 6 {
+				t.Errorf("value %d at %.2f is outside [0, 6]", i, y)
+			}
+			if i > 0 && got[i] <= got[i-1] {
+				t.Errorf("values %d and %d came out in the wrong order", i-1, i)
+			}
+		}
+	})
+
+	t.Run("takes the gaps between the values it is given", func(t *testing.T) {
+		// Rows of boxes are spaced by the height of the box above.
+		got := separate([]float64{0, 0}, ones(2), []float64{36 + 24}, -inf, inf)
+		if gap := got[1] - got[0]; math.Abs(gap-60) > 1e-9 {
+			t.Errorf("rows are %.2f apart, want 60", gap)
+		}
+	})
+}
