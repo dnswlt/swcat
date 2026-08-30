@@ -108,6 +108,10 @@ type storeData struct {
 	config        *config.Bundle
 	svgCache      *lru.Cache[string, *svg.Result]
 	findingsCache *lru.Cache[string, []lint.Finding]
+	// finder searches repo. It lives here rather than on Server because its
+	// property providers need the repository and the findings cache of this
+	// very ref (see newFinder).
+	finder *repo.Finder
 }
 
 // StatusReader is used by Server to retrieve status information from
@@ -129,7 +133,6 @@ type Server struct {
 	mu           sync.RWMutex
 	storeDataMap map[string]*storeData
 	source       store.Source
-	finder       *repo.Finder
 
 	dotRunner dot.Runner
 
@@ -249,45 +252,11 @@ func NewServer(opts ServerOptions, source store.Source, serverOpts ...ServerOpti
 		storeDataMap: make(map[string]*storeData),
 		source:       source,
 		dotRunner:    dotRunner,
-		finder:       repo.NewFinder(),
 		started:      time.Now(),
 	}
 
 	for _, opt := range serverOpts {
 		opt(s)
-	}
-
-	if s.commentsStore != nil {
-		s.finder.RegisterPropertyProvider(func(e catalog.Entity, prop string) ([]string, bool) {
-			if prop != "comment" && prop != "comments" {
-				return nil, false
-			}
-			comments, err := s.commentsStore.GetOpenComments(e.GetRef().String())
-			if err != nil {
-				// Warn but don't fail, treating as no comments found
-				log.Printf("Failed to load comments for %s: %v", e.GetRef(), err)
-				return nil, false
-			}
-			var values []string
-			for _, c := range comments {
-				values = append(values, c.Text, c.Author)
-			}
-			return values, true
-		})
-	}
-
-	if s.linter != nil {
-		s.finder.RegisterPropertyProvider(func(e catalog.Entity, prop string) ([]string, bool) {
-			if prop != "lint" {
-				return nil, false
-			}
-			findings := s.linter.Lint(e)
-			var values []string
-			for _, f := range findings {
-				values = append(values, string(f.Severity), f.RuleName)
-			}
-			return values, true
-		})
 	}
 
 	if err := s.reloadTemplates(); err != nil {
@@ -369,7 +338,15 @@ func (s *Server) loadStoreData(ref string) (*storeData, error) {
 		return nil, err
 	}
 
-	cache, err := lru.New[string, *svg.Result](s.opts.SVGCacheSize)
+	data := s.newStoreData(ref, cfg, repoInstance)
+	s.storeDataMap[ref] = data
+	return data, nil
+}
+
+// newStoreData creates the per-ref data derived from repository: the SVG and
+// lint findings caches, and the Finder that searches it.
+func (s *Server) newStoreData(ref string, cfg *config.Bundle, repository *repo.Repository) *storeData {
+	svgCache, err := lru.New[string, *svg.Result](s.opts.SVGCacheSize)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create SVG cache (size: %d): %v", s.opts.SVGCacheSize, err))
 	}
@@ -382,12 +359,60 @@ func (s *Server) loadStoreData(ref string) (*storeData, error) {
 	data := &storeData{
 		ref:           ref,
 		config:        cfg,
-		repo:          repoInstance,
-		svgCache:      cache,
+		repo:          repository,
+		svgCache:      svgCache,
 		findingsCache: findingsCache,
 	}
-	s.storeDataMap[ref] = data
-	return data, nil
+	data.finder = s.newFinder(data)
+	return data
+}
+
+// newFinder builds the Finder for data, registering the property providers that
+// extend the query language beyond an entity's own fields.
+//
+// The providers are bound to a single storeData on purpose. The "lint" property
+// resolves findings through getFindings, i.e. with data.repo as the resolver and
+// through data.findingsCache, so that a query like "lint:error" sees exactly the
+// findings the lint page shows for the same ref. A Finder shared across refs
+// could not do that: it has no way to know which repository a query is running
+// against, so it could only fall back to the resolver-less Linter.Lint, which
+// silently skips the graph-based checks.
+func (s *Server) newFinder(data *storeData) *repo.Finder {
+	finder := repo.NewFinder()
+
+	if s.commentsStore != nil {
+		finder.RegisterPropertyProvider(func(e catalog.Entity, prop string) ([]string, bool) {
+			if prop != "comment" && prop != "comments" {
+				return nil, false
+			}
+			comments, err := s.commentsStore.GetOpenComments(e.GetRef().String())
+			if err != nil {
+				// Warn but don't fail, treating as no comments found
+				log.Printf("Failed to load comments for %s: %v", e.GetRef(), err)
+				return nil, false
+			}
+			var values []string
+			for _, c := range comments {
+				values = append(values, c.Text, c.Author)
+			}
+			return values, true
+		})
+	}
+
+	if s.linter != nil {
+		finder.RegisterPropertyProvider(func(e catalog.Entity, prop string) ([]string, bool) {
+			if prop != "lint" {
+				return nil, false
+			}
+			var values []string
+			for _, f := range s.getFindings(data, e) {
+				values = append(values, string(f.Severity), f.RuleName)
+			}
+			return values, true
+		})
+	}
+
+	return finder
 }
 
 // updateStoreData updates the data stored for data.ref with a new storeData that holds the given repo.
@@ -395,24 +420,7 @@ func (s *Server) loadStoreData(ref string) (*storeData, error) {
 //
 // Callers of this method MUST ensure that s.mu is already held.
 func (s *Server) updateStoreData(data *storeData, repository *repo.Repository) {
-	// Create new empty SVG cache
-	cache, err := lru.New[string, *svg.Result](s.opts.SVGCacheSize)
-	if err != nil {
-		panic(fmt.Sprintf("failed to create SVG cache (size: %d): %v", s.opts.SVGCacheSize, err))
-	}
-
-	findingsCache, err := lru.New[string, []lint.Finding](FindingsCacheSize)
-	if err != nil {
-		panic(fmt.Sprintf("failed to create findings cache: %v", err))
-	}
-
-	s.storeDataMap[data.ref] = &storeData{
-		ref:           data.ref,
-		repo:          repository,
-		config:        data.config,
-		svgCache:      cache,
-		findingsCache: findingsCache,
-	}
+	s.storeDataMap[data.ref] = s.newStoreData(data.ref, data.config, repository)
 }
 
 // withRequestLogging wraps a handler and logs each request.
@@ -531,7 +539,7 @@ func (s *Server) serveComponents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
 	data := s.getStoreData(r)
-	components := s.finder.FindComponents(data.repo, query)
+	components := data.finder.FindComponents(data.repo, query)
 	params := map[string]any{
 		"PageTitle":     "Components",
 		"Components":    components,
@@ -554,7 +562,7 @@ func (s *Server) serveSystems(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	systems := s.finder.FindSystems(data.repo, query)
+	systems := data.finder.FindSystems(data.repo, query)
 	params := map[string]any{
 		"PageTitle":     "Systems",
 		"Systems":       systems,
@@ -853,7 +861,7 @@ func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	apis := s.finder.FindAPIs(data.repo, query)
+	apis := data.finder.FindAPIs(data.repo, query)
 	params := map[string]any{
 		"PageTitle":     "APIs",
 		"APIs":          apis,
@@ -947,7 +955,7 @@ func (s *Server) serveResources(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	resources := s.finder.FindResources(data.repo, query)
+	resources := data.finder.FindResources(data.repo, query)
 	params := map[string]any{
 		"PageTitle":     "Resources",
 		"Resources":     resources,
@@ -1031,7 +1039,7 @@ func (s *Server) serveDomains(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	domains := s.finder.FindDomains(data.repo, query)
+	domains := data.finder.FindDomains(data.repo, query)
 	params := map[string]any{
 		"PageTitle":     "Domains",
 		"Domains":       domains,
@@ -1166,7 +1174,7 @@ func (s *Server) serveGroups(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	groups := s.finder.FindGroups(data.repo, query)
+	groups := data.finder.FindGroups(data.repo, query)
 	params := map[string]any{
 		"PageTitle":     "Groups",
 		"Groups":        groups,
@@ -1335,7 +1343,7 @@ func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
 	var entities []catalog.Entity
 	query := q.Get("q")
 	if query != "" {
-		for _, e := range s.finder.FindEntities(data.repo, query) {
+		for _, e := range data.finder.FindEntities(data.repo, query) {
 			if !selectedIDs[e.GetRef().String()] {
 				entities = append(entities, e)
 			}
@@ -1409,7 +1417,7 @@ func (s *Server) serveEntities(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	entities := s.finder.FindEntities(data.repo, query)
+	entities := data.finder.FindEntities(data.repo, query)
 	params := map[string]any{
 		"PageTitle":     "Search",
 		"Entities":      entities,
@@ -2241,14 +2249,14 @@ func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 		completions = data.repo.LabelKeys(ref.Kind)
 	case "spec.consumesApis", "spec.providesApis":
 		fieldType = "item"
-		apis := s.finder.FindAPIs(data.repo, "")
+		apis := data.finder.FindAPIs(data.repo, "")
 		completions = make([]string, len(apis))
 		for i, a := range apis {
 			completions[i] = a.GetRef().QName()
 		}
 	case "spec.dependsOn":
 		fieldType = "item"
-		entities := s.finder.FindEntities(data.repo, "kind:component OR kind:resource")
+		entities := data.finder.FindEntities(data.repo, "kind:component OR kind:resource")
 		completions = make([]string, len(entities))
 		for i, a := range entities {
 			// Use fully qualified refs including the kind for dependsOn.
@@ -2256,14 +2264,14 @@ func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 		}
 	case "spec.owner":
 		fieldType = "value"
-		groups := s.finder.FindGroups(data.repo, "")
+		groups := data.finder.FindGroups(data.repo, "")
 		completions = make([]string, len(groups))
 		for i, g := range groups {
 			completions[i] = g.GetRef().QName()
 		}
 	case "spec.system":
 		fieldType = "value"
-		systems := s.finder.FindSystems(data.repo, "")
+		systems := data.finder.FindSystems(data.repo, "")
 		completions = make([]string, len(systems))
 		for i, s := range systems {
 			completions[i] = s.GetRef().QName()
@@ -2394,7 +2402,7 @@ func (s *Server) serveEntitiesJSON(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
 	data := s.getStoreData(r)
-	entities := s.finder.FindEntities(data.repo, query)
+	entities := data.finder.FindEntities(data.repo, query)
 
 	resp := &catalog_pb.ListEntitiesResponse{
 		Entities: make([]*catalog_pb.Entity, 0, len(entities)),

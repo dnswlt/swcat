@@ -1173,3 +1173,84 @@ func TestCORS(t *testing.T) {
 		t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, "*")
 	}
 }
+
+// setObservedDep attaches an "swcat-deps/<tool>" status observation to c,
+// naming target as a machine-detected dependency.
+func setObservedDep(t *testing.T, c *catalog.Component, tool, target string) {
+	t.Helper()
+	val, err := json.Marshal(catalog.ObservedDependencies{
+		Dependencies: []catalog.ObservedDependency{{Target: catalog.MustParseRef(target)}},
+	})
+	if err != nil {
+		t.Fatalf("marshal observed deps: %v", err)
+	}
+	if !catalog.MergeObservations(c, map[string]catalog.Observation{
+		catalog.ObservedDepsKeyPrefix + "/" + tool: {Value: val, Producer: tool},
+	}) {
+		t.Fatal("MergeObservations returned false")
+	}
+}
+
+// TestLintQuery_ResolvesGraphChecks pins the wiring of the "lint:" query
+// property. Its provider is registered per storeData (see newFinder), so it
+// lints through getFindings, i.e. with data.repo as the resolver.
+//
+// The dependency-candidate check is what tells the two paths apart: it is
+// skipped entirely when the resolver is nil (see LintWithResolver), so a query
+// for it matches nothing unless the provider is bound to a repository. A CEL
+// rule would not distinguish them — it fires either way.
+func TestLintQuery_ResolvesGraphChecks(t *testing.T) {
+	st := store.NewDiskStore("../../testdata/linting")
+
+	linter, err := lint.NewLinter(&lint.Config{CheckDependencyCandidates: true})
+	if err != nil {
+		t.Fatalf("failed to create linter: %v", err)
+	}
+
+	s, err := NewServer(ServerOptions{
+		Addr:    "127.0.0.1:0",
+		BaseDir: "../..",
+		DotPath: "dot",
+	}, st, WithLinter(linter))
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+
+	data, err := s.loadStoreData("")
+	if err != nil {
+		t.Fatalf("loadStoreData: %v", err)
+	}
+
+	// Give a component an observed dependency that its spec does not declare,
+	// which is exactly what the dependency-candidate check reports.
+	c := data.repo.Component(catalog.MustParseRef("component:docless-component"))
+	if c == nil {
+		t.Fatal("component docless-component not found in testdata/linting")
+	}
+	setObservedDep(t, c, "test-tool", "component:default/undeclared-target")
+
+	// Precondition: this finding exists only on the resolver-aware path.
+	if findings := linter.Lint(c); len(findings) != 0 {
+		t.Fatalf("Linter.Lint without resolver produced %v, want no findings", findings)
+	}
+	findings := linter.LintWithResolver(c, data.repo)
+	if len(findings) != 1 || findings[0].RuleName != lint.DependencyCandidateRuleName {
+		t.Fatalf("LintWithResolver produced %v, want one %s finding",
+			findings, lint.DependencyCandidateRuleName)
+	}
+
+	// The query must see it too, which it can only do through a bound repo.
+	got := data.finder.FindEntities(data.repo, "lint:"+lint.DependencyCandidateRuleName)
+	if len(got) != 1 {
+		t.Fatalf("query lint:%s matched %d entities, want 1 (%s)",
+			lint.DependencyCandidateRuleName, len(got), c.GetRef())
+	}
+	if got[0].GetRef().String() != c.GetRef().String() {
+		t.Errorf("query matched %s, want %s", got[0].GetRef(), c.GetRef())
+	}
+
+	// Findings were resolved through the per-ref cache, not recomputed ad hoc.
+	if data.findingsCache.Len() == 0 {
+		t.Error("findings cache empty: the lint provider bypassed getFindings")
+	}
+}

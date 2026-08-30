@@ -39,7 +39,7 @@ func (s *Server) serveLintFindings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := s.getStoreData(r)
-	allEntities := s.finder.FindEntities(data.repo, "")
+	allEntities := data.finder.FindEntities(data.repo, "")
 
 	reportedGroups := s.linter.ReportedGroups()
 	isReported := func(owner string) bool {
@@ -179,7 +179,7 @@ func (s *Server) serveKubeWorkloads(w http.ResponseWriter, r *http.Request) {
 
 	// Build a set of known workload names from annotations.
 	annotatedNames := make(map[string]bool)
-	for _, e := range s.finder.FindComponents(data.repo, "") {
+	for _, e := range data.finder.FindComponents(data.repo, "") {
 		if v, ok := e.GetMetadata().Annotations[catalog.AnnotKubeName]; ok {
 			annotatedNames[v] = true
 		}
@@ -260,7 +260,7 @@ func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request
 	if a := s.linter.Prometheus().WorkloadNameAnnotation; a != "" {
 		annotationKey = a
 	}
-	for _, e := range s.finder.FindComponents(data.repo, "") {
+	for _, e := range data.finder.FindComponents(data.repo, "") {
 		if v, ok := e.GetMetadata().Annotations[annotationKey]; ok {
 			annotatedNames[v] = true
 		}
@@ -317,7 +317,7 @@ func (s *Server) serveBitbucketResults(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := s.getStoreData(r)
-	entities := s.finder.FindEntities(data.repo, "")
+	entities := data.finder.FindEntities(data.repo, "")
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
@@ -391,7 +391,7 @@ func (s *Server) serveLinkCheckResults(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := s.getStoreData(r)
-	entities := s.finder.FindEntities(data.repo, "")
+	entities := data.finder.FindEntities(data.repo, "")
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
