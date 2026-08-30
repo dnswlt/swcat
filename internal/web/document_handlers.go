@@ -90,4 +90,3 @@ func (s *Server) serveDocuments(w http.ResponseWriter, r *http.Request, docID st
 
 	s.serveHTMLPage(w, r, "documents.html", params)
 }
-
