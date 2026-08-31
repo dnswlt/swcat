@@ -2882,6 +2882,11 @@ func (s *Server) routes() *http.ServeMux {
 			s.deleteObservedDependencies(w, r, r.PathValue("detectedBy"))
 		})))
 
+	// Lint findings, plus the catalog-wide scans a request asks for. A POST
+	// because the scans it can trigger reach out to external systems, and the
+	// Bitbucket one may refresh a server-side cache.
+	root.Handle("POST /catalog/findings", s.handleRefDataDispatch(http.HandlerFunc(s.serveFindings)))
+
 	root.Handle("GET /catalog/autocomplete", s.handleRefDataDispatch(http.HandlerFunc(s.serveAutocomplete)))
 
 	root.HandleFunc("POST /catalog/reload", s.reloadCatalog)

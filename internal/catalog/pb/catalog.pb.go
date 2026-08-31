@@ -83,6 +83,125 @@ func (DependencyRelation) EnumDescriptor() ([]byte, []int) {
 	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{0}
 }
 
+// Scan identifies one of the catalog-wide scans. Unlike the entity lint rules,
+// these reach out to external systems, so each has to be requested by name.
+type Scan int32
+
+const (
+	Scan_SCAN_UNSPECIFIED Scan = 0
+	// Workloads Prometheus reports metrics for. Finds workloads the catalog does
+	// not describe.
+	Scan_SCAN_PROMETHEUS_WORKLOADS Scan = 1
+	// Workloads running in the Kubernetes cluster. Finds workloads the catalog
+	// does not describe.
+	Scan_SCAN_KUBE_WORKLOADS Scan = 2
+	// Files in Bitbucket matched against the entities that link to them.
+	Scan_SCAN_BITBUCKET_FILES Scan = 3
+	// Reachability of the links entities carry in their metadata.
+	Scan_SCAN_LINK_CHECK Scan = 4
+)
+
+// Enum value maps for Scan.
+var (
+	Scan_name = map[int32]string{
+		0: "SCAN_UNSPECIFIED",
+		1: "SCAN_PROMETHEUS_WORKLOADS",
+		2: "SCAN_KUBE_WORKLOADS",
+		3: "SCAN_BITBUCKET_FILES",
+		4: "SCAN_LINK_CHECK",
+	}
+	Scan_value = map[string]int32{
+		"SCAN_UNSPECIFIED":          0,
+		"SCAN_PROMETHEUS_WORKLOADS": 1,
+		"SCAN_KUBE_WORKLOADS":       2,
+		"SCAN_BITBUCKET_FILES":      3,
+		"SCAN_LINK_CHECK":           4,
+	}
+)
+
+func (x Scan) Enum() *Scan {
+	p := new(Scan)
+	*p = x
+	return p
+}
+
+func (x Scan) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Scan) Descriptor() protoreflect.EnumDescriptor {
+	return file_swcat_catalog_v1_catalog_proto_enumTypes[1].Descriptor()
+}
+
+func (Scan) Type() protoreflect.EnumType {
+	return &file_swcat_catalog_v1_catalog_proto_enumTypes[1]
+}
+
+func (x Scan) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Scan.Descriptor instead.
+func (Scan) EnumDescriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{1}
+}
+
+type ScanStatus_State int32
+
+const (
+	ScanStatus_STATE_UNSPECIFIED ScanStatus_State = 0
+	// The section ran and its results are complete.
+	ScanStatus_STATE_OK ScanStatus_State = 1
+	// Not available in this deployment, e.g. no linter configured, or no
+	// Prometheus client. Not an error, and says nothing about the catalog.
+	ScanStatus_STATE_NOT_CONFIGURED ScanStatus_State = 2
+	// The section was attempted and failed; see error.
+	ScanStatus_STATE_FAILED ScanStatus_State = 3
+)
+
+// Enum value maps for ScanStatus_State.
+var (
+	ScanStatus_State_name = map[int32]string{
+		0: "STATE_UNSPECIFIED",
+		1: "STATE_OK",
+		2: "STATE_NOT_CONFIGURED",
+		3: "STATE_FAILED",
+	}
+	ScanStatus_State_value = map[string]int32{
+		"STATE_UNSPECIFIED":    0,
+		"STATE_OK":             1,
+		"STATE_NOT_CONFIGURED": 2,
+		"STATE_FAILED":         3,
+	}
+)
+
+func (x ScanStatus_State) Enum() *ScanStatus_State {
+	p := new(ScanStatus_State)
+	*p = x
+	return p
+}
+
+func (x ScanStatus_State) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ScanStatus_State) Descriptor() protoreflect.EnumDescriptor {
+	return file_swcat_catalog_v1_catalog_proto_enumTypes[2].Descriptor()
+}
+
+func (ScanStatus_State) Type() protoreflect.EnumType {
+	return &file_swcat_catalog_v1_catalog_proto_enumTypes[2]
+}
+
+func (x ScanStatus_State) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ScanStatus_State.Descriptor instead.
+func (ScanStatus_State) EnumDescriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{19, 0}
+}
+
 // Metadata common to all entities.
 type Metadata struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1044,6 +1163,1142 @@ func (x *ObservedDependency) GetEvidence() []string {
 	return nil
 }
 
+// FindingsRequest is the request body of POST /catalog/findings.
+//
+// This is a POST rather than a GET because the scans it can trigger reach out
+// to external systems, and the Bitbucket one may refresh a server-side cache,
+// which is not something intermediaries should be free to repeat on a whim.
+//
+// Entity lint findings are included by default: leave `lint` unset to get them
+// with default options, set it to narrow the selection, or set lint.skip to
+// leave them out. An empty request body therefore returns exactly the entity
+// lint findings.
+//
+// The scans are the other way round: each one runs only if `scans` names it, so
+// nothing expensive happens unless it was asked for. Their options messages
+// only tune a scan that was named; supplying options for a scan absent from
+// `scans` is an error rather than a silently ignored no-op.
+//
+//	{}                                          entity lint findings
+//	{"scans": ["SCAN_KUBE_WORKLOADS"]}          those, plus cluster workloads
+//	{"scans": ["SCAN_BITBUCKET_FILES"],
+//	 "bitbucketFiles": {"refresh": true},
+//	 "lint": {"skip": true}}                    a fresh Bitbucket scan, alone
+type FindingsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The scans to run in addition to the entity lint findings. Empty means none.
+	Scans               []Scan                     `protobuf:"varint,1,rep,packed,name=scans,proto3,enum=swcat.catalog.v1.Scan" json:"scans,omitempty"`
+	Lint                *LintOptions               `protobuf:"bytes,2,opt,name=lint,proto3" json:"lint,omitempty"`
+	PrometheusWorkloads *PrometheusWorkloadOptions `protobuf:"bytes,3,opt,name=prometheus_workloads,json=prometheusWorkloads,proto3" json:"prometheus_workloads,omitempty"`
+	KubeWorkloads       *KubeWorkloadOptions       `protobuf:"bytes,4,opt,name=kube_workloads,json=kubeWorkloads,proto3" json:"kube_workloads,omitempty"`
+	BitbucketFiles      *BitbucketFileOptions      `protobuf:"bytes,5,opt,name=bitbucket_files,json=bitbucketFiles,proto3" json:"bitbucket_files,omitempty"`
+	LinkCheck           *LinkCheckOptions          `protobuf:"bytes,6,opt,name=link_check,json=linkCheck,proto3" json:"link_check,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *FindingsRequest) Reset() {
+	*x = FindingsRequest{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FindingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FindingsRequest) ProtoMessage() {}
+
+func (x *FindingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FindingsRequest.ProtoReflect.Descriptor instead.
+func (*FindingsRequest) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *FindingsRequest) GetScans() []Scan {
+	if x != nil {
+		return x.Scans
+	}
+	return nil
+}
+
+func (x *FindingsRequest) GetLint() *LintOptions {
+	if x != nil {
+		return x.Lint
+	}
+	return nil
+}
+
+func (x *FindingsRequest) GetPrometheusWorkloads() *PrometheusWorkloadOptions {
+	if x != nil {
+		return x.PrometheusWorkloads
+	}
+	return nil
+}
+
+func (x *FindingsRequest) GetKubeWorkloads() *KubeWorkloadOptions {
+	if x != nil {
+		return x.KubeWorkloads
+	}
+	return nil
+}
+
+func (x *FindingsRequest) GetBitbucketFiles() *BitbucketFileOptions {
+	if x != nil {
+		return x.BitbucketFiles
+	}
+	return nil
+}
+
+func (x *FindingsRequest) GetLinkCheck() *LinkCheckOptions {
+	if x != nil {
+		return x.LinkCheck
+	}
+	return nil
+}
+
+type LintOptions struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Leave the entity lint findings out of the response.
+	Skip bool `protobuf:"varint,1,opt,name=skip,proto3" json:"skip,omitempty"`
+	// Restrict findings to entities matching this query, in the syntax of
+	// GET /catalog/entities?q=. Empty means every entity.
+	Query         string `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LintOptions) Reset() {
+	*x = LintOptions{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LintOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LintOptions) ProtoMessage() {}
+
+func (x *LintOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LintOptions.ProtoReflect.Descriptor instead.
+func (*LintOptions) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *LintOptions) GetSkip() bool {
+	if x != nil {
+		return x.Skip
+	}
+	return false
+}
+
+func (x *LintOptions) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+type PrometheusWorkloadOptions struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Report only workloads that no catalog entity describes.
+	UntrackedOnly bool `protobuf:"varint,1,opt,name=untracked_only,json=untrackedOnly,proto3" json:"untracked_only,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrometheusWorkloadOptions) Reset() {
+	*x = PrometheusWorkloadOptions{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrometheusWorkloadOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrometheusWorkloadOptions) ProtoMessage() {}
+
+func (x *PrometheusWorkloadOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrometheusWorkloadOptions.ProtoReflect.Descriptor instead.
+func (*PrometheusWorkloadOptions) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *PrometheusWorkloadOptions) GetUntrackedOnly() bool {
+	if x != nil {
+		return x.UntrackedOnly
+	}
+	return false
+}
+
+type KubeWorkloadOptions struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Report only workloads that no catalog entity describes.
+	UntrackedOnly bool `protobuf:"varint,1,opt,name=untracked_only,json=untrackedOnly,proto3" json:"untracked_only,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KubeWorkloadOptions) Reset() {
+	*x = KubeWorkloadOptions{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KubeWorkloadOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KubeWorkloadOptions) ProtoMessage() {}
+
+func (x *KubeWorkloadOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KubeWorkloadOptions.ProtoReflect.Descriptor instead.
+func (*KubeWorkloadOptions) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *KubeWorkloadOptions) GetUntrackedOnly() bool {
+	if x != nil {
+		return x.UntrackedOnly
+	}
+	return false
+}
+
+type BitbucketFileOptions struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Report only files that matched no catalog entity.
+	UntrackedOnly bool `protobuf:"varint,1,opt,name=untracked_only,json=untrackedOnly,proto3" json:"untracked_only,omitempty"`
+	// Re-run the scan against Bitbucket instead of serving the cached file list.
+	Refresh       bool `protobuf:"varint,2,opt,name=refresh,proto3" json:"refresh,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BitbucketFileOptions) Reset() {
+	*x = BitbucketFileOptions{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BitbucketFileOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BitbucketFileOptions) ProtoMessage() {}
+
+func (x *BitbucketFileOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BitbucketFileOptions.ProtoReflect.Descriptor instead.
+func (*BitbucketFileOptions) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *BitbucketFileOptions) GetUntrackedOnly() bool {
+	if x != nil {
+		return x.UntrackedOnly
+	}
+	return false
+}
+
+func (x *BitbucketFileOptions) GetRefresh() bool {
+	if x != nil {
+		return x.Refresh
+	}
+	return false
+}
+
+type LinkCheckOptions struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Report only links confirmed to be broken, omitting those that merely could
+	// not be checked.
+	BrokenOnly    bool `protobuf:"varint,1,opt,name=broken_only,json=brokenOnly,proto3" json:"broken_only,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkCheckOptions) Reset() {
+	*x = LinkCheckOptions{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkCheckOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkCheckOptions) ProtoMessage() {}
+
+func (x *LinkCheckOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkCheckOptions.ProtoReflect.Descriptor instead.
+func (*LinkCheckOptions) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *LinkCheckOptions) GetBrokenOnly() bool {
+	if x != nil {
+		return x.BrokenOnly
+	}
+	return false
+}
+
+// FindingsResponse is the response body of POST /catalog/findings. A section is
+// present only if it was requested, or -- for lint -- not skipped.
+type FindingsResponse struct {
+	state               protoimpl.MessageState  `protogen:"open.v1"`
+	Lint                *LintFindings           `protobuf:"bytes,1,opt,name=lint,proto3" json:"lint,omitempty"`
+	PrometheusWorkloads *PrometheusWorkloadScan `protobuf:"bytes,2,opt,name=prometheus_workloads,json=prometheusWorkloads,proto3" json:"prometheus_workloads,omitempty"`
+	KubeWorkloads       *KubeWorkloadScan       `protobuf:"bytes,3,opt,name=kube_workloads,json=kubeWorkloads,proto3" json:"kube_workloads,omitempty"`
+	BitbucketFiles      *BitbucketFileScan      `protobuf:"bytes,4,opt,name=bitbucket_files,json=bitbucketFiles,proto3" json:"bitbucket_files,omitempty"`
+	LinkCheck           *LinkCheckScan          `protobuf:"bytes,5,opt,name=link_check,json=linkCheck,proto3" json:"link_check,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *FindingsResponse) Reset() {
+	*x = FindingsResponse{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FindingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FindingsResponse) ProtoMessage() {}
+
+func (x *FindingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FindingsResponse.ProtoReflect.Descriptor instead.
+func (*FindingsResponse) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *FindingsResponse) GetLint() *LintFindings {
+	if x != nil {
+		return x.Lint
+	}
+	return nil
+}
+
+func (x *FindingsResponse) GetPrometheusWorkloads() *PrometheusWorkloadScan {
+	if x != nil {
+		return x.PrometheusWorkloads
+	}
+	return nil
+}
+
+func (x *FindingsResponse) GetKubeWorkloads() *KubeWorkloadScan {
+	if x != nil {
+		return x.KubeWorkloads
+	}
+	return nil
+}
+
+func (x *FindingsResponse) GetBitbucketFiles() *BitbucketFileScan {
+	if x != nil {
+		return x.BitbucketFiles
+	}
+	return nil
+}
+
+func (x *FindingsResponse) GetLinkCheck() *LinkCheckScan {
+	if x != nil {
+		return x.LinkCheck
+	}
+	return nil
+}
+
+// ScanStatus reports how one section of a FindingsResponse fared.
+//
+// Sections are independent: one unreachable external system must not suppress
+// the results of the others. An empty result list means "nothing found" only
+// when the state is STATE_OK, so consumers must check this before concluding
+// that a scan came back clean.
+type ScanStatus struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	State ScanStatus_State       `protobuf:"varint,1,opt,name=state,proto3,enum=swcat.catalog.v1.ScanStatus_State" json:"state,omitempty"`
+	// Human-readable cause. Set when state is STATE_FAILED.
+	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScanStatus) Reset() {
+	*x = ScanStatus{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScanStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScanStatus) ProtoMessage() {}
+
+func (x *ScanStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScanStatus.ProtoReflect.Descriptor instead.
+func (*ScanStatus) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ScanStatus) GetState() ScanStatus_State {
+	if x != nil {
+		return x.State
+	}
+	return ScanStatus_STATE_UNSPECIFIED
+}
+
+func (x *ScanStatus) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+// LintFindings holds the entity-scoped lint rule violations.
+type LintFindings struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        *ScanStatus            `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	Findings      []*Finding             `protobuf:"bytes,2,rep,name=findings,proto3" json:"findings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LintFindings) Reset() {
+	*x = LintFindings{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LintFindings) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LintFindings) ProtoMessage() {}
+
+func (x *LintFindings) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LintFindings.ProtoReflect.Descriptor instead.
+func (*LintFindings) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *LintFindings) GetStatus() *ScanStatus {
+	if x != nil {
+		return x.Status
+	}
+	return nil
+}
+
+func (x *LintFindings) GetFindings() []*Finding {
+	if x != nil {
+		return x.Findings
+	}
+	return nil
+}
+
+// Finding is a single lint rule violation reported for one catalog entity.
+//
+// Findings are derived rather than stored: they are recomputed from the catalog
+// and the lint configuration, so the same entity can yield different findings
+// over time without the catalog itself changing.
+type Finding struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The entity the finding was reported for. Always set.
+	Entity *Ref `protobuf:"bytes,1,opt,name=entity,proto3" json:"entity,omitempty"`
+	// Name of the rule that produced the finding, e.g. "has-description". Checks
+	// that are built in rather than configured use a fixed name, such as
+	// "dependency-candidate".
+	RuleName string `protobuf:"bytes,2,opt,name=rule_name,json=ruleName,proto3" json:"rule_name,omitempty"`
+	// Importance of the finding: "error", "warn" or "info". A string rather than
+	// an enum, spelled as in lint.yml and in the "lint:" query property, so that
+	// one vocabulary covers the configuration, queries and this API.
+	Severity string `protobuf:"bytes,3,opt,name=severity,proto3" json:"severity,omitempty"`
+	// Human-readable description of the violation, and the primary thing to act
+	// on. Some checks embed their supporting evidence here.
+	Message       string `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Finding) Reset() {
+	*x = Finding{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Finding) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Finding) ProtoMessage() {}
+
+func (x *Finding) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Finding.ProtoReflect.Descriptor instead.
+func (*Finding) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *Finding) GetEntity() *Ref {
+	if x != nil {
+		return x.Entity
+	}
+	return nil
+}
+
+func (x *Finding) GetRuleName() string {
+	if x != nil {
+		return x.RuleName
+	}
+	return ""
+}
+
+func (x *Finding) GetSeverity() string {
+	if x != nil {
+		return x.Severity
+	}
+	return ""
+}
+
+func (x *Finding) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+// PrometheusWorkloadScan reports the workloads Prometheus knows about, so that
+// workloads missing from the catalog can be found. It carries workload identity
+// only: metric values and label sets stay in the UI, since the point is to
+// reconcile the catalog, not to expose Prometheus through swcat.
+type PrometheusWorkloadScan struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        *ScanStatus            `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	Workloads     []*PrometheusWorkload  `protobuf:"bytes,2,rep,name=workloads,proto3" json:"workloads,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrometheusWorkloadScan) Reset() {
+	*x = PrometheusWorkloadScan{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrometheusWorkloadScan) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrometheusWorkloadScan) ProtoMessage() {}
+
+func (x *PrometheusWorkloadScan) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrometheusWorkloadScan.ProtoReflect.Descriptor instead.
+func (*PrometheusWorkloadScan) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *PrometheusWorkloadScan) GetStatus() *ScanStatus {
+	if x != nil {
+		return x.Status
+	}
+	return nil
+}
+
+func (x *PrometheusWorkloadScan) GetWorkloads() []*PrometheusWorkload {
+	if x != nil {
+		return x.Workloads
+	}
+	return nil
+}
+
+type PrometheusWorkload struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The catalog entities that claim this workload, by matching name or by
+	// carrying the configured workload-name annotation.
+	//
+	// Repeated because the annotation match is set membership: nothing stops two
+	// entities from naming the same workload, and reporting one of them would be
+	// an arbitrary choice. Empty means untracked -- the workload runs, but the
+	// catalog does not describe it -- and more than one entry is itself worth
+	// looking at, since two entities claiming one workload is a catalog problem.
+	MatchedEntities []*Ref `protobuf:"bytes,2,rep,name=matched_entities,json=matchedEntities,proto3" json:"matched_entities,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *PrometheusWorkload) Reset() {
+	*x = PrometheusWorkload{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrometheusWorkload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrometheusWorkload) ProtoMessage() {}
+
+func (x *PrometheusWorkload) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrometheusWorkload.ProtoReflect.Descriptor instead.
+func (*PrometheusWorkload) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *PrometheusWorkload) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *PrometheusWorkload) GetMatchedEntities() []*Ref {
+	if x != nil {
+		return x.MatchedEntities
+	}
+	return nil
+}
+
+// KubeWorkloadScan reports the workloads running in the cluster, for the same
+// reconciliation purpose as PrometheusWorkloadScan. Identity only, deliberately:
+// labels and annotations stay in the UI so that this does not turn into a
+// general-purpose Kubernetes scanner.
+type KubeWorkloadScan struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        *ScanStatus            `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	Workloads     []*KubeWorkload        `protobuf:"bytes,2,rep,name=workloads,proto3" json:"workloads,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KubeWorkloadScan) Reset() {
+	*x = KubeWorkloadScan{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KubeWorkloadScan) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KubeWorkloadScan) ProtoMessage() {}
+
+func (x *KubeWorkloadScan) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KubeWorkloadScan.ProtoReflect.Descriptor instead.
+func (*KubeWorkloadScan) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *KubeWorkloadScan) GetStatus() *ScanStatus {
+	if x != nil {
+		return x.Status
+	}
+	return nil
+}
+
+func (x *KubeWorkloadScan) GetWorkloads() []*KubeWorkload {
+	if x != nil {
+		return x.Workloads
+	}
+	return nil
+}
+
+type KubeWorkload struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// One of "Deployment", "StatefulSet", "CronJob", "DaemonSet", "Job".
+	Kind      string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	Name      string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Namespace string `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	// The catalog entities that claim this workload. Empty means untracked; see
+	// PrometheusWorkload.matched_entities for why this is repeated.
+	MatchedEntities []*Ref `protobuf:"bytes,4,rep,name=matched_entities,json=matchedEntities,proto3" json:"matched_entities,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *KubeWorkload) Reset() {
+	*x = KubeWorkload{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KubeWorkload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KubeWorkload) ProtoMessage() {}
+
+func (x *KubeWorkload) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KubeWorkload.ProtoReflect.Descriptor instead.
+func (*KubeWorkload) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *KubeWorkload) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *KubeWorkload) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *KubeWorkload) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *KubeWorkload) GetMatchedEntities() []*Ref {
+	if x != nil {
+		return x.MatchedEntities
+	}
+	return nil
+}
+
+// BitbucketFileScan reports the files found in Bitbucket and the entities they
+// were matched to.
+type BitbucketFileScan struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        *ScanStatus            `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	Files         []*BitbucketFile       `protobuf:"bytes,2,rep,name=files,proto3" json:"files,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BitbucketFileScan) Reset() {
+	*x = BitbucketFileScan{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BitbucketFileScan) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BitbucketFileScan) ProtoMessage() {}
+
+func (x *BitbucketFileScan) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BitbucketFileScan.ProtoReflect.Descriptor instead.
+func (*BitbucketFileScan) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *BitbucketFileScan) GetStatus() *ScanStatus {
+	if x != nil {
+		return x.Status
+	}
+	return nil
+}
+
+func (x *BitbucketFileScan) GetFiles() []*BitbucketFile {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+type BitbucketFile struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ProjectKey string                 `protobuf:"bytes,1,opt,name=project_key,json=projectKey,proto3" json:"project_key,omitempty"`
+	RepoSlug   string                 `protobuf:"bytes,2,opt,name=repo_slug,json=repoSlug,proto3" json:"repo_slug,omitempty"`
+	// Path within the repository.
+	Path string `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
+	// The entity the file was matched to, or unset if it matched none.
+	//
+	// Singular, unlike the workload scans: the matcher resolves a file to at most
+	// one entity by longest-prefix match on the repository path, so there is a
+	// single answer to report rather than a set to choose from.
+	Entity        *Ref `protobuf:"bytes,4,opt,name=entity,proto3" json:"entity,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BitbucketFile) Reset() {
+	*x = BitbucketFile{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BitbucketFile) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BitbucketFile) ProtoMessage() {}
+
+func (x *BitbucketFile) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BitbucketFile.ProtoReflect.Descriptor instead.
+func (*BitbucketFile) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *BitbucketFile) GetProjectKey() string {
+	if x != nil {
+		return x.ProjectKey
+	}
+	return ""
+}
+
+func (x *BitbucketFile) GetRepoSlug() string {
+	if x != nil {
+		return x.RepoSlug
+	}
+	return ""
+}
+
+func (x *BitbucketFile) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *BitbucketFile) GetEntity() *Ref {
+	if x != nil {
+		return x.Entity
+	}
+	return nil
+}
+
+// LinkCheckScan reports on the reachability of the links entities carry in
+// their metadata.
+type LinkCheckScan struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        *ScanStatus            `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	Links         []*LinkCheck           `protobuf:"bytes,2,rep,name=links,proto3" json:"links,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkCheckScan) Reset() {
+	*x = LinkCheckScan{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkCheckScan) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkCheckScan) ProtoMessage() {}
+
+func (x *LinkCheckScan) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkCheckScan.ProtoReflect.Descriptor instead.
+func (*LinkCheckScan) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *LinkCheckScan) GetStatus() *ScanStatus {
+	if x != nil {
+		return x.Status
+	}
+	return nil
+}
+
+func (x *LinkCheckScan) GetLinks() []*LinkCheck {
+	if x != nil {
+		return x.Links
+	}
+	return nil
+}
+
+type LinkCheck struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The entity whose metadata.links the URL came from.
+	Entity *Ref   `protobuf:"bytes,1,opt,name=entity,proto3" json:"entity,omitempty"`
+	Url    string `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	Title  string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	Type   string `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
+	// "ok", "broken", or "warn" when the link could be confirmed neither way,
+	// e.g. the checker has no access to it.
+	Status string `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	// Why the link is not OK. Empty when status is "ok".
+	Reason        string `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkCheck) Reset() {
+	*x = LinkCheck{}
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkCheck) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkCheck) ProtoMessage() {}
+
+func (x *LinkCheck) ProtoReflect() protoreflect.Message {
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkCheck.ProtoReflect.Descriptor instead.
+func (*LinkCheck) Descriptor() ([]byte, []int) {
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *LinkCheck) GetEntity() *Ref {
+	if x != nil {
+		return x.Entity
+	}
+	return nil
+}
+
+func (x *LinkCheck) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *LinkCheck) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *LinkCheck) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *LinkCheck) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *LinkCheck) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
 type DomainSpec struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Owner       *Ref                   `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
@@ -1057,7 +2312,7 @@ type DomainSpec struct {
 
 func (x *DomainSpec) Reset() {
 	*x = DomainSpec{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[12]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1069,7 +2324,7 @@ func (x *DomainSpec) String() string {
 func (*DomainSpec) ProtoMessage() {}
 
 func (x *DomainSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[12]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1082,7 +2337,7 @@ func (x *DomainSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainSpec.ProtoReflect.Descriptor instead.
 func (*DomainSpec) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{12}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *DomainSpec) GetOwner() *Ref {
@@ -1128,7 +2383,7 @@ type SystemSpec struct {
 
 func (x *SystemSpec) Reset() {
 	*x = SystemSpec{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[13]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1140,7 +2395,7 @@ func (x *SystemSpec) String() string {
 func (*SystemSpec) ProtoMessage() {}
 
 func (x *SystemSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[13]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1153,7 +2408,7 @@ func (x *SystemSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SystemSpec.ProtoReflect.Descriptor instead.
 func (*SystemSpec) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{13}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *SystemSpec) GetOwner() *Ref {
@@ -1218,7 +2473,7 @@ type ComponentSpec struct {
 
 func (x *ComponentSpec) Reset() {
 	*x = ComponentSpec{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[14]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1230,7 +2485,7 @@ func (x *ComponentSpec) String() string {
 func (*ComponentSpec) ProtoMessage() {}
 
 func (x *ComponentSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[14]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1243,7 +2498,7 @@ func (x *ComponentSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentSpec.ProtoReflect.Descriptor instead.
 func (*ComponentSpec) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{14}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ComponentSpec) GetType() string {
@@ -1338,7 +2593,7 @@ type ResourceSpec struct {
 
 func (x *ResourceSpec) Reset() {
 	*x = ResourceSpec{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[15]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1350,7 +2605,7 @@ func (x *ResourceSpec) String() string {
 func (*ResourceSpec) ProtoMessage() {}
 
 func (x *ResourceSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[15]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1363,7 +2618,7 @@ func (x *ResourceSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceSpec.ProtoReflect.Descriptor instead.
 func (*ResourceSpec) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{15}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ResourceSpec) GetType() string {
@@ -1426,7 +2681,7 @@ type ApiSpec struct {
 
 func (x *ApiSpec) Reset() {
 	*x = ApiSpec{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[16]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1438,7 +2693,7 @@ func (x *ApiSpec) String() string {
 func (*ApiSpec) ProtoMessage() {}
 
 func (x *ApiSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[16]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1451,7 +2706,7 @@ func (x *ApiSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApiSpec.ProtoReflect.Descriptor instead.
 func (*ApiSpec) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{16}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ApiSpec) GetType() string {
@@ -1527,7 +2782,7 @@ type ApiSpecVersion struct {
 
 func (x *ApiSpecVersion) Reset() {
 	*x = ApiSpecVersion{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[17]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1539,7 +2794,7 @@ func (x *ApiSpecVersion) String() string {
 func (*ApiSpecVersion) ProtoMessage() {}
 
 func (x *ApiSpecVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[17]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1552,7 +2807,7 @@ func (x *ApiSpecVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApiSpecVersion.ProtoReflect.Descriptor instead.
 func (*ApiSpecVersion) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{17}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ApiSpecVersion) GetVersion() *Version {
@@ -1582,7 +2837,7 @@ type GroupSpec struct {
 
 func (x *GroupSpec) Reset() {
 	*x = GroupSpec{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[18]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1594,7 +2849,7 @@ func (x *GroupSpec) String() string {
 func (*GroupSpec) ProtoMessage() {}
 
 func (x *GroupSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[18]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1607,7 +2862,7 @@ func (x *GroupSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupSpec.ProtoReflect.Descriptor instead.
 func (*GroupSpec) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{18}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *GroupSpec) GetType() string {
@@ -1656,7 +2911,7 @@ type GroupSpecProfile struct {
 
 func (x *GroupSpecProfile) Reset() {
 	*x = GroupSpecProfile{}
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[19]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1668,7 +2923,7 @@ func (x *GroupSpecProfile) String() string {
 func (*GroupSpecProfile) ProtoMessage() {}
 
 func (x *GroupSpecProfile) ProtoReflect() protoreflect.Message {
-	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[19]
+	mi := &file_swcat_catalog_v1_catalog_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1681,7 +2936,7 @@ func (x *GroupSpecProfile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupSpecProfile.ProtoReflect.Descriptor instead.
 func (*GroupSpecProfile) Descriptor() ([]byte, []int) {
-	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{19}
+	return file_swcat_catalog_v1_catalog_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *GroupSpecProfile) GetDisplayName() string {
@@ -1801,7 +3056,85 @@ const file_swcat_catalog_v1_catalog_proto_rawDesc = "" +
 	"\x12ObservedDependency\x12-\n" +
 	"\x06target\x18\x01 \x01(\v2\x15.swcat.catalog.v1.RefR\x06target\x12@\n" +
 	"\brelation\x18\x02 \x01(\x0e2$.swcat.catalog.v1.DependencyRelationR\brelation\x12\x1a\n" +
-	"\bevidence\x18\x03 \x03(\tR\bevidence\"\xb8\x01\n" +
+	"\bevidence\x18\x03 \x03(\tR\bevidence\"\xb4\x03\n" +
+	"\x0fFindingsRequest\x12,\n" +
+	"\x05scans\x18\x01 \x03(\x0e2\x16.swcat.catalog.v1.ScanR\x05scans\x121\n" +
+	"\x04lint\x18\x02 \x01(\v2\x1d.swcat.catalog.v1.LintOptionsR\x04lint\x12^\n" +
+	"\x14prometheus_workloads\x18\x03 \x01(\v2+.swcat.catalog.v1.PrometheusWorkloadOptionsR\x13prometheusWorkloads\x12L\n" +
+	"\x0ekube_workloads\x18\x04 \x01(\v2%.swcat.catalog.v1.KubeWorkloadOptionsR\rkubeWorkloads\x12O\n" +
+	"\x0fbitbucket_files\x18\x05 \x01(\v2&.swcat.catalog.v1.BitbucketFileOptionsR\x0ebitbucketFiles\x12A\n" +
+	"\n" +
+	"link_check\x18\x06 \x01(\v2\".swcat.catalog.v1.LinkCheckOptionsR\tlinkCheck\"7\n" +
+	"\vLintOptions\x12\x12\n" +
+	"\x04skip\x18\x01 \x01(\bR\x04skip\x12\x14\n" +
+	"\x05query\x18\x02 \x01(\tR\x05query\"B\n" +
+	"\x19PrometheusWorkloadOptions\x12%\n" +
+	"\x0euntracked_only\x18\x01 \x01(\bR\runtrackedOnly\"<\n" +
+	"\x13KubeWorkloadOptions\x12%\n" +
+	"\x0euntracked_only\x18\x01 \x01(\bR\runtrackedOnly\"W\n" +
+	"\x14BitbucketFileOptions\x12%\n" +
+	"\x0euntracked_only\x18\x01 \x01(\bR\runtrackedOnly\x12\x18\n" +
+	"\arefresh\x18\x02 \x01(\bR\arefresh\"3\n" +
+	"\x10LinkCheckOptions\x12\x1f\n" +
+	"\vbroken_only\x18\x01 \x01(\bR\n" +
+	"brokenOnly\"\xfc\x02\n" +
+	"\x10FindingsResponse\x122\n" +
+	"\x04lint\x18\x01 \x01(\v2\x1e.swcat.catalog.v1.LintFindingsR\x04lint\x12[\n" +
+	"\x14prometheus_workloads\x18\x02 \x01(\v2(.swcat.catalog.v1.PrometheusWorkloadScanR\x13prometheusWorkloads\x12I\n" +
+	"\x0ekube_workloads\x18\x03 \x01(\v2\".swcat.catalog.v1.KubeWorkloadScanR\rkubeWorkloads\x12L\n" +
+	"\x0fbitbucket_files\x18\x04 \x01(\v2#.swcat.catalog.v1.BitbucketFileScanR\x0ebitbucketFiles\x12>\n" +
+	"\n" +
+	"link_check\x18\x05 \x01(\v2\x1f.swcat.catalog.v1.LinkCheckScanR\tlinkCheck\"\xb6\x01\n" +
+	"\n" +
+	"ScanStatus\x128\n" +
+	"\x05state\x18\x01 \x01(\x0e2\".swcat.catalog.v1.ScanStatus.StateR\x05state\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"X\n" +
+	"\x05State\x12\x15\n" +
+	"\x11STATE_UNSPECIFIED\x10\x00\x12\f\n" +
+	"\bSTATE_OK\x10\x01\x12\x18\n" +
+	"\x14STATE_NOT_CONFIGURED\x10\x02\x12\x10\n" +
+	"\fSTATE_FAILED\x10\x03\"{\n" +
+	"\fLintFindings\x124\n" +
+	"\x06status\x18\x01 \x01(\v2\x1c.swcat.catalog.v1.ScanStatusR\x06status\x125\n" +
+	"\bfindings\x18\x02 \x03(\v2\x19.swcat.catalog.v1.FindingR\bfindings\"\x8b\x01\n" +
+	"\aFinding\x12-\n" +
+	"\x06entity\x18\x01 \x01(\v2\x15.swcat.catalog.v1.RefR\x06entity\x12\x1b\n" +
+	"\trule_name\x18\x02 \x01(\tR\bruleName\x12\x1a\n" +
+	"\bseverity\x18\x03 \x01(\tR\bseverity\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\"\x92\x01\n" +
+	"\x16PrometheusWorkloadScan\x124\n" +
+	"\x06status\x18\x01 \x01(\v2\x1c.swcat.catalog.v1.ScanStatusR\x06status\x12B\n" +
+	"\tworkloads\x18\x02 \x03(\v2$.swcat.catalog.v1.PrometheusWorkloadR\tworkloads\"j\n" +
+	"\x12PrometheusWorkload\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12@\n" +
+	"\x10matched_entities\x18\x02 \x03(\v2\x15.swcat.catalog.v1.RefR\x0fmatchedEntities\"\x86\x01\n" +
+	"\x10KubeWorkloadScan\x124\n" +
+	"\x06status\x18\x01 \x01(\v2\x1c.swcat.catalog.v1.ScanStatusR\x06status\x12<\n" +
+	"\tworkloads\x18\x02 \x03(\v2\x1e.swcat.catalog.v1.KubeWorkloadR\tworkloads\"\x96\x01\n" +
+	"\fKubeWorkload\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1c\n" +
+	"\tnamespace\x18\x03 \x01(\tR\tnamespace\x12@\n" +
+	"\x10matched_entities\x18\x04 \x03(\v2\x15.swcat.catalog.v1.RefR\x0fmatchedEntities\"\x80\x01\n" +
+	"\x11BitbucketFileScan\x124\n" +
+	"\x06status\x18\x01 \x01(\v2\x1c.swcat.catalog.v1.ScanStatusR\x06status\x125\n" +
+	"\x05files\x18\x02 \x03(\v2\x1f.swcat.catalog.v1.BitbucketFileR\x05files\"\x90\x01\n" +
+	"\rBitbucketFile\x12\x1f\n" +
+	"\vproject_key\x18\x01 \x01(\tR\n" +
+	"projectKey\x12\x1b\n" +
+	"\trepo_slug\x18\x02 \x01(\tR\brepoSlug\x12\x12\n" +
+	"\x04path\x18\x03 \x01(\tR\x04path\x12-\n" +
+	"\x06entity\x18\x04 \x01(\v2\x15.swcat.catalog.v1.RefR\x06entity\"x\n" +
+	"\rLinkCheckScan\x124\n" +
+	"\x06status\x18\x01 \x01(\v2\x1c.swcat.catalog.v1.ScanStatusR\x06status\x121\n" +
+	"\x05links\x18\x02 \x03(\v2\x1b.swcat.catalog.v1.LinkCheckR\x05links\"\xa6\x01\n" +
+	"\tLinkCheck\x12-\n" +
+	"\x06entity\x18\x01 \x01(\v2\x15.swcat.catalog.v1.RefR\x06entity\x12\x10\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x12\n" +
+	"\x04type\x18\x04 \x01(\tR\x04type\x12\x16\n" +
+	"\x06status\x18\x05 \x01(\tR\x06status\x12\x16\n" +
+	"\x06reason\x18\x06 \x01(\tR\x06reason\"\xb8\x01\n" +
 	"\n" +
 	"DomainSpec\x12+\n" +
 	"\x05owner\x18\x01 \x01(\v2\x15.swcat.catalog.v1.RefR\x05owner\x128\n" +
@@ -1873,7 +3206,13 @@ const file_swcat_catalog_v1_catalog_proto_rawDesc = "" +
 	"\x1fDEPENDENCY_RELATION_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19DEPENDENCY_RELATION_CALLS\x10\x01\x12 \n" +
 	"\x1cDEPENDENCY_RELATION_PRODUCES\x10\x02\x12 \n" +
-	"\x1cDEPENDENCY_RELATION_CONSUMES\x10\x03B8Z6github.com/dnswlt/swcat/internal/catalog/pb;catalog_pbb\x06proto3"
+	"\x1cDEPENDENCY_RELATION_CONSUMES\x10\x03*\x83\x01\n" +
+	"\x04Scan\x12\x14\n" +
+	"\x10SCAN_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19SCAN_PROMETHEUS_WORKLOADS\x10\x01\x12\x17\n" +
+	"\x13SCAN_KUBE_WORKLOADS\x10\x02\x12\x18\n" +
+	"\x14SCAN_BITBUCKET_FILES\x10\x03\x12\x13\n" +
+	"\x0fSCAN_LINK_CHECK\x10\x04B8Z6github.com/dnswlt/swcat/internal/catalog/pb;catalog_pbb\x06proto3"
 
 var (
 	file_swcat_catalog_v1_catalog_proto_rawDescOnce sync.Once
@@ -1887,103 +3226,150 @@ func file_swcat_catalog_v1_catalog_proto_rawDescGZIP() []byte {
 	return file_swcat_catalog_v1_catalog_proto_rawDescData
 }
 
-var file_swcat_catalog_v1_catalog_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_swcat_catalog_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_swcat_catalog_v1_catalog_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_swcat_catalog_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_swcat_catalog_v1_catalog_proto_goTypes = []any{
-	(DependencyRelation)(0),       // 0: swcat.catalog.v1.DependencyRelation
-	(*Metadata)(nil),              // 1: swcat.catalog.v1.Metadata
-	(*Link)(nil),                  // 2: swcat.catalog.v1.Link
-	(*LinkGroupInfo)(nil),         // 3: swcat.catalog.v1.LinkGroupInfo
-	(*Ref)(nil),                   // 4: swcat.catalog.v1.Ref
-	(*LabelRef)(nil),              // 5: swcat.catalog.v1.LabelRef
-	(*Version)(nil),               // 6: swcat.catalog.v1.Version
-	(*Entity)(nil),                // 7: swcat.catalog.v1.Entity
-	(*ListEntitiesResponse)(nil),  // 8: swcat.catalog.v1.ListEntitiesResponse
-	(*Status)(nil),                // 9: swcat.catalog.v1.Status
-	(*Observation)(nil),           // 10: swcat.catalog.v1.Observation
-	(*ObservedDependencies)(nil),  // 11: swcat.catalog.v1.ObservedDependencies
-	(*ObservedDependency)(nil),    // 12: swcat.catalog.v1.ObservedDependency
-	(*DomainSpec)(nil),            // 13: swcat.catalog.v1.DomainSpec
-	(*SystemSpec)(nil),            // 14: swcat.catalog.v1.SystemSpec
-	(*ComponentSpec)(nil),         // 15: swcat.catalog.v1.ComponentSpec
-	(*ResourceSpec)(nil),          // 16: swcat.catalog.v1.ResourceSpec
-	(*ApiSpec)(nil),               // 17: swcat.catalog.v1.ApiSpec
-	(*ApiSpecVersion)(nil),        // 18: swcat.catalog.v1.ApiSpecVersion
-	(*GroupSpec)(nil),             // 19: swcat.catalog.v1.GroupSpec
-	(*GroupSpecProfile)(nil),      // 20: swcat.catalog.v1.GroupSpecProfile
-	nil,                           // 21: swcat.catalog.v1.Metadata.LabelsEntry
-	nil,                           // 22: swcat.catalog.v1.Metadata.AnnotationsEntry
-	nil,                           // 23: swcat.catalog.v1.LabelRef.AttrsEntry
-	nil,                           // 24: swcat.catalog.v1.Status.ObservationsEntry
-	nil,                           // 25: swcat.catalog.v1.Observation.MetaEntry
-	nil,                           // 26: swcat.catalog.v1.ObservedDependencies.MetaEntry
-	(*structpb.Value)(nil),        // 27: google.protobuf.Value
-	(*timestamppb.Timestamp)(nil), // 28: google.protobuf.Timestamp
+	(DependencyRelation)(0),           // 0: swcat.catalog.v1.DependencyRelation
+	(Scan)(0),                         // 1: swcat.catalog.v1.Scan
+	(ScanStatus_State)(0),             // 2: swcat.catalog.v1.ScanStatus.State
+	(*Metadata)(nil),                  // 3: swcat.catalog.v1.Metadata
+	(*Link)(nil),                      // 4: swcat.catalog.v1.Link
+	(*LinkGroupInfo)(nil),             // 5: swcat.catalog.v1.LinkGroupInfo
+	(*Ref)(nil),                       // 6: swcat.catalog.v1.Ref
+	(*LabelRef)(nil),                  // 7: swcat.catalog.v1.LabelRef
+	(*Version)(nil),                   // 8: swcat.catalog.v1.Version
+	(*Entity)(nil),                    // 9: swcat.catalog.v1.Entity
+	(*ListEntitiesResponse)(nil),      // 10: swcat.catalog.v1.ListEntitiesResponse
+	(*Status)(nil),                    // 11: swcat.catalog.v1.Status
+	(*Observation)(nil),               // 12: swcat.catalog.v1.Observation
+	(*ObservedDependencies)(nil),      // 13: swcat.catalog.v1.ObservedDependencies
+	(*ObservedDependency)(nil),        // 14: swcat.catalog.v1.ObservedDependency
+	(*FindingsRequest)(nil),           // 15: swcat.catalog.v1.FindingsRequest
+	(*LintOptions)(nil),               // 16: swcat.catalog.v1.LintOptions
+	(*PrometheusWorkloadOptions)(nil), // 17: swcat.catalog.v1.PrometheusWorkloadOptions
+	(*KubeWorkloadOptions)(nil),       // 18: swcat.catalog.v1.KubeWorkloadOptions
+	(*BitbucketFileOptions)(nil),      // 19: swcat.catalog.v1.BitbucketFileOptions
+	(*LinkCheckOptions)(nil),          // 20: swcat.catalog.v1.LinkCheckOptions
+	(*FindingsResponse)(nil),          // 21: swcat.catalog.v1.FindingsResponse
+	(*ScanStatus)(nil),                // 22: swcat.catalog.v1.ScanStatus
+	(*LintFindings)(nil),              // 23: swcat.catalog.v1.LintFindings
+	(*Finding)(nil),                   // 24: swcat.catalog.v1.Finding
+	(*PrometheusWorkloadScan)(nil),    // 25: swcat.catalog.v1.PrometheusWorkloadScan
+	(*PrometheusWorkload)(nil),        // 26: swcat.catalog.v1.PrometheusWorkload
+	(*KubeWorkloadScan)(nil),          // 27: swcat.catalog.v1.KubeWorkloadScan
+	(*KubeWorkload)(nil),              // 28: swcat.catalog.v1.KubeWorkload
+	(*BitbucketFileScan)(nil),         // 29: swcat.catalog.v1.BitbucketFileScan
+	(*BitbucketFile)(nil),             // 30: swcat.catalog.v1.BitbucketFile
+	(*LinkCheckScan)(nil),             // 31: swcat.catalog.v1.LinkCheckScan
+	(*LinkCheck)(nil),                 // 32: swcat.catalog.v1.LinkCheck
+	(*DomainSpec)(nil),                // 33: swcat.catalog.v1.DomainSpec
+	(*SystemSpec)(nil),                // 34: swcat.catalog.v1.SystemSpec
+	(*ComponentSpec)(nil),             // 35: swcat.catalog.v1.ComponentSpec
+	(*ResourceSpec)(nil),              // 36: swcat.catalog.v1.ResourceSpec
+	(*ApiSpec)(nil),                   // 37: swcat.catalog.v1.ApiSpec
+	(*ApiSpecVersion)(nil),            // 38: swcat.catalog.v1.ApiSpecVersion
+	(*GroupSpec)(nil),                 // 39: swcat.catalog.v1.GroupSpec
+	(*GroupSpecProfile)(nil),          // 40: swcat.catalog.v1.GroupSpecProfile
+	nil,                               // 41: swcat.catalog.v1.Metadata.LabelsEntry
+	nil,                               // 42: swcat.catalog.v1.Metadata.AnnotationsEntry
+	nil,                               // 43: swcat.catalog.v1.LabelRef.AttrsEntry
+	nil,                               // 44: swcat.catalog.v1.Status.ObservationsEntry
+	nil,                               // 45: swcat.catalog.v1.Observation.MetaEntry
+	nil,                               // 46: swcat.catalog.v1.ObservedDependencies.MetaEntry
+	(*structpb.Value)(nil),            // 47: google.protobuf.Value
+	(*timestamppb.Timestamp)(nil),     // 48: google.protobuf.Timestamp
 }
 var file_swcat_catalog_v1_catalog_proto_depIdxs = []int32{
-	21, // 0: swcat.catalog.v1.Metadata.labels:type_name -> swcat.catalog.v1.Metadata.LabelsEntry
-	22, // 1: swcat.catalog.v1.Metadata.annotations:type_name -> swcat.catalog.v1.Metadata.AnnotationsEntry
-	2,  // 2: swcat.catalog.v1.Metadata.links:type_name -> swcat.catalog.v1.Link
-	3,  // 3: swcat.catalog.v1.Link.group_info:type_name -> swcat.catalog.v1.LinkGroupInfo
-	4,  // 4: swcat.catalog.v1.LabelRef.ref:type_name -> swcat.catalog.v1.Ref
-	23, // 5: swcat.catalog.v1.LabelRef.attrs:type_name -> swcat.catalog.v1.LabelRef.AttrsEntry
-	1,  // 6: swcat.catalog.v1.Entity.metadata:type_name -> swcat.catalog.v1.Metadata
-	13, // 7: swcat.catalog.v1.Entity.domain_spec:type_name -> swcat.catalog.v1.DomainSpec
-	14, // 8: swcat.catalog.v1.Entity.system_spec:type_name -> swcat.catalog.v1.SystemSpec
-	15, // 9: swcat.catalog.v1.Entity.component_spec:type_name -> swcat.catalog.v1.ComponentSpec
-	16, // 10: swcat.catalog.v1.Entity.resource_spec:type_name -> swcat.catalog.v1.ResourceSpec
-	17, // 11: swcat.catalog.v1.Entity.api_spec:type_name -> swcat.catalog.v1.ApiSpec
-	19, // 12: swcat.catalog.v1.Entity.group_spec:type_name -> swcat.catalog.v1.GroupSpec
-	9,  // 13: swcat.catalog.v1.Entity.status:type_name -> swcat.catalog.v1.Status
-	7,  // 14: swcat.catalog.v1.ListEntitiesResponse.entities:type_name -> swcat.catalog.v1.Entity
-	24, // 15: swcat.catalog.v1.Status.observations:type_name -> swcat.catalog.v1.Status.ObservationsEntry
-	27, // 16: swcat.catalog.v1.Observation.value:type_name -> google.protobuf.Value
-	28, // 17: swcat.catalog.v1.Observation.updated_at:type_name -> google.protobuf.Timestamp
-	25, // 18: swcat.catalog.v1.Observation.meta:type_name -> swcat.catalog.v1.Observation.MetaEntry
-	4,  // 19: swcat.catalog.v1.ObservedDependencies.source:type_name -> swcat.catalog.v1.Ref
-	28, // 20: swcat.catalog.v1.ObservedDependencies.observed_at:type_name -> google.protobuf.Timestamp
-	12, // 21: swcat.catalog.v1.ObservedDependencies.dependencies:type_name -> swcat.catalog.v1.ObservedDependency
-	26, // 22: swcat.catalog.v1.ObservedDependencies.meta:type_name -> swcat.catalog.v1.ObservedDependencies.MetaEntry
-	4,  // 23: swcat.catalog.v1.ObservedDependency.target:type_name -> swcat.catalog.v1.Ref
+	41, // 0: swcat.catalog.v1.Metadata.labels:type_name -> swcat.catalog.v1.Metadata.LabelsEntry
+	42, // 1: swcat.catalog.v1.Metadata.annotations:type_name -> swcat.catalog.v1.Metadata.AnnotationsEntry
+	4,  // 2: swcat.catalog.v1.Metadata.links:type_name -> swcat.catalog.v1.Link
+	5,  // 3: swcat.catalog.v1.Link.group_info:type_name -> swcat.catalog.v1.LinkGroupInfo
+	6,  // 4: swcat.catalog.v1.LabelRef.ref:type_name -> swcat.catalog.v1.Ref
+	43, // 5: swcat.catalog.v1.LabelRef.attrs:type_name -> swcat.catalog.v1.LabelRef.AttrsEntry
+	3,  // 6: swcat.catalog.v1.Entity.metadata:type_name -> swcat.catalog.v1.Metadata
+	33, // 7: swcat.catalog.v1.Entity.domain_spec:type_name -> swcat.catalog.v1.DomainSpec
+	34, // 8: swcat.catalog.v1.Entity.system_spec:type_name -> swcat.catalog.v1.SystemSpec
+	35, // 9: swcat.catalog.v1.Entity.component_spec:type_name -> swcat.catalog.v1.ComponentSpec
+	36, // 10: swcat.catalog.v1.Entity.resource_spec:type_name -> swcat.catalog.v1.ResourceSpec
+	37, // 11: swcat.catalog.v1.Entity.api_spec:type_name -> swcat.catalog.v1.ApiSpec
+	39, // 12: swcat.catalog.v1.Entity.group_spec:type_name -> swcat.catalog.v1.GroupSpec
+	11, // 13: swcat.catalog.v1.Entity.status:type_name -> swcat.catalog.v1.Status
+	9,  // 14: swcat.catalog.v1.ListEntitiesResponse.entities:type_name -> swcat.catalog.v1.Entity
+	44, // 15: swcat.catalog.v1.Status.observations:type_name -> swcat.catalog.v1.Status.ObservationsEntry
+	47, // 16: swcat.catalog.v1.Observation.value:type_name -> google.protobuf.Value
+	48, // 17: swcat.catalog.v1.Observation.updated_at:type_name -> google.protobuf.Timestamp
+	45, // 18: swcat.catalog.v1.Observation.meta:type_name -> swcat.catalog.v1.Observation.MetaEntry
+	6,  // 19: swcat.catalog.v1.ObservedDependencies.source:type_name -> swcat.catalog.v1.Ref
+	48, // 20: swcat.catalog.v1.ObservedDependencies.observed_at:type_name -> google.protobuf.Timestamp
+	14, // 21: swcat.catalog.v1.ObservedDependencies.dependencies:type_name -> swcat.catalog.v1.ObservedDependency
+	46, // 22: swcat.catalog.v1.ObservedDependencies.meta:type_name -> swcat.catalog.v1.ObservedDependencies.MetaEntry
+	6,  // 23: swcat.catalog.v1.ObservedDependency.target:type_name -> swcat.catalog.v1.Ref
 	0,  // 24: swcat.catalog.v1.ObservedDependency.relation:type_name -> swcat.catalog.v1.DependencyRelation
-	4,  // 25: swcat.catalog.v1.DomainSpec.owner:type_name -> swcat.catalog.v1.Ref
-	4,  // 26: swcat.catalog.v1.DomainSpec.subdomain_of:type_name -> swcat.catalog.v1.Ref
-	4,  // 27: swcat.catalog.v1.DomainSpec.systems:type_name -> swcat.catalog.v1.Ref
-	4,  // 28: swcat.catalog.v1.SystemSpec.owner:type_name -> swcat.catalog.v1.Ref
-	4,  // 29: swcat.catalog.v1.SystemSpec.domain:type_name -> swcat.catalog.v1.Ref
-	4,  // 30: swcat.catalog.v1.SystemSpec.components:type_name -> swcat.catalog.v1.Ref
-	4,  // 31: swcat.catalog.v1.SystemSpec.apis:type_name -> swcat.catalog.v1.Ref
-	4,  // 32: swcat.catalog.v1.SystemSpec.resources:type_name -> swcat.catalog.v1.Ref
-	4,  // 33: swcat.catalog.v1.ComponentSpec.owner:type_name -> swcat.catalog.v1.Ref
-	4,  // 34: swcat.catalog.v1.ComponentSpec.system:type_name -> swcat.catalog.v1.Ref
-	4,  // 35: swcat.catalog.v1.ComponentSpec.domain:type_name -> swcat.catalog.v1.Ref
-	4,  // 36: swcat.catalog.v1.ComponentSpec.subcomponent_of:type_name -> swcat.catalog.v1.Ref
-	5,  // 37: swcat.catalog.v1.ComponentSpec.provides_apis:type_name -> swcat.catalog.v1.LabelRef
-	5,  // 38: swcat.catalog.v1.ComponentSpec.consumes_apis:type_name -> swcat.catalog.v1.LabelRef
-	5,  // 39: swcat.catalog.v1.ComponentSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
-	5,  // 40: swcat.catalog.v1.ComponentSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
-	4,  // 41: swcat.catalog.v1.ComponentSpec.subcomponents:type_name -> swcat.catalog.v1.Ref
-	4,  // 42: swcat.catalog.v1.ResourceSpec.owner:type_name -> swcat.catalog.v1.Ref
-	4,  // 43: swcat.catalog.v1.ResourceSpec.system:type_name -> swcat.catalog.v1.Ref
-	4,  // 44: swcat.catalog.v1.ResourceSpec.domain:type_name -> swcat.catalog.v1.Ref
-	5,  // 45: swcat.catalog.v1.ResourceSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
-	5,  // 46: swcat.catalog.v1.ResourceSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
-	4,  // 47: swcat.catalog.v1.ApiSpec.owner:type_name -> swcat.catalog.v1.Ref
-	4,  // 48: swcat.catalog.v1.ApiSpec.system:type_name -> swcat.catalog.v1.Ref
-	4,  // 49: swcat.catalog.v1.ApiSpec.domain:type_name -> swcat.catalog.v1.Ref
-	18, // 50: swcat.catalog.v1.ApiSpec.versions:type_name -> swcat.catalog.v1.ApiSpecVersion
-	5,  // 51: swcat.catalog.v1.ApiSpec.providers:type_name -> swcat.catalog.v1.LabelRef
-	5,  // 52: swcat.catalog.v1.ApiSpec.consumers:type_name -> swcat.catalog.v1.LabelRef
-	6,  // 53: swcat.catalog.v1.ApiSpecVersion.version:type_name -> swcat.catalog.v1.Version
-	20, // 54: swcat.catalog.v1.GroupSpec.profile:type_name -> swcat.catalog.v1.GroupSpecProfile
-	4,  // 55: swcat.catalog.v1.GroupSpec.parent:type_name -> swcat.catalog.v1.Ref
-	4,  // 56: swcat.catalog.v1.GroupSpec.children:type_name -> swcat.catalog.v1.Ref
-	10, // 57: swcat.catalog.v1.Status.ObservationsEntry.value:type_name -> swcat.catalog.v1.Observation
-	58, // [58:58] is the sub-list for method output_type
-	58, // [58:58] is the sub-list for method input_type
-	58, // [58:58] is the sub-list for extension type_name
-	58, // [58:58] is the sub-list for extension extendee
-	0,  // [0:58] is the sub-list for field type_name
+	1,  // 25: swcat.catalog.v1.FindingsRequest.scans:type_name -> swcat.catalog.v1.Scan
+	16, // 26: swcat.catalog.v1.FindingsRequest.lint:type_name -> swcat.catalog.v1.LintOptions
+	17, // 27: swcat.catalog.v1.FindingsRequest.prometheus_workloads:type_name -> swcat.catalog.v1.PrometheusWorkloadOptions
+	18, // 28: swcat.catalog.v1.FindingsRequest.kube_workloads:type_name -> swcat.catalog.v1.KubeWorkloadOptions
+	19, // 29: swcat.catalog.v1.FindingsRequest.bitbucket_files:type_name -> swcat.catalog.v1.BitbucketFileOptions
+	20, // 30: swcat.catalog.v1.FindingsRequest.link_check:type_name -> swcat.catalog.v1.LinkCheckOptions
+	23, // 31: swcat.catalog.v1.FindingsResponse.lint:type_name -> swcat.catalog.v1.LintFindings
+	25, // 32: swcat.catalog.v1.FindingsResponse.prometheus_workloads:type_name -> swcat.catalog.v1.PrometheusWorkloadScan
+	27, // 33: swcat.catalog.v1.FindingsResponse.kube_workloads:type_name -> swcat.catalog.v1.KubeWorkloadScan
+	29, // 34: swcat.catalog.v1.FindingsResponse.bitbucket_files:type_name -> swcat.catalog.v1.BitbucketFileScan
+	31, // 35: swcat.catalog.v1.FindingsResponse.link_check:type_name -> swcat.catalog.v1.LinkCheckScan
+	2,  // 36: swcat.catalog.v1.ScanStatus.state:type_name -> swcat.catalog.v1.ScanStatus.State
+	22, // 37: swcat.catalog.v1.LintFindings.status:type_name -> swcat.catalog.v1.ScanStatus
+	24, // 38: swcat.catalog.v1.LintFindings.findings:type_name -> swcat.catalog.v1.Finding
+	6,  // 39: swcat.catalog.v1.Finding.entity:type_name -> swcat.catalog.v1.Ref
+	22, // 40: swcat.catalog.v1.PrometheusWorkloadScan.status:type_name -> swcat.catalog.v1.ScanStatus
+	26, // 41: swcat.catalog.v1.PrometheusWorkloadScan.workloads:type_name -> swcat.catalog.v1.PrometheusWorkload
+	6,  // 42: swcat.catalog.v1.PrometheusWorkload.matched_entities:type_name -> swcat.catalog.v1.Ref
+	22, // 43: swcat.catalog.v1.KubeWorkloadScan.status:type_name -> swcat.catalog.v1.ScanStatus
+	28, // 44: swcat.catalog.v1.KubeWorkloadScan.workloads:type_name -> swcat.catalog.v1.KubeWorkload
+	6,  // 45: swcat.catalog.v1.KubeWorkload.matched_entities:type_name -> swcat.catalog.v1.Ref
+	22, // 46: swcat.catalog.v1.BitbucketFileScan.status:type_name -> swcat.catalog.v1.ScanStatus
+	30, // 47: swcat.catalog.v1.BitbucketFileScan.files:type_name -> swcat.catalog.v1.BitbucketFile
+	6,  // 48: swcat.catalog.v1.BitbucketFile.entity:type_name -> swcat.catalog.v1.Ref
+	22, // 49: swcat.catalog.v1.LinkCheckScan.status:type_name -> swcat.catalog.v1.ScanStatus
+	32, // 50: swcat.catalog.v1.LinkCheckScan.links:type_name -> swcat.catalog.v1.LinkCheck
+	6,  // 51: swcat.catalog.v1.LinkCheck.entity:type_name -> swcat.catalog.v1.Ref
+	6,  // 52: swcat.catalog.v1.DomainSpec.owner:type_name -> swcat.catalog.v1.Ref
+	6,  // 53: swcat.catalog.v1.DomainSpec.subdomain_of:type_name -> swcat.catalog.v1.Ref
+	6,  // 54: swcat.catalog.v1.DomainSpec.systems:type_name -> swcat.catalog.v1.Ref
+	6,  // 55: swcat.catalog.v1.SystemSpec.owner:type_name -> swcat.catalog.v1.Ref
+	6,  // 56: swcat.catalog.v1.SystemSpec.domain:type_name -> swcat.catalog.v1.Ref
+	6,  // 57: swcat.catalog.v1.SystemSpec.components:type_name -> swcat.catalog.v1.Ref
+	6,  // 58: swcat.catalog.v1.SystemSpec.apis:type_name -> swcat.catalog.v1.Ref
+	6,  // 59: swcat.catalog.v1.SystemSpec.resources:type_name -> swcat.catalog.v1.Ref
+	6,  // 60: swcat.catalog.v1.ComponentSpec.owner:type_name -> swcat.catalog.v1.Ref
+	6,  // 61: swcat.catalog.v1.ComponentSpec.system:type_name -> swcat.catalog.v1.Ref
+	6,  // 62: swcat.catalog.v1.ComponentSpec.domain:type_name -> swcat.catalog.v1.Ref
+	6,  // 63: swcat.catalog.v1.ComponentSpec.subcomponent_of:type_name -> swcat.catalog.v1.Ref
+	7,  // 64: swcat.catalog.v1.ComponentSpec.provides_apis:type_name -> swcat.catalog.v1.LabelRef
+	7,  // 65: swcat.catalog.v1.ComponentSpec.consumes_apis:type_name -> swcat.catalog.v1.LabelRef
+	7,  // 66: swcat.catalog.v1.ComponentSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
+	7,  // 67: swcat.catalog.v1.ComponentSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
+	6,  // 68: swcat.catalog.v1.ComponentSpec.subcomponents:type_name -> swcat.catalog.v1.Ref
+	6,  // 69: swcat.catalog.v1.ResourceSpec.owner:type_name -> swcat.catalog.v1.Ref
+	6,  // 70: swcat.catalog.v1.ResourceSpec.system:type_name -> swcat.catalog.v1.Ref
+	6,  // 71: swcat.catalog.v1.ResourceSpec.domain:type_name -> swcat.catalog.v1.Ref
+	7,  // 72: swcat.catalog.v1.ResourceSpec.depends_on:type_name -> swcat.catalog.v1.LabelRef
+	7,  // 73: swcat.catalog.v1.ResourceSpec.dependents:type_name -> swcat.catalog.v1.LabelRef
+	6,  // 74: swcat.catalog.v1.ApiSpec.owner:type_name -> swcat.catalog.v1.Ref
+	6,  // 75: swcat.catalog.v1.ApiSpec.system:type_name -> swcat.catalog.v1.Ref
+	6,  // 76: swcat.catalog.v1.ApiSpec.domain:type_name -> swcat.catalog.v1.Ref
+	38, // 77: swcat.catalog.v1.ApiSpec.versions:type_name -> swcat.catalog.v1.ApiSpecVersion
+	7,  // 78: swcat.catalog.v1.ApiSpec.providers:type_name -> swcat.catalog.v1.LabelRef
+	7,  // 79: swcat.catalog.v1.ApiSpec.consumers:type_name -> swcat.catalog.v1.LabelRef
+	8,  // 80: swcat.catalog.v1.ApiSpecVersion.version:type_name -> swcat.catalog.v1.Version
+	40, // 81: swcat.catalog.v1.GroupSpec.profile:type_name -> swcat.catalog.v1.GroupSpecProfile
+	6,  // 82: swcat.catalog.v1.GroupSpec.parent:type_name -> swcat.catalog.v1.Ref
+	6,  // 83: swcat.catalog.v1.GroupSpec.children:type_name -> swcat.catalog.v1.Ref
+	12, // 84: swcat.catalog.v1.Status.ObservationsEntry.value:type_name -> swcat.catalog.v1.Observation
+	85, // [85:85] is the sub-list for method output_type
+	85, // [85:85] is the sub-list for method input_type
+	85, // [85:85] is the sub-list for extension type_name
+	85, // [85:85] is the sub-list for extension extendee
+	0,  // [0:85] is the sub-list for field type_name
 }
 
 func init() { file_swcat_catalog_v1_catalog_proto_init() }
@@ -2004,8 +3390,8 @@ func file_swcat_catalog_v1_catalog_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_swcat_catalog_v1_catalog_proto_rawDesc), len(file_swcat_catalog_v1_catalog_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   26,
+			NumEnums:      3,
+			NumMessages:   44,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -34,7 +34,8 @@ func ToPB(e Entity) *catalog_pb.Entity {
 	return nil
 }
 
-func refToPB(r *Ref) *catalog_pb.Ref {
+// RefToPB converts an entity reference to its protobuf form.
+func RefToPB(r *Ref) *catalog_pb.Ref {
 	if r == nil {
 		return nil
 	}
@@ -80,7 +81,7 @@ func labelRefToPB(r *LabelRef) *catalog_pb.LabelRef {
 		return nil
 	}
 	return &catalog_pb.LabelRef{
-		Ref:   refToPB(r.Ref),
+		Ref:   RefToPB(r.Ref),
 		Label: r.Label,
 		Attrs: r.Attrs,
 	}
@@ -221,10 +222,10 @@ func componentToPB(c *Component) *catalog_pb.Entity {
 	spec := &catalog_pb.ComponentSpec{
 		Type:           c.Spec.Type,
 		Lifecycle:      c.Spec.Lifecycle,
-		Owner:          refToPB(c.Spec.Owner),
-		System:         refToPB(c.Spec.System),
-		Domain:         refToPB(c.GetDomain()),
-		SubcomponentOf: refToPB(c.Spec.SubcomponentOf),
+		Owner:          RefToPB(c.Spec.Owner),
+		System:         RefToPB(c.Spec.System),
+		Domain:         RefToPB(c.GetDomain()),
+		SubcomponentOf: RefToPB(c.Spec.SubcomponentOf),
 	}
 	for _, r := range c.Spec.ProvidesAPIs {
 		spec.ProvidesApis = append(spec.ProvidesApis, labelRefToPB(r))
@@ -239,7 +240,7 @@ func componentToPB(c *Component) *catalog_pb.Entity {
 		spec.Dependents = append(spec.Dependents, labelRefToPB(r))
 	}
 	for _, r := range c.GetSubcomponents() {
-		spec.Subcomponents = append(spec.Subcomponents, refToPB(r))
+		spec.Subcomponents = append(spec.Subcomponents, RefToPB(r))
 	}
 	return &catalog_pb.Entity{
 		Kind:     string(KindComponent),
@@ -254,18 +255,18 @@ func systemToPB(s *System) *catalog_pb.Entity {
 		return nil
 	}
 	spec := &catalog_pb.SystemSpec{
-		Owner:  refToPB(s.Spec.Owner),
-		Domain: refToPB(s.Spec.Domain),
+		Owner:  RefToPB(s.Spec.Owner),
+		Domain: RefToPB(s.Spec.Domain),
 		Type:   s.Spec.Type,
 	}
 	for _, r := range s.GetComponents() {
-		spec.Components = append(spec.Components, refToPB(r))
+		spec.Components = append(spec.Components, RefToPB(r))
 	}
 	for _, r := range s.GetAPIs() {
-		spec.Apis = append(spec.Apis, refToPB(r))
+		spec.Apis = append(spec.Apis, RefToPB(r))
 	}
 	for _, r := range s.GetResources() {
-		spec.Resources = append(spec.Resources, refToPB(r))
+		spec.Resources = append(spec.Resources, RefToPB(r))
 	}
 	return &catalog_pb.Entity{
 		Kind:     string(KindSystem),
@@ -280,12 +281,12 @@ func domainToPB(d *Domain) *catalog_pb.Entity {
 		return nil
 	}
 	spec := &catalog_pb.DomainSpec{
-		Owner:       refToPB(d.Spec.Owner),
-		SubdomainOf: refToPB(d.Spec.SubdomainOf),
+		Owner:       RefToPB(d.Spec.Owner),
+		SubdomainOf: RefToPB(d.Spec.SubdomainOf),
 		Type:        d.Spec.Type,
 	}
 	for _, r := range d.GetSystems() {
-		spec.Systems = append(spec.Systems, refToPB(r))
+		spec.Systems = append(spec.Systems, RefToPB(r))
 	}
 	return &catalog_pb.Entity{
 		Kind:     string(KindDomain),
@@ -301,9 +302,9 @@ func resourceToPB(r *Resource) *catalog_pb.Entity {
 	}
 	spec := &catalog_pb.ResourceSpec{
 		Type:   r.Spec.Type,
-		Owner:  refToPB(r.Spec.Owner),
-		System: refToPB(r.Spec.System),
-		Domain: refToPB(r.GetDomain()),
+		Owner:  RefToPB(r.Spec.Owner),
+		System: RefToPB(r.Spec.System),
+		Domain: RefToPB(r.GetDomain()),
 	}
 	for _, d := range r.Spec.DependsOn {
 		spec.DependsOn = append(spec.DependsOn, labelRefToPB(d))
@@ -326,9 +327,9 @@ func apiToPB(a *API) *catalog_pb.Entity {
 	spec := &catalog_pb.ApiSpec{
 		Type:       a.Spec.Type,
 		Lifecycle:  a.Spec.Lifecycle,
-		Owner:      refToPB(a.Spec.Owner),
-		System:     refToPB(a.Spec.System),
-		Domain:     refToPB(a.GetDomain()),
+		Owner:      RefToPB(a.Spec.Owner),
+		System:     RefToPB(a.Spec.System),
+		Domain:     RefToPB(a.GetDomain()),
 		Definition: a.Spec.Definition,
 	}
 	for _, v := range a.Spec.Versions {
@@ -362,11 +363,11 @@ func groupToPB(g *Group) *catalog_pb.Entity {
 			Email:       g.Spec.Profile.Email,
 			Picture:     g.Spec.Profile.Picture,
 		},
-		Parent:  refToPB(g.Spec.Parent),
+		Parent:  RefToPB(g.Spec.Parent),
 		Members: g.Spec.Members,
 	}
 	for _, c := range g.Spec.Children {
-		spec.Children = append(spec.Children, refToPB(c))
+		spec.Children = append(spec.Children, RefToPB(c))
 	}
 	return &catalog_pb.Entity{
 		Kind:     string(KindGroup),

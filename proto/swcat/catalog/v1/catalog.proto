@@ -167,6 +167,227 @@ enum DependencyRelation {
   DEPENDENCY_RELATION_CONSUMES = 3;
 }
 
+// --- Lint ---
+
+// FindingsRequest is the request body of POST /catalog/findings.
+//
+// This is a POST rather than a GET because the scans it can trigger reach out
+// to external systems, and the Bitbucket one may refresh a server-side cache,
+// which is not something intermediaries should be free to repeat on a whim.
+//
+// Entity lint findings are included by default: leave `lint` unset to get them
+// with default options, set it to narrow the selection, or set lint.skip to
+// leave them out. An empty request body therefore returns exactly the entity
+// lint findings.
+//
+// The scans are the other way round: each one runs only if `scans` names it, so
+// nothing expensive happens unless it was asked for. Their options messages
+// only tune a scan that was named; supplying options for a scan absent from
+// `scans` is an error rather than a silently ignored no-op.
+//
+//   {}                                          entity lint findings
+//   {"scans": ["SCAN_KUBE_WORKLOADS"]}          those, plus cluster workloads
+//   {"scans": ["SCAN_BITBUCKET_FILES"],
+//    "bitbucketFiles": {"refresh": true},
+//    "lint": {"skip": true}}                    a fresh Bitbucket scan, alone
+message FindingsRequest {
+  // The scans to run in addition to the entity lint findings. Empty means none.
+  repeated Scan scans = 1;
+
+  LintOptions lint = 2;
+  PrometheusWorkloadOptions prometheus_workloads = 3;
+  KubeWorkloadOptions kube_workloads = 4;
+  BitbucketFileOptions bitbucket_files = 5;
+  LinkCheckOptions link_check = 6;
+}
+
+// Scan identifies one of the catalog-wide scans. Unlike the entity lint rules,
+// these reach out to external systems, so each has to be requested by name.
+enum Scan {
+  SCAN_UNSPECIFIED = 0;
+  // Workloads Prometheus reports metrics for. Finds workloads the catalog does
+  // not describe.
+  SCAN_PROMETHEUS_WORKLOADS = 1;
+  // Workloads running in the Kubernetes cluster. Finds workloads the catalog
+  // does not describe.
+  SCAN_KUBE_WORKLOADS = 2;
+  // Files in Bitbucket matched against the entities that link to them.
+  SCAN_BITBUCKET_FILES = 3;
+  // Reachability of the links entities carry in their metadata.
+  SCAN_LINK_CHECK = 4;
+}
+
+message LintOptions {
+  // Leave the entity lint findings out of the response.
+  bool skip = 1;
+  // Restrict findings to entities matching this query, in the syntax of
+  // GET /catalog/entities?q=. Empty means every entity.
+  string query = 2;
+}
+
+message PrometheusWorkloadOptions {
+  // Report only workloads that no catalog entity describes.
+  bool untracked_only = 1;
+}
+
+message KubeWorkloadOptions {
+  // Report only workloads that no catalog entity describes.
+  bool untracked_only = 1;
+}
+
+message BitbucketFileOptions {
+  // Report only files that matched no catalog entity.
+  bool untracked_only = 1;
+  // Re-run the scan against Bitbucket instead of serving the cached file list.
+  bool refresh = 2;
+}
+
+message LinkCheckOptions {
+  // Report only links confirmed to be broken, omitting those that merely could
+  // not be checked.
+  bool broken_only = 1;
+}
+
+// FindingsResponse is the response body of POST /catalog/findings. A section is
+// present only if it was requested, or -- for lint -- not skipped.
+message FindingsResponse {
+  LintFindings lint = 1;
+  PrometheusWorkloadScan prometheus_workloads = 2;
+  KubeWorkloadScan kube_workloads = 3;
+  BitbucketFileScan bitbucket_files = 4;
+  LinkCheckScan link_check = 5;
+}
+
+// ScanStatus reports how one section of a FindingsResponse fared.
+//
+// Sections are independent: one unreachable external system must not suppress
+// the results of the others. An empty result list means "nothing found" only
+// when the state is STATE_OK, so consumers must check this before concluding
+// that a scan came back clean.
+message ScanStatus {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    // The section ran and its results are complete.
+    STATE_OK = 1;
+    // Not available in this deployment, e.g. no linter configured, or no
+    // Prometheus client. Not an error, and says nothing about the catalog.
+    STATE_NOT_CONFIGURED = 2;
+    // The section was attempted and failed; see error.
+    STATE_FAILED = 3;
+  }
+  State state = 1;
+  // Human-readable cause. Set when state is STATE_FAILED.
+  string error = 2;
+}
+
+// LintFindings holds the entity-scoped lint rule violations.
+message LintFindings {
+  ScanStatus status = 1;
+  repeated Finding findings = 2;
+}
+
+// Finding is a single lint rule violation reported for one catalog entity.
+//
+// Findings are derived rather than stored: they are recomputed from the catalog
+// and the lint configuration, so the same entity can yield different findings
+// over time without the catalog itself changing.
+message Finding {
+  // The entity the finding was reported for. Always set.
+  Ref entity = 1;
+  // Name of the rule that produced the finding, e.g. "has-description". Checks
+  // that are built in rather than configured use a fixed name, such as
+  // "dependency-candidate".
+  string rule_name = 2;
+  // Importance of the finding: "error", "warn" or "info". A string rather than
+  // an enum, spelled as in lint.yml and in the "lint:" query property, so that
+  // one vocabulary covers the configuration, queries and this API.
+  string severity = 3;
+  // Human-readable description of the violation, and the primary thing to act
+  // on. Some checks embed their supporting evidence here.
+  string message = 4;
+}
+
+// PrometheusWorkloadScan reports the workloads Prometheus knows about, so that
+// workloads missing from the catalog can be found. It carries workload identity
+// only: metric values and label sets stay in the UI, since the point is to
+// reconcile the catalog, not to expose Prometheus through swcat.
+message PrometheusWorkloadScan {
+  ScanStatus status = 1;
+  repeated PrometheusWorkload workloads = 2;
+}
+
+message PrometheusWorkload {
+  string name = 1;
+  // The catalog entities that claim this workload, by matching name or by
+  // carrying the configured workload-name annotation.
+  //
+  // Repeated because the annotation match is set membership: nothing stops two
+  // entities from naming the same workload, and reporting one of them would be
+  // an arbitrary choice. Empty means untracked -- the workload runs, but the
+  // catalog does not describe it -- and more than one entry is itself worth
+  // looking at, since two entities claiming one workload is a catalog problem.
+  repeated Ref matched_entities = 2;
+}
+
+// KubeWorkloadScan reports the workloads running in the cluster, for the same
+// reconciliation purpose as PrometheusWorkloadScan. Identity only, deliberately:
+// labels and annotations stay in the UI so that this does not turn into a
+// general-purpose Kubernetes scanner.
+message KubeWorkloadScan {
+  ScanStatus status = 1;
+  repeated KubeWorkload workloads = 2;
+}
+
+message KubeWorkload {
+  // One of "Deployment", "StatefulSet", "CronJob", "DaemonSet", "Job".
+  string kind = 1;
+  string name = 2;
+  string namespace = 3;
+  // The catalog entities that claim this workload. Empty means untracked; see
+  // PrometheusWorkload.matched_entities for why this is repeated.
+  repeated Ref matched_entities = 4;
+}
+
+// BitbucketFileScan reports the files found in Bitbucket and the entities they
+// were matched to.
+message BitbucketFileScan {
+  ScanStatus status = 1;
+  repeated BitbucketFile files = 2;
+}
+
+message BitbucketFile {
+  string project_key = 1;
+  string repo_slug = 2;
+  // Path within the repository.
+  string path = 3;
+  // The entity the file was matched to, or unset if it matched none.
+  //
+  // Singular, unlike the workload scans: the matcher resolves a file to at most
+  // one entity by longest-prefix match on the repository path, so there is a
+  // single answer to report rather than a set to choose from.
+  Ref entity = 4;
+}
+
+// LinkCheckScan reports on the reachability of the links entities carry in
+// their metadata.
+message LinkCheckScan {
+  ScanStatus status = 1;
+  repeated LinkCheck links = 2;
+}
+
+message LinkCheck {
+  // The entity whose metadata.links the URL came from.
+  Ref entity = 1;
+  string url = 2;
+  string title = 3;
+  string type = 4;
+  // "ok", "broken", or "warn" when the link could be confirmed neither way,
+  // e.g. the checker has no access to it.
+  string status = 5;
+  // Why the link is not OK. Empty when status is "ok".
+  string reason = 6;
+}
+
 // --- Domain ---
 
 message DomainSpec {

@@ -1,16 +1,12 @@
 package web
 
 import (
-	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/dnswlt/swcat/internal/catalog"
-	"github.com/dnswlt/swcat/internal/kube"
 	"github.com/dnswlt/swcat/internal/lint"
 )
 
@@ -138,172 +134,59 @@ func (s *Server) serveLintFindings(w http.ResponseWriter, r *http.Request) {
 	})
 
 	var linkCheckSources []string
-	if s.linter != nil {
-		linkCheckSources = lint.LinkFetchers{Bitbucket: s.bbClient}.Names()
+	if s.linkCheckEnabled() {
+		linkCheckSources = s.linkFetchers().Names()
 	}
 
 	params := map[string]any{
 		"PageTitle":        "Lint",
 		"OwnerGroups":      result,
-		"HasKube":          s.kubeClient != nil && s.linter != nil && s.linter.Kube().Enabled,
-		"HasPrometheus":    s.promClient != nil && s.linter != nil && s.linter.Prometheus().Enabled,
-		"HasBitbucket":     s.bbClient != nil && s.linter != nil && s.linter.Bitbucket().Enabled,
+		"HasKube":          s.kubeScanEnabled(),
+		"HasPrometheus":    s.prometheusScanEnabled(),
+		"HasBitbucket":     s.bitbucketScanEnabled(),
 		"LinkCheckSources": linkCheckSources,
 	}
 
 	s.serveHTMLPage(w, r, "lint_findings.html", params)
 }
 
-type kubeWorkloadView struct {
-	kube.Workload
-	Tracked bool
-}
-
 func (s *Server) serveKubeWorkloads(w http.ResponseWriter, r *http.Request) {
-	if s.kubeClient == nil || s.linter == nil || !s.linter.Kube().Enabled {
-		s.renderErrorSnippet(w, "Kubernetes workload scan not enabled")
-		return
-	}
-
 	data := s.getStoreData(r)
+	untrackedOnly := r.URL.Query().Get("untracked") == "on"
 
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-
-	allWorkloads, err := s.kubeClient.AllWorkloads(ctx)
-	if err != nil {
-		log.Printf("Error fetching workloads: %v", err)
-		s.renderErrorSnippet(w, fmt.Sprintf("Error fetching workloads: %v", err))
+	scan := s.scanKubeWorkloads(r.Context(), data, untrackedOnly)
+	if !scan.Outcome.ok() {
+		s.renderErrorSnippet(w, scan.Outcome.reason)
 		return
 	}
-
-	// Build a set of known workload names from annotations.
-	annotatedNames := make(map[string]bool)
-	for _, e := range data.finder.FindComponents(data.repo, "") {
-		if v, ok := e.GetMetadata().Annotations[catalog.AnnotKubeName]; ok {
-			annotatedNames[v] = true
-		}
-	}
-
-	isTracked := func(w kube.Workload) bool {
-		// Tracked if a Component with the same name exists in the default namespace.
-		ref := &catalog.Ref{Kind: catalog.KindComponent, Namespace: catalog.DefaultNamespace, Name: w.Name}
-		if data.repo.Component(ref) != nil {
-			return true
-		}
-		// Tracked if any entity has a matching annotation.
-		return annotatedNames[w.Name]
-	}
-
-	var workloads []kubeWorkloadView
-	for _, w := range allWorkloads {
-		if s.linter != nil && s.linter.IsExcludedKubeWorkload(w.Name) {
-			continue
-		}
-		workloads = append(workloads, kubeWorkloadView{
-			Workload: w,
-			Tracked:  isTracked(w),
-		})
-	}
-
-	// Filter to untracked workloads if requested.
-	untrackedOnly := r.URL.Query().Get("untracked") == "on"
-	if untrackedOnly {
-		workloads = slices.DeleteFunc(workloads, func(w kubeWorkloadView) bool {
-			return w.Tracked
-		})
-	}
-
-	slices.SortFunc(workloads, func(a, b kubeWorkloadView) int {
-		if c := strings.Compare(a.Namespace, b.Namespace); c != 0 {
-			return c
-		}
-		if c := strings.Compare(string(a.Kind), string(b.Kind)); c != 0 {
-			return c
-		}
-		return strings.Compare(a.Name, b.Name)
-	})
 
 	params := map[string]any{
-		"Workloads": workloads,
+		"Workloads": scan.Workloads,
 		"LabelKeys": []string{"app", "app.kubernetes.io/version"},
 	}
 	s.serveHTMLPage(w, r, "kube_workloads.html", params)
 }
 
-type prometheusWorkloadView struct {
-	lint.PromWorkload
-	Tracked bool
-}
-
 func (s *Server) servePrometheusWorkloads(w http.ResponseWriter, r *http.Request) {
-	if s.promClient == nil || s.linter == nil || !s.linter.Prometheus().Enabled {
-		s.renderErrorSnippet(w, "Prometheus workload scan not enabled")
-		return
-	}
-
 	data := s.getStoreData(r)
+	untrackedOnly := r.URL.Query().Get("untracked") == "on"
 
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-
-	promWorkloads, err := s.linter.ScanPrometheusWorkloads(ctx, s.promClient)
-	if err != nil {
-		log.Printf("Error scanning prometheus workloads: %v", err)
-		s.renderErrorSnippet(w, fmt.Sprintf("Error scanning prometheus workloads: %v", err))
+	scan := s.scanPrometheusWorkloads(r.Context(), data, untrackedOnly)
+	if !scan.Outcome.ok() {
+		s.renderErrorSnippet(w, scan.Outcome.reason)
 		return
 	}
-
-	// Build a set of known workload names from annotations.
-	annotatedNames := make(map[string]bool)
-	annotationKey := catalog.AnnotKubeName
-	if a := s.linter.Prometheus().WorkloadNameAnnotation; a != "" {
-		annotationKey = a
-	}
-	for _, e := range data.finder.FindComponents(data.repo, "") {
-		if v, ok := e.GetMetadata().Annotations[annotationKey]; ok {
-			annotatedNames[v] = true
-		}
-	}
-
-	isTracked := func(w lint.PromWorkload) bool {
-		// Tracked if a Component with the same name exists in the default namespace.
-		ref := &catalog.Ref{Kind: catalog.KindComponent, Namespace: catalog.DefaultNamespace, Name: w.Name}
-		if data.repo.Component(ref) != nil {
-			return true
-		}
-		// Tracked if any entity has a matching annotation.
-		return annotatedNames[w.Name]
-	}
-
-	var workloads []prometheusWorkloadView
-	for _, w := range promWorkloads {
-		workloads = append(workloads, prometheusWorkloadView{
-			PromWorkload: w,
-			Tracked:      isTracked(w),
-		})
-	}
-
-	// Filter to untracked workloads if requested.
-	untrackedOnly := r.URL.Query().Get("untracked") == "on"
-	if untrackedOnly {
-		workloads = slices.DeleteFunc(workloads, func(w prometheusWorkloadView) bool {
-			return w.Tracked
-		})
-	}
-
-	slices.SortFunc(workloads, func(a, b prometheusWorkloadView) int {
-		return strings.Compare(a.Name, b.Name)
-	})
 
 	params := map[string]any{
-		"Workloads":     workloads,
+		"Workloads":     scan.Workloads,
 		"DisplayLabels": s.linter.Prometheus().DisplayLabels,
 		"ShowMetrics":   s.linter.Prometheus().ShowMetrics,
 	}
 	s.serveHTMLPage(w, r, "prometheus_workloads.html", params)
 }
 
+// bitbucketResultView adds the display-only fields the scan itself has no
+// business knowing about.
 type bitbucketResultView struct {
 	lint.BitbucketScanResult
 	Tracked bool
@@ -311,52 +194,25 @@ type bitbucketResultView struct {
 }
 
 func (s *Server) serveBitbucketResults(w http.ResponseWriter, r *http.Request) {
-	if s.bbClient == nil || s.linter == nil || !s.linter.Bitbucket().Enabled {
-		s.renderErrorSnippet(w, "Bitbucket scan not enabled")
-		return
-	}
-
 	data := s.getStoreData(r)
-	entities := data.finder.FindEntities(data.repo, "")
+	untrackedOnly := r.URL.Query().Get("untracked") == "on"
+	refresh := r.URL.Query().Get("rescan") == "on"
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
-	defer cancel()
-
-	useCache := r.URL.Query().Get("rescan") != "on"
-	log.Printf("Looking for files in Bitbucket (useCache=%v)", useCache)
-	queryResults, err := s.linter.FindBitbucketFiles(ctx, s.bbClient, useCache, bitbucketConcurrency)
-	if err != nil {
-		log.Printf("Error scanning Bitbucket files: %v", err)
-		s.renderErrorSnippet(w, fmt.Sprintf("Error scanning Bitbucket files: %v", err))
+	scan := s.scanBitbucketFiles(r.Context(), data, untrackedOnly, refresh)
+	if !scan.Outcome.ok() {
+		s.renderErrorSnippet(w, scan.Outcome.reason)
 		return
 	}
-	log.Printf("Found %d files. Matching files against entity URLs.", len(queryResults))
-	scanResults := s.linter.MatchBitbucketFiles(queryResults, entities)
 
-	untrackedOnly := r.URL.Query().Get("untracked") == "on"
-	var views []bitbucketResultView
-	for _, res := range scanResults {
-		tracked := res.Entity != nil
-		if untrackedOnly && tracked {
-			continue
-		}
+	views := make([]bitbucketResultView, 0, len(scan.Results))
+	for _, res := range scan.Results {
 		f := res.File
 		views = append(views, bitbucketResultView{
 			BitbucketScanResult: res,
-			Tracked:             tracked,
+			Tracked:             res.Entity != nil,
 			FileURL:             fmt.Sprintf("%s/projects/%s/repos/%s/browse/%s", s.bbClient.BaseURL(), f.ProjectKey, f.RepoSlug, f.Path),
 		})
 	}
-
-	slices.SortFunc(views, func(a, b bitbucketResultView) int {
-		if c := strings.Compare(a.File.ProjectKey, b.File.ProjectKey); c != 0 {
-			return c
-		}
-		if c := strings.Compare(a.File.RepoSlug, b.File.RepoSlug); c != 0 {
-			return c
-		}
-		return strings.Compare(a.File.Path, b.File.Path)
-	})
 
 	params := map[string]any{
 		"Results": views,
@@ -364,86 +220,18 @@ func (s *Server) serveBitbucketResults(w http.ResponseWriter, r *http.Request) {
 	s.serveHTMLPage(w, r, "bitbucket_results.html", params)
 }
 
-type linkCheckRowView struct {
-	Entity catalog.Entity
-	URL    string
-	Title  string
-	Type   string
-	// Status is one of "ok", "broken", "warn". Used by the template to
-	// pick an icon and color.
-	Status string
-	Reason string
-}
-
-// bitbucketConcurrency caps how many Bitbucket requests run in parallel.
-// Kept conservative to avoid overloading the Bitbucket server.
-const bitbucketConcurrency = 4
-
 func (s *Server) serveLinkCheckResults(w http.ResponseWriter, r *http.Request) {
-	if s.linter == nil {
-		s.renderErrorSnippet(w, "Linter not configured")
-		return
-	}
-	// At least one fetcher must be available to make this useful.
-	if s.bbClient == nil {
-		s.renderErrorSnippet(w, "No link fetchers configured")
-		return
-	}
-
 	data := s.getStoreData(r)
-	entities := data.finder.FindEntities(data.repo, "")
-
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
-	defer cancel()
-
-	fetchers := lint.LinkFetchers{Bitbucket: s.bbClient}
-	checks := s.linter.ScanLinks(ctx, fetchers, entities, bitbucketConcurrency)
-
 	brokenOnly := r.URL.Query().Get("broken") == "on"
-	var views []linkCheckRowView
-	for _, c := range checks {
-		var status string
-		switch c.Result.Status {
-		case lint.LinkCheckOK:
-			status = "ok"
-		case lint.LinkCheckBroken:
-			status = "broken"
-		default:
-			// LinkCheckError, LinkCheckNoAccess: cannot be confirmed
-			// either way, displayed as a warning.
-			status = "warn"
-		}
-		// "Broken only" hides everything except confirmed-broken links.
-		if brokenOnly && status != "broken" {
-			continue
-		}
-		reason := c.Result.Reason
-		if c.Result.Err != nil {
-			if reason != "" {
-				reason = fmt.Sprintf("%s: %v", reason, c.Result.Err)
-			} else {
-				reason = c.Result.Err.Error()
-			}
-		}
-		views = append(views, linkCheckRowView{
-			Entity: c.Entity,
-			URL:    c.Link.URL,
-			Title:  c.Link.Title,
-			Type:   c.Link.Type,
-			Status: status,
-			Reason: reason,
-		})
-	}
 
-	slices.SortFunc(views, func(a, b linkCheckRowView) int {
-		if c := strings.Compare(a.Entity.GetQName(), b.Entity.GetQName()); c != 0 {
-			return c
-		}
-		return strings.Compare(a.URL, b.URL)
-	})
+	scan := s.scanLinks(r.Context(), data, brokenOnly)
+	if !scan.Outcome.ok() {
+		s.renderErrorSnippet(w, scan.Outcome.reason)
+		return
+	}
 
 	params := map[string]any{
-		"Results": views,
+		"Results": scan.Rows,
 	}
 	s.serveHTMLPage(w, r, "link_check_results.html", params)
 }

@@ -33,9 +33,9 @@ func TestToPB_DomainField(t *testing.T) {
 			wantSpec: &catalog_pb.ComponentSpec{
 				Type:      "service",
 				Lifecycle: "prod",
-				Owner:     refToPB(ownerRef),
-				System:    refToPB(systemRef),
-				Domain:    refToPB(domainRef),
+				Owner:     RefToPB(ownerRef),
+				System:    RefToPB(systemRef),
+				Domain:    RefToPB(domainRef),
 			},
 		},
 		{
@@ -53,9 +53,9 @@ func TestToPB_DomainField(t *testing.T) {
 			wantSpec: &catalog_pb.ApiSpec{
 				Type:      "openapi",
 				Lifecycle: "stable",
-				Owner:     refToPB(ownerRef),
-				System:    refToPB(systemRef),
-				Domain:    refToPB(domainRef),
+				Owner:     RefToPB(ownerRef),
+				System:    RefToPB(systemRef),
+				Domain:    RefToPB(domainRef),
 			},
 		},
 		{
@@ -71,9 +71,9 @@ func TestToPB_DomainField(t *testing.T) {
 			},
 			wantSpec: &catalog_pb.ResourceSpec{
 				Type:   "database",
-				Owner:  refToPB(ownerRef),
-				System: refToPB(systemRef),
-				Domain: refToPB(domainRef),
+				Owner:  RefToPB(ownerRef),
+				System: RefToPB(systemRef),
+				Domain: RefToPB(domainRef),
 			},
 		},
 	}
