@@ -58,27 +58,27 @@
     "anyRef": {
       "type": "string",
       "pattern": "^(?:(?:domain|system|component|resource|api|group):)?(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/)?[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$",
-      "description": "An entity reference: [<kind>:][<namespace>/]<name>, e.g. 'component:payments/checkout'. The kind is lowercase; the namespace defaults to 'default'."
+      "description": "An entity reference: `[<kind>:][<namespace>/]<name>`, e.g. `component:payments/checkout`. The kind is lowercase; the namespace defaults to `default`."
     },
     "groupRef": {
       "type": "string",
       "pattern": "^(?:group:)?(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/)?[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$",
-      "description": "A reference to a Group: [group:][<namespace>/]<name>."
+      "description": "A reference to a Group: `[group:][<namespace>/]<name>`."
     },
     "systemRef": {
       "type": "string",
       "pattern": "^(?:system:)?(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/)?[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$",
-      "description": "A reference to a System: [system:][<namespace>/]<name>."
+      "description": "A reference to a System: `[system:][<namespace>/]<name>`."
     },
     "domainRef": {
       "type": "string",
       "pattern": "^(?:domain:)?(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/)?[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$",
-      "description": "A reference to a Domain: [domain:][<namespace>/]<name>."
+      "description": "A reference to a Domain: `[domain:][<namespace>/]<name>`."
     },
     "componentRef": {
       "type": "string",
       "pattern": "^(?:component:)?(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/)?[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$",
-      "description": "A reference to a Component: [component:][<namespace>/]<name>."
+      "description": "A reference to a Component: `[component:][<namespace>/]<name>`."
     },
 
     "apiLabelRef": {
@@ -327,7 +327,7 @@
         },
         "versions": {
           "type": "array",
-          "description": "The versions in which this API currently exists. Consumers and providers can select one with '@<version>'.",
+          "description": "The versions in which this API currently exists. Consumers and providers can select one with `@<version>`.",
           "items": { "$ref": "#/definitions/apiSpecVersion" }
         }
       }

@@ -39,16 +39,3 @@ The fields of each entity kind are also documented in
 
 A larger example can be found under
 [examples/flights](https://github.com/dnswlt/swcat/tree/main/examples/flights).
-
-## Machine-readable schemas
-
-The catalog YAML format has a
-[JSON Schema](https://dnswlt.github.io/swcat/schema/swcat/catalog/v1/catalog.schema.json)
-for validation, completion, and hover documentation in editors such as VS Code
-and IntelliJ. Associate that URL with the YAML files in your catalog using your
-editor's JSON Schema mapping settings.
-
-The JSON returned by the REST API has a separate
-[Protobuf schema](https://dnswlt.github.io/swcat/schema/swcat/catalog/v1/catalog.proto).
-See the [JSON API documentation](../json-api.md) for the differences between the
-catalog YAML representation and the API's Protobuf JSON representation.

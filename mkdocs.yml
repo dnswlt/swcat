@@ -25,6 +25,7 @@ nav:
       - 'user-guide/catalog/index.md'
       - 'Metadata': 'user-guide/catalog/metadata.md'
       - 'Entity References': 'user-guide/catalog/entity-references.md'
+      - 'Editor setup': 'user-guide/catalog/editor-setup.md'
       - 'Domain': 'user-guide/catalog/domain.md'
       - 'System': 'user-guide/catalog/system.md'
       - 'Component': 'user-guide/catalog/component.md'
