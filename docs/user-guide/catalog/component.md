@@ -41,3 +41,7 @@ spec:
   dependsOn:
     - resource:my-database
 ```
+
+swcat can also compare dependencies observed by external runtime tools with the
+relationships declared by Components. See
+[Observed dependency linting](../linting/observed-dependencies.md).

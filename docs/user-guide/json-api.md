@@ -186,6 +186,11 @@ curl -X DELETE \
 
 ## Reporting observed dependencies
 
+!!! tip
+    This endpoint supplies observations to swcat's optional dependency lint
+    check. See [Observed dependency linting](linting/observed-dependencies.md)
+    for configuration, matching behavior, and guidance on resolving findings.
+
 External tools (for example a runtime-traffic or message-bus scanner) can report
 the dependencies they *observe* between entities. These are tentative,
 machine-detected dependencies — distinct from the dependencies declared in an

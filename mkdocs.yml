@@ -43,6 +43,7 @@ nav:
     - 'Linting':
       - 'user-guide/linting/index.md'
       - 'CEL Rules': 'user-guide/linting/cel.md'
+      - 'Observed dependencies': 'user-guide/linting/observed-dependencies.md'
       - 'Prometheus Scan': 'user-guide/linting/prometheus.md'
       - 'Bitbucket Scan': 'user-guide/linting/bitbucket.md'
     - 'Remote catalogs': 'user-guide/remote-catalog.md'
