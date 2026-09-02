@@ -7,7 +7,7 @@ manipulate entities stored in the catalog.
 
 The JSON exchanged by this API is the **Protobuf JSON mapping** of the catalog
 schema defined in
-[`proto/swcat/catalog/v1/catalog.proto`](https://github.com/dnswlt/swcat/blob/main/proto/swcat/catalog/v1/catalog.proto).
+[`catalog.proto`](https://dnswlt.github.io/swcat/schema/swcat/catalog/v1/catalog.proto).
 That `.proto` file is the authoritative schema for entities, their specs, and
 status observations.
 
@@ -50,7 +50,7 @@ curl -G 'http://localhost:9191/catalog/entities' \
 ```
 
 The response body is a
-[`ListEntitiesResponse`](https://github.com/dnswlt/swcat/blob/main/proto/swcat/catalog/v1/catalog.proto):
+[`ListEntitiesResponse`](https://dnswlt.github.io/swcat/schema/swcat/catalog/v1/catalog.proto):
 a JSON object containing an `entities` array, where each element is an entity
 encoded according to the schema described above:
 
@@ -138,7 +138,7 @@ field of an entity (see the query example above).
 
 Each observation is identified by a key (following the annotation naming
 conventions, e.g. `swcat.io/last-build`) and carries an
-[`Observation`](https://github.com/dnswlt/swcat/blob/main/proto/swcat/catalog/v1/catalog.proto)
+[`Observation`](https://dnswlt.github.io/swcat/schema/swcat/catalog/v1/catalog.proto)
 payload:
 
 | Field | Required | Description |
@@ -194,7 +194,7 @@ entity's spec — and swcat stores them as a
 well-known key `swcat-deps/<detectedBy>`.
 
 Send a `POST` request to `/catalog/observed-dependencies` with an
-[`ObservedDependencies`](https://github.com/dnswlt/swcat/blob/main/proto/swcat/catalog/v1/catalog.proto)
+[`ObservedDependencies`](https://dnswlt.github.io/swcat/schema/swcat/catalog/v1/catalog.proto)
 JSON body:
 
 | Field | Required | Description |

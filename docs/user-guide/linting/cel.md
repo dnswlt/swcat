@@ -83,7 +83,7 @@ Example: `kind:API AND lint:error`
 
 ## The Entity Model
 
-When writing CEL expressions, you have access to the entity's fields as defined in the [catalog.proto](https://github.com/dnswlt/swcat/blob/main/proto/swcat/catalog/v1/catalog.proto) Protobuf definition.
+When writing CEL expressions, you have access to the entity's fields as defined in the [catalog.proto](https://dnswlt.github.io/swcat/schema/swcat/catalog/v1/catalog.proto) Protobuf definition.
 
 The following variables are available in the CEL environment:
 

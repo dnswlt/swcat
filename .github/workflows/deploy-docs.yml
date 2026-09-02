@@ -30,7 +30,15 @@ jobs:
       - name: Install dependencies
         run: pip install mkdocs mkdocs-material
 
-      # Step 4: Build and deploy the documentation
+      # Publish machine-readable schemas alongside the documentation without
+      # making docs/ their authoritative source location.
+      - name: Stage schemas
+        run: |
+          mkdir -p docs/schema/swcat/catalog/v1
+          cp schema/swcat/catalog/v1/catalog.schema.json docs/schema/swcat/catalog/v1/
+          cp proto/swcat/catalog/v1/catalog.proto docs/schema/swcat/catalog/v1/
+
+      # Build and deploy the documentation, including the staged schemas.
       # The `gh-deploy` command builds the site and pushes it to the `gh-pages` branch.
       - name: Deploy to GitHub Pages
         run: mkdocs gh-deploy --force
