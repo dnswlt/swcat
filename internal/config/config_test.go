@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dnswlt/swcat/internal/catalog"
+	catalogrepo "github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
 )
 
@@ -143,5 +145,175 @@ ui:
 	_, err := Load(st, "swcat.yml")
 	if err == nil {
 		t.Fatalf("expected error for invalid template content")
+	}
+}
+
+func TestLoad_StarlarkLinkFile_RelativeToConfigDir(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"conf/swcat.yml": `
+catalog:
+  starlarkLinks:
+    - filter: kind=component
+      file: links/components.star
+`,
+		"conf/links/components.star": `def links(entity): return []`,
+	})
+
+	st := store.NewDiskStore(root)
+	b, err := Load(st, "conf/swcat.yml")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(b.Catalog.StarlarkLinks) != 1 {
+		t.Fatalf("len(StarlarkLinks) = %d, want 1", len(b.Catalog.StarlarkLinks))
+	}
+	if got := b.Catalog.StarlarkLinks[0].File; got != "links/components.star" {
+		t.Fatalf("File = %q, want %q", got, "links/components.star")
+	}
+}
+
+func TestLoad_StarlarkLinkFileErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  string
+		files   map[string]string
+		wantErr string
+	}{
+		{
+			name: "missing file",
+			config: `
+catalog:
+  starlarkLinks:
+    - filter: kind=component
+      file: missing.star
+`,
+			wantErr: `could not read file "missing.star"`,
+		},
+		{
+			name: "syntax error",
+			config: `
+catalog:
+  starlarkLinks:
+    - filter: kind=component
+      file: broken.star
+`,
+			files:   map[string]string{"broken.star": `def links(:`},
+			wantErr: `compile "broken.star"`,
+		},
+		{
+			name: "empty filter",
+			config: `
+catalog:
+  starlarkLinks:
+    - file: links.star
+`,
+			files:   map[string]string{"links.star": `def links(entity): return []`},
+			wantErr: "empty filter",
+		},
+		{
+			name: "empty file",
+			config: `
+catalog:
+  starlarkLinks:
+    - filter: kind=component
+`,
+			wantErr: "empty file",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			files := map[string]string{"swcat.yml": tt.config}
+			for path, contents := range tt.files {
+				files[path] = contents
+			}
+			writeFiles(t, root, files)
+			_, err := Load(store.NewDiskStore(root), "swcat.yml")
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Load error = %v, want error containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestLoad_StarlarkLinksEndToEnd(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"swcat.yml": `
+catalog:
+  starlarkLinks:
+    - filter: kind=component
+      file: links/components.star
+`,
+		"links/components.star": `
+def links(entity):
+    return [link(
+        url="https://deployments.example.com/{name}".format(
+            name=entity["metadata"]["name"],
+        ),
+        title="Deployment",
+    )]
+`,
+		"catalog/catalog.yml": `
+apiVersion: swcat/v1
+kind: Group
+metadata:
+  name: team
+spec:
+  type: team
+  profile:
+    displayName: Team
+---
+apiVersion: swcat/v1
+kind: Domain
+metadata:
+  name: payments
+spec:
+  type: business
+  owner: team
+---
+apiVersion: swcat/v1
+kind: System
+metadata:
+  name: checkout
+spec:
+  type: service
+  owner: team
+  domain: payments
+---
+apiVersion: swcat/v1
+kind: Component
+metadata:
+  name: checkout-api
+spec:
+  type: service
+  lifecycle: production
+  owner: team
+  system: checkout
+`,
+	})
+
+	st := store.NewDiskStore(root)
+	bundle, err := Load(st, "swcat.yml")
+	if err != nil {
+		t.Fatalf("Load config: %v", err)
+	}
+	repository, err := catalogrepo.Load(st, nil, bundle.Catalog)
+	if err != nil {
+		t.Fatalf("Load repository: %v", err)
+	}
+	entity := repository.Entity(&catalog.Ref{
+		Kind:      catalog.KindComponent,
+		Namespace: "default",
+		Name:      "checkout-api",
+	})
+	if entity == nil {
+		t.Fatal("checkout-api component not found")
+	}
+	links := entity.GetMetadata().Links
+	if len(links) != 1 || links[0].URL != "https://deployments.example.com/checkout-api" || !links[0].IsGenerated {
+		t.Fatalf("generated links = %#v", links)
 	}
 }

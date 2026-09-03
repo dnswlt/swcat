@@ -2,11 +2,14 @@ package repo
 
 import (
 	"fmt"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	starlarkinterp "github.com/dnswlt/swcat/internal/starlark"
+	"github.com/dnswlt/swcat/internal/store"
 	"gopkg.in/yaml.v3"
 )
 
@@ -110,11 +113,53 @@ type AutomaticLink struct {
 	MultiLinkData string `yaml:"multiLinkData,omitempty"`
 }
 
+// StarlarkLink generates links by executing a Starlark file for every entity
+// matching Filter.
+type StarlarkLink struct {
+	// A filter expression that determines which entities this script applies to.
+	// [required]
+	Filter string `yaml:"filter"`
+	// A Starlark file relative to swcat.yml. It must define links(entity).
+	// [required]
+	File string `yaml:"file"`
+
+	program *starlarkinterp.Program
+}
+
 // Config holds repository-specific application configuration.
 type Config struct {
 	AnnotationBasedLinks map[string]*AnnotationBasedLink `yaml:"annotationBasedLinks"`
 	AutomaticLinks       []*AutomaticLink                `yaml:"automaticLinks"`
+	StarlarkLinks        []*StarlarkLink                 `yaml:"starlarkLinks"`
 	Validation           *CatalogValidationRules         `yaml:"validation"`
+}
+
+// LoadStarlarkLinks reads and compiles all configured Starlark link files.
+// File paths are relative to the directory containing swcat.yml.
+func (c *Config) LoadStarlarkLinks(st store.Store, configDir string) error {
+	for i, link := range c.StarlarkLinks {
+		if link == nil {
+			return fmt.Errorf("starlarkLinks[%d] is null", i)
+		}
+		if strings.TrimSpace(link.Filter) == "" {
+			return fmt.Errorf("starlarkLinks[%d] has an empty filter", i)
+		}
+		if strings.TrimSpace(link.File) == "" {
+			return fmt.Errorf("starlarkLinks[%d] has an empty file", i)
+		}
+
+		filename := path.Join(configDir, link.File)
+		source, err := st.ReadFile(filename)
+		if err != nil {
+			return fmt.Errorf("starlarkLinks[%d]: could not read file %q: %w", i, link.File, err)
+		}
+		program, err := starlarkinterp.Compile(filename, source)
+		if err != nil {
+			return fmt.Errorf("starlarkLinks[%d]: compile %q: %w", i, link.File, err)
+		}
+		link.program = program
+	}
+	return nil
 }
 
 func (r *CatalogValidationRules) Accept(e catalog.Entity) error {

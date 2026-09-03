@@ -12,6 +12,7 @@ import (
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/query"
+	starlarkinterp "github.com/dnswlt/swcat/internal/starlark"
 )
 
 // linkTemplateFuncs defines custom template functions available in link templates.
@@ -152,6 +153,11 @@ type linkGenerator struct {
 	multiLinkData string           // if non-empty, generates per-entry links from the swcat/data-{multiLinkData} annotation.
 	annotation    string           // annotation-based: fire when entity has this annotation
 	eval          *query.Evaluator // automatic: fire when entity matches this filter
+}
+
+type starlarkLinkGenerator struct {
+	eval    *query.Evaluator
+	program *starlarkinterp.Program
 }
 
 // isValidAbsoluteURL checks if a string is a valid, absolute URL
@@ -375,8 +381,36 @@ func (r *Repository) prepareLinkTemplates() ([]linkGenerator, error) {
 	return generators, nil
 }
 
+func (r *Repository) prepareStarlarkLinks() ([]starlarkLinkGenerator, error) {
+	generators := make([]starlarkLinkGenerator, 0, len(r.config.StarlarkLinks))
+	for i, link := range r.config.StarlarkLinks {
+		if link == nil {
+			return nil, fmt.Errorf("starlarkLinks[%d] is null", i)
+		}
+		if strings.TrimSpace(link.Filter) == "" {
+			return nil, fmt.Errorf("starlarkLinks[%d] has an empty filter", i)
+		}
+		if link.program == nil {
+			return nil, fmt.Errorf("starlarkLinks[%d] file %q was not loaded", i, link.File)
+		}
+		expr, err := query.Parse(link.Filter)
+		if err != nil {
+			return nil, fmt.Errorf("starlarkLinks[%d] has invalid filter expression %q: %w", i, link.Filter, err)
+		}
+		generators = append(generators, starlarkLinkGenerator{
+			eval:    query.NewEvaluator(expr),
+			program: link.program,
+		})
+	}
+	return generators, nil
+}
+
 func (r *Repository) addGeneratedLinks() error {
 	tmpls, err := r.prepareLinkTemplates()
+	if err != nil {
+		return err
+	}
+	starlarkGenerators, err := r.prepareStarlarkLinks()
 	if err != nil {
 		return err
 	}
@@ -411,6 +445,38 @@ func (r *Repository) addGeneratedLinks() error {
 				return err
 			}
 			links = append(links, newLinks...)
+		}
+		for _, generator := range starlarkGenerators {
+			matches, err := generator.eval.Matches(e)
+			if err != nil {
+				return fmt.Errorf("failed to evaluate Starlark link filter for entity %v: %w", e.GetRef(), err)
+			}
+			if !matches {
+				continue
+			}
+			generated, err := generator.program.Links(e, r)
+			if err != nil {
+				return fmt.Errorf("failed to execute Starlark link file %q for entity %v: %w", generator.program.Filename(), e.GetRef(), err)
+			}
+			for _, link := range generated {
+				if !isValidAbsoluteURL(link.URL) {
+					return fmt.Errorf("invalid URL from Starlark link file %q for %v: %q", generator.program.Filename(), e.GetRef(), link.URL)
+				}
+				catalogLink := &catalog.Link{
+					URL:         link.URL,
+					Title:       link.Title,
+					Icon:        link.Icon,
+					Type:        link.Type,
+					IsGenerated: true,
+				}
+				if link.Group != "" {
+					catalogLink.GroupInfo = &catalog.LinkGroupInfo{
+						Group: link.Group,
+						Label: link.Label,
+					}
+				}
+				links = append(links, catalogLink)
+			}
 		}
 
 		meta.Links = append(meta.Links, links...)

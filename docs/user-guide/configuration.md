@@ -45,6 +45,11 @@ The `catalog` section allows you to configure repository-specific settings.
     Supports `multiLinks` and `multiLinkData` for generating per-environment link
     groups. See [Multi-environment Links](#multi-environment-links) below.
 
+* `starlarkLinks`: A list of Starlark programs that generate zero or more links
+    for entities matching a filter. Each entry has a `filter` using the existing
+    [query syntax](query-syntax.md) and a `file` path relative to `swcat.yml`.
+    See [Starlark links](starlark-links.md) for the script API and examples.
+
 * `validation`: Defines validation rules for entity specifications.
   You can define rules for domains, systems, components, resources, and APIs.
     * `values`: A list of allowed values for a field.

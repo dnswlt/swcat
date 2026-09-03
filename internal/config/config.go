@@ -139,6 +139,9 @@ func Load(st store.Store, configPath string) (*Bundle, error) {
 	if err := bundle.UI.loadTemplates(st, path.Dir(configPath)); err != nil {
 		return nil, err
 	}
+	if err := bundle.Catalog.LoadStarlarkLinks(st, path.Dir(configPath)); err != nil {
+		return nil, err
+	}
 
 	return &bundle, nil
 }

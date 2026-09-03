@@ -11,6 +11,7 @@ require (
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/yuin/goldmark v1.8.2
+	go.starlark.net v0.0.0-20260828210309-6dd8f160a37f
 	golang.org/x/mod v0.37.0
 	golang.org/x/net v0.56.0
 	google.golang.org/grpc v1.82.0

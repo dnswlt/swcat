@@ -33,6 +33,7 @@ nav:
       - 'API': 'user-guide/catalog/api.md'
       - 'Group': 'user-guide/catalog/group.md'
     - 'Configuration': 'user-guide/configuration.md'
+    - 'Starlark links': 'user-guide/starlark-links.md'
     - 'Custom content': 'user-guide/custom-content.md'
     - 'Sidecar extensions': 'user-guide/sidecar-extensions.md'
     - 'Plugins':

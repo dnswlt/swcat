@@ -1,9 +1,11 @@
 package repo
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	starlarkinterp "github.com/dnswlt/swcat/internal/starlark"
 )
 
 func TestPrepareLinkTemplates(t *testing.T) {
@@ -677,5 +679,145 @@ func TestAddGeneratedLinks_AddQueryParams(t *testing.T) {
 	wantURL := "https://example.com?foo=bar+baz&q=hello+world"
 	if link.URL != wantURL {
 		t.Errorf("link.URL = %q, want %q", link.URL, wantURL)
+	}
+}
+
+func TestAddGeneratedLinks_Starlark(t *testing.T) {
+	program, err := starlarkinterp.Compile("components.star", []byte(`
+def links(entity):
+    system = lookup_ref(entity["componentSpec"]["system"])
+    environment = json.decode(iannotation("swcat/data-environments"))[0]
+    return [link(
+        url="https://{environment}.example.com/{component}".format(
+            environment=environment["value"],
+            component=entity["metadata"]["name"],
+        ),
+        title="Deploy {system}".format(system=system["metadata"]["name"]),
+        type="deployment",
+        group="Deployments",
+        label=environment["label"],
+    )]
+`))
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	repo := NewRepositoryWithConfig(Config{
+		StarlarkLinks: []*StarlarkLink{{
+			Filter:  "kind=component",
+			File:    "components.star",
+			program: program,
+		}},
+	})
+	system := &catalog.System{
+		Metadata: &catalog.Metadata{
+			Name: "payments",
+			Annotations: map[string]string{
+				"swcat/data-environments": `[{"label":"prod","value":"production"}]`,
+			},
+		},
+		Spec: &catalog.SystemSpec{},
+	}
+	component := &catalog.Component{
+		Metadata: &catalog.Metadata{Name: "checkout"},
+		Spec: &catalog.ComponentSpec{
+			Type:   "service",
+			System: system.GetRef(),
+		},
+	}
+	repo.AddEntity(system)
+	repo.AddEntity(component)
+
+	if err := repo.addGeneratedLinks(); err != nil {
+		t.Fatalf("addGeneratedLinks: %v", err)
+	}
+	if len(component.Metadata.Links) != 1 {
+		t.Fatalf("len(links) = %d, want 1", len(component.Metadata.Links))
+	}
+	link := component.Metadata.Links[0]
+	if link.URL != "https://production.example.com/checkout" {
+		t.Errorf("URL = %q", link.URL)
+	}
+	if link.Title != "Deploy payments" || link.Type != "deployment" || !link.IsGenerated {
+		t.Errorf("link = %#v", link)
+	}
+	if link.GroupInfo == nil || link.GroupInfo.Group != "Deployments" || link.GroupInfo.Label != "prod" {
+		t.Errorf("GroupInfo = %#v", link.GroupInfo)
+	}
+}
+
+func TestAddGeneratedLinks_StarlarkErrorsFailHard(t *testing.T) {
+	tests := []struct {
+		name    string
+		source  string
+		wantErr string
+	}{
+		{
+			name:    "runtime error",
+			source:  `def links(entity): return [1 // 0]`,
+			wantErr: "floored division by zero",
+		},
+		{
+			name:    "invalid result type",
+			source:  `def links(entity): return [{"url": "https://example.com"}]`,
+			wantErr: "returned dict at index 0, want link",
+		},
+		{
+			name:    "constructor type error",
+			source:  `def links(entity): return [link(url=123)]`,
+			wantErr: `for parameter "url": got int, want string`,
+		},
+		{
+			name:    "invalid URL",
+			source:  `def links(entity): return [link(url="relative/path")]`,
+			wantErr: `invalid URL from Starlark link file`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			program, err := starlarkinterp.Compile("broken.star", []byte(tt.source))
+			if err != nil {
+				t.Fatalf("Compile: %v", err)
+			}
+			repo := NewRepositoryWithConfig(Config{
+				StarlarkLinks: []*StarlarkLink{{
+					Filter:  "kind=component",
+					File:    "broken.star",
+					program: program,
+				}},
+			})
+			component := &catalog.Component{
+				Metadata: &catalog.Metadata{Name: "checkout"},
+				Spec:     &catalog.ComponentSpec{Type: "service"},
+			}
+			repo.AddEntity(component)
+
+			err = repo.addGeneratedLinks()
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("addGeneratedLinks error = %v, want error containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestAddGeneratedLinks_StarlarkSkipsNonMatchingEntity(t *testing.T) {
+	program, err := starlarkinterp.Compile("apis.star", []byte(`def links(entity): return [1 // 0]`))
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	repo := NewRepositoryWithConfig(Config{
+		StarlarkLinks: []*StarlarkLink{{
+			Filter:  "kind=api",
+			File:    "apis.star",
+			program: program,
+		}},
+	})
+	repo.AddEntity(&catalog.Component{
+		Metadata: &catalog.Metadata{Name: "checkout"},
+		Spec:     &catalog.ComponentSpec{Type: "service"},
+	})
+
+	if err := repo.addGeneratedLinks(); err != nil {
+		t.Fatalf("addGeneratedLinks: %v", err)
 	}
 }

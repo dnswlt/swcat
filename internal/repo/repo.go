@@ -831,7 +831,7 @@ func (r *Repository) Validate() error {
 	r.sortReferences()
 
 	if err := r.addGeneratedLinks(); err != nil {
-		return fmt.Errorf("error generating annotation-based links: %w", err)
+		return fmt.Errorf("error generating links: %w", err)
 	}
 
 	return nil
