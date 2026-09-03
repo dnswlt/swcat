@@ -67,33 +67,10 @@ catalog:
                 "ns" .Metadata.Namespace ) }}
       title: Source code
       icon: code
-    hexz.me/logging:
-      url: https://example.com/logs/{{ .MultiLink.Value.logName }}/{{ .Metadata.Name }}
-      title: Logs
-      icon: logs
-      multiLinkData: environments
-      multiLinks:
-        - label: main
-          value: 
-            logName: main
-    hexz.me/asyncapi:
-      url: https://example.com/repos/apis/{{.MultiLink.Value}}/{{ .Annotation.Value }}_{{ .Version.Major }}
-      title: API Schema ({{ .Version }})
-      multiLinks:
-        - label: dev
-          value: dev
-        - label: prod
-          value: prod
-  # Create links for all entities matching a filter.
-  automaticLinks:
-      - filter: |
-          kind=component AND (system=flights-search OR system=flights-tickets)
-        url: https://grafana.example.com/dashboards/prod/{{ first (.IAnnotation "hexz.me/monitoring") .Metadata.Name }}
-        title: Monitoring
-      - filter: |
-          kind=component AND system=flights-search
-        url: https://k8s.example.com/k8s/ns/{{ .System.Metadata.Name }}-prod/{{ toGVK (first (.IAnnotation "apps.kubernetes.io/kind") "Deployment") }}/pods
-        title: k8s pods
+  # Generate conditional, grouped, and version-aware links in Starlark.
+  starlarkLinks:
+    - filter: kind=api OR kind=component
+      file: links/generated.star
   validation:
     api:
       type:

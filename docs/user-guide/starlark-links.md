@@ -5,6 +5,8 @@ Configure Starlark-based link generation under `catalog.starlarkLinks` in
 `swcat.yml`; each script receives a matching entity and returns its links.
 This is useful when link targets depend on entity data or one entity needs links
 for several environments, versions, or related resources.
+It is the preferred replacement for the deprecated `automaticLinks` and
+annotation-based multilink settings.
 [Starlark](https://github.com/google/starlark-go) is a deterministic Python-like
 configuration language suited to iteration, branching, structured annotations,
 and following catalog references.
@@ -100,7 +102,7 @@ references.
 ### `iannotation`
 
 ```python
-value = iannotation("swcat/data-environments")
+value = iannotation("deployments.example.com/environments")
 ```
 
 Returns an inherited annotation for the current entity. swcat starts at the
@@ -120,8 +122,13 @@ The standard Starlark `json` module is available. In particular,
 `json.decode(string)` is useful for structured annotation values:
 
 ```python
-environments = json.decode(iannotation("swcat/data-environments") or "[]")
+environments = json.decode(
+    iannotation("deployments.example.com/environments") or "[]"
+)
 ```
+
+The annotation name and JSON structure belong to the catalog using the script;
+Starlark link generation does not prescribe a naming convention or schema.
 
 ## Generating grouped links
 
@@ -131,12 +138,11 @@ in an inherited annotation:
 ```python
 def links(entity):
     environments = json.decode(
-        iannotation("swcat/data-environments") or "[]"
+        iannotation("deployments.example.com/environments") or "[]"
     )
 
     result = []
-    for entry in environments:
-        environment = entry["value"]
+    for environment in environments:
         result.append(link(
             url=(
                 "https://deployments.{host}/{application}"
@@ -144,10 +150,10 @@ def links(entity):
                 host=environment["host"],
                 application=entity["metadata"]["name"],
             ),
-            title="Deployment ({label})".format(label=entry["label"]),
+            title="Deployment ({name})".format(name=environment["name"]),
             type="deployment",
             group="Deployment",
-            label=entry["label"],
+            label=environment["name"],
         ))
 
     return result

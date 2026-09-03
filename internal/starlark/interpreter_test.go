@@ -43,7 +43,7 @@ func testEntities() (*catalog.Component, *fakeCatalog) {
 			system.GetRef().String(): system,
 		},
 		annotations: map[string]string{
-			"example.com/environments": `[{"label":"prod","host":"prod.example.com"}]`,
+			"example.com/environments": `[{"name":"prod","host":"prod.example.com"}]`,
 		},
 	}
 }
@@ -64,7 +64,7 @@ def links(entity):
         icon="cloud",
         type="deployment",
         group="Deployments",
-        label=environment["label"],
+        label=environment["name"],
     )]
 `))
 	if err != nil {

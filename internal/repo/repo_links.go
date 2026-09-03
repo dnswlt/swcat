@@ -89,8 +89,10 @@ type linkTemplateContext struct {
 
 	// Fields containing specific contextual data relevant to the link generation.
 	Annotation nameval
-	Version    *catalog.Version
-	MultiLink  MultiLinkEntry
+
+	// Deprecated template values retained for historical catalog revisions.
+	Version   *catalog.Version
+	MultiLink MultiLinkEntry
 }
 
 func (c *linkTemplateContext) Metadata() *catalog.Metadata {
@@ -141,18 +143,26 @@ func (c *linkTemplateContext) ILabel(key string) string {
 	return ""
 }
 
-// linkGenerator holds compiled templates and metadata for one auto-generated link rule.
-// Exactly one of annotation or eval is set, determining when the rule fires.
+// linkGenerator holds compiled templates for an annotation-based link rule.
 type linkGenerator struct {
-	url           *template.Template
-	title         *template.Template
-	icon          string
-	typ           string
-	hasVersion    bool             // if true, generates per-version links for versioned APIs
-	multiLinks    []MultiLinkEntry // if non-empty, generates per-entry links
-	multiLinkData string           // if non-empty, generates per-entry links from the swcat/data-{multiLinkData} annotation.
-	annotation    string           // annotation-based: fire when entity has this annotation
-	eval          *query.Evaluator // automatic: fire when entity matches this filter
+	url        *template.Template
+	title      *template.Template
+	icon       string
+	typ        string
+	annotation string
+
+	// Deprecated expansion settings retained for historical catalog revisions.
+	legacyHasVersion    bool
+	legacyMultiLinks    []MultiLinkEntry
+	legacyMultiLinkData string
+}
+
+// legacyAutomaticLinkGenerator adds the filter used by the deprecated
+// automaticLinks configuration. Template rendering remains shared with
+// annotation-based links, which also retain legacy expansion support.
+type legacyAutomaticLinkGenerator struct {
+	linkGenerator
+	eval *query.Evaluator
 }
 
 type starlarkLinkGenerator struct {
@@ -194,7 +204,9 @@ func (g *linkGenerator) renderTitle(data linkTemplateContext) (string, error) {
 	return sb.String(), nil
 }
 
-// generateLinks produces all links for entity e.
+// generateLinks produces links for an annotation-based template. New
+// configurations take the single-link path; historical configurations may
+// still request the deprecated expansion behavior.
 func (g *linkGenerator) generateLinks(r *Repository, e catalog.Entity) ([]*catalog.Link, error) {
 	baseCtx := linkTemplateContext{repo: r, entity: e}
 	if g.annotation != "" {
@@ -203,97 +215,18 @@ func (g *linkGenerator) generateLinks(r *Repository, e catalog.Entity) ([]*catal
 		}
 	}
 
-	multiLinks := g.multiLinks
-	if g.multiLinkData != "" {
-		// Find multi-links via annotation reference.
-		v := baseCtx.IAnnotation("swcat/data-" + g.multiLinkData)
-		if v != "" {
-			var entries []MultiLinkEntry
-			if err := json.Unmarshal([]byte(v), &entries); err != nil {
-				return nil, fmt.Errorf("invalid JSON in annotation swcat/data-%s for %v: %v",
-					g.multiLinkData, e.GetRef(), err)
-			}
-			multiLinks = entries
-		}
+	if g.usesLegacyExpansion() {
+		return g.generateLegacyExpandedLinks(baseCtx, e)
 	}
+	return g.generateSingleLink(baseCtx)
+}
 
-	if len(multiLinks) > 0 {
-		// Collect versions to iterate over. For non-versioned entities (or when
-		// hasVersion is false) we use a single nil entry to run the loop once.
-		var versions []*catalog.Version
-		if g.hasVersion {
-			if ap, ok := e.(*catalog.API); ok {
-				for i := range ap.Spec.Versions {
-					versions = append(versions, &ap.Spec.Versions[i].Version)
-				}
-			}
-		}
-		if len(versions) == 0 {
-			versions = []*catalog.Version{nil}
-		}
-		links := make([]*catalog.Link, 0, len(versions)*len(multiLinks))
-		for _, ver := range versions {
-			// Build per-version data (without MultiLink) to render the group title.
-			verCtx := baseCtx
-			if ver != nil {
-				verCtx.Version = ver
-			}
-			groupTitle, err := g.renderTitle(verCtx)
-			if err != nil {
-				return nil, err
-			}
-			for _, ml := range multiLinks {
-				mlCtx := verCtx
-				mlCtx.MultiLink = ml
-				u, err := g.renderURL(mlCtx)
-				if err != nil {
-					return nil, err
-				}
-				links = append(links, &catalog.Link{
-					Title:       groupTitle + " (" + ml.Label + ")",
-					URL:         u,
-					Icon:        g.icon,
-					Type:        g.typ,
-					IsGenerated: true,
-					GroupInfo:   &catalog.LinkGroupInfo{Group: groupTitle, Label: ml.Label},
-				})
-			}
-		}
-		return links, nil
-	}
-
-	if g.hasVersion {
-		if ap, ok := e.(*catalog.API); ok && len(ap.Spec.Versions) > 0 {
-			links := make([]*catalog.Link, 0, len(ap.Spec.Versions))
-			for _, ver := range ap.Spec.Versions {
-				verCtx := baseCtx
-				verCtx.Version = &ver.Version
-				u, err := g.renderURL(verCtx)
-				if err != nil {
-					return nil, err
-				}
-				title, err := g.renderTitle(verCtx)
-				if err != nil {
-					return nil, err
-				}
-				links = append(links, &catalog.Link{
-					Title:       title,
-					URL:         u,
-					Icon:        g.icon,
-					Type:        g.typ,
-					IsGenerated: true,
-				})
-			}
-			return links, nil
-		}
-	}
-
-	// Single link (no multi-links, no multiple versions).
-	u, err := g.renderURL(baseCtx)
+func (g *linkGenerator) generateSingleLink(ctx linkTemplateContext) ([]*catalog.Link, error) {
+	u, err := g.renderURL(ctx)
 	if err != nil {
 		return nil, err
 	}
-	title, err := g.renderTitle(baseCtx)
+	title, err := g.renderTitle(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -304,6 +237,113 @@ func (g *linkGenerator) generateLinks(r *Repository, e catalog.Entity) ([]*catal
 		Type:        g.typ,
 		IsGenerated: true,
 	}}, nil
+}
+
+func (g *linkGenerator) usesLegacyExpansion() bool {
+	return g.legacyHasVersion || len(g.legacyMultiLinks) > 0 || g.legacyMultiLinkData != ""
+}
+
+// generateLegacyExpandedLinks retains multi-link, inherited multi-link data,
+// and implicit per-version expansion for historical swcat.yml revisions.
+func (g *linkGenerator) generateLegacyExpandedLinks(baseCtx linkTemplateContext, e catalog.Entity) ([]*catalog.Link, error) {
+	multiLinks, err := g.resolveLegacyMultiLinks(baseCtx, e)
+	if err != nil {
+		return nil, err
+	}
+	if len(multiLinks) > 0 {
+		return g.generateLegacyMultiLinks(baseCtx, e, multiLinks)
+	}
+	if g.legacyHasVersion {
+		if ap, ok := e.(*catalog.API); ok && len(ap.Spec.Versions) > 0 {
+			return g.generateLegacyVersionLinks(baseCtx, ap)
+		}
+	}
+	return g.generateSingleLink(baseCtx)
+}
+
+func (g *linkGenerator) resolveLegacyMultiLinks(baseCtx linkTemplateContext, e catalog.Entity) ([]MultiLinkEntry, error) {
+	multiLinks := g.legacyMultiLinks
+	if g.legacyMultiLinkData != "" {
+		v := baseCtx.IAnnotation("swcat/data-" + g.legacyMultiLinkData)
+		if v != "" {
+			var entries []MultiLinkEntry
+			if err := json.Unmarshal([]byte(v), &entries); err != nil {
+				return nil, fmt.Errorf("invalid JSON in annotation swcat/data-%s for %v: %v",
+					g.legacyMultiLinkData, e.GetRef(), err)
+			}
+			multiLinks = entries
+		}
+	}
+	return multiLinks, nil
+}
+
+func (g *linkGenerator) generateLegacyMultiLinks(baseCtx linkTemplateContext, e catalog.Entity, multiLinks []MultiLinkEntry) ([]*catalog.Link, error) {
+	// For non-versioned entities we use one nil entry to run the loop once.
+	var versions []*catalog.Version
+	if g.legacyHasVersion {
+		if ap, ok := e.(*catalog.API); ok {
+			for i := range ap.Spec.Versions {
+				versions = append(versions, &ap.Spec.Versions[i].Version)
+			}
+		}
+	}
+	if len(versions) == 0 {
+		versions = []*catalog.Version{nil}
+	}
+
+	links := make([]*catalog.Link, 0, len(versions)*len(multiLinks))
+	for _, ver := range versions {
+		// The group title is version-specific but independent of the multi-link.
+		verCtx := baseCtx
+		if ver != nil {
+			verCtx.Version = ver
+		}
+		groupTitle, err := g.renderTitle(verCtx)
+		if err != nil {
+			return nil, err
+		}
+		for _, ml := range multiLinks {
+			mlCtx := verCtx
+			mlCtx.MultiLink = ml
+			u, err := g.renderURL(mlCtx)
+			if err != nil {
+				return nil, err
+			}
+			links = append(links, &catalog.Link{
+				Title:       groupTitle + " (" + ml.Label + ")",
+				URL:         u,
+				Icon:        g.icon,
+				Type:        g.typ,
+				IsGenerated: true,
+				GroupInfo:   &catalog.LinkGroupInfo{Group: groupTitle, Label: ml.Label},
+			})
+		}
+	}
+	return links, nil
+}
+
+func (g *linkGenerator) generateLegacyVersionLinks(baseCtx linkTemplateContext, api *catalog.API) ([]*catalog.Link, error) {
+	links := make([]*catalog.Link, 0, len(api.Spec.Versions))
+	for _, ver := range api.Spec.Versions {
+		verCtx := baseCtx
+		verCtx.Version = &ver.Version
+		u, err := g.renderURL(verCtx)
+		if err != nil {
+			return nil, err
+		}
+		title, err := g.renderTitle(verCtx)
+		if err != nil {
+			return nil, err
+		}
+		links = append(links, &catalog.Link{
+			Title:       title,
+			URL:         u,
+			Icon:        g.icon,
+			Type:        g.typ,
+			IsGenerated: true,
+		})
+	}
+	return links, nil
 }
 
 // compileLinkTemplates compiles a URL+title template pair, applying missingkey=error.
@@ -321,8 +361,9 @@ func compileLinkTemplates(urlStr, titleStr, errContext string) (*template.Templa
 	return urlTmpl, titleTmpl, nil
 }
 
-// prepareLinkTemplates compiles all url and title templates found in the config.
-func (r *Repository) prepareLinkTemplates() ([]linkGenerator, error) {
+// prepareAnnotationLinkTemplates compiles the supported one-to-one annotation
+// rules and any deprecated expansion settings found in historical configs.
+func (r *Repository) prepareAnnotationLinkTemplates() ([]linkGenerator, error) {
 	var generators []linkGenerator
 	versionPlaceholderRE := regexp.MustCompile(`\{\{\s*\.Version\b`)
 
@@ -338,17 +379,23 @@ func (r *Repository) prepareLinkTemplates() ([]linkGenerator, error) {
 			return nil, err
 		}
 		generators = append(generators, linkGenerator{
-			url:           urlTmpl,
-			title:         titleTmpl,
-			icon:          abl.Icon,
-			typ:           abl.Type,
-			hasVersion:    versionPlaceholderRE.MatchString(abl.URL + " " + abl.Title),
-			multiLinks:    abl.MultiLinks,
-			multiLinkData: abl.MultiLinkData,
-			annotation:    annot,
+			url:                 urlTmpl,
+			title:               titleTmpl,
+			icon:                abl.Icon,
+			typ:                 abl.Type,
+			annotation:          annot,
+			legacyHasVersion:    versionPlaceholderRE.MatchString(abl.URL + " " + abl.Title),
+			legacyMultiLinks:    abl.MultiLinks,
+			legacyMultiLinkData: abl.MultiLinkData,
 		})
 	}
+	return generators, nil
+}
 
+// prepareLegacyAutomaticLinkTemplates retains automaticLinks support for
+// historical Git refs. New configurations use Starlark links.
+func (r *Repository) prepareLegacyAutomaticLinkTemplates() ([]legacyAutomaticLinkGenerator, error) {
+	var generators []legacyAutomaticLinkGenerator
 	for _, al := range r.config.AutomaticLinks {
 		if al == nil {
 			continue
@@ -367,14 +414,16 @@ func (r *Repository) prepareLinkTemplates() ([]linkGenerator, error) {
 		if err != nil {
 			return nil, err
 		}
-		generators = append(generators, linkGenerator{
-			url:           urlTmpl,
-			title:         titleTmpl,
-			icon:          al.Icon,
-			typ:           al.Type,
-			multiLinks:    al.MultiLinks,
-			multiLinkData: al.MultiLinkData,
-			eval:          query.NewEvaluator(expr),
+		generators = append(generators, legacyAutomaticLinkGenerator{
+			linkGenerator: linkGenerator{
+				url:                 urlTmpl,
+				title:               titleTmpl,
+				icon:                al.Icon,
+				typ:                 al.Type,
+				legacyMultiLinks:    al.MultiLinks,
+				legacyMultiLinkData: al.MultiLinkData,
+			},
+			eval: query.NewEvaluator(expr),
 		})
 	}
 
@@ -405,8 +454,34 @@ func (r *Repository) prepareStarlarkLinks() ([]starlarkLinkGenerator, error) {
 	return generators, nil
 }
 
+// generateLegacyAutomaticLinks evaluates deprecated automaticLinks rules for
+// catalogs loaded from historical Git refs.
+func (r *Repository) generateLegacyAutomaticLinks(e catalog.Entity, generators []legacyAutomaticLinkGenerator) ([]*catalog.Link, error) {
+	var links []*catalog.Link
+	for i := range generators {
+		g := &generators[i]
+		matches, err := g.eval.Matches(e)
+		if err != nil {
+			return nil, fmt.Errorf("failed to evaluate filter for entity %v: %v", e.GetRef(), err)
+		}
+		if !matches {
+			continue
+		}
+		generated, err := g.generateLinks(r, e)
+		if err != nil {
+			return nil, err
+		}
+		links = append(links, generated...)
+	}
+	return links, nil
+}
+
 func (r *Repository) addGeneratedLinks() error {
-	tmpls, err := r.prepareLinkTemplates()
+	annotationTemplates, err := r.prepareAnnotationLinkTemplates()
+	if err != nil {
+		return err
+	}
+	legacyAutomaticTemplates, err := r.prepareLegacyAutomaticLinkTemplates()
 	if err != nil {
 		return err
 	}
@@ -424,21 +499,11 @@ func (r *Repository) addGeneratedLinks() error {
 			panic(fmt.Sprintf("addGeneratedLinks called on entity %s that already has generated links", e.GetRef()))
 		}
 		var links []*catalog.Link
-		for i := range tmpls {
-			g := &tmpls[i]
-			if g.annotation != "" {
-				value, ok := meta.Annotations[g.annotation]
-				if !ok || value == "" {
-					continue
-				}
-			} else {
-				matches, err := g.eval.Matches(e)
-				if err != nil {
-					return fmt.Errorf("failed to evaluate filter for entity %v: %v", e.GetRef(), err)
-				}
-				if !matches {
-					continue
-				}
+		for i := range annotationTemplates {
+			g := &annotationTemplates[i]
+			value, ok := meta.Annotations[g.annotation]
+			if !ok || value == "" {
+				continue
 			}
 			newLinks, err := g.generateLinks(r, e)
 			if err != nil {
@@ -446,6 +511,11 @@ func (r *Repository) addGeneratedLinks() error {
 			}
 			links = append(links, newLinks...)
 		}
+		legacyLinks, err := r.generateLegacyAutomaticLinks(e, legacyAutomaticTemplates)
+		if err != nil {
+			return err
+		}
+		links = append(links, legacyLinks...)
 		for _, generator := range starlarkGenerators {
 			matches, err := generator.eval.Matches(e)
 			if err != nil {

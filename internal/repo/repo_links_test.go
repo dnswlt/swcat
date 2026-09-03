@@ -8,7 +8,7 @@ import (
 	starlarkinterp "github.com/dnswlt/swcat/internal/starlark"
 )
 
-func TestPrepareLinkTemplates(t *testing.T) {
+func TestPrepareAnnotationLinkTemplates(t *testing.T) {
 	tests := []struct {
 		name    string
 		link    *AnnotationBasedLink
@@ -60,9 +60,9 @@ func TestPrepareLinkTemplates(t *testing.T) {
 			repo.config.AnnotationBasedLinks = map[string]*AnnotationBasedLink{
 				"test": tt.link,
 			}
-			tmpls, err := repo.prepareLinkTemplates()
+			tmpls, err := repo.prepareAnnotationLinkTemplates()
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("prepareLinkTemplates() error: %v, wantErr: %t", err, tt.wantErr)
+				t.Fatalf("prepareAnnotationLinkTemplates() error: %v, wantErr: %t", err, tt.wantErr)
 			}
 			if tt.wantErr {
 				return
@@ -686,16 +686,16 @@ func TestAddGeneratedLinks_Starlark(t *testing.T) {
 	program, err := starlarkinterp.Compile("components.star", []byte(`
 def links(entity):
     system = lookup_ref(entity["componentSpec"]["system"])
-    environment = json.decode(iannotation("swcat/data-environments"))[0]
+    environment = json.decode(iannotation("deployments.example.com/environments"))[0]
     return [link(
         url="https://{environment}.example.com/{component}".format(
-            environment=environment["value"],
+            environment=environment["environment"],
             component=entity["metadata"]["name"],
         ),
         title="Deploy {system}".format(system=system["metadata"]["name"]),
         type="deployment",
         group="Deployments",
-        label=environment["label"],
+        label=environment["name"],
     )]
 `))
 	if err != nil {
@@ -712,7 +712,7 @@ def links(entity):
 		Metadata: &catalog.Metadata{
 			Name: "payments",
 			Annotations: map[string]string{
-				"swcat/data-environments": `[{"label":"prod","value":"production"}]`,
+				"deployments.example.com/environments": `[{"name":"prod","environment":"production"}]`,
 			},
 		},
 		Spec: &catalog.SystemSpec{},

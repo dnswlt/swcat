@@ -64,26 +64,28 @@ type AnnotationBasedLink struct {
 	// An optional value to categorize links into specific groups.
 	// [optional]
 	Type string `yaml:"type,omitempty"`
-	// An optional list of name/value pairs to generate multiple links
-	// for the same parameterized URL. Useful e.g. to generate links
-	// for multiple environments.
+	// Deprecated: use StarlarkLinks for generating multiple links. This remains
+	// supported so historical catalog revisions keep loading.
 	MultiLinks []MultiLinkEntry `yaml:"multiLinks,omitempty"`
-	// An optional reference to a multi-link annotation. If present,
-	// MultiLinkEntry items are read from the entity annotation
-	// swcat/data-{MultiLinkData}
-	// which has to be a valid JSON list of MultiLinkEntry items, e.g.
-	// [{"label": "dev", "value": "development.cloud.net"}].
+	// Deprecated: use StarlarkLinks with iannotation and json.decode. This
+	// remains supported so historical catalog revisions keep loading.
 	MultiLinkData string `yaml:"multiLinkData,omitempty"`
 }
 
 // MultiLinkEntry defines a single named value used in multiLinks expansion.
 // The Label is the per-link label (e.g. "dev") and Value is substituted into
 // URL/title templates via {{ .MultiLink.Value }}.
+//
+// Deprecated: retained for compatibility with historical catalog revisions.
 type MultiLinkEntry struct {
 	Label string `yaml:"label" json:"label"`
 	Value any    `yaml:"value" json:"value"`
 }
 
+// AutomaticLink is the legacy template-based generated-link configuration.
+//
+// Deprecated: use StarlarkLink. This remains supported so historical catalog
+// revisions keep loading.
 type AutomaticLink struct {
 	// A filter expression that determines which entities this link applies to.
 	// [required]
@@ -101,15 +103,9 @@ type AutomaticLink struct {
 	// An optional value to categorize links into specific groups.
 	// [optional]
 	Type string `yaml:"type,omitempty"`
-	// An optional list of name/value pairs to generate multiple links
-	// for the same parameterized URL. Useful e.g. to generate links
-	// for multiple environments.
+	// Deprecated: retained for compatibility with historical catalog revisions.
 	MultiLinks []MultiLinkEntry `yaml:"multiLinks,omitempty"`
-	// An optional reference to a multi-link annotation. If present,
-	// MultiLinkEntry items are read from the entity annotation
-	// swcat/data-{MultiLinkData}
-	// which has to be a valid JSON list of MultiLinkEntry items, e.g.
-	// [{"label": "dev", "value": "development.cloud.net"}].
+	// Deprecated: retained for compatibility with historical catalog revisions.
 	MultiLinkData string `yaml:"multiLinkData,omitempty"`
 }
 
@@ -129,9 +125,10 @@ type StarlarkLink struct {
 // Config holds repository-specific application configuration.
 type Config struct {
 	AnnotationBasedLinks map[string]*AnnotationBasedLink `yaml:"annotationBasedLinks"`
-	AutomaticLinks       []*AutomaticLink                `yaml:"automaticLinks"`
-	StarlarkLinks        []*StarlarkLink                 `yaml:"starlarkLinks"`
-	Validation           *CatalogValidationRules         `yaml:"validation"`
+	// Deprecated: use StarlarkLinks. Retained for historical catalog revisions.
+	AutomaticLinks []*AutomaticLink        `yaml:"automaticLinks"`
+	StarlarkLinks  []*StarlarkLink         `yaml:"starlarkLinks"`
+	Validation     *CatalogValidationRules `yaml:"validation"`
 }
 
 // LoadStarlarkLinks reads and compiles all configured Starlark link files.

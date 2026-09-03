@@ -20,30 +20,19 @@ for the Go struct that holds all available configuration options.
 
 The `catalog` section allows you to configure repository-specific settings.
 
-* `annotationBasedLinks`: An optional map from annotation keys to links.
-    The `url` and `title` fields support the following template placeholders:
+* `annotationBasedLinks`: An optional map from annotation keys to simple,
+    one-to-one links. A link is added whenever an entity has the corresponding
+    annotation. The `url` and `title` templates can use:
     * `{{ .Metadata.<Field> }}` for any `<Field>` in the entity's metadata
         (e.g., `Name`).
     * `{{ .Annotation.Key }}` and `{{ .Annotation.Value }}` for the key and value
         of the annotation being processed.
-    * *(only for versioned API entities)* `{{ .Version }}` and
-        `{{ .Version.<Part> }}` for each API version or one of its parts
-        (`Major`, `Minor`, `Patch`, `Suffix`).
-        The version part fields are only populated if the version string matches a
-        common pattern (e.g. *v1*, *1.2.3*, or *v1alpha*).
-
-    Supports `multiLinks` and `multiLinkData` for generating per-environment link
-    groups. See [Multi-environment Links](#multi-environment-links) below.
-
-* `automaticLinks`: A list of link templates automatically added to entities
-    matching a filter expression. Each entry has the following fields:
-    * `filter`: A query expression (see [Query Syntax](query-syntax.md)) that
-        determines which entities the link applies to.
-    * `url`: The URL template for the link (supports `{{ .Metadata.<Field> }}`).
-    * `title`: The title template for the link.
-
-    Supports `multiLinks` and `multiLinkData` for generating per-environment link
-    groups. See [Multi-environment Links](#multi-environment-links) below.
+    * `{{ .GetAnnotation "key" }}` and `{{ .Label "key" }}` for annotations and
+        labels directly on the entity.
+    * `{{ .IAnnotation "key" }}` and `{{ .ILabel "key" }}` to search the entity
+        and its parent hierarchy.
+    * `{{ .System }}` and `{{ .Domain }}` for the related entities, where
+        applicable (e.g., `{{ .System.Metadata.Name }}`).
 
 * `starlarkLinks`: A list of Starlark programs that generate zero or more links
     for entities matching a filter. Each entry has a `filter` using the existing
@@ -55,9 +44,17 @@ The `catalog` section allows you to configure repository-specific settings.
     * `values`: A list of allowed values for a field.
     * `matches`: A list of regular expressions that the value must match.
 
-### Custom template functions
+### Legacy generated-link configuration
 
-Both `annotationBasedLinks` and `automaticLinks` support custom template functions:
+`automaticLinks`, `multiLinks`, `multiLinkData`, the `swcat/data-*` annotation
+convention and its `{label, value}` entries, and implicit per-version expansion
+through `{{ .Version }}` are deprecated. They remain supported so historical
+Git branches and tags containing those settings continue to load, but new
+configurations should use `starlarkLinks` and application-specific annotations.
+
+### Annotation link template functions
+
+`annotationBasedLinks` supports these template functions:
 
 * `{{ first <val1> <val2> ... }}` returns the first non-empty string. This is
     useful to provide fallback values, e.g. `{{ first (index .Metadata.Annotations "my/annot") .Metadata.Name }}`.
@@ -67,47 +64,7 @@ Both `annotationBasedLinks` and `automaticLinks` support custom template functio
     parameters from an even-numbered list of key-value pairs.
 * `{{ addQueryParams <baseUrl> <queryParams> }}` appends query parameters to a
     base URL, merging with any existing ones.
-    Example: `{{ addQueryParams "https://example.com" (queryParams "id" .Metadata.Name "env" .MultiLink.Value) }}`.
-
-
-### Multi-environment Links
-
-Both `annotationBasedLinks` and `automaticLinks` support generating multiple
-links from a single template. This is useful for linking to the same resource
-across multiple environments or stages.
-
-You can either provide a static list of links via `multiLinks`, or dynamic
-entries via `multiLinkData`.
-
-#### Static Multi-links
-
-The `multiLinks` field takes a list of entries, each with two fields:
-
-* `label`: The short display label shown as a pill in the UI (e.g. `dev`).
-* `value`: Substituted into the `url` template via `{{ .MultiLink.Value }}`.
-
-#### Dynamic Multi-links
-
-The `multiLinkData` field allows you to fetch the link entries from an entity
-annotation. If `multiLinkData: <name>` is set, `swcat` reads the entries from the
-`swcat/data-<name>` annotation of the entity (or its parent system/domain).
-
-The annotation value must be a valid JSON list of objects with `label` and
-`value` fields, e.g.:
-`[{"label": "dev", "value": "development"}, {"label": "prod", "value": "production"}]`.
-
-The `title` template serves as the shared group title (e.g. `Monitoring`) and
-is rendered without `{{ .MultiLink.* }}` data. Individual link titles are derived
-automatically as `<group title> (<label>)` (e.g. `Monitoring (dev)`).
-
-In the UI, grouped links are displayed as a labelled row of clickable pills:
-
-```text
-Monitoring  [dev]  [staging]  [prod]
-```
-
-See the [Example Configuration](#example-configuration) below for a complete
-example.
+    Example: `{{ addQueryParams "https://example.com" (queryParams "id" .Metadata.Name) }}`.
 
 ## SVG Configuration
 
@@ -173,27 +130,11 @@ catalog:
       # The annotation value is the "project" name, the repo is named after the entity.
       url: https://example.com/projects/{{ .Annotation.Value }}/repos/{{ .Metadata.Name }}
       title: Source code
-    # Auto-generates per-environment monitoring links for annotated entities.
-    # Rendered as a grouped pill row: "Monitoring  [dev]  [staging]  [prod]"
-    hexz.me/app-name:
-      url: https://grafana.{{ .MultiLink.Value }}.example.com/d/{{ .Annotation.Value }}
-      title: Monitoring
-      icon: dashboard
-      multiLinks:
-        - label: dev
-          value: dev.example.com
-        - label: staging
-          value: staging.example.com
-        - label: prod
-          value: prod.example.com
-    # Auto-generates per-environment monitoring links for annotated entities.
-    # The list of environments is fetched from the swcat/data-environments annotation.
-    # Rendered as a grouped pill row: "Logs  [dev]  [staging]  [prod]"
-    hexz.me/app-logs:
-      url: https://logs.{{ .MultiLink.Value }}.example.com/s/{{ .Metadata.Name }}
-      title: Logs
-      icon: list
-      multiLinkData: environments
+  # Use Starlark when link generation involves conditions, related entities,
+  # versions, or multiple links.
+  starlarkLinks:
+    - filter: kind=component
+      file: links/components.star
   validation:
     api:
       type:
