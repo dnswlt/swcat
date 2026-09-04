@@ -1,0 +1,481 @@
+syntax = "proto3";
+
+package swcat.catalog.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/dnswlt/swcat/internal/catalog/pb;catalog_pb";
+
+// Metadata common to all entities.
+message Metadata {
+  // The name of the entity. Must be unique within the catalog at any given point in time, for any given namespace + kind pair.
+  string name = 1;
+  // The namespace that the entity belongs to. If empty, the entity is assume to live in the default namespace.
+  string namespace = 2;
+  // A display name of the entity, to be presented in user interfaces instead of the name property, when available.
+  string title = 3;
+  // A short (typically relatively few words, on one line) description of the entity.
+  string description = 4;
+  // Key/value pairs of identifying information attached to the entity.
+  map<string, string> labels = 5;
+  // Key/value pairs of non-identifying auxiliary information attached to the entity.
+  map<string, string> annotations = 6;
+  // A list of single-valued strings, to for example classify catalog entities in various ways.
+  repeated string tags = 7;
+  // A list of external hyperlinks related to the entity.
+  repeated Link links = 8;
+}
+
+message Link {
+  string url = 1;
+  string title = 2;
+  string icon = 3;
+  string type = 4;
+  bool is_generated = 5;
+  // Set for auto-generated multi-environment links. Non-nil links with the
+  // same group_info.group are rendered together in the UI.
+  LinkGroupInfo group_info = 6;
+}
+
+// LinkGroupInfo groups multiple links (e.g. one per environment) under a
+// shared display title. A nil value means the link is standalone.
+message LinkGroupInfo {
+  string group = 1; // shared display title for the group, e.g. "Monitoring"
+  string label = 2; // per-link label within the group, e.g. "dev", "prod"
+}
+
+// Ref represents a reference to another entity.
+message Ref {
+  string kind = 1;
+  string namespace = 2;
+  string name = 3;
+}
+
+// LabelRef represents a reference with an optional label and attributes.
+message LabelRef {
+  Ref ref = 1;
+  string label = 2;
+  map<string, string> attrs = 3;
+}
+
+message Version {
+  string raw_version = 1;
+  int32 major = 2;
+  int32 minor = 3;
+  int32 patch = 4;
+  string suffix = 5;
+}
+
+// Entity represents any catalog entity.
+message Entity {
+  string kind = 1;
+  Metadata metadata = 2;
+
+  oneof spec {
+    DomainSpec domain_spec = 3;
+    SystemSpec system_spec = 4;
+    ComponentSpec component_spec = 5;
+    ResourceSpec resource_spec = 6;
+    ApiSpec api_spec = 7;
+    GroupSpec group_spec = 8;
+  }
+
+  // Runtime status. Not persisted in the repository, but populated at runtime
+  // (e.g. by plugins). Always nil for Group entities.
+  Status status = 9;
+}
+
+// ListEntitiesResponse is the response body of GET /catalog/entities.
+message ListEntitiesResponse {
+  repeated Entity entities = 1;
+}
+
+// Status holds runtime observations attached to an entity by plugins.
+message Status {
+  // Map from observation name (following annotation naming conventions) to
+  // status observation.
+  map<string, Observation> observations = 1;
+}
+
+message Observation {
+  // The observation value as a parsed JSON value, so it round-trips through
+  // protojson as native JSON (object/array/number/string/bool/null) rather
+  // than a base64-encoded blob.
+  google.protobuf.Value value = 1;
+  // Identifier of the plugin that produced this observation.
+  string producer = 2;
+  google.protobuf.Timestamp updated_at = 3;
+  // Optional: the entity version at which this observation was made.
+  string version = 4;
+  // Optional: additional metadata for display in custom content.
+  map<string, string> meta = 5;
+}
+
+// --- Observed dependencies ---
+
+// ObservedDependencies is the schema external tools must comply with when
+// reporting the dependencies they observed for a single source entity. swcat
+// stores these tentative, "observed" dependencies in the source entity's
+// Status observations, kept separate from the declared dependencies in the
+// entity's spec.
+message ObservedDependencies {
+  // Reference to the source entity that the observed dependencies originate
+  // from. Required.
+  Ref source = 1;
+  // Label of the external tool that detected these dependencies. Required.
+  string detected_by = 2;
+  // When the dependencies were observed. If unset, the server populates it
+  // with the receive timestamp. Maps to Observation.updated_at.
+  google.protobuf.Timestamp observed_at = 3;
+  // The dependencies observed for the source entity. Reporting an empty list
+  // clears the previously observed dependencies for this source/detected_by
+  // pair.
+  repeated ObservedDependency dependencies = 4;
+  // Optional: the version of the source entity these dependencies were
+  // observed for, e.g. "1.4.2". Maps to Observation.version.
+  string version = 5;
+  // Optional: additional metadata about this observation, for display in
+  // custom content. Maps to Observation.meta.
+  map<string, string> meta = 6;
+}
+
+// ObservedDependency is a single dependency from a source entity to a target
+// entity, as detected by an external tool.
+message ObservedDependency {
+  // Reference to the entity that the source entity depends on. Required.
+  Ref target = 1;
+  // The nature of the dependency relationship.
+  DependencyRelation relation = 2;
+  // The evidence on which the detection was based, e.g. a list of topic names,
+  // an RPC Service.Method name, or other relevant detail.
+  repeated string evidence = 3;
+}
+
+// DependencyRelation classifies the nature of an observed dependency.
+enum DependencyRelation {
+  // Unknown relation; treated as a generic dependency.
+  DEPENDENCY_RELATION_UNSPECIFIED = 0;
+  // The source entity makes synchronous calls to the target, e.g. via REST,
+  // gRPC or GraphQL.
+  DEPENDENCY_RELATION_CALLS = 1;
+  // The source entity produces messages/events to the target, e.g. a pub/sub
+  // topic or message queue.
+  DEPENDENCY_RELATION_PRODUCES = 2;
+  // The source entity consumes messages/events from the target, e.g. as a
+  // pub/sub subscriber or queue consumer.
+  DEPENDENCY_RELATION_CONSUMES = 3;
+}
+
+// --- Lint ---
+
+// FindingsRequest is the request body of POST /catalog/findings.
+//
+// This is a POST rather than a GET because the scans it can trigger reach out
+// to external systems, and the Bitbucket one may refresh a server-side cache,
+// which is not something intermediaries should be free to repeat on a whim.
+//
+// Entity lint findings are included by default: leave `lint` unset to get them
+// with default options, set it to narrow the selection, or set lint.skip to
+// leave them out. An empty request body therefore returns exactly the entity
+// lint findings.
+//
+// The scans are the other way round: each one runs only if `scans` names it, so
+// nothing expensive happens unless it was asked for. Their options messages
+// only tune a scan that was named; supplying options for a scan absent from
+// `scans` is an error rather than a silently ignored no-op.
+//
+//   {}                                          entity lint findings
+//   {"scans": ["SCAN_KUBE_WORKLOADS"]}          those, plus cluster workloads
+//   {"scans": ["SCAN_BITBUCKET_FILES"],
+//    "bitbucketFiles": {"refresh": true},
+//    "lint": {"skip": true}}                    a fresh Bitbucket scan, alone
+message FindingsRequest {
+  // The scans to run in addition to the entity lint findings. Empty means none.
+  repeated Scan scans = 1;
+
+  LintOptions lint = 2;
+  PrometheusWorkloadOptions prometheus_workloads = 3;
+  KubeWorkloadOptions kube_workloads = 4;
+  BitbucketFileOptions bitbucket_files = 5;
+  LinkCheckOptions link_check = 6;
+}
+
+// Scan identifies one of the catalog-wide scans. Unlike the entity lint rules,
+// these reach out to external systems, so each has to be requested by name.
+enum Scan {
+  SCAN_UNSPECIFIED = 0;
+  // Workloads Prometheus reports metrics for. Finds workloads the catalog does
+  // not describe.
+  SCAN_PROMETHEUS_WORKLOADS = 1;
+  // Workloads running in the Kubernetes cluster. Finds workloads the catalog
+  // does not describe.
+  SCAN_KUBE_WORKLOADS = 2;
+  // Files in Bitbucket matched against the entities that link to them.
+  SCAN_BITBUCKET_FILES = 3;
+  // Reachability of the links entities carry in their metadata.
+  SCAN_LINK_CHECK = 4;
+}
+
+message LintOptions {
+  // Leave the entity lint findings out of the response.
+  bool skip = 1;
+  // Restrict findings to entities matching this query, in the syntax of
+  // GET /catalog/entities?q=. Empty means every entity.
+  string query = 2;
+}
+
+message PrometheusWorkloadOptions {
+  // Report only workloads that no catalog entity describes.
+  bool untracked_only = 1;
+}
+
+message KubeWorkloadOptions {
+  // Report only workloads that no catalog entity describes.
+  bool untracked_only = 1;
+}
+
+message BitbucketFileOptions {
+  // Report only files that matched no catalog entity.
+  bool untracked_only = 1;
+  // Re-run the scan against Bitbucket instead of serving the cached file list.
+  bool refresh = 2;
+}
+
+message LinkCheckOptions {
+  // Report only links confirmed to be broken, omitting those that merely could
+  // not be checked.
+  bool broken_only = 1;
+}
+
+// FindingsResponse is the response body of POST /catalog/findings. A section is
+// present only if it was requested, or -- for lint -- not skipped.
+message FindingsResponse {
+  LintFindings lint = 1;
+  PrometheusWorkloadScan prometheus_workloads = 2;
+  KubeWorkloadScan kube_workloads = 3;
+  BitbucketFileScan bitbucket_files = 4;
+  LinkCheckScan link_check = 5;
+}
+
+// ScanStatus reports how one section of a FindingsResponse fared.
+//
+// Sections are independent: one unreachable external system must not suppress
+// the results of the others. An empty result list means "nothing found" only
+// when the state is STATE_OK, so consumers must check this before concluding
+// that a scan came back clean.
+message ScanStatus {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    // The section ran and its results are complete.
+    STATE_OK = 1;
+    // Not available in this deployment, e.g. no linter configured, or no
+    // Prometheus client. Not an error, and says nothing about the catalog.
+    STATE_NOT_CONFIGURED = 2;
+    // The section was attempted and failed; see error.
+    STATE_FAILED = 3;
+  }
+  State state = 1;
+  // Human-readable cause. Set when state is STATE_FAILED.
+  string error = 2;
+}
+
+// LintFindings holds the entity-scoped lint rule violations.
+message LintFindings {
+  ScanStatus status = 1;
+  repeated Finding findings = 2;
+}
+
+// Finding is a single lint rule violation reported for one catalog entity.
+//
+// Findings are derived rather than stored: they are recomputed from the catalog
+// and the lint configuration, so the same entity can yield different findings
+// over time without the catalog itself changing.
+message Finding {
+  // The entity the finding was reported for. Always set.
+  Ref entity = 1;
+  // Name of the rule that produced the finding, e.g. "has-description". Checks
+  // that are built in rather than configured use a fixed name, such as
+  // "dependency-candidate".
+  string rule_name = 2;
+  // Importance of the finding: "error", "warn" or "info". A string rather than
+  // an enum, spelled as in lint.yml and in the "lint:" query property, so that
+  // one vocabulary covers the configuration, queries and this API.
+  string severity = 3;
+  // Human-readable description of the violation, and the primary thing to act
+  // on. Some checks embed their supporting evidence here.
+  string message = 4;
+}
+
+// PrometheusWorkloadScan reports the workloads Prometheus knows about, so that
+// workloads missing from the catalog can be found. It carries workload identity
+// only: metric values and label sets stay in the UI, since the point is to
+// reconcile the catalog, not to expose Prometheus through swcat.
+message PrometheusWorkloadScan {
+  ScanStatus status = 1;
+  repeated PrometheusWorkload workloads = 2;
+}
+
+message PrometheusWorkload {
+  string name = 1;
+  // The catalog entities that claim this workload, by matching name or by
+  // carrying the configured workload-name annotation.
+  //
+  // Repeated because the annotation match is set membership: nothing stops two
+  // entities from naming the same workload, and reporting one of them would be
+  // an arbitrary choice. Empty means untracked -- the workload runs, but the
+  // catalog does not describe it -- and more than one entry is itself worth
+  // looking at, since two entities claiming one workload is a catalog problem.
+  repeated Ref matched_entities = 2;
+}
+
+// KubeWorkloadScan reports the workloads running in the cluster, for the same
+// reconciliation purpose as PrometheusWorkloadScan. Identity only, deliberately:
+// labels and annotations stay in the UI so that this does not turn into a
+// general-purpose Kubernetes scanner.
+message KubeWorkloadScan {
+  ScanStatus status = 1;
+  repeated KubeWorkload workloads = 2;
+}
+
+message KubeWorkload {
+  // One of "Deployment", "StatefulSet", "CronJob", "DaemonSet", "Job".
+  string kind = 1;
+  string name = 2;
+  string namespace = 3;
+  // The catalog entities that claim this workload. Empty means untracked; see
+  // PrometheusWorkload.matched_entities for why this is repeated.
+  repeated Ref matched_entities = 4;
+}
+
+// BitbucketFileScan reports the files found in Bitbucket and the entities they
+// were matched to.
+message BitbucketFileScan {
+  ScanStatus status = 1;
+  repeated BitbucketFile files = 2;
+}
+
+message BitbucketFile {
+  string project_key = 1;
+  string repo_slug = 2;
+  // Path within the repository.
+  string path = 3;
+  // The entity the file was matched to, or unset if it matched none.
+  //
+  // Singular, unlike the workload scans: the matcher resolves a file to at most
+  // one entity by longest-prefix match on the repository path, so there is a
+  // single answer to report rather than a set to choose from.
+  Ref entity = 4;
+}
+
+// LinkCheckScan reports on the reachability of the links entities carry in
+// their metadata.
+message LinkCheckScan {
+  ScanStatus status = 1;
+  repeated LinkCheck links = 2;
+}
+
+message LinkCheck {
+  // The entity whose metadata.links the URL came from.
+  Ref entity = 1;
+  string url = 2;
+  string title = 3;
+  string type = 4;
+  // "ok", "broken", or "warn" when the link could be confirmed neither way,
+  // e.g. the checker has no access to it.
+  string status = 5;
+  // Why the link is not OK. Empty when status is "ok".
+  string reason = 6;
+}
+
+// --- Domain ---
+
+message DomainSpec {
+  Ref owner = 1;
+  Ref subdomain_of = 2;
+  string type = 3;
+
+  // Inverse relationships
+  repeated Ref systems = 4;
+}
+
+// --- System ---
+
+message SystemSpec {
+  Ref owner = 1;
+  Ref domain = 2;
+  string type = 3;
+
+  // Inverse relationships
+  repeated Ref components = 4;
+  repeated Ref apis = 5;
+  repeated Ref resources = 6;
+}
+
+// --- Component ---
+
+message ComponentSpec {
+  string type = 1;
+  string lifecycle = 2;
+  Ref owner = 3;
+  Ref system = 4;
+  Ref domain = 11;
+  Ref subcomponent_of = 5;
+  repeated LabelRef provides_apis = 6;
+  repeated LabelRef consumes_apis = 7;
+  repeated LabelRef depends_on = 8;
+
+  // Inverse relationships
+  repeated LabelRef dependents = 9;
+  repeated Ref subcomponents = 10;
+}
+
+// --- Resource ---
+
+message ResourceSpec {
+  string type = 1;
+  Ref owner = 2;
+  Ref system = 3;
+  Ref domain = 6;
+  repeated LabelRef depends_on = 4;
+
+  // Inverse relationships
+  repeated LabelRef dependents = 5;
+}
+
+// --- API ---
+
+message ApiSpec {
+  string type = 1;
+  string lifecycle = 2;
+  Ref owner = 3;
+  Ref system = 4;
+  Ref domain = 9;
+  string definition = 5;
+  repeated ApiSpecVersion versions = 6;
+
+  // Inverse relationships
+  repeated LabelRef providers = 7;
+  repeated LabelRef consumers = 8;
+}
+
+message ApiSpecVersion {
+  Version version = 1;
+  string lifecycle = 2;
+}
+
+// --- Group ---
+
+message GroupSpec {
+  string type = 1;
+  GroupSpecProfile profile = 2;
+  Ref parent = 3;
+  repeated Ref children = 4;
+  repeated string members = 5;
+}
+
+message GroupSpecProfile {
+  string display_name = 1;
+  string email = 2;
+  string picture = 3;
+}
