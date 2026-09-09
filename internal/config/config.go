@@ -94,7 +94,8 @@ type Bundle struct {
 // customContentFuncs are the template helpers exposed to user-defined
 // CustomContent templates.
 var customContentFuncs = template.FuncMap{
-	"join": join,
+	"join":      join,
+	"hasPrefix": strings.HasPrefix,
 }
 
 // join formats a slice/array as a comma-separated string. Strings are used

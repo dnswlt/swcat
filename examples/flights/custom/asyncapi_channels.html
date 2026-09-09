@@ -1,5 +1,26 @@
 {{ range . }}
 <h3>Version: {{ .version }}</h3>
+{{ if hasPrefix .asyncapiVersion "3" }}
+{{/* AsyncAPI 3.x: operations reference channels, and may declare a reply.
+     Branch on the version, not on the list: a valid 3.x spec may have no
+     operations at all. */}}
+<table>
+  <thead><tr><th>Operation</th><th>Topic</th><th>Action</th><th>Kind</th><th>Messages</th></tr></thead>
+  <tbody>
+    {{ range .operations }}
+    <tr>
+      <td>{{ .name }}</td>
+      <td>{{ if .address }}{{ .address }}{{ else if .channel }}{{ .channel }}{{ else }}{{ .ref }}{{ end }}</td>
+      <td>{{ .action }}</td>
+      <td>{{ if .reply }}req/reply{{ else if .action }}one-way{{ else }}unresolved{{ end }}</td>
+      <td>{{ .messages | join }}</td>
+    </tr>
+    {{ end }}
+  </tbody>
+</table>
+{{ else }}
+{{/* AsyncAPI 2.x: no operations, and no way to express request/reply. */}}
+<p><em>Legacy AsyncAPI {{ .asyncapiVersion }}</em></p>
 <table>
   <thead><tr><th>Topic</th><th>Messages</th></tr></thead>
   <tbody>
@@ -11,4 +32,5 @@
     {{ end }}
   </tbody>
 </table>
+{{ end }}
 {{ end }}

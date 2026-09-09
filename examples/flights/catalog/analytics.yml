@@ -38,23 +38,22 @@ metadata:
   annotations:
     swcat/visibility: public
     maven.apache.org/coords: org.slf4j:slf4j-api
+    # An AsyncAPI 2.x extract: 2.x has no operations, so channels are
+    # reported instead, and there is no way to express request/reply.
     asyncapi.com/channels: |-
       [
-        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
-        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
-        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
-        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
-        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
-        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
-        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
-        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
-        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
-        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
-        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
-        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
-        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
-        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] },
-        { "address": "/foo/bar", "messages": ["Bar1", "Bar2"] }
+        {
+          "version": "3.1.4",
+          "asyncapiVersion": "2.6.0",
+          "channels": [
+            { "name": "analytics.events.raw.v1", "address": "analytics.events.raw.v1", "messages": ["PageViewed", "SessionStarted"] },
+            { "name": "analytics.events.booking.v1", "address": "analytics.events.booking.v1", "messages": ["BookingStarted", "BookingCompleted"] },
+            { "name": "analytics.events.search.v1", "address": "analytics.events.search.v1", "messages": ["FlightSearched"] },
+            { "name": "analytics.events.payment.v1", "address": "analytics.events.payment.v1", "messages": ["PaymentAuthorized", "PaymentDeclined"] },
+            { "name": "analytics.events.error.v1", "address": "analytics.events.error.v1", "messages": ["ClientError"] },
+            { "name": "analytics.ingest.dlq.v1", "address": "analytics.ingest.dlq.v1", "messages": ["RejectedEvent"] }
+          ]
+        }
       ]
 spec:
   type: kafka/csv

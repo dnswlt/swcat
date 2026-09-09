@@ -24,9 +24,12 @@ const (
 	AsyncAPIPluginLintTarget = "swcat-lint/finding-newer-version"
 )
 
-type VersionedChannels struct {
-	Version  string                    `json:"version"`
-	Channels []*asyncapi.SimpleChannel `json:"channels"`
+// VersionedSpec is the AsyncAPI extract for one resolved artifact version.
+// The embedded Extract reports channels for v2.x specs and operations for
+// v3.x specs; see the asyncapi package for why the shape differs by version.
+type VersionedSpec struct {
+	Version string `json:"version"`
+	asyncapi.Extract
 }
 
 type asyncAPIFetcherConfig struct {
@@ -191,7 +194,7 @@ func (m *AsyncAPIImporterPlugin) resolveArtifactContext(entity catalog.Entity, a
 // getStoredObservation extracts previously fetched results from the entity's status.
 // If the JSON is incompatible (e.g. from an older version of the plugin),
 // it safely discards the data by returning nil, triggering a fresh fetch.
-func (m *AsyncAPIImporterPlugin) getStoredObservation(entity catalog.Entity) map[string]*VersionedChannels {
+func (m *AsyncAPIImporterPlugin) getStoredObservation(entity catalog.Entity) map[string]*VersionedSpec {
 	status := entity.GetStatus()
 	if status == nil {
 		return nil
@@ -200,15 +203,21 @@ func (m *AsyncAPIImporterPlugin) getStoredObservation(entity catalog.Entity) map
 	if !ok {
 		return nil
 	}
-	var stored []*VersionedChannels
+	var stored []*VersionedSpec
 	dec := json.NewDecoder(bytes.NewReader(obs.Value))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&stored); err != nil {
 		return nil
 	}
-	results := make(map[string]*VersionedChannels, len(stored))
-	for _, vch := range stored {
-		results[vch.Version] = vch
+	results := make(map[string]*VersionedSpec, len(stored))
+	for _, vs := range stored {
+		// Entries written before the extract carried the AsyncAPI version
+		// predate the current shape. They decode without error but hold no
+		// operations, so drop them and let the next fetch repopulate.
+		if vs.AsyncAPIVersion == "" {
+			continue
+		}
+		results[vs.Version] = vs
 	}
 	return results
 }
@@ -306,24 +315,24 @@ func checkForNewerMajorVersion(entity catalog.Entity, available []string, now ti
 }
 
 // fetchResults populates results, downloading missing versions while reusing stored ones.
-func (m *AsyncAPIImporterPlugin) fetchResults(ctx context.Context, repo, g, a string, versions []string, stored map[string]*VersionedChannels) ([]*VersionedChannels, error) {
-	var results []*VersionedChannels
+func (m *AsyncAPIImporterPlugin) fetchResults(ctx context.Context, repo, g, a string, versions []string, stored map[string]*VersionedSpec) ([]*VersionedSpec, error) {
+	var results []*VersionedSpec
 	for _, v := range versions {
-		if vch, ok := stored[v]; ok {
-			results = append(results, vch)
+		if vs, ok := stored[v]; ok {
+			results = append(results, vs)
 		} else {
-			vch, err := m.fetchVersionedChannels(ctx, repo, g, a, v)
+			vs, err := m.fetchVersionedSpec(ctx, repo, g, a, v)
 			if err != nil {
 				return nil, err
 			}
-			results = append(results, vch)
+			results = append(results, vs)
 		}
 	}
 	return results, nil
 }
 
-// fetchVersionedChannels retrieves the artifact for a specific version and parses the AsyncAPI channels.
-func (m *AsyncAPIImporterPlugin) fetchVersionedChannels(ctx context.Context, repository, groupId, artifactId, version string) (*VersionedChannels, error) {
+// fetchVersionedSpec retrieves the artifact for a specific version and parses the AsyncAPI spec.
+func (m *AsyncAPIImporterPlugin) fetchVersionedSpec(ctx context.Context, repository, groupId, artifactId, version string) (*VersionedSpec, error) {
 	coords := jfrog.MavenCoordinates{
 		GroupID:    groupId,
 		ArtifactID: artifactId,
@@ -354,14 +363,14 @@ func (m *AsyncAPIImporterPlugin) fetchVersionedChannels(ctx context.Context, rep
 		specBytes = replacePropertyPlaceholders(specBytes, props)
 	}
 
-	spec, err := asyncapi.ParseBytes(specBytes)
+	extract, err := asyncapi.ParseBytes(specBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse AsyncAPI spec: %w", err)
 	}
 
-	return &VersionedChannels{
-		Version:  version,
-		Channels: spec.SimpleChannels(),
+	return &VersionedSpec{
+		Version: version,
+		Extract: *extract,
 	}, nil
 }
 

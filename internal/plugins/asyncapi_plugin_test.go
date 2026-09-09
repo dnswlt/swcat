@@ -3,6 +3,8 @@ package plugins
 import (
 	"reflect"
 	"testing"
+
+	"github.com/dnswlt/swcat/internal/catalog"
 )
 
 func TestReplacePropertyPlaceholders(t *testing.T) {
@@ -165,5 +167,85 @@ func TestParseProperties(t *testing.T) {
 				t.Errorf("parseProperties() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestGetStoredObservation covers reading back status observations, including
+// ones written before the extract recorded the AsyncAPI version. Those decode
+// cleanly but carry no operations, so they must be discarded rather than
+// reused; the next fetch repopulates them.
+func TestGetStoredObservation(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  []string // versions expected to survive as reusable cache entries
+	}{
+		{
+			name:  "current format is reused",
+			value: `[{"version":"1.2.0","asyncapiVersion":"3.0.0","operations":[{"name":"op1","action":"send","channel":"ch1","address":"a/b","messages":["M"]}]}]`,
+			want:  []string{"1.2.0"},
+		},
+		{
+			name:  "legacy entries without asyncapiVersion are dropped",
+			value: `[{"version":"1.2.0","channels":[{"name":"ch1","address":"a/b","messages":["M"]}]}]`,
+			want:  nil,
+		},
+		{
+			name:  "mixed legacy and current keeps only the current",
+			value: `[{"version":"1.0.0","channels":[]},{"version":"2.0.0","asyncapiVersion":"2.6.0","channels":[]}]`,
+			want:  []string{"2.0.0"},
+		},
+		{
+			name:  "unknown fields discard the whole observation",
+			value: `[{"version":"1.2.0","asyncapiVersion":"3.0.0","somethingElse":42}]`,
+			want:  nil,
+		},
+		{
+			name:  "malformed JSON discards the whole observation",
+			value: `not json at all`,
+			want:  nil,
+		},
+	}
+
+	m := &AsyncAPIImporterPlugin{name: "asyncapi-test"}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			entity := &catalog.Component{Metadata: &catalog.Metadata{Name: "my-service"}}
+			catalog.CopyStatus(entity, &catalog.Status{
+				Observations: map[string]catalog.Observation{
+					AsyncAPIPluginTarget: {Value: []byte(tt.value)},
+				},
+			})
+
+			got := m.getStoredObservation(entity)
+
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d cache entries, want %d: %+v", len(got), len(tt.want), got)
+			}
+			for _, v := range tt.want {
+				if _, ok := got[v]; !ok {
+					t.Errorf("version %q missing from cache entries %+v", v, got)
+				}
+			}
+		})
+	}
+}
+
+// TestGetStoredObservation_NoStatus checks the paths where there is nothing
+// stored at all, which must not panic.
+func TestGetStoredObservation_NoStatus(t *testing.T) {
+	m := &AsyncAPIImporterPlugin{name: "asyncapi-test"}
+
+	noStatus := &catalog.Component{Metadata: &catalog.Metadata{Name: "my-service"}}
+	if got := m.getStoredObservation(noStatus); got != nil {
+		t.Errorf("entity without status: got %+v, want nil", got)
+	}
+
+	noObservation := &catalog.Component{Metadata: &catalog.Metadata{Name: "my-service"}}
+	catalog.CopyStatus(noObservation, &catalog.Status{
+		Observations: map[string]catalog.Observation{},
+	})
+	if got := m.getStoredObservation(noObservation); got != nil {
+		t.Errorf("entity without the observation: got %+v, want nil", got)
 	}
 }

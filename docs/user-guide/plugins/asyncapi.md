@@ -79,9 +79,9 @@ spec:
     *   For API entities with `spec.versions`: for each declared version, picks the latest available artifact matching the same major version.
     *   Otherwise: uses the version pinned via `maven.apache.org/coords`, or falls back to the latest semver release.
 4.  **Reuse cache:** Versions whose channels were fetched in a previous run are reused from the existing status observation; only new versions are downloaded.
-5.  **Download & parse:** Retrieves each missing artifact, opens it as a zip, reads the file at `spec.file`, optionally substitutes `@@placeholders@@` from bundled `.properties` files, and parses the AsyncAPI spec (v2 and v3 supported).
+5.  **Download & parse:** Retrieves each missing artifact, opens it as a zip, reads the file at `spec.file`, optionally substitutes `@@placeholders@@` from bundled `.properties` files, and parses the AsyncAPI spec (v2 and v3 supported). v3 specs are extracted as operations, v2 specs as channels; see [Output](#output).
 6.  **Lint:** If a newer major version exists in the repository that is not declared on the entity, emits a lint finding.
-7.  **Persist:** Writes the channels and the optional finding as status observations.
+7.  **Persist:** Writes the extracted operations (or channels, for v2) and the optional finding as status observations.
 
 ## Output
 
@@ -89,18 +89,58 @@ The plugin writes two status observations:
 
 | Observation | Content |
 |---|---|
-| `swcat-plugins/asyncapi-channels` | Array of `VersionedChannels`, one per resolved version. |
+| `swcat-plugins/asyncapi-channels` | Array of `VersionedSpec`, one per resolved version. |
 | `swcat-lint/finding-newer-version` | A `LintFinding` describing a newer major version available in the repository but not listed on the entity. Only present when such a version exists. |
 
-`VersionedChannels` JSON structure:
+`VersionedSpec` JSON structure. AsyncAPI 2.x and 3.x model things
+differently: 2.x nests operations inside channels, while 3.x has operations
+reference channels. Each version is therefore reported in its native shape,
+and `asyncapiVersion` says which to expect: **3.x specs report `operations`,
+2.x specs report `channels`.**
+
+For a 3.x spec:
 
 ```json
 [
   {
     "version": "1.4.2",
+    "asyncapiVersion": "3.0.0",
+    "operations": [
+      {
+        "name": "onOrderCreated",
+        "action": "send",
+        "channel": "orderCreated",
+        "address": "orders.created.v1",
+        "messages": ["OrderCreated"]
+      },
+      {
+        "name": "getOrderDetails",
+        "action": "receive",
+        "channel": "orderDetailsRequest",
+        "address": "orders.details.v1.request",
+        "reply": true,
+        "messages": ["OrderDetailsRequest"]
+      }
+    ]
+  }
+]
+```
+
+`reply` is true when the operation declares an AsyncAPI `reply`, i.e. it is a
+request/reply operation rather than a fire-and-forget publish. It is omitted
+when false. Channels that no operation references are not reported: they
+describe a place with no declared application-level use.
+
+For a 2.x spec:
+
+```json
+[
+  {
+    "version": "1.4.2",
+    "asyncapiVersion": "2.6.0",
     "channels": [
       {
-        "name": "orderCreated",
+        "name": "orders.created.v1",
         "address": "orders.created.v1",
         "messages": ["OrderCreated"]
       }
@@ -108,6 +148,9 @@ The plugin writes two status observations:
   }
 ]
 ```
+
+Every channel is reported. AsyncAPI 2.x has no request/reply concept, so
+there is no equivalent of the 3.x `reply` flag.
 
 For API entities with declared versions, the observation's `meta` map records the resolution from each declared `RawVersion` to the concrete repository version (keys are prefixed with `version-`, e.g. `version-v1` → `1.4.2`). For other entities, the single resolved version is reported in the observation's `version` field instead.
 
@@ -123,15 +166,49 @@ ui:
       template: |
         {{ range . }}
           <h4>Version {{ .version }}</h4>
-          <table>
-            <tr><th>Channel</th><th>Address</th><th>Messages</th></tr>
-            {{ range .channels }}
-              <tr>
-                <td>{{ .name }}</td>
-                <td>{{ .address }}</td>
-                <td>{{ range .messages }}{{ . }} {{ end }}</td>
-              </tr>
-            {{ end }}
-          </table>
+          {{ if hasPrefix .asyncapiVersion "3" }}
+            <table>
+              <tr><th>Operation</th><th>Address</th><th>Action</th><th>Kind</th><th>Messages</th></tr>
+              {{ range .operations }}
+                <tr>
+                  <td>{{ .name }}</td>
+                  <td>{{ if .address }}{{ .address }}{{ else if .channel }}{{ .channel }}{{ else }}{{ .ref }}{{ end }}</td>
+                  <td>{{ .action }}</td>
+                  <td>{{ if .reply }}req/reply{{ else if .action }}one-way{{ else }}unresolved{{ end }}</td>
+                  <td>{{ range .messages }}{{ . }} {{ end }}</td>
+                </tr>
+              {{ end }}
+            </table>
+          {{ else }}
+            <p><em>Legacy AsyncAPI {{ .asyncapiVersion }}</em></p>
+            <table>
+              <tr><th>Channel</th><th>Address</th><th>Messages</th></tr>
+              {{ range .channels }}
+                <tr>
+                  <td>{{ .name }}</td>
+                  <td>{{ .address }}</td>
+                  <td>{{ range .messages }}{{ . }} {{ end }}</td>
+                </tr>
+              {{ end }}
+            </table>
+          {{ end }}
         {{ end }}
 ```
+
+Branching on `asyncapiVersion` keeps one template working for both AsyncAPI
+versions. A template that only ranges over `.channels` renders nothing for a
+3.x spec. Branch on the version rather than on `.operations`, which is
+omitted when empty: a valid 3.x spec may declare no operations at all.
+
+`reply` distinguishes request/reply from one-way delivery. It is not a
+pub/sub flag: `action` (`send`/`receive`) says which direction the
+application uses the channel in, and a channel may be a queue, a WebSocket
+or an HTTP endpoint rather than a topic.
+
+References to other documents are not followed — a spec is read on its own.
+An unfollowed reference is reported rather than dropped: a channel that could
+not be resolved leaves `address` empty and puts the reference in `channel`,
+and an operation that is itself an unresolved `$ref` carries it in `ref` with
+every other field empty. Since nothing is then known about how that operation
+communicates, a template should fall back through `address` → `channel` →
+`ref`, and treat a missing `action` as unknown rather than as one-way.

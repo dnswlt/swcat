@@ -4,12 +4,47 @@
             "annotations": {
                 "asyncapi.com/channels": [
                     {
-                        "address": "/this/is/yoodle",
-                        "messages": [ "Ack", "Nack" ]
+                        "version": "2.0.1",
+                        "asyncapiVersion": "3.0.0",
+                        "operations": [
+                            {
+                                "name": "checkCard",
+                                "action": "receive",
+                                "channel": "CardCheckRequest",
+                                "address": "payments/cc/v2/check/request",
+                                "reply": true,
+                                "messages": [ "CardCheckRequest" ]
+                            },
+                            {
+                                "name": "checkCardLimit",
+                                "action": "receive",
+                                "channel": "CardLimitRequest",
+                                "address": "payments/cc/v2/limit/request",
+                                "reply": true,
+                                "messages": [ "CardLimitRequest" ]
+                            },
+                            {
+                                "name": "onCardCheckAudited",
+                                "action": "send",
+                                "channel": "CardCheckAudit",
+                                "address": "payments/cc/v2/audit",
+                                "messages": [ "CardCheckAudited" ]
+                            }
+                        ]
                     },
                     {
-                        "address": "/ding/dang/dong",
-                        "messages": [ "SuperNova" ]
+                        "version": "1.7.0",
+                        "asyncapiVersion": "3.0.0",
+                        "operations": [
+                            {
+                                "name": "checkCard",
+                                "action": "receive",
+                                "channel": "CardCheckRequest",
+                                "address": "payments/cc/v1/check/request",
+                                "reply": true,
+                                "messages": [ "CardCheckRequest" ]
+                            }
+                        ]
                     }
                 ]
             }

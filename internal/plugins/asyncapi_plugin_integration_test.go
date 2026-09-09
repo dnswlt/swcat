@@ -69,8 +69,9 @@ func TestAsyncAPIImporterPlugin_ExecuteInternal(t *testing.T) {
 		repository = "libs-release"
 	)
 
-	// AsyncAPI v3 spec with two channels and @@placeholders@@ that must be
-	// substituted from the .properties file before parsing.
+	// AsyncAPI v3 spec with two operations and @@placeholders@@ that must be
+	// substituted from the .properties file before parsing. One operation
+	// declares a reply (request/reply), the other does not (fire-and-forget).
 	specYAML := `
 asyncapi: '3.0.0'
 info:
@@ -87,6 +88,18 @@ channels:
     messages:
       orderCreated:
         name: OrderCreated
+operations:
+  onUserSignedUp:
+    action: send
+    channel:
+      $ref: '#/channels/signups'
+  onOrderCreated:
+    action: receive
+    channel:
+      $ref: '#/channels/orders'
+    reply:
+      address:
+        location: "$message.header#/replyTo"
 `
 	props := `
 # A comment line
@@ -156,7 +169,7 @@ file: META-INF/asyncapi.yaml
 		t.Errorf("RetrieveArtifact coords = %+v, want %+v", fetcher.gotCoords, wantCoords)
 	}
 
-	// Verify the observation: two channels with addresses substituted from the .properties file.
+	// Verify the observation: two operations with addresses substituted from the .properties file.
 	obs, ok := result.Observations[AsyncAPIPluginTarget]
 	if !ok {
 		t.Fatalf("%q observation missing", AsyncAPIPluginTarget)
@@ -167,43 +180,55 @@ file: META-INF/asyncapi.yaml
 	if obs.Version != "1.2.0" {
 		t.Errorf("observation Version = %q, want %q", obs.Version, "1.2.0")
 	}
-	var results []*VersionedChannels
+	var results []*VersionedSpec
 	if err := json.Unmarshal(obs.Value, &results); err != nil {
 		t.Fatalf("unmarshal observation: %v", err)
 	}
 	if len(results) != 1 {
 		t.Fatalf("got %d versioned results, want 1", len(results))
 	}
-	channels := results[0].Channels
-	if len(channels) != 2 {
-		t.Fatalf("got %d channels, want 2: %+v", len(channels), channels)
+	if results[0].AsyncAPIVersion != "3.0.0" {
+		t.Errorf("AsyncAPIVersion = %q, want %q", results[0].AsyncAPIVersion, "3.0.0")
+	}
+	if results[0].Channels != nil {
+		t.Errorf("Channels = %+v, want nil for a v3 spec", results[0].Channels)
+	}
+	operations := results[0].Operations
+	if len(operations) != 2 {
+		t.Fatalf("got %d operations, want 2: %+v", len(operations), operations)
 	}
 	// Index by name for order-independent assertions.
-	byName := map[string]*asyncapi.SimpleChannel{}
-	for _, ch := range channels {
-		byName[ch.Name] = ch
+	byName := map[string]*asyncapi.SimpleOperation{}
+	for _, op := range operations {
+		byName[op.Name] = op
 	}
-	check := func(name, wantAddr, wantMsg string) {
+	check := func(name, wantChannel, wantAddr, wantMsg string, wantReply bool) {
 		t.Helper()
-		ch, ok := byName[name]
+		op, ok := byName[name]
 		if !ok {
-			t.Errorf("channel %q missing", name)
+			t.Errorf("operation %q missing", name)
 			return
 		}
-		if ch.Address != wantAddr {
-			t.Errorf("channel %q address = %q, want %q", name, ch.Address, wantAddr)
+		if op.Channel != wantChannel {
+			t.Errorf("operation %q channel = %q, want %q", name, op.Channel, wantChannel)
 		}
-		if !slices.Equal(ch.Messages, []string{wantMsg}) {
-			t.Errorf("channel %q messages = %v, want [%s]", name, ch.Messages, wantMsg)
+		if op.Address != wantAddr {
+			t.Errorf("operation %q address = %q, want %q", name, op.Address, wantAddr)
+		}
+		if !slices.Equal(op.Messages, []string{wantMsg}) {
+			t.Errorf("operation %q messages = %v, want [%s]", name, op.Messages, wantMsg)
+		}
+		if op.Reply != wantReply {
+			t.Errorf("operation %q reply = %v, want %v", name, op.Reply, wantReply)
 		}
 	}
-	check("signups", "user/signedup", "userSignedUp")
-	check("orders", "order/created", "orderCreated")
+	check("onUserSignedUp", "signups", "user/signedup", "UserSignedUp", false)
+	check("onOrderCreated", "orders", "order/created", "OrderCreated", true)
 
 	// Sanity check that placeholder substitution actually ran.
-	for _, ch := range channels {
-		if ch.Address == "" || ch.Address[0] == '@' {
-			t.Errorf("channel %q: placeholder %q not substituted", ch.Name, ch.Address)
+	for _, op := range operations {
+		if op.Address == "" || op.Address[0] == '@' {
+			t.Errorf("operation %q: placeholder %q not substituted", op.Name, op.Address)
 		}
 	}
 }
@@ -223,6 +248,11 @@ info:
 channels:
   v1channel:
     address: v1/addr
+operations:
+  v1op:
+    action: send
+    channel:
+      $ref: '#/channels/v1channel'
 `
 	v2Spec := `
 asyncapi: '3.0.0'
@@ -232,6 +262,11 @@ info:
 channels:
   v2channel:
     address: v2/addr
+operations:
+  v2op:
+    action: send
+    channel:
+      $ref: '#/channels/v2channel'
 `
 
 	fetcher := &fakeArtifactFetcher{
@@ -292,7 +327,7 @@ file: META-INF/asyncapi.yaml
 		t.Errorf("Meta[version-v2] = %q, want %q", obs.Meta["version-v2"], "2.0.1")
 	}
 
-	var results []*VersionedChannels
+	var results []*VersionedSpec
 	if err := json.Unmarshal(obs.Value, &results); err != nil {
 		t.Fatalf("unmarshal observation: %v", err)
 	}
@@ -300,15 +335,15 @@ file: META-INF/asyncapi.yaml
 		t.Fatalf("got %d versioned results, want 2", len(results))
 	}
 
-	// Verify that each result has its correct channels
+	// Verify that each result has its correct operations
 	for _, r := range results {
 		if r.Version == "1.2.3" {
-			if len(r.Channels) != 1 || r.Channels[0].Name != "v1channel" {
-				t.Errorf("v1 channels mismatch: %+v", r.Channels)
+			if len(r.Operations) != 1 || r.Operations[0].Channel != "v1channel" {
+				t.Errorf("v1 operations mismatch: %+v", r.Operations)
 			}
 		} else if r.Version == "2.0.1" {
-			if len(r.Channels) != 1 || r.Channels[0].Name != "v2channel" {
-				t.Errorf("v2 channels mismatch: %+v", r.Channels)
+			if len(r.Operations) != 1 || r.Operations[0].Channel != "v2channel" {
+				t.Errorf("v2 operations mismatch: %+v", r.Operations)
 			}
 		}
 	}

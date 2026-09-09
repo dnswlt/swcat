@@ -137,6 +137,7 @@ The following helper functions are available in custom-content templates:
 | Helper | Description |
 | :--- | :--- |
 | `join` | Format a slice or array as a comma-separated string (e.g. `{{ .tags \| join }}`). |
+| `hasPrefix` | Report whether a string starts with a prefix (e.g. `{{ if hasPrefix .version "3" }}`). |
 
 ## Examples
 
