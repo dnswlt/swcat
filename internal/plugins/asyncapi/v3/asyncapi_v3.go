@@ -107,7 +107,9 @@ func (s *Spec) Resolve() {
 		}
 		if op.Ref != "" && s.Components != nil {
 			if name, found := strings.CutPrefix(op.Ref, "#/components/operations/"); found {
-				if resolved, ok := s.Components.Operations[name]; ok {
+				// A component may be present but empty, in which case the
+				// lookup succeeds and still yields nothing to resolve to.
+				if resolved, ok := s.Components.Operations[name]; ok && resolved != nil {
 					s.Operations[k] = resolved
 					op = resolved
 				}

@@ -227,6 +227,194 @@ func TestParseUnsupportedVersion(t *testing.T) {
 	}
 }
 
+// TestParseSlightlyInvalidSpecsDoesNotPanic covers malformed-but-plausible
+// documents produced while editing a spec by hand. Whether these entries are
+// skipped, preserved, or rejected is deliberately left to the parser; none of
+// them should be able to panic the importer.
+func TestParseSlightlyInvalidSpecsDoesNotPanic(t *testing.T) {
+	tests := []struct {
+		name string
+		spec string
+	}{
+		{
+			name: "v2 null channel",
+			spec: `
+asyncapi: '2.6.0'
+channels:
+  broken: null
+components:
+  messages: {}
+`,
+		},
+		{
+			name: "v2 reference to null component message",
+			spec: `
+asyncapi: '2.6.0'
+channels:
+  jobs:
+    publish:
+      message:
+        $ref: '#/components/messages/MissingBody'
+components:
+  messages:
+    MissingBody: null
+`,
+		},
+		{
+			name: "v3 null operation message",
+			spec: `
+asyncapi: '3.0.0'
+channels:
+  jobs:
+    address: jobs
+operations:
+  sendJob:
+    action: send
+    channel:
+      $ref: '#/channels/jobs'
+    messages:
+      - null
+`,
+		},
+		{
+			name: "v3 null inherited channel message",
+			spec: `
+asyncapi: '3.0.0'
+channels:
+  jobs:
+    address: jobs
+    messages:
+      broken: null
+operations:
+  sendJob:
+    action: send
+    channel:
+      $ref: '#/channels/jobs'
+`,
+		},
+		{
+			name: "v3 reference to null component operation",
+			spec: `
+asyncapi: '3.0.0'
+operations:
+  sendJob:
+    $ref: '#/components/operations/NullOperation'
+components:
+  operations:
+    NullOperation: null
+`,
+		},
+		{
+			name: "v2 null publish operation",
+			spec: `
+asyncapi: '2.6.0'
+channels:
+  jobs:
+    publish: null
+    subscribe:
+      message: null
+`,
+		},
+		{
+			name: "v2 null components section",
+			spec: `
+asyncapi: '2.6.0'
+channels:
+  jobs:
+    publish:
+      message:
+        $ref: '#/components/messages/Gone'
+components:
+  messages: null
+`,
+		},
+		{
+			name: "v3 null reply parts",
+			spec: `
+asyncapi: '3.0.0'
+operations:
+  sendJob:
+    action: send
+    reply:
+      address: null
+      channel: null
+      messages:
+        - null
+`,
+		},
+		{
+			name: "v3 reference to null component channel",
+			spec: `
+asyncapi: '3.0.0'
+channels:
+  alias:
+    $ref: '#/components/channels/Missing'
+operations:
+  sendJob:
+    action: send
+    channel:
+      $ref: '#/channels/alias'
+components:
+  channels:
+    Missing: null
+`,
+		},
+		{
+			name: "v3 reference to null channel-scoped message",
+			spec: `
+asyncapi: '3.0.0'
+channels:
+  jobs:
+    address: jobs
+    messages:
+      broken: null
+operations:
+  sendJob:
+    action: send
+    channel:
+      $ref: '#/channels/jobs'
+    messages:
+      - $ref: '#/channels/jobs/messages/broken'
+`,
+		},
+		{
+			name: "v3 every section null",
+			spec: `
+asyncapi: '3.0.0'
+channels: null
+operations: null
+components: null
+`,
+		},
+		{
+			name: "v3 self-referential channel",
+			spec: `
+asyncapi: '3.0.0'
+channels:
+  loop:
+    $ref: '#/channels/loop'
+operations:
+  sendJob:
+    action: send
+    channel:
+      $ref: '#/channels/loop'
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					t.Errorf("ParseBytes() panicked: %v", recovered)
+				}
+			}()
+
+			_, _ = ParseBytes([]byte(tt.spec))
+		})
+	}
+}
+
 // TestParseV3MessageSubsets covers operation.messages, which references the
 // channel's own messages rather than components, and distinguishes an omitted
 // list ("all channel messages") from an explicitly empty one ("none").

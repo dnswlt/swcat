@@ -98,6 +98,11 @@ func ParseBytes(data []byte) (*Extract, error) {
 func extractV2(spec *v2.Spec) *Extract {
 	channels := []*SimpleChannel{}
 	for addr, ch := range spec.Channels {
+		// A key with no body under it parses as a nil entry; there is nothing
+		// to report for it.
+		if ch == nil {
+			continue
+		}
 		msgs := []string{}
 		collectMsg := func(op *v2.Operation) {
 			if op == nil || op.Message == nil {
@@ -155,6 +160,9 @@ func extractV3(spec *v3.Spec) *Extract {
 		// not for length.
 		if op.Messages != nil {
 			for _, msg := range op.Messages {
+				if msg == nil {
+					continue
+				}
 				// An unresolvable $ref has no name to show; fall back to the
 				// reference itself rather than dropping the message silently.
 				if n := messageName(msg.Name, msg.Title, msg.Ref); n != "" {
@@ -163,6 +171,9 @@ func extractV3(spec *v3.Spec) *Extract {
 			}
 		} else if op.Channel != nil {
 			for key, msg := range op.Channel.Messages {
+				if msg == nil {
+					continue
+				}
 				simple.Messages = append(simple.Messages, messageName(msg.Name, msg.Title, key))
 			}
 		}

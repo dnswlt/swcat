@@ -57,6 +57,11 @@ func (s *Spec) Resolve() {
 	}
 
 	for _, ch := range s.Channels {
+		// A channel key with no body ("broken:" with nothing under it) parses
+		// as a nil entry rather than an empty one.
+		if ch == nil {
+			continue
+		}
 		// Resolve messages in Publish operation
 		if ch.Publish != nil && ch.Publish.Message != nil {
 			s.resolveMessage(ch.Publish.Message)
@@ -69,12 +74,17 @@ func (s *Spec) Resolve() {
 }
 
 func (s *Spec) resolveMessage(msg *Message) {
-	if msg.Ref != "" {
-		if name, found := strings.CutPrefix(msg.Ref, "#/components/messages/"); found {
-			if resolved, ok := s.Components.Messages[name]; ok {
-				// Copy resolved fields to msg
-				*msg = *resolved
-			}
-		}
+	if msg == nil || msg.Ref == "" {
+		return
+	}
+	name, found := strings.CutPrefix(msg.Ref, "#/components/messages/")
+	if !found {
+		return
+	}
+	// A component may be present but empty, in which case the lookup succeeds
+	// and still yields nothing to copy.
+	if resolved, ok := s.Components.Messages[name]; ok && resolved != nil {
+		// Copy resolved fields to msg
+		*msg = *resolved
 	}
 }
