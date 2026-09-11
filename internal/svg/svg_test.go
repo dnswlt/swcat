@@ -2,6 +2,7 @@ package svg
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -430,6 +431,52 @@ func TestDefaultDetailLevelIsAPIs(t *testing.T) {
 	} {
 		if got := ParseDetailLevel(s, DetailAll); got != want {
 			t.Errorf("ParseDetailLevel(%q) = %v, want %v", s, got, want)
+		}
+	}
+}
+
+// clusterOrder returns the cluster labels in the order they are declared in the
+// DOT source. dot lays out the same graph differently depending on that order,
+// so it has to be stable across calls.
+func clusterOrder(dotSource string) []string {
+	var labels []string
+	for _, line := range strings.Split(dotSource, "\n") {
+		if rest, ok := strings.CutPrefix(line, `label="`); ok {
+			labels = append(labels, strings.TrimSuffix(rest, `"`))
+		}
+	}
+	return labels
+}
+
+func TestGraphClustersAreDeterministic(t *testing.T) {
+	r := flightsRepo(t)
+	runner := &mockRunner{}
+	renderer := NewRenderer(r, runner, DefaultConfig())
+
+	// Components spread over four systems, so there are four clusters to order.
+	var entities []catalog.Entity
+	for _, name := range []string{
+		"purchase-forwarder", "cache-loader", "flights-frontend-service", "flights-routes",
+		"availability-aggregator", "cache-server", "flights-search-backend",
+	} {
+		comp := r.Component(&catalog.Ref{Kind: catalog.KindComponent, Name: name})
+		if comp == nil {
+			t.Fatalf("component %q not found in the flights example", name)
+		}
+		entities = append(entities, comp)
+	}
+
+	want := []string{"flights-cache", "flights-frontend", "flights-search", "flights-tickets"}
+
+	// Repeated to catch Go's randomized map iteration: a map-ordered emission
+	// would shuffle the clusters on almost every call.
+	for range 16 {
+		if _, err := renderer.Graph(context.Background(), entities,
+			GraphOptions{SystemsAsClusters: true}); err != nil {
+			t.Fatalf("Graph failed: %v", err)
+		}
+		if got := clusterOrder(runner.lastDotSource); !slices.Equal(got, want) {
+			t.Fatalf("clusters declared as %v, want %v", got, want)
 		}
 	}
 }

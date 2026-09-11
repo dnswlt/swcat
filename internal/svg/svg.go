@@ -3,6 +3,7 @@ package svg
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/dot"
@@ -694,6 +695,11 @@ func (r *render) generateGraphDotSource(entities []catalog.Entity, opts GraphOpt
 		children []catalog.Entity
 	}
 	sysClusters := make(map[string]*clusterGroup)
+	// clusterOrder holds the same groups as sysClusters, in a deterministic order.
+	// Iterating the map directly would emit clusters in random order, and dot's
+	// layout depends on the order in which subgraphs are declared: the same graph
+	// would render differently on every cache miss.
+	var clusterOrder []*clusterGroup
 
 	if opts.SystemsAsClusters {
 		// Group entities by their system cluster.
@@ -709,6 +715,7 @@ func (r *render) generateGraphDotSource(entities []catalog.Entity, opts GraphOpt
 			}
 			g := &clusterGroup{sysRef: sysRef}
 			sysClusters[key] = g
+			clusterOrder = append(clusterOrder, g)
 			return g
 		}
 
@@ -724,7 +731,11 @@ func (r *render) generateGraphDotSource(entities []catalog.Entity, opts GraphOpt
 			}
 		}
 
-		for _, g := range sysClusters {
+		slices.SortFunc(clusterOrder, func(a, b *clusterGroup) int {
+			return a.sysRef.Compare(b.sysRef)
+		})
+
+		for _, g := range clusterOrder {
 			sys := r.repo.System(g.sysRef)
 			dw.StartCluster(sys.GetRef().QName())
 			for _, child := range g.children {
