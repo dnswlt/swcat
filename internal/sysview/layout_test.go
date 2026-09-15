@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/dnswlt/swcat/internal/font"
 )
 
 // diagram builds a small diagram: focal is the focal system with the given
@@ -146,7 +148,7 @@ func TestColumnsHaveUniformWidth(t *testing.T) {
 		}
 	}
 	// The widest label still has to fit.
-	if want := TextWidth("a-very-long-external-system-name", DefaultStyle().FontSize); width < want {
+	if want := font.TextWidth("a-very-long-external-system-name", DefaultStyle().FontSize); width < want {
 		t.Errorf("column width %.1f is too narrow for its widest label (%.1f)", width, want)
 	}
 	for _, n := range d.Focal.Nodes {
@@ -290,7 +292,7 @@ func TestEdgeLabelsGetRoomOnTheirRun(t *testing.T) {
 			t.Errorf("label %q: run is %.1f wide, needs %.1f", label, run, want)
 		}
 		for _, line := range e.labelLines {
-			if w := TextWidth(line, st.EdgeFontSize); w > st.EdgeLabelMaxWidth {
+			if w := font.TextWidth(line, st.EdgeFontSize); w > st.EdgeLabelMaxWidth {
 				t.Errorf("label line %q is %.1f wide, over the %.1f wrap width",
 					line, w, st.EdgeLabelMaxWidth)
 			}

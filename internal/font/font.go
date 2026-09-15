@@ -1,4 +1,13 @@
-package sysview
+// Package font measures text with the same glyph advances the browser renders
+// the graph SVGs with.
+//
+// Noto Sans is the font the graph SVGs are rendered with in the browser (see
+// web/main.js and the .graphviz-svg rule in web/style.css). Layout has to size
+// boxes to fit their text, so it needs the very same glyph advances the browser
+// will use. Reading a font from the host would make layout depend on what is
+// installed on the machine (dot's long-standing weakness here), so we embed the
+// exact same subset files the frontend loads and measure against those.
+package font
 
 import (
 	"bytes"
@@ -11,12 +20,7 @@ import (
 	"sync"
 )
 
-// Noto Sans is the font the graph SVGs are rendered with in the browser (see
-// web/main.js and the .graphviz-svg rule in web/style.css). Layout has to size
-// boxes to fit their text, so it needs the very same glyph advances the browser
-// will use. Reading a font from the host would make layout depend on what is
-// installed on the machine (dot's long-standing weakness here), so we embed the
-// exact same subset files the frontend loads and measure against those.
+// fontFS holds the Noto Sans subsets copied from what web/package.json installs.
 //
 //go:embed fonts/*.woff
 var fontFS embed.FS
@@ -43,12 +47,12 @@ func fontMetrics() map[rune]float64 {
 		for _, name := range fontFiles {
 			data, err := fontFS.ReadFile(name)
 			if err != nil {
-				log.Printf("sysview: cannot read embedded font %s: %v", name, err)
+				log.Printf("font: cannot read embedded font %s: %v", name, err)
 				continue
 			}
 			m, err := parseWOFFAdvances(data)
 			if err != nil {
-				log.Printf("sysview: cannot parse embedded font %s: %v", name, err)
+				log.Printf("font: cannot parse embedded font %s: %v", name, err)
 				continue
 			}
 			for r, a := range m {

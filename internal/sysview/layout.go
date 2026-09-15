@@ -5,6 +5,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/dnswlt/swcat/internal/font"
 )
 
 const (
@@ -173,7 +175,7 @@ func (l *layouter) measure() {
 	l.ports = ports
 	nodeSize := func(n *Node) (w, h float64) {
 		for _, lbl := range n.Labels {
-			w = max(w, TextWidth(lbl.Text, st.fontSize(lbl)))
+			w = max(w, font.TextWidth(lbl.Text, st.fontSize(lbl)))
 			h += st.lineHeight(lbl)
 		}
 		busiest := max(ports[portKey{n, portLeft}], ports[portKey{n, portRight}])
@@ -189,7 +191,7 @@ func (l *layouter) measure() {
 			l.focalWidth = max(l.focalWidth, w)
 		}
 		l.focalWidth = max(l.focalWidth, st.NodeMinWidth)
-		titleW := TextWidth(l.d.Focal.Label, st.GroupFontSize)
+		titleW := font.TextWidth(l.d.Focal.Label, st.GroupFontSize)
 		l.d.Focal.w = max(l.focalWidth+2*st.GroupPadX, titleW+2*st.GroupPadX)
 		l.focalWidth = l.d.Focal.w - 2*st.GroupPadX
 		for _, n := range l.d.Focal.Nodes {
@@ -208,7 +210,7 @@ func (l *layouter) measure() {
 		}
 		if it.Group != nil {
 			w += 2 * st.GroupPadX
-			w = max(w, TextWidth(it.Group.Label, st.GroupFontSize)+2*st.GroupPadX)
+			w = max(w, font.TextWidth(it.Group.Label, st.GroupFontSize)+2*st.GroupPadX)
 		}
 		l.itemWidth = max(l.itemWidth, w)
 	}
@@ -233,7 +235,7 @@ func (l *layouter) measure() {
 		}
 		e.labelLines = wrapLabel(e.Label, st)
 		for _, line := range e.labelLines {
-			e.labelW = max(e.labelW, TextWidth(line, st.EdgeFontSize))
+			e.labelW = max(e.labelW, font.TextWidth(line, st.EdgeFontSize))
 		}
 		e.labelH = float64(len(e.labelLines)) * st.EdgeLabelLineHeight
 	}
@@ -254,7 +256,7 @@ func wrapLabel(label string, st Style) []string {
 		}
 		line := words[0]
 		for _, w := range words[1:] {
-			if TextWidth(line+" "+w, st.EdgeFontSize) > st.EdgeLabelMaxWidth {
+			if font.TextWidth(line+" "+w, st.EdgeFontSize) > st.EdgeLabelMaxWidth {
 				out = append(out, line)
 				line = w
 				continue

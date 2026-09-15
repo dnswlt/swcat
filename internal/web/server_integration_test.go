@@ -3,6 +3,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -205,6 +207,60 @@ func TestIntegration_ServerSmoke(t *testing.T) {
 				if !strings.Contains(bodyStr, exp) {
 					t.Errorf("GET %s: response body missing expected substring %q:\n%s", tc.path, exp, bodyStr)
 				}
+			}
+		})
+	}
+}
+
+// TestIntegration_ServerFonts downloads every font file main.css refers to. If
+// one is missing, the browser silently falls back to another font and graph
+// labels outgrow the boxes that were sized for Noto Sans.
+func TestIntegration_ServerFonts(t *testing.T) {
+	ts, s := setupIntegrationServer(t)
+	t.Cleanup(func() { ts.Close() })
+	client := ts.Client()
+
+	cssURL, err := url.Parse(ts.URL + s.assetURL("main.css"))
+	if err != nil {
+		t.Fatalf("Failed to parse main.css URL: %v", err)
+	}
+	resp, err := client.Get(cssURL.String())
+	if err != nil {
+		t.Fatalf("Failed to GET %s: %v", cssURL, err)
+	}
+	css, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET %s: status %d, err %v", cssURL, resp.StatusCode, err)
+	}
+
+	fontRefs := regexp.MustCompile(`url\(["']?([^"')]+\.woff2?)["']?\)`).FindAllStringSubmatch(string(css), -1)
+	if len(fontRefs) == 0 {
+		t.Fatalf("%s references no .woff/.woff2 files", cssURL.Path)
+	}
+
+	for _, ref := range fontRefs {
+		fontURL, err := cssURL.Parse(ref[1]) // CSS urls resolve against the stylesheet
+		if err != nil {
+			t.Fatalf("Failed to resolve font URL %q: %v", ref[1], err)
+		}
+		t.Run(fontURL.Path, func(t *testing.T) {
+			t.Parallel()
+			resp, err := client.Get(fontURL.String())
+			if err != nil {
+				t.Fatalf("Failed to GET %s: %v", fontURL, err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("GET %s returned status %d, expected 200", fontURL.Path, resp.StatusCode)
+			}
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("Failed to read body from %s: %v", fontURL.Path, err)
+			}
+			// Check the signature, so an HTML error page served with 200 doesn't pass.
+			if !bytes.HasPrefix(body, []byte("wOF2")) && !bytes.HasPrefix(body, []byte("wOFF")) {
+				t.Errorf("GET %s did not return a WOFF/WOFF2 file (%d bytes)", fontURL.Path, len(body))
 			}
 		})
 	}

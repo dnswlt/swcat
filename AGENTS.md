@@ -30,6 +30,7 @@ first. `-base-dir .` serves both from disk during development.
 - `internal/svg` — builds diagrams from the catalog
 - `internal/dot` — writes graphviz source and runs `dot`
 - `internal/sysview` — lays out and renders the external views in process
+- `internal/font` — text measurement against the embedded frontend fonts
 - `internal/plugins`, `internal/lint`, `internal/query` — extensions, checks, search
 
 ## Frontend
@@ -75,7 +76,7 @@ is good at, so they stay with `dot`.
 
 Before changing `internal/sysview`:
 
-- Text is measured with the Noto Sans subsets in `internal/sysview/fonts/`, copied
+- Text is measured with the Noto Sans subsets in `internal/font/fonts/`, copied
   from what `web/package.json` installs. Keep them in sync or labels outgrow their
   boxes. They are embedded so layout never depends on host fonts.
 - Coordinates are points (`width="600pt"` with a matching viewBox), so the browser
