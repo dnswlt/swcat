@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -9,6 +10,69 @@ import (
 	"github.com/dnswlt/swcat/internal/repo"
 	"gopkg.in/yaml.v3"
 )
+
+func TestRegistryRelationshipPredicates(t *testing.T) {
+	api := &catalog.API{Metadata: &catalog.Metadata{Name: "payments-api"}, Spec: &catalog.APISpec{}}
+	api.SetDomain(catalog.MustParseRef("domain:payments"))
+	component := &catalog.Component{Metadata: &catalog.Metadata{Name: "consumer"}, Spec: &catalog.ComponentSpec{
+		ConsumesAPIs: []*catalog.LabelRef{{Ref: api.GetRef()}},
+	}}
+	repository := repo.NewRepository()
+	for _, entity := range []catalog.Entity{api, component} {
+		if err := repository.AddEntity(entity); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tests := []struct {
+		name, trigger, inhibit string
+		want                   bool
+		err                    string
+	}{
+		{"trigger matches", "kind:component consumesApis[domain=payments]", "", true, ""},
+		{"trigger does not match", "consumesApis[domain=other]", "", false, ""},
+		{"inhibit matches", "kind:component", "consumesApis[domain=payments]", false, ""},
+		{"inhibit does not match", "kind:component", "consumesApis[domain=other]", true, ""},
+		{"invalid trigger", "consumesApis[unknown=value]", "", false, "trigger: unknown attribute"},
+		{"invalid inhibit", "kind:component", "consumesApis[unknown=value]", false, "inhibit: unknown attribute"},
+		{"unsupported lint trigger", "lint=error", "", false, "trigger: unknown attribute"},
+		{"unsupported lint inhibit", "kind:component", "lint=error", false, "inhibit: unknown attribute"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registry, err := NewRegistry(&Config{Plugins: map[string]*Definition{
+				"timestamp": {Kind: "TimestampPlugin", Trigger: tt.trigger, Inhibit: tt.inhibit},
+			}}, Services{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			checkError := func(err error) {
+				t.Helper()
+				if tt.err != "" {
+					if err == nil || !strings.Contains(err.Error(), tt.err) || !strings.Contains(err.Error(), "timestamp") {
+						t.Fatalf("got error %v, want plugin name and %q", err, tt.err)
+					}
+				} else if err != nil {
+					t.Fatal(err)
+				}
+			}
+			names, err := registry.MatchingPlugins(component, repository)
+			checkError(err)
+			if (len(names) > 0) != tt.want {
+				t.Fatalf("MatchingPlugins = %v, want match %v", names, tt.want)
+			}
+			result, err := registry.Run(t.Context(), repository, component)
+			checkError(err)
+			if tt.err == "" {
+				_, ran := result.Annotations[AnnotPluginsUpdateTime]
+				if ran != tt.want {
+					t.Fatalf("plugin ran = %v, want %v", ran, tt.want)
+				}
+			} else if result != nil {
+				t.Fatal("failed predicates must not execute plugins")
+			}
+		})
+	}
+}
 
 func TestReadConfig(t *testing.T) {
 	// Tests that the spec field of plugin configs are read properly.

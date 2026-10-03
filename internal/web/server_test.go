@@ -15,8 +15,121 @@ import (
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/lint"
+	"github.com/dnswlt/swcat/internal/plugins"
+	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
 )
+
+func TestPluginToolbarUsesRequestCatalog(t *testing.T) {
+	s := newTestServer(t, store.NewDiskStore("../../testdata/test1"))
+	registry, err := plugins.NewRegistry(&plugins.Config{Plugins: map[string]*plugins.Definition{
+		"payments-plugin": {
+			Kind: "TimestampPlugin", Trigger: "consumesApis[domain=payments]",
+			Inhibit: "consumesApis[tag=restricted]",
+		},
+	}}, plugins.Services{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.pluginRegistry = registry
+	for _, tc := range []struct {
+		domain     string
+		restricted bool
+		want       bool
+	}{
+		{"payments", false, true},
+		{"other", false, false},
+		{"payments", true, false},
+		{"payments", false, true},
+	} {
+		// Reuse entity identities across snapshots to catch a resolver retained
+		// from another request or catalog revision.
+		api := &catalog.API{Metadata: &catalog.Metadata{Name: "api"}, Spec: &catalog.APISpec{}}
+		api.SetDomain(catalog.MustParseRef("domain:" + tc.domain))
+		if tc.restricted {
+			api.Metadata.Tags = []string{"restricted"}
+		}
+		component := &catalog.Component{Metadata: &catalog.Metadata{Name: "consumer"}, Spec: &catalog.ComponentSpec{
+			ConsumesAPIs: []*catalog.LabelRef{{Ref: api.GetRef()}},
+		}}
+		repository := repo.NewRepository()
+		for _, entity := range []catalog.Entity{api, component} {
+			if err := repository.AddEntity(entity); err != nil {
+				t.Fatal(err)
+			}
+		}
+		req := httptest.NewRequest(http.MethodGet, "/ui/components/consumer", nil)
+		req = req.WithContext(context.WithValue(req.Context(), ctxRefData, &storeData{repo: repository}))
+		params := map[string]any{"Entity": component, "ReadOnly": true}
+		fragment, err := s.renderTemplateFragment(req, "entity_toolbar.html", params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rr := httptest.NewRecorder()
+		s.serveHTMLPage(rr, req, "entity_toolbar.html", params)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("page status %d: %s", rr.Code, rr.Body.String())
+		}
+		for _, html := range []string{string(fragment), rr.Body.String()} {
+			if got := strings.Contains(html, "payments-plugin"); got != tc.want {
+				t.Fatalf("domain=%s restricted=%v: plugin visible=%v, want %v", tc.domain, tc.restricted, got, tc.want)
+			}
+		}
+	}
+}
+
+func TestPluginPredicateErrorsDoNotBreakRendering(t *testing.T) {
+	s := newTestServer(t, store.NewDiskStore("../../testdata/test1"))
+	api := &catalog.API{Metadata: &catalog.Metadata{Name: "api"}, Spec: &catalog.APISpec{}}
+	component := &catalog.Component{Metadata: &catalog.Metadata{Name: "consumer"}, Spec: &catalog.ComponentSpec{
+		ConsumesAPIs: []*catalog.LabelRef{{Ref: api.GetRef()}},
+	}}
+	repository := repo.NewRepository()
+	for _, entity := range []catalog.Entity{api, component} {
+		if err := repository.AddEntity(entity); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct{ name, trigger, inhibit string }{
+		{"unknown nested trigger attribute", "consumesApis[unknwn=x]", ""},
+		{"unknown nested inhibit attribute", "kind=component", "consumesApis[unknwn=x]"},
+		{"unsupported lint trigger", "lint=error", ""},
+		{"unsupported lint inhibit", "kind=component", "lint=error"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			registry, err := plugins.NewRegistry(&plugins.Config{Plugins: map[string]*plugins.Definition{
+				"broken-plugin": {Kind: "TimestampPlugin", Trigger: tc.trigger, Inhibit: tc.inhibit},
+			}}, plugins.Services{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			s.pluginRegistry = registry
+			req := httptest.NewRequest(http.MethodGet, "/ui/components/consumer", nil)
+			req = req.WithContext(context.WithValue(req.Context(), ctxRefData, &storeData{repo: repository}))
+			params := map[string]any{"Entity": component, "ReadOnly": true}
+			fragment, err := s.renderTemplateFragment(req, "entity_toolbar.html", params)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rr := httptest.NewRecorder()
+			s.serveHTMLPage(rr, req, "entity_toolbar.html", params)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("page status %d: %s", rr.Code, rr.Body.String())
+			}
+			for _, html := range []string{string(fragment), rr.Body.String()} {
+				if strings.Contains(html, "plugin-btn") || strings.Contains(html, "broken-plugin") {
+					t.Fatal("broken predicate must hide plugin menu")
+				}
+				if !strings.Contains(html, "View Source") {
+					t.Fatal("remaining toolbar should still render")
+				}
+			}
+			if result, err := registry.Run(t.Context(), repository, component); err == nil || result != nil {
+				t.Fatalf("Run = %v, %v; want no result and an error", result, err)
+			}
+		})
+	}
+}
 
 // fakeRunner is a fake implementation of dot.Runner.
 type fakeRunner struct {

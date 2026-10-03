@@ -29,6 +29,11 @@ The script must define `links(entity)`. It is called once for every entity that
 matches the filter and must return a list of values created by the host-provided
 `link` constructor.
 
+All filters and scripts see the catalog before any generated links are attached.
+They can inspect authored links, including links on related entities, but cannot
+depend on another generator's output. Generated links are attached only after
+all generators finish, so entity iteration order does not affect the results.
+
 ```python
 def links(entity):
     metadata = entity["metadata"]

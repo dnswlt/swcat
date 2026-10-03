@@ -460,7 +460,7 @@ func (r *Repository) generateLegacyAutomaticLinks(e catalog.Entity, generators [
 	var links []*catalog.Link
 	for i := range generators {
 		g := &generators[i]
-		matches, err := g.eval.Matches(e)
+		matches, err := g.eval.Matches(e, r)
 		if err != nil {
 			return nil, fmt.Errorf("failed to evaluate filter for entity %v: %v", e.GetRef(), err)
 		}
@@ -490,6 +490,10 @@ func (r *Repository) addGeneratedLinks() error {
 		return err
 	}
 
+	// Filters and scripts may inspect other entities. Keep generated links out
+	// of the entire catalog until all evaluations finish, so their results do
+	// not depend on map iteration order.
+	pending := make(map[*catalog.Metadata][]*catalog.Link, len(r.allEntities))
 	for _, e := range r.allEntities {
 		meta := e.GetMetadata()
 		// Check that no generated links already exist (that would be a programming error)
@@ -517,7 +521,7 @@ func (r *Repository) addGeneratedLinks() error {
 		}
 		links = append(links, legacyLinks...)
 		for _, generator := range starlarkGenerators {
-			matches, err := generator.eval.Matches(e)
+			matches, err := generator.eval.Matches(e, r)
 			if err != nil {
 				return fmt.Errorf("failed to evaluate Starlark link filter for entity %v: %w", e.GetRef(), err)
 			}
@@ -549,6 +553,9 @@ func (r *Repository) addGeneratedLinks() error {
 			}
 		}
 
+		pending[meta] = links
+	}
+	for meta, links := range pending {
 		meta.Links = append(meta.Links, links...)
 		slices.SortFunc(meta.Links, func(a, b *catalog.Link) int {
 			if c := cmp.Compare(a.Title, b.Title); c != 0 {

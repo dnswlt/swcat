@@ -1,12 +1,70 @@
 package repo
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	starlarkinterp "github.com/dnswlt/swcat/internal/starlark"
 )
+
+func TestGeneratedLinkFiltersSeeOnlyAuthoredLinks(t *testing.T) {
+	for _, generator := range []string{"legacy", "starlark"} {
+		for _, attribute := range []string{"meta", "*"} {
+			for _, authored := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%s/authored=%v", generator, attribute, authored), func(t *testing.T) {
+					filter := "dependsOn[" + attribute + ":grafana]"
+					cfg := Config{AutomaticLinks: []*AutomaticLink{{
+						Filter: "kind=component", URL: "https://grafana.example.com", Title: "Generated Grafana",
+					}}}
+					if generator == "legacy" {
+						cfg.AutomaticLinks = append(cfg.AutomaticLinks, &AutomaticLink{
+							Filter: filter, URL: "https://example.com/related", Title: "Related",
+						})
+					} else {
+						program, err := starlarkinterp.Compile("related.star", []byte(`
+def links(entity):
+    return [link(url="https://example.com/related", title="Related")]
+`))
+						if err != nil {
+							t.Fatal(err)
+						}
+						cfg.StarlarkLinks = []*StarlarkLink{{Filter: filter, File: "related.star", program: program}}
+					}
+					r := NewRepositoryWithConfig(cfg)
+					a := &catalog.Component{Metadata: &catalog.Metadata{Name: "a"}, Spec: &catalog.ComponentSpec{}}
+					b := &catalog.Component{Metadata: &catalog.Metadata{Name: "b"}, Spec: &catalog.ComponentSpec{}}
+					// Whichever entity is processed second must not see the first's
+					// generated link. The cycle makes the regression deterministic.
+					a.Spec.DependsOn = []*catalog.LabelRef{{Ref: b.GetRef()}}
+					b.Spec.DependsOn = []*catalog.LabelRef{{Ref: a.GetRef()}}
+					for _, entity := range []*catalog.Component{a, b} {
+						if authored {
+							entity.Metadata.Links = []*catalog.Link{{URL: "https://grafana.example.com/authored", Title: "Authored"}}
+						}
+						if err := r.AddEntity(entity); err != nil {
+							t.Fatal(err)
+						}
+					}
+					if err := r.addGeneratedLinks(); err != nil {
+						t.Fatal(err)
+					}
+					for _, entity := range []*catalog.Component{a, b} {
+						var hasRelated, hasGrafana bool
+						for _, link := range entity.Metadata.Links {
+							hasRelated = hasRelated || link.Title == "Related"
+							hasGrafana = hasGrafana || link.Title == "Generated Grafana"
+						}
+						if hasRelated != authored || !hasGrafana {
+							t.Errorf("%s: related=%v, grafana=%v; want related=%v, grafana=true", entity.GetRef(), hasRelated, hasGrafana, authored)
+						}
+					}
+				})
+			}
+		}
+	}
+}
 
 func TestPrepareAnnotationLinkTemplates(t *testing.T) {
 	tests := []struct {

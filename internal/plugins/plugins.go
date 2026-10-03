@@ -197,40 +197,41 @@ func NewRegistry(config *Config, services Services) (*Registry, error) {
 	return r, nil
 }
 
-func (t *Trigger) Matches(e catalog.Entity) bool {
+func (t *Trigger) Matches(e catalog.Entity, resolver query.Resolver) (bool, error) {
 	if t.condition == nil {
-		return false // No trigger condition => never trigger
+		return false, nil // No trigger condition => never trigger
 	}
-	if ok, _ := t.condition.Matches(e); !ok {
-		return false
+	matches, err := t.condition.Matches(e, resolver)
+	if err != nil {
+		return false, fmt.Errorf("trigger: %w", err)
+	}
+	if !matches {
+		return false, nil
 	}
 	if t.inhibitCondition != nil {
-		if inhibit, _ := t.inhibitCondition.Matches(e); inhibit {
-			return false
+		inhibit, err := t.inhibitCondition.Matches(e, resolver)
+		if err != nil {
+			return false, fmt.Errorf("inhibit: %w", err)
+		}
+		if inhibit {
+			return false, nil
 		}
 	}
-	return true
+	return true, nil
 }
 
-// Matches returns true if the trigger of any plugin in the registry matches the given entity.
-func (r *Registry) Matches(e catalog.Entity) bool {
-	for _, t := range r.triggers {
-		if t.Matches(e) {
-			return true
-		}
-	}
-	return false
-}
-
-func (r *Registry) MatchingPlugins(e catalog.Entity) []string {
+func (r *Registry) MatchingPlugins(e catalog.Entity, resolver query.Resolver) ([]string, error) {
 	var keys []string
-
-	for k, t := range r.triggers {
-		if t.Matches(e) {
-			keys = append(keys, k)
+	for name, trigger := range r.triggers {
+		matches, err := trigger.Matches(e, resolver)
+		if err != nil {
+			return nil, fmt.Errorf("plugin %s for %s: %w", name, e.GetRef(), err)
+		}
+		if matches {
+			keys = append(keys, name)
 		}
 	}
-	return keys
+	return keys, nil
 }
 
 // SchedulerConfig returns the scheduler config loaded from the plugins config file.
@@ -249,6 +250,10 @@ func (r *Registry) Plugins() []string {
 
 func (r *Registry) Run(ctx context.Context, repoProvider RepositoryProvider, e catalog.Entity) (*RunResult, error) {
 	repository := repoProvider.GetRepository()
+	matching, err := r.MatchingPlugins(e, repository)
+	if err != nil {
+		return nil, err
+	}
 
 	var tempDir string
 	defer func() {
@@ -298,11 +303,8 @@ func (r *Registry) Run(ctx context.Context, repoProvider RepositoryProvider, e c
 		}
 		return nil
 	}
-	for n, t := range r.triggers {
-		if !t.Matches(e) {
-			continue
-		}
-		err := execFunc(n, t.plugin)
+	for _, name := range matching {
+		err := execFunc(name, r.triggers[name].plugin)
 		if err != nil {
 			// TODO: Proceed after plugin failure - we expect it will be quite common
 			// for individual plugins to fail on some entities, while other succeed.

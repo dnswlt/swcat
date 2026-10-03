@@ -29,6 +29,7 @@ The following attributes are available for filtering:
 
 * `*`: Full-text search across all fields (`*:'some thing'`, `*:foo`).
 * `meta`: Search in all metadata fields (name, namespace, title, description, labels, annotations, tags, links).
+* `kind`: The entity kind (e.g., `component`, `api`, `system`).
 * `name`: The name of the entity.
 * `namespace`: The namespace of the entity.
 * `title`: The title of the entity.
@@ -72,6 +73,14 @@ Example with regex:
 name~^my-.*-prod$
 ```
 
+Square brackets delimit relationship predicates (see below). Quote attribute
+values that contain literal brackets, including regular-expression character
+classes:
+
+```
+name~'^[a-z]+-prod$'
+```
+
 ## Combining expressions
 
 You can combine multiple expressions using `AND` and `OR`. Parentheses can be used for grouping. If no operator is specified, `AND` is used by default.
@@ -99,3 +108,76 @@ Example:
 ```
 !owner:my-team
 ```
+
+## Related-entity predicates
+
+Use `relationship[query]` to find entities with **at least one related entity**
+that matches the query inside the brackets. Inside the brackets, attributes refer
+to the related entity; outside, they refer to the entity being searched.
+
+For example, on the components page, find components that consume APIs from
+domain `payments` but belong to a different domain:
+
+```
+!domain=payments AND consumesApis[domain=payments]
+```
+
+For a search across all entity kinds, add `kind=component`. Components, APIs, and
+resources inherit their domain from their system. This uses their assigned
+domain, not its ancestor domains. Use `=` to select an exact qualified domain name, such as
+`domain=finance/payments`; `:` would also match names containing that text.
+On a domain entity, `domain[...]` tests the domain itself, not its parent
+(`subdomainOf`), just as `domain=` matches its own qualified name.
+
+Brackets are supported on `owner`, `system`, `domain`, `consumesApis`,
+`providesApis`, `providedBy`, `consumedBy`, `dependsOn`, `dependents`, and `rel`.
+Relationship names are case-insensitive. Scalar attributes such as `tag` and
+`type` do not support brackets. The existing `consumesApis:payments` form still
+matches API reference names; `consumesApis[name:payments]` instead follows those
+references and searches the target API's name.
+
+The nested query supports the same terms, operators, grouping, and implicit
+`AND` as the outer query. Predicates can themselves contain relationship
+predicates:
+
+```
+consumesApis[domain=payments AND lifecycle=production]
+consumesApis[providedBy[owner=platform-team]]
+consumedBy[domain=checkout]
+```
+
+These find, respectively, entities consuming a production API in payments,
+entities consuming an API provided by a component owned by platform-team, and
+APIs consumed by an entity in checkout. Each result entity appears only once,
+even if several related entities match.
+
+All conditions in one pair of brackets must match **the same related entity**:
+
+```
+consumesApis[domain=payments AND tag=production]
+```
+
+Separate predicates may match different APIs:
+
+```
+consumesApis[domain=payments] AND consumesApis[tag=production]
+```
+
+Negation outside brackets means that no related entity matches. Negation inside
+brackets still requires at least one related entity:
+
+```
+!consumesApis[domain=payments]
+consumesApis[!domain=payments]
+```
+
+The first matches entities consuming no APIs in payments, including entities
+consuming no APIs at all. The second requires a consumed API outside payments.
+A relationship that does not apply to an entity kind has no matches. References
+are followed by their full identity, including kind and namespace; unresolved
+references do not count as matches.
+
+Brackets must contain a query (`consumesApis[]` is invalid). Each nesting level
+follows one relationship; it does not search recursively through the graph.
+Comparing attributes of the related entity with attributes of the outer entity
+is not supported.

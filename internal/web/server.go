@@ -480,26 +480,16 @@ func (s *Server) reloadTemplates() error {
 	tmpl := template.New("root")
 	tmpl = tmpl.Funcs(map[string]any{
 		// These functions get replaced during request processing.
-		"toURL":       undefinedTemplateFunction,
-		"toEntityURL": undefinedTemplateFunction,
-		"uiURL":       undefinedTemplateFunction,
+		"toURL":           undefinedTemplateFunction,
+		"toEntityURL":     undefinedTemplateFunction,
+		"uiURL":           undefinedTemplateFunction,
+		"matchingPlugins": undefinedTemplateFunction,
 		// "Static" functions
-		"asset":        s.assetURL,
-		"markdown":     markdown,
-		"formatTags":   formatTags,
-		"formatLabels": formatLabels,
-		"isCloneable":  isCloneable,
-		"hasPlugins": func(e catalog.Entity) bool {
-			return s.pluginRegistry != nil && s.pluginRegistry.Matches(e)
-		},
-		"matchingPlugins": func(e catalog.Entity) []string {
-			if s.pluginRegistry == nil {
-				return nil
-			}
-			res := s.pluginRegistry.MatchingPlugins(e)
-			slices.Sort(res)
-			return res
-		},
+		"asset":         s.assetURL,
+		"markdown":      markdown,
+		"formatTags":    formatTags,
+		"formatLabels":  formatLabels,
+		"isCloneable":   isCloneable,
 		"entitySummary": entitySummary,
 		"parentSystem":  parentSystem,
 		"dict":          dictFunc,
@@ -1269,6 +1259,26 @@ func (s *Server) renderGraphSVG(r *http.Request, data *storeData, selectedEntiti
 	return params
 }
 
+// Plugin predicates must resolve against the same catalog snapshot as the page.
+func (s *Server) pluginTemplateFuncs(r *http.Request) template.FuncMap {
+	return template.FuncMap{
+		"matchingPlugins": func(e catalog.Entity) []string {
+			if s.pluginRegistry == nil {
+				return nil
+			}
+			matching, err := s.pluginRegistry.MatchingPlugins(e, s.getStoreData(r).repo)
+			if err != nil {
+				// A broken predicate hides the menu, but must not break browsing.
+				// Registry.Run still returns the error and prevents execution.
+				log.Printf("Failed to match plugins for entity %s: %v", e.GetRef(), err)
+				return nil
+			}
+			slices.Sort(matching)
+			return matching
+		},
+	}
+}
+
 // renderTemplateFragment renders a template with context-aware URL functions.
 func (s *Server) renderTemplateFragment(r *http.Request, templateName string, params map[string]any) ([]byte, error) {
 	tmpl, err := s.template.Clone()
@@ -1276,7 +1286,7 @@ func (s *Server) renderTemplateFragment(r *http.Request, templateName string, pa
 		return nil, fmt.Errorf("clone template: %w", err)
 	}
 
-	tmpl = tmpl.Funcs(map[string]any{
+	tmpl = tmpl.Funcs(s.pluginTemplateFuncs(r)).Funcs(map[string]any{
 		"toURL": func(s any) (string, error) {
 			return toURLWithContext(r.Context(), s)
 		},
@@ -2373,7 +2383,7 @@ func (s *Server) serveHTMLPage(w http.ResponseWriter, r *http.Request, templateF
 		return
 	}
 	// Overwrite URL-functions with context-aware analogs.
-	tmpl = tmpl.Funcs(map[string]any{
+	tmpl = tmpl.Funcs(s.pluginTemplateFuncs(r)).Funcs(map[string]any{
 		"toURL": func(s any) (string, error) {
 			return toURLWithContext(r.Context(), s)
 		},

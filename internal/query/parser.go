@@ -30,11 +30,21 @@ type AttributeTerm struct {
 }
 
 func (at *AttributeTerm) String() string {
-	// Add quotes if the value contains spaces, colons, or is empty, to ensure it can be re-parsed.
-	if strings.Contains(at.Value, " ") || strings.Contains(at.Value, ":") || at.Value == "" {
+	// Quote spaces, colons, brackets, and empty values so they can be re-parsed.
+	if strings.ContainsAny(at.Value, " :[]") || at.Value == "" {
 		return fmt.Sprintf("%s%s'%s'", at.Attribute, at.Operator, at.Value)
 	}
 	return fmt.Sprintf("%s%s%s", at.Attribute, at.Operator, at.Value)
+}
+
+// RelationshipExpression matches when at least one related entity matches Expression.
+type RelationshipExpression struct {
+	Relationship string
+	Expression   Expression
+}
+
+func (re *RelationshipExpression) String() string {
+	return fmt.Sprintf("%s[%s]", re.Relationship, re.Expression.String())
 }
 
 // NotExpression represents a negation using '!' (e.g., "!tag:foo").
@@ -75,11 +85,13 @@ const (
 	tokenNot // "!"
 
 	// Punctuation
-	tokenLParen // "("
-	tokenRParen // ")"
-	tokenColon  // ":"
-	tokenTilde  // "~"
-	tokenEqual  // "="
+	tokenLParen   // "("
+	tokenRParen   // ")"
+	tokenLBracket // "["
+	tokenRBracket // "]"
+	tokenColon    // ":"
+	tokenTilde    // "~"
+	tokenEqual    // "="
 )
 
 var tokenNames = map[tokenType]string{
@@ -92,6 +104,8 @@ var tokenNames = map[tokenType]string{
 	tokenNot:        "NOT",
 	tokenLParen:     "LPAREN",
 	tokenRParen:     "RPAREN",
+	tokenLBracket:   "LBRACKET",
+	tokenRBracket:   "RBRACKET",
 	tokenColon:      "COLON",
 	tokenTilde:      "TILDE",
 	tokenEqual:      "EQUAL",
@@ -139,6 +153,10 @@ func (l *lexer) nextToken() token {
 		tok = token{typ: tokenLParen, lit: "("}
 	case ')':
 		tok = token{typ: tokenRParen, lit: ")"}
+	case '[':
+		tok = token{typ: tokenLBracket, lit: "["}
+	case ']':
+		tok = token{typ: tokenRBracket, lit: "]"}
 	case ':':
 		tok = token{typ: tokenColon, lit: ":"}
 	case '~':
@@ -187,7 +205,7 @@ func (l *lexer) readIdentifier() string {
 }
 
 func (l *lexer) isIdentifierChar(ch rune) bool {
-	return ch != 0 && !unicode.IsSpace(ch) && !strings.ContainsRune("()!:'\"~=", ch)
+	return ch != 0 && !unicode.IsSpace(ch) && !strings.ContainsRune("()[]!:'\"~=", ch)
 }
 
 func (l *lexer) readString(quote rune) string {
@@ -321,6 +339,21 @@ func (p *Parser) isTermStart(ttype tokenType) bool {
 }
 
 func (p *Parser) parseIdentifierOrAttributeTerm() Expression {
+	if p.peekToken.typ == tokenLBracket {
+		expr := &RelationshipExpression{Relationship: p.curToken.lit}
+		if _, ok := relationshipAccessors[strings.ToLower(expr.Relationship)]; !ok {
+			p.errors = append(p.errors, fmt.Sprintf("unknown relationship for filtering: %s", expr.Relationship))
+		}
+		p.nextToken() // consume relationship, current is '['
+		p.nextToken() // consume '['
+		expr.Expression = p.parseExpression(precedenceLowest)
+		if p.peekToken.typ != tokenRBracket {
+			p.errors = append(p.errors, fmt.Sprintf("expected ']' to close relationship predicate, got %s", p.peekToken.typ))
+			return nil
+		}
+		p.nextToken() // consume ']'
+		return expr
+	}
 	if p.peekToken.typ == tokenColon || p.peekToken.typ == tokenTilde || p.peekToken.typ == tokenEqual {
 		// It's an AttributeTerm
 		attrTerm := &AttributeTerm{Attribute: p.curToken.lit}

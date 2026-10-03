@@ -1,10 +1,59 @@
 package query
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
 )
+
+type entityResolver map[string]catalog.Entity
+
+func (r entityResolver) Entity(ref *catalog.Ref) catalog.Entity {
+	return r[ref.String()]
+}
+
+func TestRelationshipEvaluationErrors(t *testing.T) {
+	api := &catalog.API{Metadata: &catalog.Metadata{Name: "api"}, Spec: &catalog.APISpec{}}
+	component := &catalog.Component{Metadata: &catalog.Metadata{Name: "consumer"}, Spec: &catalog.ComponentSpec{
+		ConsumesAPIs: []*catalog.LabelRef{
+			{Ref: catalog.MustParseRef("api:missing")},
+			{Ref: api.GetRef()},
+		},
+	}}
+	resolved := entityResolver{api.GetRef().String(): api}
+	tests := []struct {
+		query    string
+		resolver Resolver
+		want     bool
+		err      string
+	}{
+		{"consumesApis[name=api]", nil, false, "requires a catalog resolver"},
+		{"consumesApis[name=api]", resolved, true, ""},
+		{"consumesApis[name=api]", entityResolver{}, false, ""},
+		{"!consumesApis[name=api]", entityResolver{}, true, ""},
+		{"consumesApis[unknown=value]", resolved, false, "unknown attribute"},
+		{"!consumesApis[unknown=value]", resolved, false, "unknown attribute"},
+		{`consumesApis[name~'[a-']`, resolved, false, "invalid regular expression"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			expr, err := Parse(tt.query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			evaluator := NewEvaluator(expr)
+			got, err := evaluator.Matches(component, tt.resolver)
+			if tt.err != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.err) {
+					t.Fatalf("got error %v, want %q", err, tt.err)
+				}
+			} else if err != nil || got != tt.want {
+				t.Fatalf("got %v, %v; want %v", got, err, tt.want)
+			}
+		})
+	}
+}
 
 func TestEvaluator_Matches(t *testing.T) {
 	api1 := &catalog.API{
@@ -316,7 +365,7 @@ func TestEvaluator_Matches(t *testing.T) {
 		},
 		{
 			name:    "invalid regex",
-			query:   "name~[a-",
+			query:   "name~'[a-'",
 			entity:  comp1,
 			wantErr: true, // This error surfaces during evaluation, not parsing
 		},
@@ -335,7 +384,7 @@ func TestEvaluator_Matches(t *testing.T) {
 			}
 
 			evaluator := NewEvaluator(expr)
-			gotMatch, err := evaluator.Matches(tt.entity)
+			gotMatch, err := evaluator.Matches(tt.entity, nil)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Evaluator.Matches() error = %v, wantErr %v", err, tt.wantErr)

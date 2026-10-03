@@ -185,3 +185,49 @@ func TestParseErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestParseRelationshipPredicates(t *testing.T) {
+	tests := []struct{ input, want string }{
+		{"consumesApis[domain=X]", "consumesApis[domain=X]"},
+		{"!domain=X consumesApis[domain=X]", "(!domain=X AND consumesApis[domain=X])"},
+		{"consumesApis [ domain=X tag:production ]", "consumesApis[(domain=X AND tag:production)]"},
+		{"consumesApis[providedBy[owner=my-team]]", "consumesApis[providedBy[owner=my-team]]"},
+		{"!consumesApis[domain=X] OR owner[name=team] tag:prod", "(!consumesApis[domain=X] OR (owner[name=team] AND tag:prod))"},
+		{"consumesApis[(domain=X OR domain=Y) !tag:test]", "consumesApis[((domain=X OR domain=Y) AND !tag:test)]"},
+		{"consumedBy[gateway]", "consumedBy[gateway]"},
+		{"CONSUMESAPIS[namespace=other]", "CONSUMESAPIS[namespace=other]"},
+		{`consumesApis[name~'^[a-z]+$']`, `consumesApis[name~'^[a-z]+$']`},
+		{`title:'[draft]'`, `title:'[draft]'`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			expr, err := Parse(tt.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := expr.String(); got != tt.want {
+				t.Fatalf("got %s, want %s", got, tt.want)
+			}
+			roundTrip, err := Parse(expr.String())
+			if err != nil || roundTrip.String() != tt.want {
+				t.Fatalf("round trip: %v, %v", roundTrip, err)
+			}
+		})
+	}
+}
+
+func TestParseInvalidRelationshipPredicates(t *testing.T) {
+	for _, input := range []string{
+		"consumesApis[]", "consumesApis[domain=X", "consumesApis[domain=X]]",
+		"consumesApis[domain=X AND]", "consumesApis[(domain=X]",
+		"consumesApis[domain=X)]", "[domain=X]", "consumesApis[providedBy[]]",
+		"consumesApis[providedBy[owner=team]", "tag[production]",
+		"unknown[name=x]", "consumesApis[unknown[name=x]]",
+	} {
+		t.Run(input, func(t *testing.T) {
+			if _, err := Parse(input); err == nil {
+				t.Fatal("expected parse error")
+			}
+		})
+	}
+}

@@ -26,7 +26,7 @@ func (f *Finder) RegisterPropertyProvider(p query.PropertyProvider) {
 	f.providers = append(f.providers, p)
 }
 
-func findEntities[T catalog.Entity](q string, items map[string]T, providers []query.PropertyProvider) []T {
+func findEntities[T catalog.Entity](repo *Repository, q string, items map[string]T, providers []query.PropertyProvider) []T {
 	var result []T
 
 	if strings.TrimSpace(q) == "" {
@@ -42,7 +42,7 @@ func findEntities[T catalog.Entity](q string, items map[string]T, providers []qu
 		}
 		ev := query.NewEvaluator(expr, providers...)
 		for _, c := range items {
-			ok, err := ev.Matches(c)
+			ok, err := ev.Matches(c, repo)
 			if err != nil {
 				return nil // Broken query (e.g. broken regex) => no results
 			}
@@ -58,29 +58,29 @@ func findEntities[T catalog.Entity](q string, items map[string]T, providers []qu
 }
 
 func (f *Finder) FindComponents(repo *Repository, q string) []*catalog.Component {
-	return findEntities(q, repo.components, f.providers)
+	return findEntities(repo, q, repo.components, f.providers)
 }
 
 func (f *Finder) FindSystems(repo *Repository, q string) []*catalog.System {
-	return findEntities(q, repo.systems, f.providers)
+	return findEntities(repo, q, repo.systems, f.providers)
 }
 
 func (f *Finder) FindAPIs(repo *Repository, q string) []*catalog.API {
-	return findEntities(q, repo.apis, f.providers)
+	return findEntities(repo, q, repo.apis, f.providers)
 }
 
 func (f *Finder) FindResources(repo *Repository, q string) []*catalog.Resource {
-	return findEntities(q, repo.resources, f.providers)
+	return findEntities(repo, q, repo.resources, f.providers)
 }
 
 func (f *Finder) FindDomains(repo *Repository, q string) []*catalog.Domain {
-	return findEntities(q, repo.domains, f.providers)
+	return findEntities(repo, q, repo.domains, f.providers)
 }
 
 func (f *Finder) FindGroups(repo *Repository, q string) []*catalog.Group {
-	return findEntities(q, repo.groups, f.providers)
+	return findEntities(repo, q, repo.groups, f.providers)
 }
 
 func (f *Finder) FindEntities(repo *Repository, q string) []catalog.Entity {
-	return findEntities(q, repo.allEntities, f.providers)
+	return findEntities(repo, q, repo.allEntities, f.providers)
 }

@@ -21,6 +21,15 @@ Plugins are configured in the `plugins.yml` file. Each plugin definition include
 *   **Inhibit:** An optional predicate to prevent the plugin from running even if the trigger matches.
 *   **Spec:** Plugin-specific configuration settings.
 
+Both `trigger` and `inhibit` use the [query syntax](../query-syntax.md),
+including relationship predicates.
+
+Predicates resolve references in the catalog being viewed or processed. The
+search-only `lint` attribute is not available in plugin predicates. If a trigger
+or inhibit predicate fails to evaluate, swcat logs the error and omits the
+matching-plugin menu entries while still rendering the entity page. Attempting
+to run plugins returns the error and executes no plugins for that entity.
+
 ### Variable Expansion
 
 The `plugins.yml` file supports environment variable expansion using the `${VAR}` or `${VAR:-default}` syntax. This is particularly useful for sensitive information (like API keys) or environment-specific settings.

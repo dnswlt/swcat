@@ -142,26 +142,9 @@ var attributeAccessors = map[string]attributeAccessor{
 		}
 		return results, true
 	},
-	"owner": func(e catalog.Entity) ([]string, bool) {
-		if o := e.GetOwner(); o != nil {
-			return []string{o.QName()}, true
-		}
-		return nil, false // No owner
-	},
-	"system": func(e catalog.Entity) ([]string, bool) {
-		sp, ok := e.(catalog.SystemPart)
-		if !ok {
-			return nil, false
-		}
-		return []string{sp.GetSystem().QName()}, true
-	},
-	"domain": func(e catalog.Entity) ([]string, bool) {
-		dp, ok := e.(catalog.DomainPart)
-		if !ok {
-			return nil, false
-		}
-		return []string{dp.GetDomain().QName()}, true
-	},
+	"owner":  relationshipAttribute("owner"),
+	"system": relationshipAttribute("system"),
+	"domain": relationshipAttribute("domain"),
 	"type": func(e catalog.Entity) ([]string, bool) {
 		if t := e.GetType(); t != "" {
 			return []string{t}, true
@@ -184,107 +167,13 @@ var attributeAccessors = map[string]attributeAccessor{
 			return nil, false
 		}
 	},
-	"consumesapis": func(e catalog.Entity) ([]string, bool) {
-		switch v := e.(type) {
-		case *catalog.Component:
-			if v.Spec == nil {
-				return nil, false
-			}
-			var results []string
-			for _, a := range v.Spec.ConsumesAPIs {
-				results = append(results, a.QName())
-			}
-			return results, true
-		default:
-			return nil, false
-		}
-	},
-	"providesapis": func(e catalog.Entity) ([]string, bool) {
-		switch v := e.(type) {
-		case *catalog.Component:
-			if v.Spec == nil {
-				return nil, false
-			}
-			var results []string
-			for _, a := range v.Spec.ProvidesAPIs {
-				results = append(results, a.QName())
-			}
-			return results, true
-		default:
-			return nil, false
-		}
-	},
-	"dependson": func(e catalog.Entity) ([]string, bool) {
-		var deps []*catalog.LabelRef
-		switch v := e.(type) {
-		case *catalog.Component:
-			if v.Spec != nil {
-				deps = v.Spec.DependsOn
-			}
-		case *catalog.Resource:
-			if v.Spec != nil {
-				deps = v.Spec.DependsOn
-			}
-		default:
-			return nil, false
-		}
-		var results []string
-		for _, d := range deps {
-			results = append(results, d.Ref.QName())
-		}
-		return results, true
-	},
-	"dependents": func(e catalog.Entity) ([]string, bool) {
-		var deps []*catalog.LabelRef
-		switch v := e.(type) {
-		case *catalog.Component:
-			deps = v.GetDependents()
-		case *catalog.Resource:
-			deps = v.GetDependents()
-		default:
-			return nil, false
-		}
-		var results []string
-		for _, d := range deps {
-			results = append(results, d.Ref.QName())
-		}
-		return results, true
-	},
-	"providedby": func(e catalog.Entity) ([]string, bool) {
-		switch v := e.(type) {
-		case *catalog.API:
-			var results []string
-			for _, lr := range v.GetProviders() {
-				results = append(results, lr.Ref.QName())
-			}
-			return results, true
-		default:
-			return nil, false
-		}
-	},
-	"consumedby": func(e catalog.Entity) ([]string, bool) {
-		switch v := e.(type) {
-		case *catalog.API:
-			var results []string
-			for _, lr := range v.GetConsumers() {
-				results = append(results, lr.Ref.QName())
-			}
-			return results, true
-		default:
-			return nil, false
-		}
-	},
-	"rel": func(e catalog.Entity) ([]string, bool) {
-		refs := relatedEntities(e)
-		if len(refs) == 0 {
-			return nil, false
-		}
-		var results []string
-		for _, r := range refs {
-			results = append(results, r.String())
-		}
-		return results, true
-	},
+	"consumesapis": relationshipAttribute("consumesapis"),
+	"providesapis": relationshipAttribute("providesapis"),
+	"dependson":    relationshipAttribute("dependson"),
+	"dependents":   relationshipAttribute("dependents"),
+	"providedby":   relationshipAttribute("providedby"),
+	"consumedby":   relationshipAttribute("consumedby"),
+	"rel":          relationshipAttribute("rel"),
 }
 
 // relatedEntities returns a slice of references to all entities that are directly
@@ -363,13 +252,15 @@ func relatedEntities(e catalog.Entity) []*catalog.Ref {
 	return refs
 }
 
-// Matches returns true if the entity matches the expression held by the Evaluator.
-func (ev *Evaluator) Matches(e catalog.Entity) (bool, error) {
-	return ev.evaluateNode(e, ev.expr)
+// Matches evaluates a query against an entity in the supplied catalog.
+// Pass nil only for scalar queries; relationship predicates require a resolver.
+// Unresolved references do not supply a matching witness.
+func (ev *Evaluator) Matches(e catalog.Entity, resolver Resolver) (bool, error) {
+	return ev.evaluateNode(e, ev.expr, resolver)
 }
 
 // evaluateNode recursively walks the expression tree.
-func (ev *Evaluator) evaluateNode(e catalog.Entity, expr Expression) (bool, error) {
+func (ev *Evaluator) evaluateNode(e catalog.Entity, expr Expression, resolver Resolver) (bool, error) {
 	switch v := expr.(type) {
 	case *Term:
 		// A simple term matches against the entity's qualified name.
@@ -411,15 +302,35 @@ func (ev *Evaluator) evaluateNode(e catalog.Entity, expr Expression) (bool, erro
 		}
 		return false, nil
 
+	case *RelationshipExpression:
+		accessor, ok := relationshipAccessors[strings.ToLower(v.Relationship)]
+		if !ok {
+			return false, fmt.Errorf("unknown relationship for filtering: %s", v.Relationship)
+		}
+		if resolver == nil {
+			return false, fmt.Errorf("relationship predicate %s requires a catalog resolver", v.Relationship)
+		}
+		for _, ref := range accessor(e) {
+			target := resolver.Entity(ref)
+			if target == nil {
+				continue
+			}
+			matches, err := ev.evaluateNode(target, v.Expression, resolver)
+			if err != nil || matches {
+				return matches, err
+			}
+		}
+		return false, nil
+
 	case *NotExpression:
-		matches, err := ev.evaluateNode(e, v.Expression)
+		matches, err := ev.evaluateNode(e, v.Expression, resolver)
 		if err != nil {
 			return false, err
 		}
 		return !matches, nil
 
 	case *BinaryExpression:
-		leftMatches, err := ev.evaluateNode(e, v.Left)
+		leftMatches, err := ev.evaluateNode(e, v.Left, resolver)
 		if err != nil {
 			return false, err
 		}
@@ -428,14 +339,14 @@ func (ev *Evaluator) evaluateNode(e catalog.Entity, expr Expression) (bool, erro
 			if !leftMatches {
 				return false, nil
 			}
-			return ev.evaluateNode(e, v.Right)
+			return ev.evaluateNode(e, v.Right, resolver)
 		}
 
 		if v.Operator == "OR" {
 			if leftMatches {
 				return true, nil
 			}
-			return ev.evaluateNode(e, v.Right)
+			return ev.evaluateNode(e, v.Right, resolver)
 		}
 	}
 
