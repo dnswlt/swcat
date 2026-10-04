@@ -278,9 +278,9 @@ func TestIntegration_ServerEntities(t *testing.T) {
 	}
 
 	// We want to test the detail page for every entity in the repo.
-	entities := sd.finder.FindEntities(sd.repo, "")
-	if len(entities) == 0 {
-		t.Fatal("No entities found in repository")
+	entities, err := sd.finder.FindEntities(sd.repo, "")
+	if err != nil || len(entities) == 0 {
+		t.Fatalf("No entities found in repository (err: %v)", err)
 	}
 
 	client := ts.Client()

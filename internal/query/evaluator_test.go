@@ -13,7 +13,7 @@ func (r entityResolver) Entity(ref *catalog.Ref) catalog.Entity {
 	return r[ref.String()]
 }
 
-func TestRelationshipEvaluationErrors(t *testing.T) {
+func TestRelationshipEvaluation(t *testing.T) {
 	api := &catalog.API{Metadata: &catalog.Metadata{Name: "api"}, Spec: &catalog.APISpec{}}
 	component := &catalog.Component{Metadata: &catalog.Metadata{Name: "consumer"}, Spec: &catalog.ComponentSpec{
 		ConsumesAPIs: []*catalog.LabelRef{
@@ -26,33 +26,81 @@ func TestRelationshipEvaluationErrors(t *testing.T) {
 		query    string
 		resolver Resolver
 		want     bool
-		err      string
 	}{
-		{"consumesApis[name=api]", nil, false, "requires a catalog resolver"},
-		{"consumesApis[name=api]", resolved, true, ""},
-		{"consumesApis[name=api]", entityResolver{}, false, ""},
-		{"!consumesApis[name=api]", entityResolver{}, true, ""},
-		{"consumesApis[unknown=value]", resolved, false, "unknown attribute"},
-		{"!consumesApis[unknown=value]", resolved, false, "unknown attribute"},
-		{`consumesApis[name~'[a-']`, resolved, false, "invalid regular expression"},
+		{"consumesApis[name=api]", resolved, true},
+		// The missing API is unresolved, so it is no witness for a negated condition either.
+		{"consumesApis[!name=api]", resolved, false},
+		{"consumesApis[name=api]", entityResolver{}, false},
+		{"!consumesApis[name=api]", entityResolver{}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
-			expr, err := Parse(tt.query)
+			evaluator, err := Compile(tt.query)
 			if err != nil {
 				t.Fatal(err)
 			}
-			evaluator := NewEvaluator(expr)
-			got, err := evaluator.Matches(component, tt.resolver)
-			if tt.err != "" {
-				if err == nil || !strings.Contains(err.Error(), tt.err) {
-					t.Fatalf("got error %v, want %q", err, tt.err)
-				}
-			} else if err != nil || got != tt.want {
-				t.Fatalf("got %v, %v; want %v", got, err, tt.want)
+			if got := evaluator.Matches(component, tt.resolver); got != tt.want {
+				t.Fatalf("got %v, want %v", got, tt.want)
 			}
 		})
 	}
+}
+
+// mustPanic fails the test unless f panics with a message containing want.
+func mustPanic(t *testing.T, want string, f func()) {
+	t.Helper()
+	defer func() {
+		t.Helper()
+		r := recover()
+		if msg, _ := r.(string); !strings.Contains(msg, want) {
+			t.Fatalf("got panic %v, want one containing %q", r, want)
+		}
+	}()
+	f()
+}
+
+// A nil resolver is a programming error. It panics on every query, not only
+// on those whose evaluation reaches a relationship predicate.
+func TestMatchesRequiresResolver(t *testing.T) {
+	component := &catalog.Component{Metadata: &catalog.Metadata{Name: "c"}, Spec: &catalog.ComponentSpec{}}
+	for _, q := range []string{
+		"name=c",
+		"consumesApis[name=x]",
+		// Short-circuited: evaluation would never reach the relationship.
+		"name=nomatch AND consumesApis[name=x]",
+		"name=c OR consumesApis[name=x]",
+	} {
+		t.Run(q, func(t *testing.T) {
+			evaluator, err := Compile(q)
+			if err != nil {
+				t.Fatal(err)
+			}
+			mustPanic(t, "requires a resolver", func() { evaluator.Matches(component, nil) })
+		})
+	}
+}
+
+// unknownExpr is an expression type that Parse never produces.
+type unknownExpr struct{}
+
+func (unknownExpr) String() string { return "unknown" }
+
+// Expression types and operators that Parse never produces are internal
+// invariant violations: they panic instead of silently not matching.
+func TestUnsupportedExpressionsPanic(t *testing.T) {
+	component := &catalog.Component{Metadata: &catalog.Metadata{Name: "c"}, Spec: &catalog.ComponentSpec{}}
+	t.Run("evaluate unknown type", func(t *testing.T) {
+		ev := &Evaluator{expr: unknownExpr{}}
+		mustPanic(t, "unsupported expression type", func() { ev.Matches(component, entityResolver{}) })
+	})
+	t.Run("evaluate unknown operator", func(t *testing.T) {
+		ev := &Evaluator{expr: &BinaryExpression{Left: &Term{Value: "c"}, Operator: "XOR", Right: &Term{Value: "c"}}}
+		mustPanic(t, "unsupported binary operator", func() { ev.Matches(component, entityResolver{}) })
+	})
+	t.Run("compile unknown type", func(t *testing.T) {
+		ev := &Evaluator{}
+		mustPanic(t, "unsupported expression type", func() { ev.compileNode(&NotExpression{Expression: unknownExpr{}}) })
+	})
 }
 
 func TestEvaluator_Matches(t *testing.T) {
@@ -367,32 +415,65 @@ func TestEvaluator_Matches(t *testing.T) {
 			name:    "invalid regex",
 			query:   "name~'[a-'",
 			entity:  comp1,
-			wantErr: true, // This error surfaces during evaluation, not parsing
+			wantErr: true, // Parses, but Compile rejects it
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// This assumes a Parse function exists in the query package.
-			// You would have this from your queryparser.
-			expr, err := Parse(tt.query)
-			if err != nil {
-				if tt.wantErr {
-					return // Expected parse error
-				}
-				t.Fatalf("Parse() error = %v, wantErr %v", err, tt.wantErr)
-			}
-
-			evaluator := NewEvaluator(expr)
-			gotMatch, err := evaluator.Matches(tt.entity, nil)
-
+			evaluator, err := Compile(tt.query)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Evaluator.Matches() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("Compile() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if err == nil && gotMatch != tt.wantMatch {
+			if err != nil {
+				return
+			}
+			if gotMatch := evaluator.Matches(tt.entity, entityResolver{}); gotMatch != tt.wantMatch {
 				t.Errorf("Evaluator.Matches() = %v, want %v", gotMatch, tt.wantMatch)
 			}
 		})
+	}
+}
+
+// Compile validates the whole expression up front, so whether a query is valid
+// does not depend on which parts evaluation would reach.
+func TestCompileValidatesWholeQuery(t *testing.T) {
+	lint := PropertyProvider{
+		Names:  []string{"lint"},
+		Values: func(catalog.Entity, string) []string { return nil },
+	}
+	tests := []struct {
+		query string
+		err   string // empty: compiles
+	}{
+		{"name=a", ""},
+		{"lint=warn", ""},
+		{"LINT=warn", ""},
+		{"consumesApis[lint=warn]", ""},
+		{"unknown=x", "unknown attribute for filtering: unknown"},
+		{"!unknown=x", "unknown attribute"},
+		{"consumesApis[unknown=x]", "unknown attribute"},
+		{"name=a AND unknown=x", "unknown attribute"},
+		{"name~'[a-'", "invalid regular expression"},
+		{"name=a OR name~'[a-'", "invalid regular expression"},
+		{"consumesApis[providedBy[name~'(']]", "invalid regular expression"},
+		{"consumesApis[name=x", "expected ']'"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			_, err := Compile(tt.query, lint)
+			if tt.err == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tt.err) {
+				t.Fatalf("got error %v, want %q", err, tt.err)
+			}
+		})
+	}
+	// Provider attributes are known only to evaluators compiled with the provider.
+	if _, err := Compile("lint=warn"); err == nil || !strings.Contains(err.Error(), "unknown attribute") {
+		t.Fatalf("Compile without provider: got %v, want unknown attribute", err)
 	}
 }

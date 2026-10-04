@@ -162,10 +162,13 @@ func TestRepository_Finders(t *testing.T) {
 		wantNames []string
 	}
 
-	testFinder := func(t *testing.T, finder func(string) []catalog.Entity, tests []finderTest) {
+	testFinder := func(t *testing.T, finder func(string) ([]catalog.Entity, error), tests []finderTest) {
 		for _, tt := range tests {
 			t.Run(tt.query, func(t *testing.T) {
-				results := finder(tt.query)
+				results, err := finder(tt.query)
+				if err != nil {
+					t.Fatal(err)
+				}
 				if len(results) != len(tt.wantNames) {
 					t.Errorf("len(results) = %d, want %d", len(results), len(tt.wantNames))
 				}
@@ -184,12 +187,13 @@ func TestRepository_Finders(t *testing.T) {
 
 	t.Run("FindComponents", func(t *testing.T) {
 		f := NewFinder()
-		finder := func(q string) []catalog.Entity {
+		finder := func(q string) ([]catalog.Entity, error) {
+			found, err := f.FindComponents(repo, q)
 			var entities []catalog.Entity
-			for _, e := range f.FindComponents(repo, q) {
+			for _, e := range found {
 				entities = append(entities, e)
 			}
-			return entities
+			return entities, err
 		}
 		tests := []finderTest{
 			{"ns1", []string{"ns1/c1", "ns1/c2"}},
@@ -205,12 +209,13 @@ func TestRepository_Finders(t *testing.T) {
 
 	t.Run("FindSystems", func(t *testing.T) {
 		f := NewFinder()
-		finder := func(q string) []catalog.Entity {
+		finder := func(q string) ([]catalog.Entity, error) {
+			found, err := f.FindSystems(repo, q)
 			var entities []catalog.Entity
-			for _, e := range f.FindSystems(repo, q) {
+			for _, e := range found {
 				entities = append(entities, e)
 			}
-			return entities
+			return entities, err
 		}
 		tests := []finderTest{
 			{"s", []string{"s1", "s2"}},
@@ -222,12 +227,13 @@ func TestRepository_Finders(t *testing.T) {
 
 	t.Run("FindDomains", func(t *testing.T) {
 		f := NewFinder()
-		finder := func(q string) []catalog.Entity {
+		finder := func(q string) ([]catalog.Entity, error) {
+			found, err := f.FindDomains(repo, q)
 			var entities []catalog.Entity
-			for _, e := range f.FindDomains(repo, q) {
+			for _, e := range found {
 				entities = append(entities, e)
 			}
-			return entities
+			return entities, err
 		}
 		tests := []finderTest{
 			{"d", []string{"d1"}},
@@ -238,12 +244,13 @@ func TestRepository_Finders(t *testing.T) {
 
 	t.Run("FindAPIs", func(t *testing.T) {
 		f := NewFinder()
-		finder := func(q string) []catalog.Entity {
+		finder := func(q string) ([]catalog.Entity, error) {
+			found, err := f.FindAPIs(repo, q)
 			var entities []catalog.Entity
-			for _, e := range f.FindAPIs(repo, q) {
+			for _, e := range found {
 				entities = append(entities, e)
 			}
-			return entities
+			return entities, err
 		}
 		tests := []finderTest{
 			{"a", []string{"a1"}},
@@ -254,12 +261,13 @@ func TestRepository_Finders(t *testing.T) {
 
 	t.Run("FindResources", func(t *testing.T) {
 		f := NewFinder()
-		finder := func(q string) []catalog.Entity {
+		finder := func(q string) ([]catalog.Entity, error) {
+			found, err := f.FindResources(repo, q)
 			var entities []catalog.Entity
-			for _, e := range f.FindResources(repo, q) {
+			for _, e := range found {
 				entities = append(entities, e)
 			}
-			return entities
+			return entities, err
 		}
 		tests := []finderTest{
 			{"r", []string{"r1"}},
@@ -270,12 +278,13 @@ func TestRepository_Finders(t *testing.T) {
 
 	t.Run("FindGroups", func(t *testing.T) {
 		f := NewFinder()
-		finder := func(q string) []catalog.Entity {
+		finder := func(q string) ([]catalog.Entity, error) {
+			found, err := f.FindGroups(repo, q)
 			var entities []catalog.Entity
-			for _, e := range f.FindGroups(repo, q) {
+			for _, e := range found {
 				entities = append(entities, e)
 			}
-			return entities
+			return entities, err
 		}
 		tests := []finderTest{
 			{"g", []string{"g1", "g2"}},

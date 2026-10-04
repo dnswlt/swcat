@@ -35,7 +35,7 @@ func (s *Server) serveLintFindings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := s.getStoreData(r)
-	allEntities := data.finder.FindEntities(data.repo, "")
+	allEntities, _ := data.finder.FindEntities(data.repo, "") // An empty query cannot fail.
 
 	reportedGroups := s.linter.ReportedGroups()
 	isReported := func(owner string) bool {

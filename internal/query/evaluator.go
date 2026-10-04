@@ -8,25 +8,88 @@ import (
 	"github.com/dnswlt/swcat/internal/catalog"
 )
 
-// PropertyProvider is a function that retrieves external properties for an entity.
-// It returns a slice of string values and a boolean indicating if the property was found.
-type PropertyProvider func(e catalog.Entity, prop string) ([]string, bool)
-
-// Evaluator holds a compiled query expression and provides methods to match it against entities.
-// It caches compiled regular expressions for performance.
-type Evaluator struct {
-	expr       Expression
-	regexCache map[string]*regexp.Regexp
-	providers  []PropertyProvider
+// PropertyProvider extends the query language with attributes that are not
+// fields of the entity itself, such as lint findings.
+type PropertyProvider struct {
+	// Names lists the attributes the provider supplies, in lower case.
+	// Queries are validated against them before any entity is evaluated.
+	Names []string
+	// Values returns the values of the named attribute for e. The attribute
+	// applies to every entity: nil means it has no values, not that it is unknown.
+	Values func(e catalog.Entity, name string) []string
 }
 
-// NewEvaluator creates a new Evaluator for the given expression AST.
-func NewEvaluator(expr Expression, providers ...PropertyProvider) *Evaluator {
-	return &Evaluator{
-		expr:       expr,
-		regexCache: make(map[string]*regexp.Regexp),
-		providers:  providers,
+// Evaluator holds a validated query and matches it against entities.
+// It is not modified by evaluation, so it can be shared between goroutines.
+type Evaluator struct {
+	expr      Expression
+	regexes   map[string]*regexp.Regexp
+	providers map[string]PropertyProvider
+}
+
+// Compile parses q and validates all of it before any entity is evaluated:
+// attribute names must be built in or supplied by one of the providers, and
+// regular expressions must compile. It is the only place where a query can be
+// rejected; a compiled query can be evaluated against any entity.
+func Compile(q string, providers ...PropertyProvider) (*Evaluator, error) {
+	expr, err := Parse(q)
+	if err != nil {
+		return nil, err
 	}
+	ev := &Evaluator{
+		expr:      expr,
+		regexes:   make(map[string]*regexp.Regexp),
+		providers: make(map[string]PropertyProvider),
+	}
+	for _, p := range providers {
+		for _, name := range p.Names {
+			ev.providers[name] = p
+		}
+	}
+	if err := ev.compileNode(expr); err != nil {
+		return nil, err
+	}
+	return ev, nil
+}
+
+// compileNode validates expr. It visits every node, so that the outcome does
+// not depend on the catalog's contents or on short-circuit evaluation.
+func (ev *Evaluator) compileNode(expr Expression) error {
+	switch v := expr.(type) {
+	case *Term:
+		return nil
+	case *AttributeTerm:
+		attr := strings.ToLower(v.Attribute)
+		if _, ok := attributeAccessors[attr]; !ok {
+			if _, ok := ev.providers[attr]; !ok {
+				return fmt.Errorf("unknown attribute for filtering: %s", v.Attribute)
+			}
+		}
+		if v.Operator == "~" {
+			if _, ok := ev.regexes[v.Value]; !ok {
+				re, err := regexp.Compile("(?i)" + v.Value) // (?i) for case-insensitivity
+				if err != nil {
+					return fmt.Errorf("invalid regular expression %q: %w", v.Value, err)
+				}
+				ev.regexes[v.Value] = re
+			}
+		}
+		return nil
+	case *RelationshipExpression:
+		if _, ok := relationshipAccessors[strings.ToLower(v.Relationship)]; !ok {
+			return fmt.Errorf("unknown relationship for filtering: %s", v.Relationship)
+		}
+		return ev.compileNode(v.Expression)
+	case *NotExpression:
+		return ev.compileNode(v.Expression)
+	case *BinaryExpression:
+		if err := ev.compileNode(v.Left); err != nil {
+			return err
+		}
+		return ev.compileNode(v.Right)
+	}
+	// Parse produces no other node types.
+	panic(fmt.Sprintf("query: unsupported expression type %T", expr))
 }
 
 // fulltextAccessor collects all relevant searchable text from an entity.
@@ -258,127 +321,85 @@ func relatedEntities(e catalog.Entity) []*catalog.Ref {
 	return refs
 }
 
-// Matches evaluates a query against an entity in the supplied catalog.
-// Pass nil only for scalar queries; relationship predicates require a resolver.
-// Unresolved references do not supply a matching witness.
-func (ev *Evaluator) Matches(e catalog.Entity, resolver Resolver) (bool, error) {
+// Matches reports whether e matches the query. The resolver looks up the
+// entities that relationship predicates refer to, in the catalog that e belongs
+// to; unresolved references do not supply a matching witness.
+//
+// Compile has validated the query, so evaluation cannot fail. A nil resolver is
+// a programming error and panics, whether or not the query uses relationships,
+// so that it shows up regardless of the query and the entity.
+func (ev *Evaluator) Matches(e catalog.Entity, resolver Resolver) bool {
+	if resolver == nil {
+		panic("query: Matches requires a resolver")
+	}
 	return ev.evaluateNode(e, ev.expr, resolver)
 }
 
 // evaluateNode recursively walks the expression tree.
-func (ev *Evaluator) evaluateNode(e catalog.Entity, expr Expression, resolver Resolver) (bool, error) {
+func (ev *Evaluator) evaluateNode(e catalog.Entity, expr Expression, resolver Resolver) bool {
 	switch v := expr.(type) {
 	case *Term:
 		// A simple term matches against the entity's qualified name.
 		qn := e.GetRef().QName()
-		return strings.Contains(strings.ToLower(qn), strings.ToLower(v.Value)), nil
+		return strings.Contains(strings.ToLower(qn), strings.ToLower(v.Value))
 
 	case *AttributeTerm:
 		attr := strings.ToLower(v.Attribute)
-		accessor, ok := attributeAccessors[attr]
 		var values []string
-		if ok {
+		if accessor, ok := attributeAccessors[attr]; ok {
 			values, ok = accessor(e)
-		} else {
-			// Try external providers
-			for _, p := range ev.providers {
-				values, ok = p(e, attr)
-				if ok {
-					break
-				}
-			}
 			if !ok {
-				return false, fmt.Errorf("unknown attribute for filtering: %s", v.Attribute)
+				// Attribute is not applicable to this entity kind.
+				return false
 			}
-		}
-		if !ok {
-			// Attribute is not applicable to this entity kind.
-			return false, nil
+		} else {
+			// Compile has checked that a provider supplies the attribute.
+			values = ev.providers[attr].Values(e, attr)
 		}
 
 		// Check if any of the returned values match the query value.
 		for _, value := range values {
-			matches, err := ev.matchesOperator(value, v.Operator, v.Value)
-			if err != nil {
-				return false, err
-			}
-			if matches {
-				return true, nil
+			if ev.matchesOperator(value, v.Operator, v.Value) {
+				return true
 			}
 		}
-		return false, nil
+		return false
 
 	case *RelationshipExpression:
-		accessor, ok := relationshipAccessors[strings.ToLower(v.Relationship)]
-		if !ok {
-			return false, fmt.Errorf("unknown relationship for filtering: %s", v.Relationship)
-		}
-		if resolver == nil {
-			return false, fmt.Errorf("relationship predicate %s requires a catalog resolver", v.Relationship)
-		}
+		accessor := relationshipAccessors[strings.ToLower(v.Relationship)]
 		for _, ref := range accessor(e) {
-			target := resolver.Entity(ref)
-			if target == nil {
-				continue
-			}
-			matches, err := ev.evaluateNode(target, v.Expression, resolver)
-			if err != nil || matches {
-				return matches, err
+			if target := resolver.Entity(ref); target != nil && ev.evaluateNode(target, v.Expression, resolver) {
+				return true
 			}
 		}
-		return false, nil
+		return false
 
 	case *NotExpression:
-		matches, err := ev.evaluateNode(e, v.Expression, resolver)
-		if err != nil {
-			return false, err
-		}
-		return !matches, nil
+		return !ev.evaluateNode(e, v.Expression, resolver)
 
 	case *BinaryExpression:
-		leftMatches, err := ev.evaluateNode(e, v.Left, resolver)
-		if err != nil {
-			return false, err
+		switch v.Operator {
+		case "AND":
+			return ev.evaluateNode(e, v.Left, resolver) && ev.evaluateNode(e, v.Right, resolver)
+		case "OR":
+			return ev.evaluateNode(e, v.Left, resolver) || ev.evaluateNode(e, v.Right, resolver)
 		}
-
-		if v.Operator == "AND" {
-			if !leftMatches {
-				return false, nil
-			}
-			return ev.evaluateNode(e, v.Right, resolver)
-		}
-
-		if v.Operator == "OR" {
-			if leftMatches {
-				return true, nil
-			}
-			return ev.evaluateNode(e, v.Right, resolver)
-		}
+		panic(fmt.Sprintf("query: unsupported binary operator %q", v.Operator))
 	}
-
-	return false, fmt.Errorf("unsupported expression type")
+	panic(fmt.Sprintf("query: unsupported expression type %T", expr))
 }
 
 // matchesOperator performs the actual string comparison based on the operator.
-func (ev *Evaluator) matchesOperator(entityValue, operator, queryValue string) (bool, error) {
+func (ev *Evaluator) matchesOperator(entityValue, operator, queryValue string) bool {
 	switch operator {
 	case ":":
-		return strings.Contains(strings.ToLower(entityValue), strings.ToLower(queryValue)), nil
+		return strings.Contains(strings.ToLower(entityValue), strings.ToLower(queryValue))
 	case "=":
-		return strings.EqualFold(entityValue, queryValue), nil
+		return strings.EqualFold(entityValue, queryValue)
 	case "~":
-		re, found := ev.regexCache[queryValue]
-		if !found {
-			var err error
-			re, err = regexp.Compile("(?i)" + queryValue) // (?i) for case-insensitivity
-			if err != nil {
-				return false, fmt.Errorf("invalid regular expression %q: %w", queryValue, err)
-			}
-			ev.regexCache[queryValue] = re
-		}
-
-		return re.MatchString(entityValue), nil
+		// Compile has compiled every regular expression in the query.
+		return ev.regexes[queryValue].MatchString(entityValue)
 	default:
-		return false, nil
+		return false
 	}
 }

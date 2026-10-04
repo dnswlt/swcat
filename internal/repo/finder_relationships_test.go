@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/query"
 )
 
 func TestFinderRelationshipPredicates(t *testing.T) {
@@ -56,14 +57,14 @@ func TestFinderRelationshipPredicates(t *testing.T) {
 	if err := r.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	finder := NewFinder(func(e catalog.Entity, property string) ([]string, bool) {
-		if property != "lint" {
-			return nil, false
-		}
-		if e == ax {
-			return []string{"warn"}, true
-		}
-		return nil, true
+	finder := NewFinder(query.PropertyProvider{
+		Names: []string{"lint"},
+		Values: func(e catalog.Entity, _ string) []string {
+			if e == ax {
+				return []string{"warn"}
+			}
+			return nil
+		},
 	})
 	tests := []struct {
 		query string
@@ -104,8 +105,12 @@ func TestFinderRelationshipPredicates(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
+			entities, err := finder.FindEntities(r, tt.query)
+			if err != nil {
+				t.Fatal(err)
+			}
 			var got []string
-			for _, entity := range finder.FindEntities(r, tt.query) {
+			for _, entity := range entities {
 				got = append(got, entity.GetRef().String())
 			}
 			slices.Sort(got)
@@ -115,12 +120,12 @@ func TestFinderRelationshipPredicates(t *testing.T) {
 		})
 	}
 	// Kind-specific list searches must also pass the repository to the evaluator.
-	got := finder.FindComponents(r, "!domain=x consumesApis[domain=x]")
-	if len(got) != 1 || got[0] != external {
-		t.Fatalf("FindComponents returned %v, want external", got)
+	got, err := finder.FindComponents(r, "!domain=x consumesApis[domain=x]")
+	if err != nil || len(got) != 1 || got[0] != external {
+		t.Fatalf("FindComponents returned %v, %v; want external", got, err)
 	}
-	apis := finder.FindAPIs(r, "consumedBy[name=external]")
-	if len(apis) != 2 {
-		t.Fatalf("FindAPIs returned %d APIs, want 2", len(apis))
+	apis, err := finder.FindAPIs(r, "consumedBy[name=external]")
+	if err != nil || len(apis) != 2 {
+		t.Fatalf("FindAPIs returned %d APIs, %v; want 2", len(apis), err)
 	}
 }

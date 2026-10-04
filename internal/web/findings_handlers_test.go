@@ -147,6 +147,8 @@ func TestFindings_BadRequests(t *testing.T) {
 		{"options without scan", `{"bitbucketFiles": {"refresh": true}}`},
 		{"unknown field", `{"lnit": {}}`},
 		{"malformed query", `{"lint": {"query": "kind:("}}`},
+		// Parses, but does not compile: must not read as a catalog without findings.
+		{"broken regex in query", `{"lint": {"query": "name~'[a-'"}}`},
 		{"not json", `not json`},
 		// protojson accepts numeric enum values, including ones the enum never
 		// declared. Left unchecked, 99 falls through the handler's switch and

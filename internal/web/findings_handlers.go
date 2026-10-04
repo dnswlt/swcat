@@ -32,7 +32,11 @@ func (s *Server) serveFindings(w http.ResponseWriter, r *http.Request) {
 	resp := &catalog_pb.FindingsResponse{}
 
 	if !req.GetLint().GetSkip() {
-		resp.Lint = s.lintSection(data, req.GetLint())
+		resp.Lint, err = s.lintSection(data, req.GetLint())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 
 	for _, scan := range req.GetScans() {
@@ -137,16 +141,23 @@ func refsToPB(refs []*catalog.Ref) []*catalog_pb.Ref {
 }
 
 // lintSection collects the entity-scoped lint findings.
-func (s *Server) lintSection(data *storeData, opts *catalog_pb.LintOptions) *catalog_pb.LintFindings {
+// It returns an error for a query that the finder rejects, such as one with a
+// broken regex or an unknown attribute. parseFindingsRequest has already
+// rejected syntax errors, but only the finder knows its providers' attributes.
+func (s *Server) lintSection(data *storeData, opts *catalog_pb.LintOptions) (*catalog_pb.LintFindings, error) {
 	if s.linter == nil {
 		return &catalog_pb.LintFindings{
 			Status: scanStatusToPB(scanNotConfigured("no linter is configured for this catalog")),
-		}
+		}, nil
 	}
 
-	out := &catalog_pb.LintFindings{Status: scanStatusToPB(scanSucceeded())}
 	// FindEntities returns entities sorted by ref, so the output is stable.
-	for _, e := range data.finder.FindEntities(data.repo, opts.GetQuery()) {
+	entities, err := data.finder.FindEntities(data.repo, opts.GetQuery())
+	if err != nil {
+		return nil, fmt.Errorf("invalid 'lint.query': %v", err)
+	}
+	out := &catalog_pb.LintFindings{Status: scanStatusToPB(scanSucceeded())}
+	for _, e := range entities {
 		ref := catalog.RefToPB(e.GetRef())
 		for _, f := range s.getFindings(data, e) {
 			out.Findings = append(out.Findings, &catalog_pb.Finding{
@@ -157,7 +168,7 @@ func (s *Server) lintSection(data *storeData, opts *catalog_pb.LintOptions) *cat
 			})
 		}
 	}
-	return out
+	return out, nil
 }
 
 // parseFindingsRequest reads and validates the request body. An absent or empty

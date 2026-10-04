@@ -205,7 +205,8 @@ func newWorkloadMatcher(data *storeData, annotationKey string) *workloadMatcher 
 		data:         data,
 		byAnnotation: make(map[string][]*catalog.Ref),
 	}
-	for _, c := range data.finder.FindComponents(data.repo, "") {
+	components, _ := data.finder.FindComponents(data.repo, "") // An empty query cannot fail.
+	for _, c := range components {
 		if v, ok := c.GetMetadata().Annotations[annotationKey]; ok && v != "" {
 			m.byAnnotation[v] = append(m.byAnnotation[v], c.GetRef())
 		}
@@ -261,7 +262,8 @@ func (s *Server) scanBitbucketFiles(ctx context.Context, data *storeData, untrac
 	}
 	log.Printf("Found %d files. Matching files against entity URLs.", len(files))
 
-	results := s.linter.MatchBitbucketFiles(files, data.finder.FindEntities(data.repo, ""))
+	entities, _ := data.finder.FindEntities(data.repo, "") // An empty query cannot fail.
+	results := s.linter.MatchBitbucketFiles(files, entities)
 	if untrackedOnly {
 		results = slices.DeleteFunc(results, func(r lint.BitbucketScanResult) bool {
 			return r.Entity != nil
@@ -309,7 +311,7 @@ func (s *Server) scanLinks(ctx context.Context, data *storeData, brokenOnly bool
 	ctx, cancel := context.WithTimeout(ctx, deepScanTimeout)
 	defer cancel()
 
-	entities := data.finder.FindEntities(data.repo, "")
+	entities, _ := data.finder.FindEntities(data.repo, "") // An empty query cannot fail.
 	out := linkCheckScan{Outcome: scanSucceeded()}
 	for _, c := range s.linter.ScanLinks(ctx, s.linkFetchers(), entities, bitbucketConcurrency) {
 		status, reason := linkCheckOutcome(c.Result)

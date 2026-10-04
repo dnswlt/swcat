@@ -1,6 +1,7 @@
 package query
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"unicode"
@@ -253,7 +254,7 @@ func Parse(input string) (Expression, error) {
 	}
 
 	if len(p.errors) > 0 {
-		return nil, fmt.Errorf("parser errors: %s", strings.Join(p.errors, "; "))
+		return nil, errors.New(strings.Join(p.errors, "; "))
 	}
 	return expr, nil
 }

@@ -25,10 +25,10 @@ Both `trigger` and `inhibit` use the [query syntax](../query-syntax.md),
 including relationship predicates.
 
 Predicates resolve references in the catalog being viewed or processed. The
-search-only `lint` attribute is not available in plugin predicates. If a trigger
-or inhibit predicate fails to evaluate, swcat logs the error and omits the
-matching-plugin menu entries while still rendering the entity page. Attempting
-to run plugins returns the error and executes no plugins for that entity.
+search-only `lint` attribute is not available in plugin predicates. Predicates
+are validated when `plugins.yml` is loaded: an invalid one, such as an unknown
+attribute or a malformed regular expression, is reported as a configuration
+error, whichever entities it would apply to.
 
 ### Variable Expansion
 

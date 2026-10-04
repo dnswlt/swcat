@@ -1,0 +1,44 @@
+{{- define "resources_results.html" -}}
+{{- if .QueryError }}
+{{ template "query_error.html" . }}
+{{- else }}
+<div class="overflow-x-auto">
+    <table class="min-w-full table-auto border-collapse">
+        <thead class="bg-gray-100">
+            <tr>
+                <th class="px-4 py-2 text-left">Name</th>
+                <th class="px-4 py-2 text-left">System</th>
+                <th class="px-4 py-2 text-left">Owner</th>
+                <th class="px-4 py-2 text-left">Type</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{- if .Resources }}
+            {{- range .Resources }}
+            <tr class="border-t">
+                <td class="px-4 py-2">
+                    <a href="{{ . | toURL }}" class="text-blue-600 hover:underline">
+                        {{ .GetQName }}
+                    </a>
+                </td>
+                <td class="px-4 py-2">
+                    <a href="{{ .Spec.System| toURL }}" class="text-blue-600 hover:underline">
+                        {{ .Spec.System.QName }}
+                    </a>
+                </td>
+                <td class="px-4 py-2">{{ .Spec.Owner.QName }}</td>
+                <td class="px-4 py-2">{{ .Spec.Type }}</td>
+            </tr>
+            {{- end }}
+            {{- else }}
+            <tr>
+                <td colspan="4" class="px-4 py-2 text-center text-gray-500">
+                    No resources found
+                </td>
+            </tr>
+            {{- end }}
+        </tbody>
+    </table>
+</div>
+{{- end }}
+{{- end }}

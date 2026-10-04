@@ -26,16 +26,11 @@ func TestRegistryRelationshipPredicates(t *testing.T) {
 	tests := []struct {
 		name, trigger, inhibit string
 		want                   bool
-		err                    string
 	}{
-		{"trigger matches", "kind:component consumesApis[domain=payments]", "", true, ""},
-		{"trigger does not match", "consumesApis[domain=other]", "", false, ""},
-		{"inhibit matches", "kind:component", "consumesApis[domain=payments]", false, ""},
-		{"inhibit does not match", "kind:component", "consumesApis[domain=other]", true, ""},
-		{"invalid trigger", "consumesApis[unknown=value]", "", false, "trigger: unknown attribute"},
-		{"invalid inhibit", "kind:component", "consumesApis[unknown=value]", false, "inhibit: unknown attribute"},
-		{"unsupported lint trigger", "lint=error", "", false, "trigger: unknown attribute"},
-		{"unsupported lint inhibit", "kind:component", "lint=error", false, "inhibit: unknown attribute"},
+		{"trigger matches", "kind:component consumesApis[domain=payments]", "", true},
+		{"trigger does not match", "consumesApis[domain=other]", "", false},
+		{"inhibit matches", "kind:component", "consumesApis[domain=payments]", false},
+		{"inhibit does not match", "kind:component", "consumesApis[domain=other]", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -45,30 +40,39 @@ func TestRegistryRelationshipPredicates(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			checkError := func(err error) {
-				t.Helper()
-				if tt.err != "" {
-					if err == nil || !strings.Contains(err.Error(), tt.err) || !strings.Contains(err.Error(), "timestamp") {
-						t.Fatalf("got error %v, want plugin name and %q", err, tt.err)
-					}
-				} else if err != nil {
-					t.Fatal(err)
-				}
-			}
-			names, err := registry.MatchingPlugins(component, repository)
-			checkError(err)
+			names := registry.MatchingPlugins(component, repository)
 			if (len(names) > 0) != tt.want {
 				t.Fatalf("MatchingPlugins = %v, want match %v", names, tt.want)
 			}
 			result, err := registry.Run(t.Context(), repository, component)
-			checkError(err)
-			if tt.err == "" {
-				_, ran := result.Annotations[AnnotPluginsUpdateTime]
-				if ran != tt.want {
-					t.Fatalf("plugin ran = %v, want %v", ran, tt.want)
-				}
-			} else if result != nil {
-				t.Fatal("failed predicates must not execute plugins")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, ran := result.Annotations[AnnotPluginsUpdateTime]; ran != tt.want {
+				t.Fatalf("plugin ran = %v, want %v", ran, tt.want)
+			}
+		})
+	}
+}
+
+// Invalid predicates are rejected when the config is loaded, whatever the
+// catalog holds, rather than failing (or never matching) when evaluated.
+func TestRegistryRejectsInvalidPredicates(t *testing.T) {
+	for _, tc := range []struct{ name, trigger, inhibit, err string }{
+		{"unknown nested trigger attribute", "consumesApis[unknwn=x]", "", "invalid trigger expression"},
+		{"unknown nested inhibit attribute", "kind=component", "consumesApis[unknwn=x]", "invalid inhibit expression"},
+		// Finder providers such as lint are not available to plugin predicates.
+		{"lint trigger", "lint=error", "", "invalid trigger expression"},
+		{"lint inhibit", "kind=component", "lint=error", "invalid inhibit expression"},
+		// Short-circuiting must not hide the broken regex.
+		{"broken regex behind OR", "kind=component OR name~'[a-'", "", "invalid regular expression"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NewRegistry(&Config{Plugins: map[string]*Definition{
+				"broken-plugin": {Kind: "TimestampPlugin", Trigger: tc.trigger, Inhibit: tc.inhibit},
+			}}, Services{})
+			if err == nil || !strings.Contains(err.Error(), tc.err) || !strings.Contains(err.Error(), "broken-plugin") {
+				t.Fatalf("got error %v, want plugin name and %q", err, tc.err)
 			}
 		})
 	}
@@ -249,5 +253,25 @@ baseInterval: 24h`
 	}
 	if sc.BaseInterval != 24*time.Hour {
 		t.Errorf("Interval = %v, want %v", sc.BaseInterval, 24*time.Hour)
+	}
+}
+
+// noRepository is a RepositoryProvider whose catalog failed to load.
+type noRepository struct{}
+
+func (noRepository) GetRepository() *repo.Repository { return nil }
+
+// A catalog that cannot be loaded is a runtime failure, reported as an error.
+// As a query.Resolver, a nil *Repository is not nil, so Matches cannot catch it.
+func TestRunWithoutCatalog(t *testing.T) {
+	registry, err := NewRegistry(&Config{Plugins: map[string]*Definition{
+		"timestamp": {Kind: "TimestampPlugin", Trigger: "consumesApis[name=x]"},
+	}}, Services{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	component := &catalog.Component{Metadata: &catalog.Metadata{Name: "c"}, Spec: &catalog.ComponentSpec{}}
+	if result, err := registry.Run(t.Context(), noRepository{}, component); err == nil || result != nil {
+		t.Fatalf("Run = %v, %v; want an error", result, err)
 	}
 }

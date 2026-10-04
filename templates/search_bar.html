@@ -1,4 +1,4 @@
-<form role="search" action="{{ .SearchPath }}" method="get" hx-get="{{ .SearchPath }}" hx-target="#{{ .EntitiesLabel }}-tbody"
+<form role="search" action="{{ .SearchPath }}" method="get" hx-get="{{ .SearchPath }}" hx-target="#{{ .EntitiesLabel }}-results"
     hx-swap="innerHTML" hx-push-url="true"
     hx-trigger="input changed from:#q delay:300ms, submit" class="flex items-center gap-2">
     <input id="q" name="q" type="search" value="{{ .Query }}" placeholder="Filter {{ .EntitiesLabel }}"

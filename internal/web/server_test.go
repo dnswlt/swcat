@@ -3,17 +3,20 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/dnswlt/swcat/internal/catalog"
+	"github.com/dnswlt/swcat/internal/comments"
 	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/repo"
@@ -75,59 +78,6 @@ func TestPluginToolbarUsesRequestCatalog(t *testing.T) {
 				t.Fatalf("domain=%s restricted=%v: plugin visible=%v, want %v", tc.domain, tc.restricted, got, tc.want)
 			}
 		}
-	}
-}
-
-func TestPluginPredicateErrorsDoNotBreakRendering(t *testing.T) {
-	s := newTestServer(t, store.NewDiskStore("../../testdata/test1"))
-	api := &catalog.API{Metadata: &catalog.Metadata{Name: "api"}, Spec: &catalog.APISpec{}}
-	component := &catalog.Component{Metadata: &catalog.Metadata{Name: "consumer"}, Spec: &catalog.ComponentSpec{
-		ConsumesAPIs: []*catalog.LabelRef{{Ref: api.GetRef()}},
-	}}
-	repository := repo.NewRepository()
-	for _, entity := range []catalog.Entity{api, component} {
-		if err := repository.AddEntity(entity); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, tc := range []struct{ name, trigger, inhibit string }{
-		{"unknown nested trigger attribute", "consumesApis[unknwn=x]", ""},
-		{"unknown nested inhibit attribute", "kind=component", "consumesApis[unknwn=x]"},
-		{"unsupported lint trigger", "lint=error", ""},
-		{"unsupported lint inhibit", "kind=component", "lint=error"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			registry, err := plugins.NewRegistry(&plugins.Config{Plugins: map[string]*plugins.Definition{
-				"broken-plugin": {Kind: "TimestampPlugin", Trigger: tc.trigger, Inhibit: tc.inhibit},
-			}}, plugins.Services{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			s.pluginRegistry = registry
-			req := httptest.NewRequest(http.MethodGet, "/ui/components/consumer", nil)
-			req = req.WithContext(context.WithValue(req.Context(), ctxRefData, &storeData{repo: repository}))
-			params := map[string]any{"Entity": component, "ReadOnly": true}
-			fragment, err := s.renderTemplateFragment(req, "entity_toolbar.html", params)
-			if err != nil {
-				t.Fatal(err)
-			}
-			rr := httptest.NewRecorder()
-			s.serveHTMLPage(rr, req, "entity_toolbar.html", params)
-			if rr.Code != http.StatusOK {
-				t.Fatalf("page status %d: %s", rr.Code, rr.Body.String())
-			}
-			for _, html := range []string{string(fragment), rr.Body.String()} {
-				if strings.Contains(html, "plugin-btn") || strings.Contains(html, "broken-plugin") {
-					t.Fatal("broken predicate must hide plugin menu")
-				}
-				if !strings.Contains(html, "View Source") {
-					t.Fatal("remaining toolbar should still render")
-				}
-			}
-			if result, err := registry.Run(t.Context(), repository, component); err == nil || result != nil {
-				t.Fatalf("Run = %v, %v; want no result and an error", result, err)
-			}
-		})
 	}
 }
 
@@ -1353,7 +1303,10 @@ func TestLintQuery_ResolvesGraphChecks(t *testing.T) {
 	}
 
 	// The query must see it too, which it can only do through a bound repo.
-	got := data.finder.FindEntities(data.repo, "lint:"+lint.DependencyCandidateRuleName)
+	got, err := data.finder.FindEntities(data.repo, "lint:"+lint.DependencyCandidateRuleName)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(got) != 1 {
 		t.Fatalf("query lint:%s matched %d entities, want 1 (%s)",
 			lint.DependencyCandidateRuleName, len(got), c.GetRef())
@@ -1365,5 +1318,88 @@ func TestLintQuery_ResolvesGraphChecks(t *testing.T) {
 	// Findings were resolved through the per-ref cache, not recomputed ad hoc.
 	if data.findingsCache.Len() == 0 {
 		t.Error("findings cache empty: the lint provider bypassed getFindings")
+	}
+}
+
+func TestSearchShowsQueryErrors(t *testing.T) {
+	s := newTestServer(t, store.NewDiskStore("../../testdata/test1"))
+	h := s.Handler()
+	paths := []string{
+		"/ui/components", "/ui/systems", "/ui/apis", "/ui/resources",
+		"/ui/domains", "/ui/groups", "/ui/entities", "/ui/graph",
+	}
+	tests := []struct {
+		query string
+		want  string // empty: the query is valid
+	}{
+		{"systems[components[name:'flights-search']", "close relationship predicate"},
+		{"name~'[a-'", "invalid regular expression"},
+		{"kind:component", ""},
+	}
+	for _, path := range paths {
+		for _, tt := range tests {
+			for _, htmx := range []bool{false, true} {
+				t.Run(path+"?q="+tt.query+"/htmx="+strconv.FormatBool(htmx), func(t *testing.T) {
+					req := httptest.NewRequest(http.MethodGet, path+"?"+url.Values{"q": {tt.query}}.Encode(), nil)
+					if htmx {
+						req.Header.Set("HX-Request", "true")
+					}
+					rr := httptest.NewRecorder()
+					h.ServeHTTP(rr, req)
+					if rr.Code != http.StatusOK {
+						t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+					}
+					body := rr.Body.String()
+					if tt.want == "" {
+						if strings.Contains(body, "Invalid query") || !strings.Contains(body, "<table") {
+							t.Fatalf("valid query did not render a results table:\n%s", body)
+						}
+					} else if !strings.Contains(body, "Invalid query") || !strings.Contains(body, tt.want) {
+						t.Fatalf("body does not report %q:\n%s", tt.want, body)
+					} else if strings.Contains(body, "<table") {
+						// The error replaces the results instead of appearing inside them.
+						t.Fatalf("error rendered alongside a results table:\n%s", body)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestServeEntitiesJSON_InvalidQuery(t *testing.T) {
+	s := newTestServer(t, store.NewDiskStore("../../testdata/test1"))
+	for _, q := range []string{"consumesApis[name=x", "name~'[a-'"} {
+		req := httptest.NewRequest(http.MethodGet, "/catalog/entities?"+url.Values{"q": {q}}.Encode(), nil)
+		rr := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rr, req)
+		if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "Invalid query") {
+			t.Fatalf("q=%s: status %d, body %q; want 400 with an error", q, rr.Code, rr.Body.String())
+		}
+	}
+}
+
+// failingCommentsStore fails every read, like an unreachable comments backend.
+type failingCommentsStore struct{ comments.EmptyStore }
+
+func (failingCommentsStore) GetOpenComments(string) ([]comments.Comment, error) {
+	return nil, errors.New("comments backend unavailable")
+}
+
+// A storage failure while answering a query is logged and treated as "no
+// comments": it is not a problem with the query, so it must not be reported as one.
+func TestCommentStoreFailureIsNotAQueryError(t *testing.T) {
+	s, err := NewServer(ServerOptions{Addr: "127.0.0.1:0", BaseDir: "../.."},
+		store.NewDiskStore("../../testdata/test1"), WithCommentsStore(failingCommentsStore{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.Handler()
+	for _, path := range []string{"/ui/entities", "/catalog/entities"} {
+		req := httptest.NewRequest(http.MethodGet, path+"?"+url.Values{"q": {"comment:foo"}}.Encode(), nil)
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK || strings.Contains(rr.Body.String(), "Invalid query") {
+			t.Fatalf("%s: status %d, body %q; want 200 without a query error", path, rr.Code, rr.Body.String())
+		}
 	}
 }

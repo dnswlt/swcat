@@ -12,20 +12,9 @@
         <!-- Search -->
         {{ template "search_bar.html" . }}
 
-        <!-- Table -->
-        <div class="overflow-x-auto">
-            <table class="min-w-full table-auto border-collapse">
-                <thead class="bg-gray-100">
-                    <tr>
-                        <th class="px-4 py-2 text-left">Name</th>
-                        <th class="px-4 py-2 text-left">Display Name</th>
-                        <th class="px-4 py-2 text-left">Type</th>
-                    </tr>
-                </thead>
-                <tbody id="{{ .EntitiesLabel }}-tbody">
-                    {{ template "groups_rows.html" . }}
-                </tbody>
-            </table>
+        <!-- Results -->
+        <div id="{{ .EntitiesLabel }}-results">
+            {{ template "groups_results.html" . }}
         </div>
     </main>
 

@@ -406,7 +406,7 @@ func (r *Repository) prepareLegacyAutomaticLinkTemplates() ([]legacyAutomaticLin
 		if strings.TrimSpace(al.URL) == "" {
 			return nil, fmt.Errorf("automatic link has an empty URL")
 		}
-		expr, err := query.Parse(al.Filter)
+		eval, err := query.Compile(al.Filter)
 		if err != nil {
 			return nil, fmt.Errorf("invalid filter expression %q: %v", al.Filter, err)
 		}
@@ -423,7 +423,7 @@ func (r *Repository) prepareLegacyAutomaticLinkTemplates() ([]legacyAutomaticLin
 				legacyMultiLinks:    al.MultiLinks,
 				legacyMultiLinkData: al.MultiLinkData,
 			},
-			eval: query.NewEvaluator(expr),
+			eval: eval,
 		})
 	}
 
@@ -442,12 +442,12 @@ func (r *Repository) prepareStarlarkLinks() ([]starlarkLinkGenerator, error) {
 		if link.program == nil {
 			return nil, fmt.Errorf("starlarkLinks[%d] file %q was not loaded", i, link.File)
 		}
-		expr, err := query.Parse(link.Filter)
+		eval, err := query.Compile(link.Filter)
 		if err != nil {
 			return nil, fmt.Errorf("starlarkLinks[%d] has invalid filter expression %q: %w", i, link.Filter, err)
 		}
 		generators = append(generators, starlarkLinkGenerator{
-			eval:    query.NewEvaluator(expr),
+			eval:    eval,
 			program: link.program,
 		})
 	}
@@ -460,11 +460,7 @@ func (r *Repository) generateLegacyAutomaticLinks(e catalog.Entity, generators [
 	var links []*catalog.Link
 	for i := range generators {
 		g := &generators[i]
-		matches, err := g.eval.Matches(e, r)
-		if err != nil {
-			return nil, fmt.Errorf("failed to evaluate filter for entity %v: %v", e.GetRef(), err)
-		}
-		if !matches {
+		if !g.eval.Matches(e, r) {
 			continue
 		}
 		generated, err := g.generateLinks(r, e)
@@ -521,11 +517,7 @@ func (r *Repository) addGeneratedLinks() error {
 		}
 		links = append(links, legacyLinks...)
 		for _, generator := range starlarkGenerators {
-			matches, err := generator.eval.Matches(e, r)
-			if err != nil {
-				return fmt.Errorf("failed to evaluate Starlark link filter for entity %v: %w", e.GetRef(), err)
-			}
-			if !matches {
+			if !generator.eval.Matches(e, r) {
 				continue
 			}
 			generated, err := generator.program.Links(e, r)

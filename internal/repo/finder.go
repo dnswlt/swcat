@@ -26,7 +26,10 @@ func (f *Finder) RegisterPropertyProvider(p query.PropertyProvider) {
 	f.providers = append(f.providers, p)
 }
 
-func findEntities[T catalog.Entity](repo *Repository, q string, items map[string]T, providers []query.PropertyProvider) []T {
+// findEntities returns the items matching q, sorted by ref. An empty query
+// matches all items. An invalid query (e.g. a broken regex or an unknown
+// attribute) returns an error instead of results, whatever the catalog holds.
+func findEntities[T catalog.Entity](repo *Repository, q string, items map[string]T, providers []query.PropertyProvider) ([]T, error) {
 	var result []T
 
 	if strings.TrimSpace(q) == "" {
@@ -36,17 +39,12 @@ func findEntities[T catalog.Entity](repo *Repository, q string, items map[string
 			result = append(result, item)
 		}
 	} else {
-		expr, err := query.Parse(q)
+		ev, err := query.Compile(q, providers...)
 		if err != nil {
-			return nil // Invalid query => no results
+			return nil, err
 		}
-		ev := query.NewEvaluator(expr, providers...)
 		for _, c := range items {
-			ok, err := ev.Matches(c, repo)
-			if err != nil {
-				return nil // Broken query (e.g. broken regex) => no results
-			}
-			if ok {
+			if ev.Matches(c, repo) {
 				result = append(result, c)
 			}
 		}
@@ -54,33 +52,33 @@ func findEntities[T catalog.Entity](repo *Repository, q string, items map[string
 	slices.SortFunc(result, func(c1, c2 T) int {
 		return catalog.CompareEntityByRef(c1, c2)
 	})
-	return result
+	return result, nil
 }
 
-func (f *Finder) FindComponents(repo *Repository, q string) []*catalog.Component {
+func (f *Finder) FindComponents(repo *Repository, q string) ([]*catalog.Component, error) {
 	return findEntities(repo, q, repo.components, f.providers)
 }
 
-func (f *Finder) FindSystems(repo *Repository, q string) []*catalog.System {
+func (f *Finder) FindSystems(repo *Repository, q string) ([]*catalog.System, error) {
 	return findEntities(repo, q, repo.systems, f.providers)
 }
 
-func (f *Finder) FindAPIs(repo *Repository, q string) []*catalog.API {
+func (f *Finder) FindAPIs(repo *Repository, q string) ([]*catalog.API, error) {
 	return findEntities(repo, q, repo.apis, f.providers)
 }
 
-func (f *Finder) FindResources(repo *Repository, q string) []*catalog.Resource {
+func (f *Finder) FindResources(repo *Repository, q string) ([]*catalog.Resource, error) {
 	return findEntities(repo, q, repo.resources, f.providers)
 }
 
-func (f *Finder) FindDomains(repo *Repository, q string) []*catalog.Domain {
+func (f *Finder) FindDomains(repo *Repository, q string) ([]*catalog.Domain, error) {
 	return findEntities(repo, q, repo.domains, f.providers)
 }
 
-func (f *Finder) FindGroups(repo *Repository, q string) []*catalog.Group {
+func (f *Finder) FindGroups(repo *Repository, q string) ([]*catalog.Group, error) {
 	return findEntities(repo, q, repo.groups, f.providers)
 }
 
-func (f *Finder) FindEntities(repo *Repository, q string) []catalog.Entity {
+func (f *Finder) FindEntities(repo *Repository, q string) ([]catalog.Entity, error) {
 	return findEntities(repo, q, repo.allEntities, f.providers)
 }

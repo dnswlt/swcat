@@ -34,6 +34,7 @@ import (
 	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/prometheus"
+	"github.com/dnswlt/swcat/internal/query"
 	"github.com/dnswlt/swcat/internal/repo"
 	"github.com/dnswlt/swcat/internal/store"
 	"github.com/dnswlt/swcat/internal/svg"
@@ -381,34 +382,34 @@ func (s *Server) newFinder(data *storeData) *repo.Finder {
 	finder := repo.NewFinder()
 
 	if s.commentsStore != nil {
-		finder.RegisterPropertyProvider(func(e catalog.Entity, prop string) ([]string, bool) {
-			if prop != "comment" && prop != "comments" {
-				return nil, false
-			}
-			comments, err := s.commentsStore.GetOpenComments(e.GetRef().String())
-			if err != nil {
-				// Warn but don't fail, treating as no comments found
-				log.Printf("Failed to load comments for %s: %v", e.GetRef(), err)
-				return nil, false
-			}
-			var values []string
-			for _, c := range comments {
-				values = append(values, c.Text, c.Author)
-			}
-			return values, true
+		finder.RegisterPropertyProvider(query.PropertyProvider{
+			Names: []string{"comment", "comments"},
+			Values: func(e catalog.Entity, _ string) []string {
+				comments, err := s.commentsStore.GetOpenComments(e.GetRef().String())
+				if err != nil {
+					// Warn but don't fail, treating as no comments found
+					log.Printf("Failed to load comments for %s: %v", e.GetRef(), err)
+					return nil
+				}
+				var values []string
+				for _, c := range comments {
+					values = append(values, c.Text, c.Author)
+				}
+				return values
+			},
 		})
 	}
 
 	if s.linter != nil {
-		finder.RegisterPropertyProvider(func(e catalog.Entity, prop string) ([]string, bool) {
-			if prop != "lint" {
-				return nil, false
-			}
-			var values []string
-			for _, f := range s.getFindings(data, e) {
-				values = append(values, string(f.Severity), f.RuleName)
-			}
-			return values, true
+		finder.RegisterPropertyProvider(query.PropertyProvider{
+			Names: []string{"lint"},
+			Values: func(e catalog.Entity, _ string) []string {
+				var values []string
+				for _, f := range s.getFindings(data, e) {
+					values = append(values, string(f.Severity), f.RuleName)
+				}
+				return values
+			},
 		})
 	}
 
@@ -529,18 +530,19 @@ func (s *Server) serveComponents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
 	data := s.getStoreData(r)
-	components := data.finder.FindComponents(data.repo, query)
+	components, queryErr := data.finder.FindComponents(data.repo, query)
 	params := map[string]any{
 		"PageTitle":     "Components",
 		"Components":    components,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindComponent),
 		"EntitiesLabel": "components",
 		"Query":         query,
+		"QueryError":    queryErr,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		// htmx request: only render rows
-		s.serveHTMLPage(w, r, "components_rows.html", params)
+		// htmx request: only render the results
+		s.serveHTMLPage(w, r, "components_results.html", params)
 		return
 	}
 	// full page
@@ -552,18 +554,19 @@ func (s *Server) serveSystems(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	systems := data.finder.FindSystems(data.repo, query)
+	systems, queryErr := data.finder.FindSystems(data.repo, query)
 	params := map[string]any{
 		"PageTitle":     "Systems",
 		"Systems":       systems,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindSystem),
 		"EntitiesLabel": "systems",
 		"Query":         query,
+		"QueryError":    queryErr,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		// htmx request: only render rows
-		s.serveHTMLPage(w, r, "systems_rows.html", params)
+		// htmx request: only render the results
+		s.serveHTMLPage(w, r, "systems_results.html", params)
 		return
 	}
 	// full page
@@ -851,18 +854,19 @@ func (s *Server) serveAPIs(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	apis := data.finder.FindAPIs(data.repo, query)
+	apis, queryErr := data.finder.FindAPIs(data.repo, query)
 	params := map[string]any{
 		"PageTitle":     "APIs",
 		"APIs":          apis,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindAPI),
 		"EntitiesLabel": "apis",
 		"Query":         query,
+		"QueryError":    queryErr,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		// htmx request: only render rows
-		s.serveHTMLPage(w, r, "apis_rows.html", params)
+		// htmx request: only render the results
+		s.serveHTMLPage(w, r, "apis_results.html", params)
 		return
 	}
 	// full page
@@ -945,18 +949,19 @@ func (s *Server) serveResources(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	resources := data.finder.FindResources(data.repo, query)
+	resources, queryErr := data.finder.FindResources(data.repo, query)
 	params := map[string]any{
 		"PageTitle":     "Resources",
 		"Resources":     resources,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindResource),
 		"EntitiesLabel": "resources",
 		"Query":         query,
+		"QueryError":    queryErr,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		// htmx request: only render rows
-		s.serveHTMLPage(w, r, "resources_rows.html", params)
+		// htmx request: only render the results
+		s.serveHTMLPage(w, r, "resources_results.html", params)
 		return
 	}
 	// full page
@@ -1029,18 +1034,19 @@ func (s *Server) serveDomains(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	domains := data.finder.FindDomains(data.repo, query)
+	domains, queryErr := data.finder.FindDomains(data.repo, query)
 	params := map[string]any{
 		"PageTitle":     "Domains",
 		"Domains":       domains,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindDomain),
 		"EntitiesLabel": "domains",
 		"Query":         query,
+		"QueryError":    queryErr,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		// htmx request: only render rows
-		s.serveHTMLPage(w, r, "domains_rows.html", params)
+		// htmx request: only render the results
+		s.serveHTMLPage(w, r, "domains_results.html", params)
 		return
 	}
 	// full page
@@ -1164,18 +1170,19 @@ func (s *Server) serveGroups(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	groups := data.finder.FindGroups(data.repo, query)
+	groups, queryErr := data.finder.FindGroups(data.repo, query)
 	params := map[string]any{
 		"PageTitle":     "Groups",
 		"Groups":        groups,
 		"SearchPath":    toListURLWithContext(r.Context(), catalog.KindGroup),
 		"EntitiesLabel": "groups",
 		"Query":         query,
+		"QueryError":    queryErr,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		// htmx request: only render rows
-		s.serveHTMLPage(w, r, "groups_rows.html", params)
+		// htmx request: only render the results
+		s.serveHTMLPage(w, r, "groups_results.html", params)
 		return
 	}
 	// full page
@@ -1266,13 +1273,7 @@ func (s *Server) pluginTemplateFuncs(r *http.Request) template.FuncMap {
 			if s.pluginRegistry == nil {
 				return nil
 			}
-			matching, err := s.pluginRegistry.MatchingPlugins(e, s.getStoreData(r).repo)
-			if err != nil {
-				// A broken predicate hides the menu, but must not break browsing.
-				// Registry.Run still returns the error and prevents execution.
-				log.Printf("Failed to match plugins for entity %s: %v", e.GetRef(), err)
-				return nil
-			}
+			matching := s.pluginRegistry.MatchingPlugins(e, s.getStoreData(r).repo)
 			slices.Sort(matching)
 			return matching
 		},
@@ -1351,9 +1352,12 @@ func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
 
 	// Retrieve entities matching query q=, filtering out already selected ones
 	var entities []catalog.Entity
+	var queryErr error
 	query := q.Get("q")
 	if query != "" {
-		for _, e := range data.finder.FindEntities(data.repo, query) {
+		var found []catalog.Entity
+		found, queryErr = data.finder.FindEntities(data.repo, query)
+		for _, e := range found {
 			if !selectedIDs[e.GetRef().String()] {
 				entities = append(entities, e)
 			}
@@ -1366,13 +1370,14 @@ func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
 		graphURL := uiURLWithContext(r.Context(), "graph")
 
 		if refreshFull {
-			// Entity add/remove: return table rows + SVG with OOB swap
-			rowsHTML, err := s.renderTemplateFragment(r, "graph_rows.html", map[string]any{
-				"Entities": entities,
-				"GraphURL": graphURL,
+			// Entity add/remove: return the results + SVG with OOB swap
+			resultsHTML, err := s.renderTemplateFragment(r, "graph_results.html", map[string]any{
+				"Entities":   entities,
+				"QueryError": queryErr,
+				"GraphURL":   graphURL,
 			})
 			if err != nil {
-				log.Printf("Failed to render graph_rows.html: %v", err)
+				log.Printf("Failed to render graph_results.html: %v", err)
 				http.Error(w, "Template rendering error", http.StatusInternalServerError)
 				return
 			}
@@ -1388,17 +1393,18 @@ func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
 
 			w.Header().Set("Content-Type", "text/html; charset=UTF-8")
 			w.Header().Set("HX-Trigger-After-Swap", "svgUpdated")
-			w.Write(rowsHTML)
+			w.Write(resultsHTML)
 			if svgHTML != nil {
 				w.Write(svgHTML)
 			}
 			return
 		}
 
-		// Search only: render just the table rows
-		s.serveHTMLPage(w, r, "graph_rows.html", map[string]any{
-			"Entities": entities,
-			"GraphURL": graphURL,
+		// Search only: render just the results
+		s.serveHTMLPage(w, r, "graph_results.html", map[string]any{
+			"Entities":   entities,
+			"QueryError": queryErr,
+			"GraphURL":   graphURL,
 		})
 		return
 	}
@@ -1413,6 +1419,7 @@ func (s *Server) serveGraph(w http.ResponseWriter, r *http.Request) {
 		"GraphURL":         graphURL,
 		"EntitiesLabel":    "entities",
 		"Query":            query,
+		"QueryError":       queryErr,
 	}
 
 	// Add SVG rendering (reuse the helper method)
@@ -1427,18 +1434,19 @@ func (s *Server) serveEntities(w http.ResponseWriter, r *http.Request) {
 	query := q.Get("q")
 	data := s.getStoreData(r)
 
-	entities := data.finder.FindEntities(data.repo, query)
+	entities, queryErr := data.finder.FindEntities(data.repo, query)
 	params := map[string]any{
 		"PageTitle":     "Search",
 		"Entities":      entities,
 		"SearchPath":    uiURLWithContext(r.Context(), "entities"),
 		"EntitiesLabel": "entities",
 		"Query":         query,
+		"QueryError":    queryErr,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		// htmx request: only render rows
-		s.serveHTMLPage(w, r, "entities_rows.html", params)
+		// htmx request: only render the results
+		s.serveHTMLPage(w, r, "entities_results.html", params)
 		return
 	}
 	// full page
@@ -2259,14 +2267,15 @@ func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 		completions = data.repo.LabelKeys(ref.Kind)
 	case "spec.consumesApis", "spec.providesApis":
 		fieldType = "item"
-		apis := data.finder.FindAPIs(data.repo, "")
+		// Constant queries cannot fail.
+		apis, _ := data.finder.FindAPIs(data.repo, "")
 		completions = make([]string, len(apis))
 		for i, a := range apis {
 			completions[i] = a.GetRef().QName()
 		}
 	case "spec.dependsOn":
 		fieldType = "item"
-		entities := data.finder.FindEntities(data.repo, "kind:component OR kind:resource")
+		entities, _ := data.finder.FindEntities(data.repo, "kind:component OR kind:resource")
 		completions = make([]string, len(entities))
 		for i, a := range entities {
 			// Use fully qualified refs including the kind for dependsOn.
@@ -2274,14 +2283,14 @@ func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
 		}
 	case "spec.owner":
 		fieldType = "value"
-		groups := data.finder.FindGroups(data.repo, "")
+		groups, _ := data.finder.FindGroups(data.repo, "")
 		completions = make([]string, len(groups))
 		for i, g := range groups {
 			completions[i] = g.GetRef().QName()
 		}
 	case "spec.system":
 		fieldType = "value"
-		systems := data.finder.FindSystems(data.repo, "")
+		systems, _ := data.finder.FindSystems(data.repo, "")
 		completions = make([]string, len(systems))
 		for i, s := range systems {
 			completions[i] = s.GetRef().QName()
@@ -2412,7 +2421,11 @@ func (s *Server) serveEntitiesJSON(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
 	data := s.getStoreData(r)
-	entities := data.finder.FindEntities(data.repo, query)
+	entities, err := data.finder.FindEntities(data.repo, query)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid query: %v", err), http.StatusBadRequest)
+		return
+	}
 
 	resp := &catalog_pb.ListEntitiesResponse{
 		Entities: make([]*catalog_pb.Entity, 0, len(entities)),

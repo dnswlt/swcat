@@ -20,21 +20,9 @@
         <!-- Search -->
         {{ template "search_bar.html" . }}
 
-        <!-- Table -->
-        <div class="overflow-x-auto border rounded-lg max-h-60 overflow-y-auto">
-            <table class="min-w-full table-auto border-collapse">
-                <thead class="bg-gray-100">
-                    <tr>
-                        <th class="px-4 py-2 text-left">Name</th>
-                        <th class="px-4 py-2 text-left">Kind</th>
-                        <th class="px-4 py-2 text-left">System</th>
-                        <th class="px-4 py-2 text-right"><!--Action--></th>
-                    </tr>
-                </thead>
-                <tbody id="{{ .EntitiesLabel }}-tbody">
-                    {{ template "graph_rows.html" . }}
-                </tbody>
-            </table>
+        <!-- Results -->
+        <div id="{{ .EntitiesLabel }}-results">
+            {{ template "graph_results.html" . }}
         </div>
 
         {{ template "graph_svg.html" . }}

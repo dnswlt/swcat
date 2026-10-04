@@ -197,41 +197,28 @@ func NewRegistry(config *Config, services Services) (*Registry, error) {
 	return r, nil
 }
 
-func (t *Trigger) Matches(e catalog.Entity, resolver query.Resolver) (bool, error) {
+// Matches reports whether the plugin should run for e. The resolver is the
+// catalog that e belongs to, against which relationship predicates are evaluated.
+func (t *Trigger) Matches(e catalog.Entity, resolver query.Resolver) bool {
 	if t.condition == nil {
-		return false, nil // No trigger condition => never trigger
+		return false // No trigger condition => never trigger
 	}
-	matches, err := t.condition.Matches(e, resolver)
-	if err != nil {
-		return false, fmt.Errorf("trigger: %w", err)
+	if !t.condition.Matches(e, resolver) {
+		return false
 	}
-	if !matches {
-		return false, nil
-	}
-	if t.inhibitCondition != nil {
-		inhibit, err := t.inhibitCondition.Matches(e, resolver)
-		if err != nil {
-			return false, fmt.Errorf("inhibit: %w", err)
-		}
-		if inhibit {
-			return false, nil
-		}
-	}
-	return true, nil
+	return t.inhibitCondition == nil || !t.inhibitCondition.Matches(e, resolver)
 }
 
-func (r *Registry) MatchingPlugins(e catalog.Entity, resolver query.Resolver) ([]string, error) {
+// MatchingPlugins returns the names of the plugins that should run for e,
+// with predicates evaluated against the catalog that resolver gives access to.
+func (r *Registry) MatchingPlugins(e catalog.Entity, resolver query.Resolver) []string {
 	var keys []string
 	for name, trigger := range r.triggers {
-		matches, err := trigger.Matches(e, resolver)
-		if err != nil {
-			return nil, fmt.Errorf("plugin %s for %s: %w", name, e.GetRef(), err)
-		}
-		if matches {
+		if trigger.Matches(e, resolver) {
 			keys = append(keys, name)
 		}
 	}
-	return keys, nil
+	return keys
 }
 
 // SchedulerConfig returns the scheduler config loaded from the plugins config file.
@@ -250,10 +237,11 @@ func (r *Registry) Plugins() []string {
 
 func (r *Registry) Run(ctx context.Context, repoProvider RepositoryProvider, e catalog.Entity) (*RunResult, error) {
 	repository := repoProvider.GetRepository()
-	matching, err := r.MatchingPlugins(e, repository)
-	if err != nil {
-		return nil, err
+	if repository == nil {
+		// Checked here: as a query.Resolver, a nil *Repository would not be nil.
+		return nil, fmt.Errorf("no catalog available to run plugins for %s", e.GetRef())
 	}
+	matching := r.MatchingPlugins(e, repository)
 
 	var tempDir string
 	defer func() {
@@ -376,18 +364,18 @@ func (r *Registry) registerPlugin(name string, def *Definition) error {
 	}
 
 	if def.Trigger != "" {
-		expr, err := query.Parse(def.Trigger)
+		condition, err := query.Compile(def.Trigger)
 		if err != nil {
 			return fmt.Errorf("invalid trigger expression for plugin %s: %v", name, err)
 		}
-		trigger.condition = query.NewEvaluator(expr)
+		trigger.condition = condition
 	}
 	if def.Inhibit != "" {
-		expr, err := query.Parse(def.Inhibit)
+		inhibit, err := query.Compile(def.Inhibit)
 		if err != nil {
 			return fmt.Errorf("invalid inhibit expression for plugin %s: %v", name, err)
 		}
-		trigger.inhibitCondition = query.NewEvaluator(expr)
+		trigger.inhibitCondition = inhibit
 	}
 
 	r.triggers[name] = trigger

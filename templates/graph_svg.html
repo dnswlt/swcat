@@ -9,7 +9,7 @@
                 <span>{{ .GetQName }}</span>
                 <button
                     hx-get="{{ $.GraphURL }}"
-                    hx-target="#entities-tbody"
+                    hx-target="#entities-results"
                     hx-swap="innerHTML"
                     hx-push-url="true"
                     data-graph-action="remove-entity"
@@ -24,7 +24,7 @@
                 <input type="checkbox"
                     {{ if .SystemsAsClusters }}checked{{ end }}
                     hx-get="{{ .GraphURL }}"
-                    hx-target="#entities-tbody"
+                    hx-target="#entities-results"
                     hx-swap="innerHTML"
                     hx-trigger="change"
                     hx-push-url="true"

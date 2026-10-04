@@ -14,20 +14,9 @@
         <!-- Search -->
         {{ template "search_bar.html" . }}
 
-        <!-- Table -->
-        <div class="overflow-x-auto">
-            <table class="min-w-full table-auto border-collapse">
-                <thead class="bg-gray-100">
-                    <tr>
-                        <th class="px-4 py-2 text-left">Name</th>
-                        <th class="px-4 py-2 text-left">Kind</th>
-                        <th class="px-4 py-2 text-left">Title / Description</th>
-                    </tr>
-                </thead>
-                <tbody id="{{ .EntitiesLabel }}-tbody">
-                    {{ template "entities_rows.html" . }}
-                </tbody>
-            </table>
+        <!-- Results -->
+        <div id="{{ .EntitiesLabel }}-results">
+            {{ template "entities_results.html" . }}
         </div>
     </main>
 

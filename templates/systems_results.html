@@ -1,0 +1,44 @@
+{{- define "systems_results.html" -}}
+{{- if .QueryError }}
+{{ template "query_error.html" . }}
+{{- else }}
+<div class="overflow-x-auto">
+    <table class="min-w-full table-auto border-collapse">
+        <thead class="bg-gray-100">
+            <tr>
+                <th class="px-4 py-2 text-left">Name</th>
+                <th class="px-4 py-2 text-left">Title</th>
+                <th class="px-4 py-2 text-left">Domain</th>
+                <th class="px-4 py-2 text-left">Owner</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{- if .Systems }}
+            {{- range .Systems }}
+            <tr class="border-t">
+                <td class="px-4 py-2">
+                    <a href="{{ . | toURL }}" class="text-blue-600 hover:underline">
+                        {{ .GetQName }}
+                    </a>
+                </td>
+                <td class="px-4 py-2">{{ .Metadata.Title }}</td>
+                <td class="px-4 py-2">
+                    <a href="{{ .Spec.Domain | toURL }}" class="text-blue-600 hover:underline">
+                        {{ .Spec.Domain.QName }}
+                    </a>
+                </td>
+                <td class="px-4 py-2">{{ .Spec.Owner.QName }}</td>
+            </tr>
+            {{- end }}
+            {{- else }}
+            <tr>
+                <td colspan="3" class="px-4 py-2 text-center text-gray-500">
+                    No systems found
+                </td>
+            </tr>
+            {{- end }}
+        </tbody>
+    </table>
+</div>
+{{- end }}
+{{- end }}
