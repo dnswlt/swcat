@@ -1,0 +1,388 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://dnswlt.github.io/swcat/schema/swcat/catalog/v1/catalog.schema.json",
+  "title": "swcat catalog entity",
+  "description": "A single swcat catalog entity (one YAML document). Catalog files may contain several documents separated by '---'.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "description": "The schema version of this entity descriptor.",
+      "default": "swcat/v1",
+      "examples": ["swcat/v1"]
+    },
+    "kind": {
+      "description": "The entity kind. Determines the shape of 'spec'.",
+      "enum": ["Domain", "System", "Component", "Resource", "API", "Group"]
+    },
+    "metadata": { "$ref": "#/definitions/metadata" },
+    "spec": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "Domain" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/definitions/domainSpec" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "System" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/definitions/systemSpec" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "Component" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/definitions/componentSpec" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "Resource" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/definitions/resourceSpec" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "API" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/definitions/apiSpec" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "Group" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/definitions/groupSpec" } } }
+    }
+  ],
+
+  "definitions": {
+    "name": {
+      "type": "string",
+      "maxLength": 63,
+      "pattern": "^[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$",
+      "description": "Letters, digits and '-'; must start with a letter and end with a letter or digit. At most 63 characters."
+    },
+
+    "anyRef": {
+      "type": "string",
+      "pattern": "^(?:(?:domain|system|component|resource|api|group):)?(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/)?[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$",
+      "description": "An entity reference: `[<kind>:][<namespace>/]<name>`, e.g. `component:payments/checkout`. The kind is lowercase; the namespace defaults to `default`."
+    },
+    "groupRef": {
+      "type": "string",
+      "pattern": "^(?:group:)?(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/)?[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$",
+      "description": "A reference to a Group: `[group:][<namespace>/]<name>`."
+    },
+    "systemRef": {
+      "type": "string",
+      "pattern": "^(?:system:)?(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/)?[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$",
+      "description": "A reference to a System: `[system:][<namespace>/]<name>`."
+    },
+    "domainRef": {
+      "type": "string",
+      "pattern": "^(?:domain:)?(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/)?[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$",
+      "description": "A reference to a Domain: `[domain:][<namespace>/]<name>`."
+    },
+    "componentRef": {
+      "type": "string",
+      "pattern": "^(?:component:)?(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/)?[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$",
+      "description": "A reference to a Component: `[component:][<namespace>/]<name>`."
+    },
+
+    "apiLabelRef": {
+      "description": "A reference to an API, either as a string ('api:ns/name @v2 \"label\"', version and label optional) or as a record.",
+      "type": ["string", "object"],
+      "if": { "type": "string" },
+      "then": {
+        "pattern": "^(?:api:)?(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/)?[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\s*@[^\\s\"]+)?(?:\\s*\"[^\"]*\")?$"
+      },
+      "else": { "$ref": "#/definitions/labelRefRecord" }
+    },
+    "dependsOnRef": {
+      "description": "A dependency on a Component or Resource. The kind is mandatory here, e.g. 'component:foo' or 'resource:bar \"reads\"'.",
+      "type": ["string", "object"],
+      "if": { "type": "string" },
+      "then": {
+        "pattern": "^(?:component|resource):(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/)?[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\s*@[^\\s\"]+)?(?:\\s*\"[^\"]*\")?$"
+      },
+      "else": { "$ref": "#/definitions/labelRefRecord" }
+    },
+    "labelRefRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref"],
+      "properties": {
+        "ref": { "$ref": "#/definitions/anyRef" },
+        "label": {
+          "type": "string",
+          "description": "A label shown on the edge in relationship diagrams."
+        },
+        "attrs": {
+          "type": "object",
+          "description": "Additional attributes. 'version' selects a declared API version.",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "allOf": [{ "$ref": "#/definitions/name" }],
+          "description": "The name of the entity. Unique per namespace and kind."
+        },
+        "namespace": {
+          "allOf": [{ "$ref": "#/definitions/name" }],
+          "description": "The namespace the entity belongs to. Defaults to 'default'."
+        },
+        "title": {
+          "type": "string",
+          "description": "A display name shown in the UI instead of 'name'."
+        },
+        "description": {
+          "type": "string",
+          "description": "A short, one-line description of the entity."
+        },
+        "labels": {
+          "type": "object",
+          "description": "Key/value pairs of identifying information (Kubernetes label rules).",
+          "propertyNames": {
+            "pattern": "^(?:[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*/)?[a-zA-Z0-9](?:[-a-zA-Z0-9_.]*[a-zA-Z0-9])?$"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 63,
+                "pattern": "^$|^[a-zA-Z0-9](?:[-a-zA-Z0-9_.]*[a-zA-Z0-9])?$"
+              },
+              { "type": ["number", "boolean"] }
+            ]
+          }
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Key/value pairs of non-identifying auxiliary information, mostly used by plugins and custom content. Values must be strings; use a block scalar (|) for embedded JSON.",
+          "propertyNames": {
+            "pattern": "^(?:[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*/)?[a-zA-Z0-9](?:[-a-zA-Z0-9_.]*[a-zA-Z0-9])?$"
+          },
+          "additionalProperties": { "type": ["string", "number", "boolean"] }
+        },
+        "tags": {
+          "type": "array",
+          "description": "Single-valued strings used to classify entities.",
+          "items": {
+            "type": "string",
+            "maxLength": 63,
+            "pattern": "^[a-z0-9:+#]+(?:-[a-z0-9:+#]+)*$"
+          }
+        },
+        "links": {
+          "type": "array",
+          "description": "External hyperlinks related to the entity.",
+          "items": { "$ref": "#/definitions/link" }
+        }
+      }
+    },
+
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url"],
+      "properties": {
+        "url": { "type": "string", "description": "The link target, in standard URI format." },
+        "title": { "type": "string", "description": "A user friendly display name for the link." },
+        "icon": { "type": "string", "description": "A key representing a visual icon to display in the UI." },
+        "type": { "type": "string", "description": "An optional value to categorize links into groups." }
+      }
+    },
+
+    "domainSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner"],
+      "properties": {
+        "owner": {
+          "allOf": [{ "$ref": "#/definitions/groupRef" }],
+          "description": "The Group that owns this domain. Must exist in the catalog."
+        },
+        "subdomainOf": {
+          "allOf": [{ "$ref": "#/definitions/domainRef" }],
+          "description": "A Domain of which this domain is a part."
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of domain. Free-form unless restricted by catalog.validation in the swcat config."
+        }
+      }
+    },
+
+    "systemSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "domain"],
+      "properties": {
+        "owner": {
+          "allOf": [{ "$ref": "#/definitions/groupRef" }],
+          "description": "The Group that owns this system. Must exist in the catalog."
+        },
+        "domain": {
+          "allOf": [{ "$ref": "#/definitions/domainRef" }],
+          "description": "The Domain this system belongs to. Required by swcat, and must exist in the catalog."
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of system. Free-form unless restricted by catalog.validation in the swcat config."
+        }
+      }
+    },
+
+    "componentSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "lifecycle", "owner", "system"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "The type of component, e.g. 'service' or 'job'. Free-form unless restricted by catalog.validation in the swcat config."
+        },
+        "lifecycle": {
+          "type": "string",
+          "description": "The lifecycle state, e.g. 'production' or 'experimental'. Free-form unless restricted by catalog.validation in the swcat config."
+        },
+        "owner": {
+          "allOf": [{ "$ref": "#/definitions/groupRef" }],
+          "description": "The Group that owns this component. Must exist in the catalog."
+        },
+        "system": {
+          "allOf": [{ "$ref": "#/definitions/systemRef" }],
+          "description": "The System this component belongs to. Must exist in the catalog."
+        },
+        "subcomponentOf": {
+          "allOf": [{ "$ref": "#/definitions/componentRef" }],
+          "description": "A Component of which this component is a part."
+        },
+        "providesApis": {
+          "type": "array",
+          "description": "The APIs provided by this component.",
+          "items": { "$ref": "#/definitions/apiLabelRef" }
+        },
+        "consumesApis": {
+          "type": "array",
+          "description": "The APIs consumed by this component.",
+          "items": { "$ref": "#/definitions/apiLabelRef" }
+        },
+        "dependsOn": {
+          "type": "array",
+          "description": "Components and Resources this component depends on to function.",
+          "items": { "$ref": "#/definitions/dependsOnRef" }
+        }
+      }
+    },
+
+    "resourceSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "owner", "system"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "The type of resource, e.g. 'database' or 'cache'. Free-form unless restricted by catalog.validation in the swcat config."
+        },
+        "owner": {
+          "allOf": [{ "$ref": "#/definitions/groupRef" }],
+          "description": "The Group that owns this resource. Must exist in the catalog."
+        },
+        "system": {
+          "allOf": [{ "$ref": "#/definitions/systemRef" }],
+          "description": "The System this resource belongs to. Must exist in the catalog."
+        },
+        "dependsOn": {
+          "type": "array",
+          "description": "Components and Resources this resource depends on to function.",
+          "items": { "$ref": "#/definitions/dependsOnRef" }
+        }
+      }
+    },
+
+    "apiSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "lifecycle", "owner", "system"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "The type of API definition, e.g. 'grpc/protobuf' or 'openapi'. Free-form unless restricted by catalog.validation in the swcat config."
+        },
+        "lifecycle": {
+          "type": "string",
+          "description": "The lifecycle state of the API. If 'versions' is given, at least one version must have this lifecycle."
+        },
+        "owner": {
+          "allOf": [{ "$ref": "#/definitions/groupRef" }],
+          "description": "The Group that owns this API. Must exist in the catalog."
+        },
+        "system": {
+          "allOf": [{ "$ref": "#/definitions/systemRef" }],
+          "description": "The System this API belongs to. Must exist in the catalog."
+        },
+        "definition": {
+          "type": "string",
+          "description": "The API definition, in the format implied by 'type'. Optional in swcat."
+        },
+        "versions": {
+          "type": "array",
+          "description": "The versions in which this API currently exists. Consumers and providers can select one with `@<version>`.",
+          "items": { "$ref": "#/definitions/apiSpecVersion" }
+        }
+      }
+    },
+
+    "apiSpecVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "lifecycle"],
+      "properties": {
+        "version": {
+          "type": ["string", "number"],
+          "description": "The version name, e.g. 'v1' or '1.2.3'."
+        },
+        "lifecycle": {
+          "type": "string",
+          "description": "The lifecycle state of this particular version."
+        }
+      }
+    },
+
+    "groupSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "The type of group, e.g. 'team'. Free-form unless restricted by catalog.validation in the swcat config."
+        },
+        "profile": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Profile information about the group, for display purposes.",
+          "properties": {
+            "displayName": { "type": "string", "description": "A display name to present to users." },
+            "email": { "type": "string", "description": "An email address where the group can be reached." },
+            "picture": { "type": "string", "description": "URL of an image representing this group." }
+          }
+        },
+        "parent": {
+          "allOf": [{ "$ref": "#/definitions/groupRef" }],
+          "description": "The immediate parent group in the hierarchy."
+        },
+        "children": {
+          "type": "array",
+          "description": "The immediate child groups (whose 'parent' points to this group).",
+          "items": { "$ref": "#/definitions/groupRef" }
+        },
+        "members": {
+          "type": "array",
+          "description": "The users that are members of this group. Uninterpreted strings.",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}
