@@ -77,6 +77,42 @@ var relationshipAccessors = map[string]relationshipAccessor{
 		}
 		return nil
 	},
+	"subcomponentof": func(e catalog.Entity) []*catalog.Ref {
+		if c, ok := e.(*catalog.Component); ok && c.Spec != nil {
+			return singleRef(c.Spec.SubcomponentOf)
+		}
+		return nil
+	},
+	"subcomponents": func(e catalog.Entity) []*catalog.Ref {
+		if c, ok := e.(*catalog.Component); ok && c.Spec != nil {
+			return c.GetSubcomponents()
+		}
+		return nil
+	},
+	"components": func(e catalog.Entity) []*catalog.Ref {
+		if s, ok := e.(*catalog.System); ok && s.Spec != nil {
+			return s.GetComponents()
+		}
+		return nil
+	},
+	"apis": func(e catalog.Entity) []*catalog.Ref {
+		if s, ok := e.(*catalog.System); ok && s.Spec != nil {
+			return s.GetAPIs()
+		}
+		return nil
+	},
+	"resources": func(e catalog.Entity) []*catalog.Ref {
+		if s, ok := e.(*catalog.System); ok && s.Spec != nil {
+			return s.GetResources()
+		}
+		return nil
+	},
+	"systems": func(e catalog.Entity) []*catalog.Ref {
+		if d, ok := e.(*catalog.Domain); ok && d.Spec != nil {
+			return d.GetSystems()
+		}
+		return nil
+	},
 	"rel": relatedEntities,
 }
 

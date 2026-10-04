@@ -48,6 +48,10 @@ The following attributes are available for filtering:
 * `consumedBy`: Entities that consume a given API.
 * `dependsOn`: Entities that a component or resource depends on.
 * `dependents`: Entities that depend on a given component or resource.
+* `subcomponentOf`: The component that a component is a subcomponent of.
+* `subcomponents`: The subcomponents of a component.
+* `components`, `apis`, `resources`: The components, APIs, or resources that are part of a system.
+* `systems`: The systems that are part of a domain.
 * `rel`: Entities directly related to the given entity reference (both incoming and outgoing).
     For example, `rel:'component:my-service'` will find the owner,
     the system it belongs to, and any APIs it provides or consumes.
@@ -130,7 +134,9 @@ On a domain entity, `domain[...]` tests the domain itself, not its parent
 (`subdomainOf`), just as `domain=` matches its own qualified name.
 
 Brackets are supported on `owner`, `system`, `domain`, `consumesApis`,
-`providesApis`, `providedBy`, `consumedBy`, `dependsOn`, `dependents`, and `rel`.
+`providesApis`, `providedBy`, `consumedBy`, `dependsOn`, `dependents`,
+`subcomponentOf`, `subcomponents`, `components`, `apis`, `resources`, `systems`,
+and `rel`.
 Relationship names are case-insensitive. Scalar attributes such as `tag` and
 `type` do not support brackets. The existing `consumesApis:payments` form still
 matches API reference names; `consumesApis[name:payments]` instead follows those
@@ -144,12 +150,14 @@ predicates:
 consumesApis[domain=payments AND lifecycle=production]
 consumesApis[providedBy[owner=platform-team]]
 consumedBy[domain=checkout]
+components[consumesApis=payments-api]
 ```
 
 These find, respectively, entities consuming a production API in payments,
-entities consuming an API provided by a component owned by platform-team, and
-APIs consumed by an entity in checkout. Each result entity appears only once,
-even if several related entities match.
+entities consuming an API provided by a component owned by platform-team,
+APIs consumed by an entity in checkout, and systems with a component that
+consumes `payments-api`. Each result entity appears only once, even if several
+related entities match.
 
 All conditions in one pair of brackets must match **the same related entity**:
 

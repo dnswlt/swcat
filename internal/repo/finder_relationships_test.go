@@ -39,6 +39,7 @@ func TestFinderRelationshipPredicates(t *testing.T) {
 	external.Spec.ConsumesAPIs = refs(ax, ay)
 	internal := component("internal", sx)
 	internal.Spec.ConsumesAPIs = refs(ax)
+	internal.Spec.SubcomponentOf = provider.GetRef()
 	other := component("other", sy)
 	other.Spec.ConsumesAPIs = refs(ay)
 	empty := component("empty", sy)
@@ -87,6 +88,15 @@ func TestFinderRelationshipPredicates(t *testing.T) {
 		{"dependsOn[dependsOn[providesApis[domain=x]]]", []string{"component:external"}},
 		{"kind=resource dependents[consumesApis[domain=x]]", []string{"resource:db"}},
 		{"kind=component rel[kind=resource type=database]", []string{"component:external", "component:provider"}},
+		{"subcomponentOf=provider", []string{"component:internal"}},
+		{"subcomponentOf[providesApis=shared]", []string{"component:internal"}},
+		{"subcomponents[consumesApis[domain=x]]", []string{"component:provider"}},
+		{"components=internal", []string{"system:sx"}},
+		{"components[consumesApis[namespace=other]]", []string{"system:sy"}},
+		{"apis[tag=production]", []string{"system:sy"}},
+		{"resources[type=database]", []string{"system:sy"}},
+		{"systems[components[name=internal]]", []string{"domain:x"}},
+		{"kind=domain !systems[apis[lifecycle=production]]", []string{"domain:x"}},
 		// Following a cycle is bounded by the query's explicit nesting depth.
 		{"name=external consumesApis[consumedBy[consumesApis[domain=x]]]", []string{"component:external"}},
 		// A known relationship on an inapplicable entity kind has no witnesses.

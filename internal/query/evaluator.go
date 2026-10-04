@@ -167,13 +167,19 @@ var attributeAccessors = map[string]attributeAccessor{
 			return nil, false
 		}
 	},
-	"consumesapis": relationshipAttribute("consumesapis"),
-	"providesapis": relationshipAttribute("providesapis"),
-	"dependson":    relationshipAttribute("dependson"),
-	"dependents":   relationshipAttribute("dependents"),
-	"providedby":   relationshipAttribute("providedby"),
-	"consumedby":   relationshipAttribute("consumedby"),
-	"rel":          relationshipAttribute("rel"),
+	"consumesapis":   relationshipAttribute("consumesapis"),
+	"providesapis":   relationshipAttribute("providesapis"),
+	"dependson":      relationshipAttribute("dependson"),
+	"dependents":     relationshipAttribute("dependents"),
+	"providedby":     relationshipAttribute("providedby"),
+	"consumedby":     relationshipAttribute("consumedby"),
+	"subcomponentof": relationshipAttribute("subcomponentof"),
+	"subcomponents":  relationshipAttribute("subcomponents"),
+	"components":     relationshipAttribute("components"),
+	"apis":           relationshipAttribute("apis"),
+	"resources":      relationshipAttribute("resources"),
+	"systems":        relationshipAttribute("systems"),
+	"rel":            relationshipAttribute("rel"),
 }
 
 // relatedEntities returns a slice of references to all entities that are directly
