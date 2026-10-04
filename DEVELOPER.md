@@ -141,23 +141,47 @@ extra configuration.
 
 ## Creating tags and releases
 
-Releases are only created from tags.
+Releases are only created from tags. Their notes come from
+[`CHANGELOG.md`](CHANGELOG.md), which follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Add user-facing
+changes to its `## [Unreleased]` section as they land, so that a release only
+needs to give that section a version. Upgrade notes, i.e. changes that require
+action from users, come first.
 
-### 1. Create and push the tag
+Versions follow [Semantic Versioning](https://semver.org/). Before 1.0, a
+breaking change increases the minor version.
+
+### 1. Update the changelog
+
+In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, add
+a new empty `## [Unreleased]` section above it, and update the comparison links
+at the bottom of the file. Commit and push.
+
+### 2. Create and push the tag
+
+Use an annotated tag:
 
 ```bash
-TAG="v0.12.3"
-git tag "$TAG"
+TAG="v0.17.0"
+git tag -a "$TAG" -m "$TAG"
 git push origin "$TAG"
 ```
 
-### 2. Create the release
+### 3. Create the release
 
-Use the GitHub CLI (`gh`) to create the release from the tag. 
-GitHub will automatically generate release notes based on the commit history.
+Use the GitHub CLI (`gh`) to create the release from the tag, with the
+version's changelog section as its notes and a link to the full diff:
 
 ```bash
-gh release create "$TAG" --generate-notes
+PREV=$(git describe --tags --abbrev=0 "$TAG^")
+NOTES="${TMPDIR:-/tmp}/swcat-release-notes.md"
+awk -v v="${TAG#v}" '
+  index($0, "## [" v "]") == 1 { p = 1; next }
+  /^## \[/ || /^\[[^]]*\]: / { p = 0 }
+  p
+' CHANGELOG.md > "$NOTES"
+printf '\n**Full Changelog**: https://github.com/dnswlt/swcat/compare/%s...%s\n' "$PREV" "$TAG" >> "$NOTES"
+gh release create "$TAG" --title "$TAG" --notes-file "$NOTES"
 ```
 
 (You might have to run `gh auth login` beforehand.)
@@ -173,12 +197,12 @@ make release-windows
 And append the generated archive to the `gh release create` command:
 
 ```bash
-gh release create "$TAG" --generate-notes "swcat-$TAG-windows-amd64.zip"
+gh release create "$TAG" --title "$TAG" --notes-file "$NOTES" "swcat-$TAG-windows-amd64.zip"
 ```
 
-### 3. Verification
+### 4. Verification
 
-Check that the release and its auto-generated notes look as expected on
+Check that the release and its notes look as expected on
 <https://github.com/dnswlt/swcat/releases>.
 
 Done!

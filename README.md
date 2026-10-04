@@ -8,5 +8,6 @@ It is inspired by the [backstage.io](https://backstage.io/)
 [Software Catalog](https://backstage.io/docs/features/software-catalog/).
 
 Visit <https://dnswlt.github.io/swcat/> for installation and usage instructions.
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 
 See [DEVELOPER.md](DEVELOPER.md) for information relevant to developers of `swcat`.
