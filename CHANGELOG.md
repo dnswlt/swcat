@@ -7,6 +7,8 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and swcat follows
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-08
+
 ### Upgrade notes
 
 - **Observed dependencies are replaced by observed endpoints.** External tools
@@ -92,5 +94,6 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and swcat follows
   the importer.
 - Diagrams with system boundaries lay out the same way on every render.
 
-[Unreleased]: https://github.com/dnswlt/swcat/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/dnswlt/swcat/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/dnswlt/swcat/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/dnswlt/swcat/compare/v0.16.0...v0.17.0
