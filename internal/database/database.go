@@ -166,6 +166,77 @@ func StoreObservations(ctx context.Context, db *sql.DB, e catalog.Entity) error 
 	return nil
 }
 
+// KeySelector selects observation keys: exactly Key, or all keys starting with
+// Prefix. Exactly one of the two must be set.
+type KeySelector struct {
+	Key    string
+	Prefix string
+}
+
+// EntityKeys lists observation keys of one entity.
+type EntityKeys struct {
+	EntityRef string
+	Keys      []string
+}
+
+// DeleteObservationsByKey deletes the observations whose key sel selects,
+// across all entities in db, including entities that no catalog revision
+// currently contains. It returns the deleted keys per entity, sorted by entity
+// and key. With dryRun, it deletes nothing and only reports.
+func DeleteObservationsByKey(ctx context.Context, db *sql.DB, sel KeySelector, dryRun bool) ([]EntityKeys, error) {
+	var where string
+	var args []any
+	switch {
+	case sel.Key != "" && sel.Prefix == "":
+		where, args = `key = ?`, []any{sel.Key}
+	case sel.Prefix != "" && sel.Key == "":
+		// Not LIKE, which would treat '%' and '_' in the prefix as wildcards.
+		where, args = `substr(key, 1, length(?)) = ?`, []any{sel.Prefix, sel.Prefix}
+	default:
+		return nil, fmt.Errorf("exactly one of key and prefix must be set")
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(ctx,
+		`SELECT entity_id, key FROM status_observations WHERE `+where+` ORDER BY entity_id, key`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query observations: %w", err)
+	}
+	var result []EntityKeys
+	for rows.Next() {
+		var entityRef, key string
+		if err := rows.Scan(&entityRef, &key); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan observation: %w", err)
+		}
+		if n := len(result); n == 0 || result[n-1].EntityRef != entityRef {
+			result = append(result, EntityKeys{EntityRef: entityRef})
+		}
+		result[len(result)-1].Keys = append(result[len(result)-1].Keys, key)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("iterate observations: %w", err)
+	}
+	rows.Close()
+
+	if dryRun || len(result) == 0 {
+		return result, nil
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM status_observations WHERE `+where, args...); err != nil {
+		return nil, fmt.Errorf("delete observations: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return result, nil
+}
+
 func RecreateTables(ctx context.Context, db *sql.DB, dropAll bool) error {
 
 	if dropAll {

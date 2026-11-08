@@ -2207,42 +2207,95 @@ func (s *Server) deleteObservedEndpoints(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	// Acquire write lock for the database updates.
+	deleted, err := s.deleteObservationsByKey(r.Context(), database.KeySelector{Key: key}, false)
+	if err != nil {
+		http.Error(w, "Failed to delete observed endpoints", http.StatusInternalServerError)
+		log.Printf("Failed to delete observation %q: %v", key, err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, "OK, deleted %q from %d entities\n", key, len(deleted))
+}
+
+// deletedObservations lists the observation keys deleted from one entity.
+type deletedObservations struct {
+	Entity string   `json:"entity"`
+	Keys   []string `json:"keys"`
+}
+
+// deleteObservationsBulk deletes the observations selected by the query from
+// every entity that carries them: either the exact key=, or all keys starting
+// with prefix=. Exactly one of them must be given, and neither may be blank, so
+// a request can never select all observations. With dryRun=true, it only
+// reports what would be deleted. The response lists the affected entities.
+func (s *Server) deleteObservationsBulk(w http.ResponseWriter, r *http.Request) {
+	if !s.canEditObservations() {
+		http.Error(w, "Cannot edit observations", http.StatusPreconditionFailed)
+		return
+	}
+	q := r.URL.Query()
+	key, prefix := q.Get("key"), q.Get("prefix")
+	if (key == "") == (prefix == "") {
+		http.Error(w, "Exactly one of the query parameters key= and prefix= is required", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(key+prefix) == "" {
+		http.Error(w, "key= and prefix= must not be blank", http.StatusBadRequest)
+		return
+	}
+	dryRun := false
+	if v := q.Get("dryRun"); v != "" {
+		var err error
+		if dryRun, err = strconv.ParseBool(v); err != nil {
+			http.Error(w, "dryRun= must be true or false", http.StatusBadRequest)
+			return
+		}
+	}
+
+	deleted, err := s.deleteObservationsByKey(r.Context(), database.KeySelector{Key: key, Prefix: prefix}, dryRun)
+	if err != nil {
+		http.Error(w, "Failed to delete observations", http.StatusInternalServerError)
+		log.Printf("Failed to delete observations (key=%q, prefix=%q): %v", key, prefix, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(map[string]any{"dryRun": dryRun, "deleted": deleted}); err != nil {
+		log.Printf("Failed to encode deleted observations as JSON: %v", err)
+	}
+}
+
+// deleteObservationsByKey deletes the observations sel selects from the
+// database, for all entities: also those absent from every loaded catalog
+// revision (e.g. deleted ones), whose rows would otherwise survive and
+// reappear if the entity returns. If anything was deleted, it clears the
+// cached catalogs, so they reload with the remaining observations on their next
+// request. It returns the deleted keys per entity,
+// sorted by entity. With dryRun, nothing is deleted.
+func (s *Server) deleteObservationsByKey(ctx context.Context, sel database.KeySelector, dryRun bool) ([]deletedObservations, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	data := s.getStoreData(r)
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-
-	// Delete the observation from each entity that carries it, persisting the
-	// remaining set per entity. StoreObservations rewrites all rows for the
-	// entity from its current in-memory observations, so we delete before store.
-	deleted := 0
-	for _, entity := range data.repo.AllEntities() {
-		status := entity.GetStatus()
-		if status == nil {
-			continue
-		}
-		if _, present := status.Observations[key]; !present {
-			continue
-		}
-		catalog.DeleteObservations(entity, []string{key})
-		if err := database.StoreObservations(ctx, s.db, entity); err != nil {
-			http.Error(w, "Failed to delete observed endpoints", http.StatusInternalServerError)
-			log.Printf("Failed to delete observation %q for %s: %v", key, entity.GetRef(), err)
-			return
-		}
-		// Observations can affect lint findings, so drop this entity's cached ones.
-		data.findingsCache.Remove(entity.GetRef().String())
-		deleted++
+	rows, err := database.DeleteObservationsByKey(ctx, s.db, sel, dryRun)
+	if err != nil {
+		return nil, err
 	}
 
-	// No need to clear storeDataMap: DeleteObservations already updated the
-	// in-memory entities in the cached repo, so the change is immediately visible.
-
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "OK, deleted %q from %d entities\n", key, deleted)
+	deleted := make([]deletedObservations, 0, len(rows))
+	for _, row := range rows {
+		deleted = append(deleted, deletedObservations{Entity: row.EntityRef, Keys: row.Keys})
+	}
+	if !dryRun && len(rows) > 0 {
+		// The default revision's entities (the only ones that load
+		// observations) still hold the deleted ones. Dropping the cache, as
+		// plugin runs do, is simpler than patching it.
+		s.storeDataMap = make(map[string]*storeData)
+	}
+	return deleted, nil
 }
 
 func (s *Server) serveAutocomplete(w http.ResponseWriter, r *http.Request) {
@@ -2898,6 +2951,10 @@ func (s *Server) routes() *http.ServeMux {
 			key := r.PathValue("key")
 			s.deleteObservation(w, r, entityRef, key)
 		})))
+	// Administratively remove observations by key or key prefix from every
+	// entity that carries them.
+	root.Handle("DELETE /catalog/observations", s.handleRefDataDispatch(
+		http.HandlerFunc(s.deleteObservationsBulk)))
 	// Lets external tools push observed (machine-detected) endpoints for a
 	// source entity. The source entity is named in the request body.
 	root.Handle("POST /catalog/observed-endpoints", s.handleRefDataDispatch(

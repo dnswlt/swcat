@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -223,5 +224,119 @@ func TestStoreObservations_Isolation(t *testing.T) {
 	}
 	if len(got2) != 1 {
 		t.Errorf("c2: expected 1, got %d", len(got2))
+	}
+}
+
+func TestDeleteObservationsByKey(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now().UTC()
+	obs := func(keys ...string) map[string]catalog.Observation {
+		m := map[string]catalog.Observation{}
+		for _, k := range keys {
+			m[k] = catalog.Observation{Value: mustJSON(t, "v"), Producer: "p", UpdatedAt: now}
+		}
+		return m
+	}
+	// "a%" checks that the prefix is not a LIKE pattern.
+	seed := func(t *testing.T) *sql.DB {
+		db := newTestDB(t)
+		for _, c := range []*catalog.Component{
+			newTestComponent("one", obs("deps/x", "deps/y", "deps-other", "a%b")),
+			newTestComponent("two", obs("deps/x", "keep", "abc")),
+		} {
+			if err := StoreObservations(ctx, db, c); err != nil {
+				t.Fatalf("StoreObservations: %v", err)
+			}
+		}
+		return db
+	}
+	keysOf := func(t *testing.T, db *sql.DB, name string) []string {
+		got, err := LoadObservations(ctx, db, "component:"+name)
+		if err != nil {
+			t.Fatalf("LoadObservations: %v", err)
+		}
+		var keys []string
+		for k := range got {
+			keys = append(keys, k)
+		}
+		slices.Sort(keys)
+		return keys
+	}
+
+	tests := []struct {
+		name             string
+		sel              KeySelector
+		dryRun           bool
+		wantDeleted      []EntityKeys
+		wantOne, wantTwo []string
+	}{
+		{
+			name: "key",
+			sel:  KeySelector{Key: "deps/x"},
+			wantDeleted: []EntityKeys{
+				{EntityRef: "component:one", Keys: []string{"deps/x"}},
+				{EntityRef: "component:two", Keys: []string{"deps/x"}},
+			},
+			wantOne: []string{"a%b", "deps-other", "deps/y"},
+			wantTwo: []string{"abc", "keep"},
+		},
+		{
+			name: "prefix",
+			sel:  KeySelector{Prefix: "deps/"},
+			wantDeleted: []EntityKeys{
+				{EntityRef: "component:one", Keys: []string{"deps/x", "deps/y"}},
+				{EntityRef: "component:two", Keys: []string{"deps/x"}},
+			},
+			wantOne: []string{"a%b", "deps-other"},
+			wantTwo: []string{"abc", "keep"},
+		},
+		{
+			name:        "prefix is not a LIKE pattern",
+			sel:         KeySelector{Prefix: "a%"},
+			wantDeleted: []EntityKeys{{EntityRef: "component:one", Keys: []string{"a%b"}}},
+			wantOne:     []string{"deps-other", "deps/x", "deps/y"},
+			wantTwo:     []string{"abc", "deps/x", "keep"},
+		},
+		{
+			name:   "dry run",
+			sel:    KeySelector{Prefix: "deps/"},
+			dryRun: true,
+			wantDeleted: []EntityKeys{
+				{EntityRef: "component:one", Keys: []string{"deps/x", "deps/y"}},
+				{EntityRef: "component:two", Keys: []string{"deps/x"}},
+			},
+			wantOne: []string{"a%b", "deps-other", "deps/x", "deps/y"},
+			wantTwo: []string{"abc", "deps/x", "keep"},
+		},
+		{
+			name:    "no match",
+			sel:     KeySelector{Key: "nope"},
+			wantOne: []string{"a%b", "deps-other", "deps/x", "deps/y"},
+			wantTwo: []string{"abc", "deps/x", "keep"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := seed(t)
+			deleted, err := DeleteObservationsByKey(ctx, db, tt.sel, tt.dryRun)
+			if err != nil {
+				t.Fatalf("DeleteObservationsByKey: %v", err)
+			}
+			if diff := cmp.Diff(tt.wantDeleted, deleted); diff != "" {
+				t.Errorf("deleted (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tt.wantOne, keysOf(t, db, "one")); diff != "" {
+				t.Errorf("one: remaining keys (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tt.wantTwo, keysOf(t, db, "two")); diff != "" {
+				t.Errorf("two: remaining keys (-want +got):\n%s", diff)
+			}
+		})
+	}
+
+	for _, sel := range []KeySelector{{}, {Key: "a", Prefix: "b"}} {
+		if _, err := DeleteObservationsByKey(ctx, newTestDB(t), sel, false); err == nil {
+			t.Errorf("selector %+v: want an error", sel)
+		}
 	}
 }

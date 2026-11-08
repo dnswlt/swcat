@@ -7,6 +7,13 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and swcat follows
 
 ## [Unreleased]
 
+### Added
+
+- `DELETE /catalog/observations?key=...` or `?prefix=...` removes observations
+  from all entities at once, with `dryRun=true` to preview. For example,
+  `prefix=swcat-deps/` removes the observed dependencies left over from
+  versions before 0.18.0.
+
 ## [0.18.0] - 2026-11-08
 
 ### Upgrade notes

@@ -184,6 +184,38 @@ curl -X DELETE \
   'http://localhost:9191/catalog/entities/component%3Amy-component/observations/swcat.io%2Flast-build'
 ```
 
+### Deleting observations from all entities
+
+Send a `DELETE` request to `/catalog/observations` to remove observations from
+**every** entity that carries them, including entities no longer in the catalog,
+selected by exactly one of these query parameters:
+
+- `key`: An exact observation key, e.g. `swcat.io/last-build`.
+- `prefix`: A key prefix, e.g. `swcat-deps/` for all keys under it. A prefix
+  matches as a plain string: `swcat-deps` would also match `swcat-deps-other`.
+
+Neither may be blank, so a single request cannot delete all observations. Add
+`dryRun=true` to see what would be deleted without deleting anything.
+
+```bash
+# Preview, then delete, the observations of all tools under "swcat-deps/".
+curl -X DELETE 'http://localhost:9191/catalog/observations?prefix=swcat-deps/&dryRun=true'
+curl -X DELETE 'http://localhost:9191/catalog/observations?prefix=swcat-deps/'
+```
+
+The response lists the affected entities and the keys deleted from each:
+
+```json
+{
+  "dryRun": false,
+  "deleted": [
+    {"entity": "component:my-component", "keys": ["swcat-deps/kafka-scanner"]}
+  ]
+}
+```
+
+Nothing matching is not an error: `deleted` is then empty.
+
 ## Reporting observed endpoints
 
 !!! tip
