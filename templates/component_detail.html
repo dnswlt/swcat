@@ -14,6 +14,7 @@
         {{ $readOnly := .ReadOnly }}
         {{ $customContent := .CustomContent }}
         {{ $findings := .Findings }}
+        {{ $observedEndpoints := .ObservedEndpoints }}
 
         {{ with .Component }}
         <div class="flex flex-col gap-2">
@@ -161,6 +162,8 @@
             </div>
         </div>
         {{ end }}
+
+        {{ template "observed_endpoints.html" $observedEndpoints }}
         {{ else }}
         <p class="text-center text-gray-500">Component not found</p>
         {{ end }}

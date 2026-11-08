@@ -24,7 +24,7 @@ func TestRelationshipEvaluation(t *testing.T) {
 	resolved := entityResolver{api.GetRef().String(): api}
 	tests := []struct {
 		query    string
-		resolver Resolver
+		resolver catalog.Resolver
 		want     bool
 	}{
 		{"consumesApis[name=api]", resolved, true},

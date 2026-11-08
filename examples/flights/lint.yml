@@ -1,8 +1,9 @@
-# Compare each Component's observed dependencies (reported via the
-# /catalog/observed-dependencies API and stored as "swcat-deps/*" status
-# observations) against its actual neighbors, and warn about observed
-# dependencies that are neither declared nor reachable through a shared API.
-# See scripts/add-observed-deps.sh for a way to populate observations.
+# Compare the dependencies implied by each Component's observed endpoints
+# (reported via the /catalog/observed-endpoints API and stored as
+# "swcat-endpoints/*" status observations) against its actual neighbors, and
+# warn about observed dependencies that are neither declared nor reachable
+# through a shared API.
+# See scripts/add-observed-endpoints.sh for a way to populate observations.
 checkDependencyCandidates: true
 
 celRules:

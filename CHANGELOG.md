@@ -7,6 +7,32 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and swcat follows
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- **Observed dependencies are replaced by observed endpoints.** External tools
+  now report how a Component communicates, its endpoints (e.g. topics) and the
+  counterparts each connects to, with `POST /catalog/observed-endpoints` and an
+  `ObservedEndpoints` message. `POST` and `DELETE
+  /catalog/observed-dependencies`, the `ObservedDependencies` message and the
+  `DependencyRelation` enum are removed. Reporting tools must be updated.
+  Observations stored under the old `swcat-deps/*` keys are ignored: delete them
+  with `DELETE /catalog/observed-dependencies/{detectedBy}` before upgrading,
+  or leave them, as they are no longer read.
+
+### Added
+
+- Component detail pages show an "Observed endpoints" table per reporting tool:
+  each endpoint with its direction, address and counterparts, sorted by
+  address, with counterparts the catalog declares no relationship with marked
+  as such.
+
+### Changed
+
+- The `dependency-candidate` lint check derives observed dependencies from
+  observed endpoints: a Component depends on the counterparts of its inbound
+  event endpoints and of its outbound request endpoints. Its evidence is the
+  addresses of the endpoints that link the two Components.
+
 ## [0.17.0] - 2026-10-04
 
 ### Upgrade notes

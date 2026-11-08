@@ -1237,18 +1237,24 @@ func TestCORS(t *testing.T) {
 	}
 }
 
-// setObservedDep attaches an "swcat-deps/<tool>" status observation to c,
-// naming target as a machine-detected dependency.
+// setObservedDep attaches an "swcat-endpoints/<tool>" status observation to c,
+// naming target as the counterpart of an inbound event endpoint, i.e. as a
+// machine-detected dependency of c.
 func setObservedDep(t *testing.T, c *catalog.Component, tool, target string) {
 	t.Helper()
-	val, err := json.Marshal(catalog.ObservedDependencies{
-		Dependencies: []catalog.ObservedDependency{{Target: catalog.MustParseRef(target)}},
+	val, err := json.Marshal(catalog.ObservedEndpoints{
+		Endpoints: []catalog.ObservedEndpoint{{
+			Address:      "some/topic",
+			Direction:    catalog.EndpointInbound,
+			Kind:         catalog.EndpointKindEvent,
+			Counterparts: []catalog.ObservedCounterpart{{Entity: catalog.MustParseRef(target)}},
+		}},
 	})
 	if err != nil {
-		t.Fatalf("marshal observed deps: %v", err)
+		t.Fatalf("marshal observed endpoints: %v", err)
 	}
 	if !catalog.MergeObservations(c, map[string]catalog.Observation{
-		catalog.ObservedDepsKeyPrefix + "/" + tool: {Value: val, Producer: tool},
+		catalog.ObservedEndpointsKeyPrefix + "/" + tool: {Value: val, Producer: tool},
 	}) {
 		t.Fatal("MergeObservations returned false")
 	}

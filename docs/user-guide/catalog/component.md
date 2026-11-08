@@ -42,6 +42,8 @@ spec:
     - resource:my-database
 ```
 
-swcat can also compare dependencies observed by external runtime tools with the
-relationships declared by Components. See
+External tools can report the endpoints they observe for a Component, e.g. the
+topics it publishes to or subscribes to, and which Components are on the other
+end. swcat shows them on the Component's detail page and can compare the
+dependencies they imply with the relationships declared by Components. See
 [Observed dependency linting](../linting/observed-dependencies.md).

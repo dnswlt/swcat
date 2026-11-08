@@ -262,7 +262,7 @@ type noRepository struct{}
 func (noRepository) GetRepository() *repo.Repository { return nil }
 
 // A catalog that cannot be loaded is a runtime failure, reported as an error.
-// As a query.Resolver, a nil *Repository is not nil, so Matches cannot catch it.
+// As a catalog.Resolver, a nil *Repository is not nil, so Matches cannot catch it.
 func TestRunWithoutCatalog(t *testing.T) {
 	registry, err := NewRegistry(&Config{Plugins: map[string]*Definition{
 		"timestamp": {Kind: "TimestampPlugin", Trigger: "consumesApis[name=x]"},

@@ -199,7 +199,7 @@ func NewRegistry(config *Config, services Services) (*Registry, error) {
 
 // Matches reports whether the plugin should run for e. The resolver is the
 // catalog that e belongs to, against which relationship predicates are evaluated.
-func (t *Trigger) Matches(e catalog.Entity, resolver query.Resolver) bool {
+func (t *Trigger) Matches(e catalog.Entity, resolver catalog.Resolver) bool {
 	if t.condition == nil {
 		return false // No trigger condition => never trigger
 	}
@@ -211,7 +211,7 @@ func (t *Trigger) Matches(e catalog.Entity, resolver query.Resolver) bool {
 
 // MatchingPlugins returns the names of the plugins that should run for e,
 // with predicates evaluated against the catalog that resolver gives access to.
-func (r *Registry) MatchingPlugins(e catalog.Entity, resolver query.Resolver) []string {
+func (r *Registry) MatchingPlugins(e catalog.Entity, resolver catalog.Resolver) []string {
 	var keys []string
 	for name, trigger := range r.triggers {
 		if trigger.Matches(e, resolver) {
@@ -238,7 +238,7 @@ func (r *Registry) Plugins() []string {
 func (r *Registry) Run(ctx context.Context, repoProvider RepositoryProvider, e catalog.Entity) (*RunResult, error) {
 	repository := repoProvider.GetRepository()
 	if repository == nil {
-		// Checked here: as a query.Resolver, a nil *Repository would not be nil.
+		// Checked here: as a catalog.Resolver, a nil *Repository would not be nil.
 		return nil, fmt.Errorf("no catalog available to run plugins for %s", e.GetRef())
 	}
 	matching := r.MatchingPlugins(e, repository)

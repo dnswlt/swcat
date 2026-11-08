@@ -17,9 +17,9 @@ architectural standards.
 
 ### 2. Observed Dependencies (Runtime Reconciliation)
 
-The [observed dependency check](observed-dependencies.md) compares dependencies
-reported by external runtime or messaging tools with the relationships modeled
-in the catalog. It warns about observed Component connections that are not
+The [observed dependency check](observed-dependencies.md) compares the
+dependencies implied by endpoints that external runtime or messaging tools
+report with the relationships modeled in the catalog. It warns about observed Component connections that are not
 represented by `dependsOn` or API usage. Enable it with
 `checkDependencyCandidates: true` in `lint.yml`.
 

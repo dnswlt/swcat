@@ -2,11 +2,6 @@ package query
 
 import "github.com/dnswlt/swcat/internal/catalog"
 
-// Resolver looks up a relationship target in the same catalog as the candidate.
-type Resolver interface {
-	Entity(ref *catalog.Ref) catalog.Entity
-}
-
 type relationshipAccessor func(catalog.Entity) []*catalog.Ref
 
 // Keep reference traversal and the corresponding string attributes in sync.

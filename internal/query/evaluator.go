@@ -328,7 +328,7 @@ func relatedEntities(e catalog.Entity) []*catalog.Ref {
 // Compile has validated the query, so evaluation cannot fail. A nil resolver is
 // a programming error and panics, whether or not the query uses relationships,
 // so that it shows up regardless of the query and the entity.
-func (ev *Evaluator) Matches(e catalog.Entity, resolver Resolver) bool {
+func (ev *Evaluator) Matches(e catalog.Entity, resolver catalog.Resolver) bool {
 	if resolver == nil {
 		panic("query: Matches requires a resolver")
 	}
@@ -336,7 +336,7 @@ func (ev *Evaluator) Matches(e catalog.Entity, resolver Resolver) bool {
 }
 
 // evaluateNode recursively walks the expression tree.
-func (ev *Evaluator) evaluateNode(e catalog.Entity, expr Expression, resolver Resolver) bool {
+func (ev *Evaluator) evaluateNode(e catalog.Entity, expr Expression, resolver catalog.Resolver) bool {
 	switch v := expr.(type) {
 	case *Term:
 		// A simple term matches against the entity's qualified name.

@@ -19,13 +19,14 @@ const maxEvidenceSamples = 3
 // checkDependencyCandidates reports observed dependencies of a Component that
 // are not reflected in the catalog.
 //
-// For the given component C it builds the undirected set of its actual
-// Component neighbors — components C declares a dependency on, components that
-// declare a dependency on C, and components reachable through a shared API (C
-// provides an API some component consumes, or C consumes an API some component
-// provides). It then walks C's observed dependencies (the "swcat-deps/*" status
-// observations) and emits a finding for every observed Component target that is
-// not among those neighbors.
+// For the given component C it builds the undirected set of its declared
+// Component neighbors (see catalog.DeclaredNeighbors). It then walks C's observed
+// endpoints (the "swcat-endpoints/*" status observations) and emits a finding
+// for every Component counterpart C depends on that is not among those
+// neighbors. C depends on the counterparts of its inbound event endpoints (it
+// consumes their events) and of its outbound request endpoints (it calls
+// them); the counterparts of its other endpoints depend on C, and are reported
+// on their own page, so each missing link is reported once, at the dependent.
 //
 // The comparison is undirected on purpose: an observed C->T dependency is
 // considered reflected as long as there is any declared edge between C and T (in
@@ -33,7 +34,7 @@ const maxEvidenceSamples = 3
 // opposite way does not produce a false finding.
 //
 // Only Component entities are checked; for any other kind it returns nil.
-func checkDependencyCandidates(e catalog.Entity, resolver Resolver) []Finding {
+func checkDependencyCandidates(e catalog.Entity, resolver catalog.Resolver) []Finding {
 	c, ok := e.(*catalog.Component)
 	if !ok {
 		return nil
@@ -43,12 +44,12 @@ func checkDependencyCandidates(e catalog.Entity, resolver Resolver) []Finding {
 		return nil
 	}
 
-	neighbors := componentNeighbors(c, resolver)
+	neighbors := catalog.DeclaredNeighbors(c, resolver)
 	self := c.GetRef().String()
 
 	// Collect missing observed targets, deduped by target ref. For each we
-	// gather the supporting evidence (e.g. the topic or endpoint that links the
-	// two components) and the tools that reported it as deduped sets.
+	// gather the supporting evidence (the endpoint addresses that link the two
+	// components) and the tools that reported it as deduped sets.
 	type missingDep struct {
 		ref      *catalog.Ref
 		evidence map[string]bool
@@ -57,32 +58,37 @@ func checkDependencyCandidates(e catalog.Entity, resolver Resolver) []Finding {
 	missing := make(map[string]*missingDep)
 
 	for name, obs := range status.Observations {
-		if !strings.HasPrefix(name, catalog.ObservedDepsKeyPrefix+"/") {
+		if !strings.HasPrefix(name, catalog.ObservedEndpointsKeyPrefix+"/") {
 			continue
 		}
-		od, err := catalog.ParseObservedDependencies(obs.Value)
+		oe, err := catalog.ParseObservedEndpoints(obs.Value)
 		if err != nil {
 			continue
 		}
-		for _, d := range od.Dependencies {
-			if d.Target == nil || d.Target.Kind != catalog.KindComponent {
+		for _, ep := range oe.Endpoints {
+			if !ep.SourceDependsOnCounterparts() {
 				continue
 			}
-			target := d.Target.String()
-			if target == self || neighbors[target] {
-				continue
-			}
-			m := missing[target]
-			if m == nil {
-				m = &missingDep{
-					ref:      d.Target,
-					evidence: make(map[string]bool),
-					tools:    make(map[string]bool),
+			for _, cp := range ep.Counterparts {
+				if cp.Entity == nil || cp.Entity.Kind != catalog.KindComponent {
+					continue
 				}
-				missing[target] = m
+				target := cp.Entity.String()
+				if target == self || neighbors[target] {
+					continue
+				}
+				m := missing[target]
+				if m == nil {
+					m = &missingDep{
+						ref:      cp.Entity,
+						evidence: make(map[string]bool),
+						tools:    make(map[string]bool),
+					}
+					missing[target] = m
+				}
+				addNonEmpty(m.evidence, ep.Address)
+				addNonEmpty(m.tools, obs.Producer)
 			}
-			addNonEmpty(m.evidence, d.Evidence...)
-			addNonEmpty(m.tools, obs.Producer)
 		}
 	}
 
@@ -113,55 +119,6 @@ func checkDependencyCandidates(e catalog.Entity, resolver Resolver) []Finding {
 		})
 	}
 	return findings
-}
-
-// componentNeighbors returns the set (keyed by ref string) of Component entities
-// that share an undirected edge with c, via declared dependencies (in either
-// direction) or through a shared API. c itself is never included.
-func componentNeighbors(c *catalog.Component, resolver Resolver) map[string]bool {
-	neighbors := make(map[string]bool)
-	add := func(r *catalog.Ref) {
-		if r != nil && r.Kind == catalog.KindComponent {
-			neighbors[r.String()] = true
-		}
-	}
-
-	// Declared dependencies and their inverses (components that depend on c).
-	for _, d := range c.Spec.DependsOn {
-		add(d.Ref)
-	}
-	for _, d := range c.GetDependents() {
-		add(d.Ref)
-	}
-
-	// Components reachable through a shared API.
-	for _, a := range c.Spec.ProvidesAPIs {
-		if api := lookupAPI(resolver, a.Ref); api != nil {
-			for _, consumer := range api.GetConsumers() {
-				add(consumer.Ref)
-			}
-		}
-	}
-	for _, a := range c.Spec.ConsumesAPIs {
-		if api := lookupAPI(resolver, a.Ref); api != nil {
-			for _, provider := range api.GetProviders() {
-				add(provider.Ref)
-			}
-		}
-	}
-
-	delete(neighbors, c.GetRef().String()) // never treat self as a neighbor
-	return neighbors
-}
-
-func lookupAPI(resolver Resolver, ref *catalog.Ref) *catalog.API {
-	if ref == nil {
-		return nil
-	}
-	if a, ok := resolver.Entity(ref).(*catalog.API); ok {
-		return a
-	}
-	return nil
 }
 
 // addNonEmpty adds each non-empty item to the set.

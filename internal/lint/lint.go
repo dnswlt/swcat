@@ -77,11 +77,11 @@ type Config struct {
 	// "swcat-lint/finding-*" observations and report those as findings.
 	CheckStatus bool `yaml:"checkStatus"`
 
-	// If true, the linter will, for each Component, compare its observed
-	// dependencies (status observations under "swcat-deps/*") against its
-	// actual neighbors (declared dependencies and components reachable through a
-	// shared API) and report observed dependencies that are not reflected in the
-	// catalog as findings. See checkDependencyCandidates. This check needs a
+	// If true, the linter will, for each Component, compare the dependencies
+	// implied by its observed endpoints (status observations under
+	// "swcat-endpoints/*") against its actual neighbors (declared dependencies
+	// and components reachable through a shared API) and report observed
+	// dependencies that are not reflected in the catalog as findings. See checkDependencyCandidates. This check needs a
 	// resolver (see Linter.LintWithResolver) and is skipped without one.
 	CheckDependencyCandidates bool `yaml:"checkDependencyCandidates"`
 
@@ -396,14 +396,6 @@ func (l *Linter) compileRule(r Rule) (compiledRule, error) {
 	}, nil
 }
 
-// Resolver looks up catalog entities by reference. Graph-based lint checks
-// (currently the dependency-candidate check) need it to traverse the entity
-// graph, e.g. to find the consumers/providers of an API. *repo.Repository
-// satisfies this interface.
-type Resolver interface {
-	Entity(ref *catalog.Ref) catalog.Entity
-}
-
 // Lint evaluates all applicable per-entity rules against the given entity.
 // Graph-based checks that require resolving references (the dependency-candidate
 // check) are skipped; use LintWithResolver to enable them.
@@ -414,7 +406,7 @@ func (l *Linter) Lint(e catalog.Entity) []Finding {
 // LintWithResolver evaluates all applicable rules against the given entity. When
 // resolver is non-nil, graph-based checks (the dependency-candidate check) are
 // also evaluated; resolver should be the repository the entity belongs to.
-func (l *Linter) LintWithResolver(e catalog.Entity, resolver Resolver) []Finding {
+func (l *Linter) LintWithResolver(e catalog.Entity, resolver catalog.Resolver) []Finding {
 	var findings []Finding
 
 	if len(l.celRules) > 0 {

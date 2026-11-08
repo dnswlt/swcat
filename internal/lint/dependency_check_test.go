@@ -13,31 +13,46 @@ type fakeResolver map[string]catalog.Entity
 
 func (f fakeResolver) Entity(ref *catalog.Ref) catalog.Entity { return f[ref.String()] }
 
-// setObservedDeps attaches an "swcat-deps/<tool>" observation listing targets
-// (given as ref strings) to c.
+// setObservedDeps attaches an "swcat-endpoints/<tool>" observation to c in
+// which c depends on each of targets (given as ref strings): one inbound event
+// endpoint per target, with the target as its counterpart.
 func setObservedDeps(t *testing.T, c *catalog.Component, tool string, targets ...string) {
 	t.Helper()
-	deps := make([]catalog.ObservedDependency, len(targets))
+	eps := make([]catalog.ObservedEndpoint, len(targets))
 	for i, target := range targets {
-		deps[i] = catalog.ObservedDependency{Target: catalog.MustParseRef(target)}
+		eps[i] = inbound("topic/"+target, catalog.MustParseRef(target))
 	}
-	setObservedDepDetails(t, c, tool, deps...)
+	setObservedEndpoints(t, c, tool, eps...)
 }
 
-// setObservedDepDetails attaches an "swcat-deps/<tool>" observation with fully
-// specified dependencies (including evidence) to c.
-func setObservedDepDetails(t *testing.T, c *catalog.Component, tool string, deps ...catalog.ObservedDependency) {
+// setObservedEndpoints attaches an "swcat-endpoints/<tool>" observation with
+// fully specified endpoints to c.
+func setObservedEndpoints(t *testing.T, c *catalog.Component, tool string, eps ...catalog.ObservedEndpoint) {
 	t.Helper()
-	od := catalog.ObservedDependencies{Dependencies: deps}
-	val, err := json.Marshal(od)
+	val, err := json.Marshal(catalog.ObservedEndpoints{Endpoints: eps})
 	if err != nil {
-		t.Fatalf("marshal observed deps: %v", err)
+		t.Fatalf("marshal observed endpoints: %v", err)
 	}
 	if !catalog.MergeObservations(c, map[string]catalog.Observation{
-		catalog.ObservedDepsKeyPrefix + "/" + tool: {Value: val, Producer: tool},
+		catalog.ObservedEndpointsKeyPrefix + "/" + tool: {Value: val, Producer: tool},
 	}) {
 		t.Fatal("MergeObservations returned false")
 	}
+}
+
+// endpoint returns an observed endpoint with the given counterpart entities.
+func endpoint(address, direction, kind string, counterparts ...*catalog.Ref) catalog.ObservedEndpoint {
+	ep := catalog.ObservedEndpoint{Address: address, Direction: direction, Kind: kind}
+	for _, r := range counterparts {
+		ep.Counterparts = append(ep.Counterparts, catalog.ObservedCounterpart{Entity: r})
+	}
+	return ep
+}
+
+// inbound returns an inbound event endpoint: the source consumes the
+// counterparts' events, so it depends on them.
+func inbound(address string, counterparts ...*catalog.Ref) catalog.ObservedEndpoint {
+	return endpoint(address, catalog.EndpointInbound, catalog.EndpointKindEvent, counterparts...)
 }
 
 func ref(s string) *catalog.Ref { return catalog.MustParseRef(s) }
@@ -112,11 +127,10 @@ func TestCheckDependencyCandidates_FlagsOnlyUnreflected(t *testing.T) {
 
 func TestCheckDependencyCandidates_IncludesEvidence(t *testing.T) {
 	c, resolver := buildComponentGraph()
-	setObservedDepDetails(t, c, "traffic-scanner",
-		catalog.ObservedDependency{
-			Target:   ref("component:default/missing"),
-			Evidence: []string{"topic:flights.events", "POST /internal/pay"},
-		},
+	setObservedEndpoints(t, c, "traffic-scanner",
+		inbound("flights/events", ref("component:default/missing")),
+		endpoint("POST /internal/pay", catalog.EndpointOutbound, catalog.EndpointKindRequest,
+			ref("component:default/missing")),
 	)
 
 	findings := checkDependencyCandidates(c, resolver)
@@ -124,7 +138,7 @@ func TestCheckDependencyCandidates_IncludesEvidence(t *testing.T) {
 		t.Fatalf("got %d findings, want 1:\n%s", len(findings), messages(findings))
 	}
 	msg := findings[0].Message
-	for _, want := range []string{"topic:flights.events", "POST /internal/pay", "traffic-scanner"} {
+	for _, want := range []string{"flights/events", "POST /internal/pay", "traffic-scanner"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("message missing %q: %q", want, msg)
 		}
@@ -137,12 +151,11 @@ func TestCheckDependencyCandidates_IncludesEvidence(t *testing.T) {
 
 func TestCheckDependencyCandidates_CapsEvidenceSamples(t *testing.T) {
 	c, resolver := buildComponentGraph()
-	setObservedDepDetails(t, c, "traffic-scanner",
-		catalog.ObservedDependency{
-			Target:   ref("component:default/missing"),
-			Evidence: []string{"ev-1", "ev-2", "ev-3", "ev-4", "ev-5"},
-		},
-	)
+	var eps []catalog.ObservedEndpoint
+	for _, address := range []string{"ev-1", "ev-2", "ev-3", "ev-4", "ev-5"} {
+		eps = append(eps, inbound(address, ref("component:default/missing")))
+	}
+	setObservedEndpoints(t, c, "traffic-scanner", eps...)
 
 	findings := checkDependencyCandidates(c, resolver)
 	if len(findings) != 1 {
@@ -159,6 +172,42 @@ func TestCheckDependencyCandidates_CapsEvidenceSamples(t *testing.T) {
 		if strings.Contains(msg, notWant) {
 			t.Errorf("message should not list %q (capped): %q", notWant, msg)
 		}
+	}
+}
+
+func TestCheckDependencyCandidates_OnlyWhereSourceDepends(t *testing.T) {
+	c, resolver := buildComponentGraph()
+	setObservedEndpoints(t, c, "test-tool",
+		// c depends on these counterparts: findings.
+		endpoint("in/event", catalog.EndpointInbound, catalog.EndpointKindEvent, ref("component:default/producer")),
+		endpoint("out/request", catalog.EndpointOutbound, catalog.EndpointKindRequest, ref("component:default/replier")),
+		// These counterparts depend on c: reported on their own page, not here.
+		endpoint("out/event", catalog.EndpointOutbound, catalog.EndpointKindEvent, ref("component:default/consumer")),
+		endpoint("in/request", catalog.EndpointInbound, catalog.EndpointKindRequest, ref("component:default/requester")),
+	)
+
+	findings := checkDependencyCandidates(c, resolver)
+	msg := messages(findings)
+	if len(findings) != 2 {
+		t.Fatalf("got %d findings, want 2:\n%s", len(findings), msg)
+	}
+	for _, want := range []string{"component:producer", "component:replier"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("findings do not mention %q:\n%s", want, msg)
+		}
+	}
+}
+
+func TestCheckDependencyCandidates_ExternalCounterpartsIgnored(t *testing.T) {
+	c, resolver := buildComponentGraph()
+	setObservedEndpoints(t, c, "test-tool", catalog.ObservedEndpoint{
+		Address:      "in/event",
+		Direction:    catalog.EndpointInbound,
+		Kind:         catalog.EndpointKindEvent,
+		Counterparts: []catalog.ObservedCounterpart{{External: "com.example:outside"}},
+	})
+	if findings := checkDependencyCandidates(c, resolver); len(findings) != 0 {
+		t.Fatalf("got %d findings, want 0:\n%s", len(findings), messages(findings))
 	}
 }
 

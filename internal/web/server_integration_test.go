@@ -543,7 +543,7 @@ func TestIntegration_UpdateObservation_WriteThenRead(t *testing.T) {
 	}
 }
 
-func TestIntegration_UpdateObservedDependencies_WriteThenRead(t *testing.T) {
+func TestIntegration_UpdateObservedEndpoints_WriteThenRead(t *testing.T) {
 	ts, _ := setupIntegrationServer(t)
 	t.Cleanup(func() { ts.Close() })
 
@@ -553,26 +553,34 @@ func TestIntegration_UpdateObservedDependencies_WriteThenRead(t *testing.T) {
 	const (
 		sourceName = "flights-search-backend"
 		detectedBy = "kafka-scanner"
-		obsKey     = "swcat-deps/kafka-scanner"
+		obsKey     = "swcat-endpoints/kafka-scanner"
 	)
 
 	// Build the request via the generated proto type and protojson, so the
 	// wire schema (field names, enum spellings) is exercised exactly as a real
 	// external tool would produce it. observed_at is intentionally omitted to
 	// verify the server defaults it.
-	reqPB := &catalog_pb.ObservedDependencies{
+	reqPB := &catalog_pb.ObservedEndpoints{
 		Source:     &catalog_pb.Ref{Kind: "Component", Name: sourceName},
 		DetectedBy: detectedBy,
-		Dependencies: []*catalog_pb.ObservedDependency{
+		Endpoints: []*catalog_pb.Endpoint{
 			{
-				Target:   &catalog_pb.Ref{Kind: "Component", Name: "cache-server"},
-				Relation: catalog_pb.DependencyRelation_DEPENDENCY_RELATION_CALLS,
-				Evidence: []string{"GET /cache/{id}"},
+				Address:   "GET /cache/{id}",
+				Direction: catalog_pb.EndpointDirection_ENDPOINT_DIRECTION_OUTBOUND,
+				Kind:      catalog_pb.EndpointKind_ENDPOINT_KIND_REQUEST,
+				Counterparts: []*catalog_pb.Counterpart{
+					{Entity: &catalog_pb.Ref{Kind: "Component", Name: "cache-server"}},
+				},
 			},
 			{
-				Target:   &catalog_pb.Ref{Kind: "Resource", Name: "flights-inmem-cache"},
-				Relation: catalog_pb.DependencyRelation_DEPENDENCY_RELATION_CONSUMES,
-				Evidence: []string{"topic:flights.updates"},
+				Address:    "flights.updates",
+				Direction:  catalog_pb.EndpointDirection_ENDPOINT_DIRECTION_INBOUND,
+				Technology: "kafka",
+				Names:      []string{"flightUpdates-in-0"},
+				Counterparts: []*catalog_pb.Counterpart{
+					{Entity: &catalog_pb.Ref{Kind: "Resource", Name: "flights-inmem-cache"}},
+					{External: "com.example:flights-importer", Address: "flights.*"},
+				},
 			},
 		},
 	}
@@ -581,11 +589,11 @@ func TestIntegration_UpdateObservedDependencies_WriteThenRead(t *testing.T) {
 		t.Fatalf("marshal request: %v", err)
 	}
 
-	// Write: POST the observed dependencies.
-	postURL := ts.URL + "/catalog/observed-dependencies"
+	// Write: POST the observed endpoints.
+	postURL := ts.URL + "/catalog/observed-endpoints"
 	resp, err := client.Post(postURL, "application/json", strings.NewReader(string(reqBody)))
 	if err != nil {
-		t.Fatalf("POST observed dependencies: %v", err)
+		t.Fatalf("POST observed endpoints: %v", err)
 	}
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
@@ -594,7 +602,7 @@ func TestIntegration_UpdateObservedDependencies_WriteThenRead(t *testing.T) {
 	}
 
 	// Read back via the public JSON API and locate the observation written
-	// under the well-known "swcat-deps/<detected_by>" key.
+	// under the well-known "swcat-endpoints/<detected_by>" key.
 	entity := fetchComponentByName(t, client, ts.URL, sourceName)
 	got := entity.GetStatus().GetObservations()[obsKey]
 	if got == nil {
@@ -610,56 +618,60 @@ func TestIntegration_UpdateObservedDependencies_WriteThenRead(t *testing.T) {
 		t.Error("UpdatedAt is missing/zero, want a server-assigned timestamp")
 	}
 
-	// The stored value is a catalog.ObservedDependencies serialized as JSON.
+	// The stored value is a catalog.ObservedEndpoints serialized as JSON.
 	// Round-trip it back through the domain parser (proto Value -> JSON ->
-	// ParseObservedDependencies) and assert on the typed result.
+	// ParseObservedEndpoints) and assert on the typed result.
 	valJSON, err := protojson.Marshal(got.GetValue())
 	if err != nil {
 		t.Fatalf("marshal observation value: %v", err)
 	}
-	od, err := catalog.ParseObservedDependencies(valJSON)
+	oe, err := catalog.ParseObservedEndpoints(valJSON)
 	if err != nil {
-		t.Fatalf("ParseObservedDependencies: %v\nvalue: %s", err, valJSON)
+		t.Fatalf("ParseObservedEndpoints: %v\nvalue: %s", err, valJSON)
 	}
-	if len(od.Dependencies) != 2 {
-		t.Fatalf("got %d dependencies, want 2: %+v", len(od.Dependencies), od.Dependencies)
-	}
-
-	byTarget := make(map[string]catalog.ObservedDependency, len(od.Dependencies))
-	for _, d := range od.Dependencies {
-		if d.Target == nil {
-			t.Fatalf("dependency with nil target: %+v", d)
-		}
-		byTarget[d.Target.Name] = d
+	if len(oe.Endpoints) != 2 {
+		t.Fatalf("got %d endpoints, want 2: %+v", len(oe.Endpoints), oe.Endpoints)
 	}
 
-	if d, ok := byTarget["cache-server"]; !ok {
-		t.Error("missing dependency on cache-server")
+	byAddress := make(map[string]catalog.ObservedEndpoint, len(oe.Endpoints))
+	for _, ep := range oe.Endpoints {
+		byAddress[ep.Address] = ep
+	}
+
+	if ep, ok := byAddress["GET /cache/{id}"]; !ok {
+		t.Error("missing endpoint GET /cache/{id}")
 	} else {
-		if d.Target.Kind != catalog.KindComponent {
-			t.Errorf("cache-server target kind = %q, want %q", d.Target.Kind, catalog.KindComponent)
+		if ep.Direction != catalog.EndpointOutbound || ep.Kind != catalog.EndpointKindRequest {
+			t.Errorf("GET /cache/{id}: direction/kind = %s/%s, want outbound/request", ep.Direction, ep.Kind)
 		}
-		if d.Relation != "calls" {
-			t.Errorf("cache-server relation = %q, want %q", d.Relation, "calls")
-		}
-		if len(d.Evidence) != 1 || d.Evidence[0] != "GET /cache/{id}" {
-			t.Errorf("cache-server evidence = %v, want [GET /cache/{id}]", d.Evidence)
+		if len(ep.Counterparts) != 1 || ep.Counterparts[0].Entity == nil ||
+			ep.Counterparts[0].Entity.Kind != catalog.KindComponent || ep.Counterparts[0].Entity.Name != "cache-server" {
+			t.Errorf("GET /cache/{id}: counterparts = %+v, want component cache-server", ep.Counterparts)
 		}
 	}
 
-	if d, ok := byTarget["flights-inmem-cache"]; !ok {
-		t.Error("missing dependency on flights-inmem-cache")
+	if ep, ok := byAddress["flights.updates"]; !ok {
+		t.Error("missing endpoint flights.updates")
 	} else {
-		if d.Target.Kind != catalog.KindResource {
-			t.Errorf("flights-inmem-cache target kind = %q, want %q", d.Target.Kind, catalog.KindResource)
+		if ep.Direction != catalog.EndpointInbound || ep.Kind != catalog.EndpointKindEvent {
+			t.Errorf("flights.updates: direction/kind = %s/%s, want inbound/event", ep.Direction, ep.Kind)
 		}
-		if d.Relation != "consumes" {
-			t.Errorf("flights-inmem-cache relation = %q, want %q", d.Relation, "consumes")
+		if ep.Technology != "kafka" || len(ep.Names) != 1 || ep.Names[0] != "flightUpdates-in-0" {
+			t.Errorf("flights.updates: technology/names = %q/%v", ep.Technology, ep.Names)
+		}
+		if len(ep.Counterparts) != 2 {
+			t.Fatalf("flights.updates: got %d counterparts, want 2: %+v", len(ep.Counterparts), ep.Counterparts)
+		}
+		if cp := ep.Counterparts[0]; cp.Entity == nil || cp.Entity.Kind != catalog.KindResource {
+			t.Errorf("flights.updates: first counterpart = %+v, want the resource", cp)
+		}
+		if cp := ep.Counterparts[1]; cp.External != "com.example:flights-importer" || cp.Address != "flights.*" {
+			t.Errorf("flights.updates: second counterpart = %+v, want the external importer", cp)
 		}
 	}
 }
 
-func TestIntegration_UpdateObservedDependencies_Validation(t *testing.T) {
+func TestIntegration_UpdateObservedEndpoints_Validation(t *testing.T) {
 	ts, _ := setupIntegrationServer(t)
 	t.Cleanup(func() { ts.Close() })
 
@@ -667,88 +679,106 @@ func TestIntegration_UpdateObservedDependencies_Validation(t *testing.T) {
 	client.Timeout = 10 * time.Second
 
 	validSource := &catalog_pb.Ref{Kind: "Component", Name: "flights-search-backend"}
-	validTarget := func() *catalog_pb.ObservedDependency {
-		return &catalog_pb.ObservedDependency{
-			Target:   &catalog_pb.Ref{Kind: "Component", Name: "cache-server"},
-			Relation: catalog_pb.DependencyRelation_DEPENDENCY_RELATION_CALLS,
-		}
+	endpointTo := func(counterpart *catalog_pb.Counterpart) []*catalog_pb.Endpoint {
+		return []*catalog_pb.Endpoint{{
+			Address:      "GET /cache/{id}",
+			Direction:    catalog_pb.EndpointDirection_ENDPOINT_DIRECTION_OUTBOUND,
+			Kind:         catalog_pb.EndpointKind_ENDPOINT_KIND_REQUEST,
+			Counterparts: []*catalog_pb.Counterpart{counterpart},
+		}}
+	}
+	validEndpoints := func() []*catalog_pb.Endpoint {
+		return endpointTo(&catalog_pb.Counterpart{Entity: &catalog_pb.Ref{Kind: "Component", Name: "cache-server"}})
 	}
 
 	tests := []struct {
 		name       string
-		req        *catalog_pb.ObservedDependencies
+		req        *catalog_pb.ObservedEndpoints
 		wantStatus int
 	}{
 		{
 			name: "empty detected_by",
-			req: &catalog_pb.ObservedDependencies{
-				Source:       validSource,
-				DetectedBy:   "",
-				Dependencies: []*catalog_pb.ObservedDependency{validTarget()},
+			req: &catalog_pb.ObservedEndpoints{
+				Source:     validSource,
+				DetectedBy: "",
+				Endpoints:  validEndpoints(),
 			},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name: "non hyphenated detected_by",
-			req: &catalog_pb.ObservedDependencies{
-				Source:       validSource,
-				DetectedBy:   "Bad_Source", // uppercase + underscore: not a valid key segment
-				Dependencies: []*catalog_pb.ObservedDependency{validTarget()},
+			req: &catalog_pb.ObservedEndpoints{
+				Source:     validSource,
+				DetectedBy: "Bad_Source", // uppercase + underscore: not a valid key segment
+				Endpoints:  validEndpoints(),
 			},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name: "missing source",
-			req: &catalog_pb.ObservedDependencies{
-				DetectedBy:   "kafka-scanner",
-				Dependencies: []*catalog_pb.ObservedDependency{validTarget()},
+			req: &catalog_pb.ObservedEndpoints{
+				DetectedBy: "kafka-scanner",
+				Endpoints:  validEndpoints(),
 			},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name: "invalid source kind",
-			req: &catalog_pb.ObservedDependencies{
-				Source:       &catalog_pb.Ref{Kind: "Banana", Name: "flights-search-backend"},
-				DetectedBy:   "kafka-scanner",
-				Dependencies: []*catalog_pb.ObservedDependency{validTarget()},
+			req: &catalog_pb.ObservedEndpoints{
+				Source:     &catalog_pb.Ref{Kind: "Banana", Name: "flights-search-backend"},
+				DetectedBy: "kafka-scanner",
+				Endpoints:  validEndpoints(),
 			},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
-			name: "invalid target kind",
-			req: &catalog_pb.ObservedDependencies{
+			name: "missing direction",
+			req: &catalog_pb.ObservedEndpoints{
 				Source:     validSource,
 				DetectedBy: "kafka-scanner",
-				Dependencies: []*catalog_pb.ObservedDependency{{
-					Target: &catalog_pb.Ref{Kind: "Banana", Name: "cache-server"},
-				}},
+				Endpoints:  []*catalog_pb.Endpoint{{Address: "a/topic"}},
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "invalid counterpart kind",
+			req: &catalog_pb.ObservedEndpoints{
+				Source:     validSource,
+				DetectedBy: "kafka-scanner",
+				Endpoints:  endpointTo(&catalog_pb.Counterpart{Entity: &catalog_pb.Ref{Kind: "Banana", Name: "cache-server"}}),
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "counterpart without entity or external",
+			req: &catalog_pb.ObservedEndpoints{
+				Source:     validSource,
+				DetectedBy: "kafka-scanner",
+				Endpoints:  endpointTo(&catalog_pb.Counterpart{Address: "a/topic"}),
 			},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name: "unknown source entity",
-			req: &catalog_pb.ObservedDependencies{
-				Source:       &catalog_pb.Ref{Kind: "Component", Name: "does-not-exist"},
-				DetectedBy:   "kafka-scanner",
-				Dependencies: []*catalog_pb.ObservedDependency{validTarget()},
+			req: &catalog_pb.ObservedEndpoints{
+				Source:     &catalog_pb.Ref{Kind: "Component", Name: "does-not-exist"},
+				DetectedBy: "kafka-scanner",
+				Endpoints:  validEndpoints(),
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
-			name: "unknown target entity",
-			req: &catalog_pb.ObservedDependencies{
+			name: "unknown counterpart entity",
+			req: &catalog_pb.ObservedEndpoints{
 				Source:     validSource,
 				DetectedBy: "kafka-scanner",
-				Dependencies: []*catalog_pb.ObservedDependency{{
-					Target:   &catalog_pb.Ref{Kind: "Component", Name: "does-not-exist"},
-					Relation: catalog_pb.DependencyRelation_DEPENDENCY_RELATION_CALLS,
-				}},
+				Endpoints:  endpointTo(&catalog_pb.Counterpart{Entity: &catalog_pb.Ref{Kind: "Component", Name: "does-not-exist"}}),
 			},
 			wantStatus: http.StatusNotFound,
 		},
 	}
 
-	postURL := ts.URL + "/catalog/observed-dependencies"
+	postURL := ts.URL + "/catalog/observed-endpoints"
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			reqBody, err := protojson.Marshal(tc.req)

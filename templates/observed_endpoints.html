@@ -1,0 +1,89 @@
+<!-- Endpoints observed by external tools (status observations "swcat-endpoints/*"), one table per tool. -->
+{{ range . }}
+<details class="border rounded-lg" {{ if .Open }}open{{ end }}>
+    <summary class="font-semibold bg-gray-100 px-3 py-1 rounded-t-lg cursor-pointer">
+        Observed endpoints
+        <span class="font-normal text-sm text-gray-500">({{ len .Rows }}, detected by {{ .Tool }})</span>
+        {{ if .Undeclared }}
+        <span class="ml-1 text-xs font-bold bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded border border-yellow-200"
+            title="Counterparts the catalog declares no relationship with">{{ .Undeclared }} not declared</span>
+        {{ end }}
+    </summary>
+    {{ if .Err }}
+    <div class="custom-content-error">
+        <strong>Error:</strong> {{ .Err }}
+    </div>
+    {{ else if .Rows }}
+    <div class="max-h-96 overflow-y-auto">
+        <table class="w-full text-sm">
+            <thead class="sticky top-0 bg-white text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <tr>
+                    <th class="pl-3 py-1"><span class="sr-only">Direction</span></th>
+                    <th class="px-3 py-1">Address</th>
+                    <th class="px-3 py-1">Counterparts</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ range .Rows }}
+                <tr class="border-t align-baseline">
+                    <td class="pl-3 py-1 text-gray-400" title="{{ .ModeTitle }}">
+                        <span class="sr-only">{{ .ModeTitle }}</span>
+                        {{/* The vertical bar is the component itself. */}}
+                        <svg class="inline-block h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            {{ if eq .Mode "in" }}
+                            <path d="M20 4v16M3 12h12M11 8l4 4-4 4" />
+                            {{ else if eq .Mode "out" }}
+                            <path d="M4 4v16M8 12h12M16 8l4 4-4 4" />
+                            {{ else if eq .Mode "request" }}
+                            <path d="M4 4v16M8 8h12M16 4l4 4-4 4M20 16H8M12 12l-4 4 4 4" />
+                            {{ else if eq .Mode "reply" }}
+                            <path d="M20 4v16M4 8h12M12 4l4 4-4 4M16 16H4M8 12l-4 4 4 4" />
+                            {{ end }}
+                        </svg>
+                    </td>
+                    <td class="px-3 py-1 font-mono text-xs break-all"
+                        {{ if or .Names .Technology }}title="{{ .Technology }}{{ if and .Technology .Names }}: {{ end }}{{ strJoin .Names ", " }}"{{ end }}>{{ .Address }}</td>
+                    <td class="px-3 py-1">
+                        {{ range .Counterparts }}
+                        <div>
+                            {{ if .Ref }}
+                            <a href="{{ .Ref | toURL }}" class="text-blue-600 hover:underline">{{ .Ref.QName }}</a>
+                            {{ else }}
+                            <span class="text-gray-700" title="Not in the catalog">{{ .External }}</span>
+                            {{ end }}
+                            {{ if .Undeclared }}
+                            <span class="ml-1 text-xs font-bold bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded border border-yellow-200"
+                                title="The catalog declares no relationship with this component">not declared</span>
+                            {{ end }}
+                        </div>
+                        {{ else }}
+                        <span class="text-gray-400" title="No counterpart observed">&ndash;</span>
+                        {{ end }}
+                    </td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    </div>
+    {{ else }}
+    <p class="px-3 py-1.5 text-sm text-gray-500">No endpoints observed.</p>
+    {{ end }}
+    {{ if or (not .UpdatedAt.IsZero) .Version }}
+    <dl class="px-3 py-1.5 border-t flex flex-wrap gap-x-5 gap-y-0.5 text-xs text-gray-500">
+        {{ if not .UpdatedAt.IsZero }}
+        <div class="flex gap-1">
+            <dt>Updated</dt>
+            <dd>{{ .UpdatedAt.Format "2006-01-02 15:04" }}</dd>
+        </div>
+        {{ end }}
+        {{ with .Version }}
+        <div class="flex gap-1">
+            <dt>Version</dt>
+            <dd>{{ . }}</dd>
+        </div>
+        {{ end }}
+    </dl>
+    {{ end }}
+</details>
+{{ end }}

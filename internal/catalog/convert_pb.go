@@ -60,22 +60,6 @@ func RefFromPB(r *catalog_pb.Ref) (*Ref, error) {
 	})
 }
 
-// DependencyRelationLabel returns the short, stable string form of a
-// DependencyRelation, suitable for storing and displaying. An unspecified
-// relation degrades to the generic "dependency".
-func DependencyRelationLabel(r catalog_pb.DependencyRelation) string {
-	switch r {
-	case catalog_pb.DependencyRelation_DEPENDENCY_RELATION_CALLS:
-		return "calls"
-	case catalog_pb.DependencyRelation_DEPENDENCY_RELATION_PRODUCES:
-		return "produces"
-	case catalog_pb.DependencyRelation_DEPENDENCY_RELATION_CONSUMES:
-		return "consumes"
-	default:
-		return "dependency"
-	}
-}
-
 func labelRefToPB(r *LabelRef) *catalog_pb.LabelRef {
 	if r == nil {
 		return nil

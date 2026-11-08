@@ -843,6 +843,7 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 	params["Comments"] = activeComments
 	params["Entity"] = component.GetRef()
 	params["Findings"] = s.getFindings(data, component)
+	params["ObservedEndpoints"] = observedEndpointsSections(component, data.repo)
 
 	s.setCustomContent(component, &data.config.UI, params)
 
@@ -2092,12 +2093,12 @@ func (s *Server) deleteObservation(w http.ResponseWriter, r *http.Request, entit
 	fmt.Fprintln(w, "OK")
 }
 
-// updateObservedDependencies lets external tools push the dependencies they
-// observed for a source entity (see the ObservedDependencies message in
-// proto/swcat/catalog/v1/catalog.proto). The reported dependencies are stored
-// as a single status observation under the key "swcat-deps/<detected_by>", so
+// updateObservedEndpoints lets external tools push the endpoints they observed
+// for a source entity (see the ObservedEndpoints message in
+// proto/swcat/catalog/v1/catalog.proto). The reported endpoints are stored as a
+// single status observation under the key "swcat-endpoints/<detected_by>", so
 // each detecting tool owns one observation and re-reporting replaces it.
-func (s *Server) updateObservedDependencies(w http.ResponseWriter, r *http.Request) {
+func (s *Server) updateObservedEndpoints(w http.ResponseWriter, r *http.Request) {
 	if !s.canEditObservations() {
 		http.Error(w, "Cannot edit observations", http.StatusPreconditionFailed)
 		return
@@ -2108,47 +2109,47 @@ func (s *Server) updateObservedDependencies(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return
 	}
-	var depsPB catalog_pb.ObservedDependencies
-	if err := protojson.Unmarshal(body, &depsPB); err != nil {
-		http.Error(w, "Failed to parse request body as ObservedDependencies", http.StatusBadRequest)
+	var epsPB catalog_pb.ObservedEndpoints
+	if err := protojson.Unmarshal(body, &epsPB); err != nil {
+		http.Error(w, "Failed to parse request body as ObservedEndpoints", http.StatusBadRequest)
 		return
 	}
 
 	// detected_by is required and, because it forms the status observation key
-	// "swcat-deps/<detected_by>", must be a hyphen-separated source identifier.
-	detectedBy := strings.TrimSpace(depsPB.DetectedBy)
+	// "swcat-endpoints/<detected_by>", must be a hyphen-separated source identifier.
+	detectedBy := strings.TrimSpace(epsPB.DetectedBy)
 	if detectedBy == "" {
 		http.Error(w, "'detected_by' is required", http.StatusBadRequest)
 		return
 	}
-	key, ok := catalog.ObservedDepsKey(detectedBy)
+	key, ok := catalog.ObservedEndpointsKey(detectedBy)
 	if !ok {
 		http.Error(w, "'detected_by' must be a hyphen-separated identifier, e.g. \"kafka-scanner\"", http.StatusBadRequest)
 		return
 	}
 
 	// Resolve the source entity reference and verify it exists.
-	if depsPB.Source == nil {
+	if epsPB.Source == nil {
 		http.Error(w, "'source' is required", http.StatusBadRequest)
 		return
 	}
-	srcRef, err := catalog.RefFromPB(depsPB.Source)
+	srcRef, err := catalog.RefFromPB(epsPB.Source)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid 'source' reference: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	// Convert and validate the payload (parses and validates every target ref).
-	observed, err := catalog.ObservedDependenciesFromPB(&depsPB)
+	// Convert and validate the payload (parses and validates every counterpart ref).
+	observed, err := catalog.ObservedEndpointsFromPB(&epsPB)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Invalid observed dependencies: %v", err), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("Invalid observed endpoints: %v", err), http.StatusBadRequest)
 		return
 	}
 	// observed_at maps to Observation.UpdatedAt; default to the receive time
 	// when the client omits it.
 	observedAt := time.Now()
-	if depsPB.ObservedAt != nil {
-		observedAt = depsPB.ObservedAt.AsTime()
+	if epsPB.ObservedAt != nil {
+		observedAt = epsPB.ObservedAt.AsTime()
 	}
 
 	data := s.getStoreData(r)
@@ -2158,25 +2159,28 @@ func (s *Server) updateObservedDependencies(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Reference integrity: every target must exist in the catalog.
-	for i, d := range observed.Dependencies {
-		if data.repo.Entity(d.Target) == nil {
-			http.Error(w, fmt.Sprintf("dependencies[%d]: target entity %s not found", i, d.Target), http.StatusNotFound)
-			return
+	// Reference integrity: every counterpart entity must exist in the catalog.
+	// Counterparts outside the catalog are reported as 'external' instead.
+	for i, ep := range observed.Endpoints {
+		for j, cp := range ep.Counterparts {
+			if cp.Entity != nil && data.repo.Entity(cp.Entity) == nil {
+				http.Error(w, fmt.Sprintf("endpoints[%d].counterparts[%d]: entity %s not found", i, j, cp.Entity), http.StatusNotFound)
+				return
+			}
 		}
 	}
 
 	value, err := json.Marshal(observed)
 	if err != nil {
-		http.Error(w, "Failed to encode observed dependencies", http.StatusInternalServerError)
+		http.Error(w, "Failed to encode observed endpoints", http.StatusInternalServerError)
 		return
 	}
 	observation := catalog.Observation{
 		Value:     value,
 		Producer:  detectedBy,
 		UpdatedAt: observedAt,
-		Version:   strings.TrimSpace(depsPB.Version),
-		Meta:      depsPB.Meta,
+		Version:   strings.TrimSpace(epsPB.Version),
+		Meta:      epsPB.Meta,
 	}
 
 	if !s.mergeAndStoreObservation(w, r, data, srcEntity, key, observation) {
@@ -2187,17 +2191,17 @@ func (s *Server) updateObservedDependencies(w http.ResponseWriter, r *http.Reque
 	fmt.Fprintln(w, "OK")
 }
 
-// deleteObservedDependencies removes the observed-dependencies observation
-// reported by a single tool ("swcat-deps/<detected_by>") from every entity that
+// deleteObservedEndpoints removes the observed-endpoints observation reported
+// by a single tool ("swcat-endpoints/<detected_by>") from every entity that
 // carries it. This is an administrative escape hatch for cleaning up after a
-// misbehaving external scanner that left stale dependencies behind.
-func (s *Server) deleteObservedDependencies(w http.ResponseWriter, r *http.Request, detectedBy string) {
+// misbehaving external scanner that left stale endpoints behind.
+func (s *Server) deleteObservedEndpoints(w http.ResponseWriter, r *http.Request, detectedBy string) {
 	if !s.canEditObservations() {
 		http.Error(w, "Cannot edit observations", http.StatusPreconditionFailed)
 		return
 	}
 
-	key, ok := catalog.ObservedDepsKey(strings.TrimSpace(detectedBy))
+	key, ok := catalog.ObservedEndpointsKey(strings.TrimSpace(detectedBy))
 	if !ok {
 		http.Error(w, "'detectedBy' must be a hyphen-separated identifier, e.g. \"kafka-scanner\"", http.StatusBadRequest)
 		return
@@ -2225,7 +2229,7 @@ func (s *Server) deleteObservedDependencies(w http.ResponseWriter, r *http.Reque
 		}
 		catalog.DeleteObservations(entity, []string{key})
 		if err := database.StoreObservations(ctx, s.db, entity); err != nil {
-			http.Error(w, "Failed to delete observed dependencies", http.StatusInternalServerError)
+			http.Error(w, "Failed to delete observed endpoints", http.StatusInternalServerError)
 			log.Printf("Failed to delete observation %q for %s: %v", key, entity.GetRef(), err)
 			return
 		}
@@ -2894,15 +2898,15 @@ func (s *Server) routes() *http.ServeMux {
 			key := r.PathValue("key")
 			s.deleteObservation(w, r, entityRef, key)
 		})))
-	// Lets external tools push observed (machine-detected) dependencies for a
+	// Lets external tools push observed (machine-detected) endpoints for a
 	// source entity. The source entity is named in the request body.
-	root.Handle("POST /catalog/observed-dependencies", s.handleRefDataDispatch(
-		http.HandlerFunc(s.updateObservedDependencies)))
-	// Administratively remove all dependencies reported by a single tool
-	// ("swcat-deps/<detectedBy>") across every entity that carries them.
-	root.Handle("DELETE /catalog/observed-dependencies/{detectedBy}", s.handleRefDataDispatch(
+	root.Handle("POST /catalog/observed-endpoints", s.handleRefDataDispatch(
+		http.HandlerFunc(s.updateObservedEndpoints)))
+	// Administratively remove all endpoints reported by a single tool
+	// ("swcat-endpoints/<detectedBy>") across every entity that carries them.
+	root.Handle("DELETE /catalog/observed-endpoints/{detectedBy}", s.handleRefDataDispatch(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			s.deleteObservedDependencies(w, r, r.PathValue("detectedBy"))
+			s.deleteObservedEndpoints(w, r, r.PathValue("detectedBy"))
 		})))
 
 	// Lint findings, plus the catalog-wide scans a request asks for. A POST
