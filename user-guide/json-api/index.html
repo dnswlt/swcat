@@ -1,0 +1,2228 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for the swcat software catalog.">
+      
+      
+      
+        <link rel="canonical" href="https://dnswlt.github.io/swcat/user-guide/json-api/">
+      
+      
+        <link rel="prev" href="../query-syntax/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>JSON API - swcat Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#json-api-for-entities" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="swcat Documentation" class="md-header__button md-logo" aria-label="swcat Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            swcat Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              JSON API
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../getting-started/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  User guide
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="swcat Documentation" class="md-nav__button md-logo" aria-label="swcat Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    swcat Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User guide
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../catalog/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Catalog
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_2" id="__nav_3_2_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Catalog
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../catalog/metadata/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metadata
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../catalog/entity-references/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Entity References
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../catalog/editor-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../catalog/domain/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Domain
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../catalog/system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../catalog/component/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Component
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../catalog/resource/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resource
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../catalog/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../catalog/group/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Group
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../starlark-links/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Starlark links
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../custom-content/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Custom content
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sidecar-extensions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sidecar extensions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../plugins/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugins
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_7" id="__nav_3_7_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Plugins
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plugins/asyncapi/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AsyncAPI Importer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plugins/grpc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    gRPC Plugins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plugins/jfrog-xray/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JFrog Xray BOM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_8" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../linting/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Linting
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_8" id="__nav_3_8_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Linting
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../linting/cel/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CEL Rules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../linting/observed-dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observed dependencies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../linting/prometheus/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prometheus Scan
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../linting/bitbucket/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bitbucket Scan
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../remote-catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Remote catalogs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../query-syntax/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Query syntax
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JSON API
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JSON API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#querying-entities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Querying entities
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Querying entities">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#query-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Query example
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#updating-annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updating annotations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Updating annotations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#update-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Update example
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#status-observations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status observations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Status observations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#writing-an-observation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing an observation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deleting-an-observation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deleting an observation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deleting-observations-from-all-entities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deleting observations from all entities
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reporting-observed-endpoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reporting observed endpoints
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Reporting observed endpoints">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reporting-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reporting example
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deleting-all-endpoints-from-a-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deleting all endpoints from a tool
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#querying-entities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Querying entities
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Querying entities">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#query-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Query example
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#updating-annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updating annotations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Updating annotations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#update-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Update example
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#status-observations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status observations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Status observations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#writing-an-observation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing an observation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deleting-an-observation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deleting an observation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deleting-observations-from-all-entities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deleting observations from all entities
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reporting-observed-endpoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reporting observed endpoints
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Reporting observed endpoints">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reporting-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reporting example
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deleting-all-endpoints-from-a-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deleting all endpoints from a tool
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="json-api-for-entities">JSON API for Entities</h1>
+<p>The <code>/catalog/entities</code> endpoint provides a JSON API to query and
+manipulate entities stored in the catalog.</p>
+<h2 id="schema">Schema</h2>
+<p>The JSON exchanged by this API is the <strong>Protobuf JSON mapping</strong> of the catalog
+schema defined in
+<a href="https://dnswlt.github.io/swcat/schema/swcat/catalog/v1/catalog.proto"><code>catalog.proto</code></a>.
+That <code>.proto</code> file is the authoritative schema for entities, their specs, and
+status observations.</p>
+<p>This is <strong>not</strong> the same as the YAML you write to author the catalog. In
+particular, the JSON representation follows protobuf's
+<a href="https://protobuf.dev/programming-guides/json/">JSON conventions</a>:</p>
+<ul>
+<li><code>kind</code> uses the canonical proper-case form (<code>Component</code>, <code>System</code>, <code>Domain</code>,
+  <code>API</code>, <code>Resource</code>, <code>Group</code>) — the same casing as the YAML <code>kind:</code> field. The
+  lowercase form (<code>component</code>, <code>api</code>, …) appears only inside entity <em>reference
+  strings</em> such as <code>component:default/my-component</code> (e.g. in URL paths).</li>
+<li>There is no <code>apiVersion</code> field.</li>
+<li>The spec is carried in a kind-specific field (<code>componentSpec</code>, <code>systemSpec</code>,
+  <code>domainSpec</code>, <code>apiSpec</code>, <code>resourceSpec</code>, <code>groupSpec</code>) rather than a generic
+  <code>spec</code>.</li>
+<li>References to other entities are objects (<code>{"kind": ..., "name": ...}</code>), not
+  the shorthand strings used in YAML.</li>
+<li>Field names are <code>lowerCamelCase</code> (e.g. <code>subcomponentOf</code>, <code>providesApis</code>,
+  <code>updatedAt</code>).</li>
+</ul>
+<h2 id="querying-entities">Querying entities</h2>
+<p>To query entities, send a <code>GET</code> request to <code>/catalog/entities</code>.
+You can filter the results using the <code>q</code> query parameter, which accepts the same
+<a href="../query-syntax/">query syntax</a> as the UI search.</p>
+<h3 id="query-example">Query example</h3>
+<p>To retrieve all components, you can use the following request:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>GET /catalog/entities?q=kind:component
+</code></pre></div>
+<p>Here is an example using <code>curl</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>curl<span class="w"> </span>-G<span class="w"> </span><span class="s1">'http://localhost:9191/catalog/entities'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>--data-urlencode<span class="w"> </span><span class="s1">'q=kind:component OR kind:api'</span>
+</code></pre></div>
+<p>The response body is a
+<a href="https://dnswlt.github.io/swcat/schema/swcat/catalog/v1/catalog.proto"><code>ListEntitiesResponse</code></a>:
+a JSON object containing an <code>entities</code> array, where each element is an entity
+encoded according to the schema described above:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">{</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">"entities"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">      </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Component"</span><span class="p">,</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">      </span><span class="nt">"metadata"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">        </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"my-component"</span><span class="p">,</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">        </span><span class="nt">"namespace"</span><span class="p">:</span><span class="w"> </span><span class="s2">"default"</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">      </span><span class="p">},</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">      </span><span class="nt">"componentSpec"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">        </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"service"</span><span class="p">,</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">        </span><span class="nt">"lifecycle"</span><span class="p">:</span><span class="w"> </span><span class="s2">"production"</span><span class="p">,</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">        </span><span class="nt">"owner"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">          </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Group"</span><span class="p">,</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">          </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"my-team"</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">        </span><span class="p">},</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="w">        </span><span class="nt">"system"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="w">          </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"System"</span><span class="p">,</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="w">          </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"my-system"</span>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="w">      </span><span class="p">},</span>
+<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a><span class="w">      </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a><span class="w">        </span><span class="nt">"observations"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a><span class="w">          </span><span class="nt">"swcat.io/last-build"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a><span class="w">            </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a><span class="w">              </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"green"</span><span class="p">,</span>
+<a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a><span class="w">              </span><span class="nt">"artifact"</span><span class="p">:</span><span class="w"> </span><span class="s2">"v1.2.3"</span>
+<a id="__codelineno-2-27" name="__codelineno-2-27" href="#__codelineno-2-27"></a><span class="w">            </span><span class="p">},</span>
+<a id="__codelineno-2-28" name="__codelineno-2-28" href="#__codelineno-2-28"></a><span class="w">            </span><span class="nt">"producer"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ci-pipeline"</span><span class="p">,</span>
+<a id="__codelineno-2-29" name="__codelineno-2-29" href="#__codelineno-2-29"></a><span class="w">            </span><span class="nt">"updatedAt"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-06-02T10:00:00Z"</span><span class="p">,</span>
+<a id="__codelineno-2-30" name="__codelineno-2-30" href="#__codelineno-2-30"></a><span class="w">            </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1.2.3"</span><span class="p">,</span>
+<a id="__codelineno-2-31" name="__codelineno-2-31" href="#__codelineno-2-31"></a><span class="w">            </span><span class="nt">"meta"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-32" name="__codelineno-2-32" href="#__codelineno-2-32"></a><span class="w">              </span><span class="nt">"buildUrl"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://ci.example.com/builds/42"</span>
+<a id="__codelineno-2-33" name="__codelineno-2-33" href="#__codelineno-2-33"></a><span class="w">            </span><span class="p">}</span>
+<a id="__codelineno-2-34" name="__codelineno-2-34" href="#__codelineno-2-34"></a><span class="w">          </span><span class="p">}</span>
+<a id="__codelineno-2-35" name="__codelineno-2-35" href="#__codelineno-2-35"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-2-36" name="__codelineno-2-36" href="#__codelineno-2-36"></a><span class="w">      </span><span class="p">}</span>
+<a id="__codelineno-2-37" name="__codelineno-2-37" href="#__codelineno-2-37"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-2-38" name="__codelineno-2-38" href="#__codelineno-2-38"></a><span class="w">  </span><span class="p">]</span>
+<a id="__codelineno-2-39" name="__codelineno-2-39" href="#__codelineno-2-39"></a><span class="p">}</span>
+</code></pre></div>
+<p>The <code>status</code> field holds runtime <a href="#status-observations">status observations</a>
+and is only present when the entity has any. It is never present on <code>group</code>
+entities.</p>
+<p>For more details on the query syntax, refer to the
+<a href="../query-syntax/">Search query syntax</a> page.</p>
+<h2 id="updating-annotations">Updating annotations</h2>
+<p>You can update an entity's annotations using a <code>POST</code> request to
+<code>/catalog/entities/{entityRef}/annotations/{annotationKey}</code>.
+The new annotation value should be provided in the request body as plain text.</p>
+<ul>
+<li><code>entityRef</code>: The full entity reference (e.g., <code>component:default/my-component</code>).</li>
+<li><code>annotationKey</code>: The key of the annotation to update (e.g., <code>swcat.io/my-annotation</code>).</li>
+</ul>
+<p><strong>Note:</strong> This operation is not available when the server is running in read-only mode.
+Only valid annotation keys and values are accepted.</p>
+<p>Annotations are persisted alongside the human-authored catalog (in the
+extensions sidecar of the YAML files). For short-lived, machine-generated
+status, prefer <a href="#status-observations">status observations</a> instead.</p>
+<h3 id="update-example">Update example</h3>
+<p>To update the <code>swcat.io/status</code> annotation for <code>component:my-component</code> to <code>deployed</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s1">'http://localhost:9191/catalog/entities/component%3Amy-component/annotations/swcat.io%2Fstatus'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>--data<span class="w"> </span><span class="s1">'deployed'</span>
+</code></pre></div>
+<h2 id="status-observations">Status observations</h2>
+<p>Status observations are short-lived, machine-generated status updates attached
+to an entity at runtime — for example, information extracted from an entity's
+most recent build artifact. Unlike annotations, they are stored in the server's
+database rather than the catalog YAML, and they are returned in the <code>status</code>
+field of an entity (see the query example above).</p>
+<p>Each observation is identified by a key (following the annotation naming
+conventions, e.g. <code>swcat.io/last-build</code>) and carries an
+<a href="https://dnswlt.github.io/swcat/schema/swcat/catalog/v1/catalog.proto"><code>Observation</code></a>
+payload:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>value</code></td>
+<td>yes</td>
+<td>The observation payload, as any JSON value (object, array, ...).</td>
+</tr>
+<tr>
+<td><code>producer</code></td>
+<td>yes</td>
+<td>Identifier of the system/plugin that produced it.</td>
+</tr>
+<tr>
+<td><code>updatedAt</code></td>
+<td>no</td>
+<td>RFC 3339 timestamp; defaults to "now" when omitted.</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td>no</td>
+<td>The entity version at which the observation was made.</td>
+</tr>
+<tr>
+<td><code>meta</code></td>
+<td>no</td>
+<td>Additional string key/value metadata for display.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Note:</strong> These operations are not available when the server is running in
+read-only mode, or when the server has no database configured.</p>
+<h3 id="writing-an-observation">Writing an observation</h3>
+<p>Send a <code>POST</code> request to
+<code>/catalog/entities/{entityRef}/observations/{key}</code> with an <code>Observation</code> as the
+JSON body. An existing observation under the same key is overwritten.</p>
+<ul>
+<li><code>entityRef</code>: The full entity reference (e.g., <code>component:default/my-component</code>).</li>
+<li><code>key</code>: The observation key (e.g., <code>swcat.io/last-build</code>).</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="s1">'http://localhost:9191/catalog/entities/component%3Amy-component/observations/swcat.io%2Flast-build'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">'Content-Type: application/json'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">'{</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="s1">        "value": {"status": "green", "artifact": "v1.2.3"},</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="s1">        "producer": "ci-pipeline",</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="s1">        "version": "1.2.3",</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="s1">        "meta": {"buildUrl": "https://ci.example.com/builds/42"}</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="s1">      }'</span>
+</code></pre></div>
+<h3 id="deleting-an-observation">Deleting an observation</h3>
+<p>Send a <code>DELETE</code> request to
+<code>/catalog/entities/{entityRef}/observations/{key}</code>. Deleting a key that does
+not exist is a no-op and still succeeds, so the operation is idempotent.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>DELETE<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="s1">'http://localhost:9191/catalog/entities/component%3Amy-component/observations/swcat.io%2Flast-build'</span>
+</code></pre></div>
+<h3 id="deleting-observations-from-all-entities">Deleting observations from all entities</h3>
+<p>Send a <code>DELETE</code> request to <code>/catalog/observations</code> to remove observations from
+<strong>every</strong> entity that carries them, including entities no longer in the catalog,
+selected by exactly one of these query parameters:</p>
+<ul>
+<li><code>key</code>: An exact observation key, e.g. <code>swcat.io/last-build</code>.</li>
+<li><code>prefix</code>: A key prefix, e.g. <code>swcat-deps/</code> for all keys under it. A prefix
+  matches as a plain string: <code>swcat-deps</code> would also match <code>swcat-deps-other</code>.</li>
+</ul>
+<p>Neither may be blank, so a single request cannot delete all observations. Add
+<code>dryRun=true</code> to see what would be deleted without deleting anything.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Preview, then delete, the observations of all tools under "swcat-deps/".</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>DELETE<span class="w"> </span><span class="s1">'http://localhost:9191/catalog/observations?prefix=swcat-deps/&amp;dryRun=true'</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>curl<span class="w"> </span>-X<span class="w"> </span>DELETE<span class="w"> </span><span class="s1">'http://localhost:9191/catalog/observations?prefix=swcat-deps/'</span>
+</code></pre></div>
+<p>The response lists the affected entities and the keys deleted from each:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">"dryRun"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="nt">"deleted"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="p">{</span><span class="nt">"entity"</span><span class="p">:</span><span class="w"> </span><span class="s2">"component:my-component"</span><span class="p">,</span><span class="w"> </span><span class="nt">"keys"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"swcat-deps/kafka-scanner"</span><span class="p">]}</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span><span class="p">]</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="p">}</span>
+</code></pre></div>
+<p>Nothing matching is not an error: <code>deleted</code> is then empty.</p>
+<h2 id="reporting-observed-endpoints">Reporting observed endpoints</h2>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Observed endpoints are shown on the Component's detail page and feed
+swcat's optional dependency lint check. See
+<a href="../linting/observed-dependencies/">Observed dependency linting</a> for its
+configuration, matching behavior, and guidance on resolving findings.</p>
+</div>
+<p>External tools (for example a message-bus or runtime-traffic scanner) can report
+how an entity communicates, as they <em>observe</em> it: its <strong>endpoints</strong> (e.g. the
+topics it publishes to or subscribes to) and, per endpoint, the
+<strong>counterparts</strong> it was found to connect to. These are tentative,
+machine-detected facts — distinct from the relationships declared in an entity's
+spec — and swcat stores them as a <a href="#status-observations">status observation</a> on
+the source entity under the well-known key <code>swcat-endpoints/&lt;detectedBy&gt;</code>.</p>
+<p>Send a <code>POST</code> request to <code>/catalog/observed-endpoints</code> with an
+<a href="https://dnswlt.github.io/swcat/schema/swcat/catalog/v1/catalog.proto"><code>ObservedEndpoints</code></a>
+JSON body:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code></td>
+<td>yes</td>
+<td>Reference to the entity whose endpoints are reported.</td>
+</tr>
+<tr>
+<td><code>detectedBy</code></td>
+<td>yes</td>
+<td>Label of the reporting tool. Must be a hyphen-separated identifier of lowercase alphanumeric segments (e.g. <code>kafka-scanner</code>), since it forms the observation key <code>swcat-endpoints/&lt;detectedBy&gt;</code>.</td>
+</tr>
+<tr>
+<td><code>observedAt</code></td>
+<td>no</td>
+<td>RFC 3339 timestamp of when the endpoints were observed; defaults to "now" when omitted.</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td>no</td>
+<td>The version of the source entity the endpoints were observed for.</td>
+</tr>
+<tr>
+<td><code>meta</code></td>
+<td>no</td>
+<td>Additional string key/value metadata.</td>
+</tr>
+<tr>
+<td><code>endpoints</code></td>
+<td>no</td>
+<td>The source's endpoints (see below), including those without any observed counterpart. An empty list clears the endpoints previously reported by this tool.</td>
+</tr>
+</tbody>
+</table>
+<p>Each entry in <code>endpoints</code> is an <code>Endpoint</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>address</code></td>
+<td>yes</td>
+<td>The address as configured, e.g. a topic <code>orders/${STAGE}/created</code>. Placeholders and wildcards are kept as they are.</td>
+</tr>
+<tr>
+<td><code>direction</code></td>
+<td>yes</td>
+<td><code>ENDPOINT_DIRECTION_INBOUND</code> (the source receives: subscribes to events, or serves requests) or <code>ENDPOINT_DIRECTION_OUTBOUND</code> (the source sends: publishes events, or sends requests).</td>
+</tr>
+<tr>
+<td><code>kind</code></td>
+<td>no</td>
+<td><code>ENDPOINT_KIND_EVENT</code> (the default) or <code>ENDPOINT_KIND_REQUEST</code> for requests that expect a reply.</td>
+</tr>
+<tr>
+<td><code>technology</code></td>
+<td>no</td>
+<td>Free text, e.g. <code>solace</code> or <code>kafka</code>.</td>
+</tr>
+<tr>
+<td><code>names</code></td>
+<td>no</td>
+<td>Tool-specific identifiers, e.g. the names of the bindings that use the address.</td>
+</tr>
+<tr>
+<td><code>counterparts</code></td>
+<td>no</td>
+<td>The other ends this endpoint connects to (see below).</td>
+</tr>
+</tbody>
+</table>
+<p>Each entry in <code>counterparts</code> is a <code>Counterpart</code>, with exactly one of <code>entity</code>
+and <code>external</code> set:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>entity</code></td>
+<td>*</td>
+<td>Reference to the catalog entity at the other end.</td>
+</tr>
+<tr>
+<td><code>external</code></td>
+<td>*</td>
+<td>Display name of an other end that is not in the catalog, e.g. its Maven coordinates.</td>
+</tr>
+<tr>
+<td><code>address</code></td>
+<td>no</td>
+<td>The counterpart's own address that matched, if it differs, e.g. a wildcard subscription <code>orders/*/created</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Each side of a connection is reported by its own source: when A publishes to a
+topic that B subscribes to, A's report lists B as a counterpart of its outbound
+endpoint, and B's report lists A as a counterpart of its inbound endpoint.
+Who depends on whom follows from the endpoint: the source depends on the
+counterparts of its inbound event endpoints (it consumes their events) and of
+its outbound request endpoints (it calls them).</p>
+<p>The <code>source</code> and every counterpart <code>entity</code> must reference entities that exist
+in the catalog; otherwise the request fails with <code>404 Not Found</code>. Report other
+ends that are not in the catalog as <code>external</code>. Malformed input (missing
+required fields, an invalid <code>detectedBy</code>, or an unknown reference kind) fails
+with <code>400 Bad Request</code>.</p>
+<p>Re-posting with the same <code>detectedBy</code> overwrites that tool's previously reported
+endpoints, so each tool owns a single <code>swcat-endpoints/&lt;detectedBy&gt;</code>
+observation. The resulting observation records <code>&lt;detectedBy&gt;</code> as its
+<code>producer</code> and <code>observedAt</code> (or the receive time) as its <code>updatedAt</code>.</p>
+<p><strong>Note:</strong> Like status observations, this operation is not available when the
+server is running in read-only mode, or when the server has no database
+configured.</p>
+<h3 id="reporting-example">Reporting example</h3>
+<p>Report that <code>flights-search-backend</code> calls <code>cache-server</code>, and consumes the
+<code>flights.updates</code> topic, which an importer outside the catalog publishes to:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s1">'http://localhost:9191/catalog/observed-endpoints'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">'Content-Type: application/json'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">'{</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="s1">        "source": {"kind": "Component", "name": "flights-search-backend"},</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="s1">        "detectedBy": "kafka-scanner",</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="s1">        "endpoints": [</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="s1">          {</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="s1">            "address": "GET /cache/{id}",</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="s1">            "direction": "ENDPOINT_DIRECTION_OUTBOUND",</span>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="s1">            "kind": "ENDPOINT_KIND_REQUEST",</span>
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="s1">            "counterparts": [{"entity": {"kind": "Component", "name": "cache-server"}}]</span>
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="s1">          },</span>
+<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="s1">          {</span>
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="s1">            "address": "flights.updates",</span>
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="s1">            "direction": "ENDPOINT_DIRECTION_INBOUND",</span>
+<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="s1">            "technology": "kafka",</span>
+<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a><span class="s1">            "names": ["flightUpdates-in-0"],</span>
+<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a><span class="s1">            "counterparts": [{"external": "com.example:flights-importer"}]</span>
+<a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a><span class="s1">          }</span>
+<a id="__codelineno-8-20" name="__codelineno-8-20" href="#__codelineno-8-20"></a><span class="s1">        ]</span>
+<a id="__codelineno-8-21" name="__codelineno-8-21" href="#__codelineno-8-21"></a><span class="s1">      }'</span>
+</code></pre></div>
+<p>The reported endpoints then appear in the source entity's <code>status</code> under the
+<code>swcat-endpoints/kafka-scanner</code> observation when you query it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p">{</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">    </span><span class="nt">"observations"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">      </span><span class="nt">"swcat-endpoints/kafka-scanner"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">        </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">          </span><span class="nt">"endpoints"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">            </span><span class="p">{</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="w">              </span><span class="nt">"address"</span><span class="p">:</span><span class="w"> </span><span class="s2">"GET /cache/{id}"</span><span class="p">,</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="w">              </span><span class="nt">"direction"</span><span class="p">:</span><span class="w"> </span><span class="s2">"outbound"</span><span class="p">,</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="w">              </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"request"</span><span class="p">,</span>
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="w">              </span><span class="nt">"counterparts"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="w">                </span><span class="p">{</span><span class="nt">"entity"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Component"</span><span class="p">,</span><span class="w"> </span><span class="nt">"namespace"</span><span class="p">:</span><span class="w"> </span><span class="s2">"default"</span><span class="p">,</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"cache-server"</span><span class="p">}}</span>
+<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="w">              </span><span class="p">]</span>
+<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a><span class="w">            </span><span class="p">},</span>
+<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a><span class="w">            </span><span class="p">{</span>
+<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a><span class="w">              </span><span class="nt">"address"</span><span class="p">:</span><span class="w"> </span><span class="s2">"flights.updates"</span><span class="p">,</span>
+<a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a><span class="w">              </span><span class="nt">"direction"</span><span class="p">:</span><span class="w"> </span><span class="s2">"inbound"</span><span class="p">,</span>
+<a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a><span class="w">              </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"event"</span><span class="p">,</span>
+<a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a><span class="w">              </span><span class="nt">"technology"</span><span class="p">:</span><span class="w"> </span><span class="s2">"kafka"</span><span class="p">,</span>
+<a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a><span class="w">              </span><span class="nt">"names"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"flightUpdates-in-0"</span><span class="p">],</span>
+<a id="__codelineno-9-21" name="__codelineno-9-21" href="#__codelineno-9-21"></a><span class="w">              </span><span class="nt">"counterparts"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">"external"</span><span class="p">:</span><span class="w"> </span><span class="s2">"com.example:flights-importer"</span><span class="p">}]</span>
+<a id="__codelineno-9-22" name="__codelineno-9-22" href="#__codelineno-9-22"></a><span class="w">            </span><span class="p">}</span>
+<a id="__codelineno-9-23" name="__codelineno-9-23" href="#__codelineno-9-23"></a><span class="w">          </span><span class="p">]</span>
+<a id="__codelineno-9-24" name="__codelineno-9-24" href="#__codelineno-9-24"></a><span class="w">        </span><span class="p">},</span>
+<a id="__codelineno-9-25" name="__codelineno-9-25" href="#__codelineno-9-25"></a><span class="w">        </span><span class="nt">"producer"</span><span class="p">:</span><span class="w"> </span><span class="s2">"kafka-scanner"</span><span class="p">,</span>
+<a id="__codelineno-9-26" name="__codelineno-9-26" href="#__codelineno-9-26"></a><span class="w">        </span><span class="nt">"updatedAt"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-06-22T21:00:05Z"</span>
+<a id="__codelineno-9-27" name="__codelineno-9-27" href="#__codelineno-9-27"></a><span class="w">      </span><span class="p">}</span>
+<a id="__codelineno-9-28" name="__codelineno-9-28" href="#__codelineno-9-28"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-9-29" name="__codelineno-9-29" href="#__codelineno-9-29"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-9-30" name="__codelineno-9-30" href="#__codelineno-9-30"></a><span class="p">}</span>
+</code></pre></div>
+<p>What is stored is swcat's <strong>internal representation</strong> of the endpoints, not a
+verbatim copy of the request payload. The endpoint normalizes the input as it
+ingests it:</p>
+<ul>
+<li><code>direction</code> and <code>kind</code> are stored as short, stable labels (<code>inbound</code>,
+  <code>outbound</code>; <code>event</code>, <code>request</code>) rather than the enum names from the request.
+  An omitted <code>kind</code> is stored as <code>event</code>.</li>
+<li><code>detectedBy</code>, <code>observedAt</code>, <code>version</code> and <code>meta</code> are folded into the
+  observation envelope (<code>producer</code>, <code>updatedAt</code>, <code>version</code>, <code>meta</code>).</li>
+<li>Each counterpart <code>entity</code> is resolved to a fully-qualified reference, so its
+  <code>namespace</code> is filled in (e.g. <code>default</code>) even when the request left it out.</li>
+</ul>
+<h3 id="deleting-all-endpoints-from-a-tool">Deleting all endpoints from a tool</h3>
+<p>When a reporting tool misbehaves and leaves stale endpoints behind, you can
+administratively wipe everything it reported with a single <code>DELETE</code> request to
+<code>/catalog/observed-endpoints/{detectedBy}</code>. This removes the
+<code>swcat-endpoints/&lt;detectedBy&gt;</code> observation from <strong>every</strong> entity that carries
+it.</p>
+<ul>
+<li><code>detectedBy</code>: The reporting tool's label (e.g. <code>kafka-scanner</code>), same value
+  used when the endpoints were reported.</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>DELETE<span class="w"> </span><span class="s1">'http://localhost:9191/catalog/observed-endpoints/solace-graph'</span>
+</code></pre></div>
+<p>Deleting a <code>detectedBy</code> that reported nothing is a no-op and still succeeds. The
+response reports how many entities were affected.</p>
+<p><strong>Note:</strong> Like the other observation operations, this is not available when the
+server is running in read-only mode, or when the server has no database
+configured.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.indexes"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+    
+  </body>
+</html>
