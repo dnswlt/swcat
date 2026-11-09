@@ -98,8 +98,8 @@ tool, sorted by address: the direction of each endpoint, its address, and its
 counterparts with links to their pages. A counterpart the catalog declares no
 relationship with is marked *not declared* (by the same undirected rule as the
 lint check, but on both sides of the connection). Counterparts outside the
-catalog are shown by name, without a link. The table starts expanded if it has
-undeclared counterparts or is short.
+catalog are shown by name, without a link. The table starts folded; its heading
+shows the number of endpoints and of undeclared counterparts.
 
 ## Resolve a finding
 

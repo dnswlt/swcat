@@ -98,23 +98,6 @@ func TestObservedEndpointsSections(t *testing.T) {
 	if sec.Undeclared != 2 {
 		t.Errorf("Undeclared = %d, want 2", sec.Undeclared)
 	}
-	if !sec.Open {
-		t.Error("section with undeclared counterparts should be open")
-	}
-}
-
-func TestObservedEndpointsSections_LargeDeclaredTableCollapsed(t *testing.T) {
-	c := &catalog.Component{Metadata: &catalog.Metadata{Name: "c"}, Spec: &catalog.ComponentSpec{}}
-	var eps []catalog.ObservedEndpoint
-	for i := 0; i <= observedEndpointsOpenMaxRows; i++ {
-		eps = append(eps, catalog.ObservedEndpoint{
-			Address: "topic/" + string(rune('a'+i)), Direction: catalog.EndpointOutbound, Kind: catalog.EndpointKindEvent,
-		})
-	}
-	setObservedEndpoints(t, c, "solace-graph", eps...)
-	if sec := observedEndpointsSections(c, mapResolver{})[0]; sec.Open {
-		t.Errorf("table with %d rows and no undeclared counterparts should start collapsed", len(sec.Rows))
-	}
 }
 
 func TestComponentDetail_ShowsObservedEndpoints(t *testing.T) {

@@ -9,11 +9,6 @@ import (
 	"github.com/dnswlt/swcat/internal/catalog"
 )
 
-// observedEndpointsOpenMaxRows is the largest table that is expanded on page
-// load even if all its counterparts are declared. Larger tables start
-// collapsed, unless they contain an undeclared counterpart.
-const observedEndpointsOpenMaxRows = 20
-
 // observedEndpointsSection is the view model of the endpoints one tool observed
 // for an entity: one table on the entity page.
 type observedEndpointsSection struct {
@@ -25,7 +20,6 @@ type observedEndpointsSection struct {
 	Rows []*observedEndpointRow
 	// Undeclared counts the undeclared counterparts.
 	Undeclared int
-	Open       bool
 	// Err is set if the observation could not be decoded; Rows is empty then.
 	Err string
 }
@@ -144,7 +138,6 @@ func observedEndpointsSections(c *catalog.Component, resolver catalog.Resolver) 
 				cmp.Compare(endpointModeRank[a.Mode], endpointModeRank[b.Mode]),
 			)
 		})
-		sec.Open = sec.Undeclared > 0 || len(sec.Rows) <= observedEndpointsOpenMaxRows
 	}
 	slices.SortFunc(sections, func(a, b *observedEndpointsSection) int {
 		return cmp.Compare(a.Tool, b.Tool)

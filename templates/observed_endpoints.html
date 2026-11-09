@@ -1,6 +1,7 @@
-<!-- Endpoints observed by external tools (status observations "swcat-endpoints/*"), one table per tool. -->
+<!-- Endpoints observed by external tools (status observations "swcat-endpoints/*"), one table per tool.
+     Folded by default: the summary line shows the counts. -->
 {{ range . }}
-<details class="border rounded-lg" {{ if .Open }}open{{ end }}>
+<details class="border rounded-lg">
     <summary class="font-semibold bg-gray-100 px-3 py-1 rounded-t-lg cursor-pointer">
         Observed endpoints
         <span class="font-normal text-sm text-gray-500">({{ len .Rows }}, detected by {{ .Tool }})</span>
