@@ -2,7 +2,7 @@ package svg
 
 import (
 	"fmt"
-	"strconv"
+	"slices"
 	"strings"
 
 	"github.com/dnswlt/swcat/internal/catalog"
@@ -66,11 +66,8 @@ func (r *render) buildExternalDiagram(m *externalModel) (*sysview.Diagram, *dot.
 				seen[key] = true
 				b.anchor(item.Group, g.container, dep.target)
 			}
-			if dep.direction == DirOutgoing {
-				b.edge(dep.source, dep.target, dep, class)
-			} else {
-				b.edge(dep.target, dep.source, dep, class)
-			}
+			from, to := dep.ends()
+			b.edge(from, to, dep, class)
 		}
 	}
 
@@ -190,14 +187,56 @@ func (b *diagramBuilder) edge(src, dst catalog.Entity, dep *extSysPartDep, class
 		info.TooltipAttrs = layout.TooltipAttrs
 	} else {
 		// The arrow stands for relationships between entities that are not
-		// drawn, so it reports how many of them it covers.
-		info.TooltipAttrs = []dot.TooltipAttr{
-			{Key: "relationships", Value: strconv.Itoa(len(dep.rels))},
-		}
+		// drawn, so it names what they use.
+		info.Sections = usedSections(dep.rels, src, dst)
 	}
 
 	b.meta.Edges[id] = info
 	b.d.Edges = append(b.d.Edges, e)
+}
+
+// usedSectionTitles orders the sections of usedSections, and names them.
+var usedSectionTitles = []struct {
+	kind  catalog.Kind
+	title string
+}{
+	{catalog.KindAPI, "APIs"},
+	{catalog.KindComponent, "Components"},
+	{catalog.KindResource, "Resources"},
+}
+
+// usedSections lists the entities that rels depend on — the APIs consumed, the
+// components and resources depended on — once each, by kind and then by name.
+// Which parts depend on them is left out: that is the detail the arrow stands
+// in for, and the next detail level draws it. So are the drawn ends of the
+// arrow, which the diagram already shows.
+func usedSections(rels []relationship, drawn ...catalog.Entity) []dot.TooltipSection {
+	byKind := map[catalog.Kind][]dot.TooltipItem{}
+	seen := map[string]bool{}
+	for _, e := range drawn {
+		seen[e.GetRef().String()] = true
+	}
+	for _, rel := range rels {
+		e := rel.to
+		ref := e.GetRef().String()
+		if seen[ref] {
+			continue
+		}
+		seen[ref] = true
+		byKind[e.GetKind()] = append(byKind[e.GetKind()], dot.TooltipItem{Ref: ref, Label: e.GetQName()})
+	}
+	var sections []dot.TooltipSection
+	for _, st := range usedSectionTitles {
+		items := byKind[st.kind]
+		if len(items) == 0 {
+			continue
+		}
+		slices.SortFunc(items, func(a, b dot.TooltipItem) int {
+			return strings.Compare(a.Label, b.Label)
+		})
+		sections = append(sections, dot.TooltipSection{Title: st.title, Items: items})
+	}
+	return sections
 }
 
 // singleDrawnRel returns the relationship this arrow stands for, if it stands
@@ -208,7 +247,8 @@ func (d *extSysPartDep) singleDrawnRel() (relationship, bool) {
 		return relationship{}, false
 	}
 	rel := d.rels[0]
-	if !rel.src.GetRef().Equal(d.source.GetRef()) || !rel.dst.GetRef().Equal(d.target.GetRef()) {
+	from, to := d.ends()
+	if !rel.from.GetRef().Equal(from.GetRef()) || !rel.to.GetRef().Equal(to.GetRef()) {
 		return relationship{}, false
 	}
 	return rel, true

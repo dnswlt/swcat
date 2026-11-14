@@ -5,8 +5,10 @@
 
 @layer utilities {
 
-    /* --- Rich Tooltip --- */
-    #rich-tooltip {
+    /* --- Rich Tooltip ---
+       Two of them (web/tooltip.js): #rich-tooltip follows the cursor on hover,
+       #pinned-tooltip stays open for a pinned edge and can be scrolled. */
+    .rich-tooltip {
         position: absolute;
         display: none;
         padding: 10px 12px;
@@ -16,13 +18,23 @@
         border-radius: 6px;
         box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
         backdrop-filter: blur(2px);
-        z-index: 1000;
         width: max-content;
-        max-width: 320px;
+        max-width: 384px;
+    }
+
+    #rich-tooltip {
+        z-index: 1001; /* above the pinned one, which hovering must not hide */
         pointer-events: none;
     }
 
-    #rich-tooltip .tooltip-title {
+    #pinned-tooltip {
+        z-index: 1000;
+        max-height: min(60vh, 480px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .rich-tooltip .tooltip-title {
         font-weight: 600;
         font-size: 0.9em;
         padding-bottom: 6px;
@@ -31,7 +43,7 @@
         word-break: break-all;
     }
 
-    #rich-tooltip .tooltip-attrs {
+    .rich-tooltip .tooltip-attrs {
         margin: 0;
         font-size: 0.85em;
         display: grid;
@@ -40,14 +52,38 @@
         row-gap: 2px;
     }
 
-    #rich-tooltip .tooltip-attrs dt {
+    .rich-tooltip .tooltip-attrs dt,
+    .rich-tooltip .tooltip-section-title {
         color: #9ca3af; /* gray-400 */
         font-weight: 500;
     }
 
-    #rich-tooltip .tooltip-attrs dd {
+    .rich-tooltip .tooltip-attrs dd {
         margin: 0;
         word-break: break-word;
+    }
+
+    .rich-tooltip .tooltip-section {
+        font-size: 0.85em;
+    }
+    .rich-tooltip .tooltip-section + .tooltip-section {
+        margin-top: 6px;
+    }
+    .rich-tooltip .tooltip-section li {
+        word-break: break-word;
+    }
+    .rich-tooltip .tooltip-section a:hover {
+        text-decoration: underline;
+    }
+
+    .rich-tooltip .tooltip-count {
+        font-weight: 400;
+    }
+
+    .rich-tooltip .tooltip-more {
+        margin-top: 6px;
+        font-size: 0.8em;
+        color: #9ca3af; /* gray-400 */
     }
 
     /* --- Popovers --- */

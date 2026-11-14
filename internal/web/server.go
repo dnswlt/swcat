@@ -609,7 +609,8 @@ type svgMetadata struct {
 }
 
 // Builds the JSON SVG metadata object. This includes both the given SVGGraphMetadata
-// as well as "routes", i.e. the /ui URLs for all entities contained in the graph.
+// as well as "routes", i.e. the /ui URLs for all entities contained in the graph
+// or listed in its tooltips.
 func (s *Server) svgMetadataJSON(r *http.Request, svgMeta *dot.SVGGraphMetadata) (template.JS, error) {
 	ctx := r.Context()
 	entities := make(map[string]string)
@@ -619,6 +620,21 @@ func (s *Server) svgMetadataJSON(r *http.Request, svgMeta *dot.SVGGraphMetadata)
 			return "", fmt.Errorf("could not create URL for %s: %v", ref, err)
 		}
 		entities[ref] = u
+	}
+	// Entities that tooltips list without drawing them are linked too.
+	for _, e := range svgMeta.Edges {
+		for _, sec := range e.Sections {
+			for _, item := range sec.Items {
+				if _, ok := entities[item.Ref]; ok {
+					continue
+				}
+				u, err := toURLWithContext(ctx, item.Ref)
+				if err != nil {
+					return "", fmt.Errorf("could not create URL for %s: %v", item.Ref, err)
+				}
+				entities[item.Ref] = u
+			}
+		}
 	}
 	meta := svgMetadata{
 		SVGGraphMetadata: svgMeta,

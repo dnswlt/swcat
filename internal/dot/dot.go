@@ -23,7 +23,24 @@ type EdgeInfo struct {
 	Label        string        `json:"label"`                  // Optional edge label.
 	Title        string        `json:"title,omitempty"`        // Optional tooltip title (e.g. "src qname → dst qname").
 	TooltipAttrs []TooltipAttr `json:"tooltipAttrs,omitempty"` // Optional key/value pairs to be displayed in tooltips.
+	// Optional lists of entities, e.g. the APIs behind an arrow that stands for
+	// several relationships. They can be long, which is why the frontend shows
+	// all of them only once the edge is pinned.
+	Sections []TooltipSection `json:"sections,omitempty"`
 }
+
+// TooltipSection is a titled list of entities shown in a tooltip.
+type TooltipSection struct {
+	Title string        `json:"title"`
+	Items []TooltipItem `json:"items"`
+}
+
+// TooltipItem is one entity in a TooltipSection.
+type TooltipItem struct {
+	Ref   string `json:"ref"` // Entity ref, which the sidecar's routes map to a URL.
+	Label string `json:"label"`
+}
+
 type ClusterInfo struct {
 	Label string `json:"label"`
 }

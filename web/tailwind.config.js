@@ -11,9 +11,15 @@ export default {
         {
             pattern: /graphviz-svg/,
         },
+        'rich-tooltip',
         '#rich-tooltip',
+        '#pinned-tooltip',
         'tooltip-title',
         'tooltip-attrs',
+        'tooltip-section',
+        'tooltip-section-title',
+        'tooltip-count',
+        'tooltip-more',
     ],
     theme: {
         extend: {},

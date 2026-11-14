@@ -166,12 +166,28 @@ const (
 	DirOutgoing
 )
 
+// orient puts the two ends of a dependency in the order it points: from the
+// dependent to what it depends on. focal is the end on the focal entity's side,
+// other the end on the neighbor's; dir says which way the dependency goes.
+func orient(focal, other catalog.Entity, dir DependencyDir) (from, to catalog.Entity) {
+	if dir == DirIncoming {
+		return other, focal
+	}
+	return focal, other
+}
+
 // relationship is one relationship from the catalog, between the entities that
-// actually declare it — which are not always the ones drawn.
+// actually declare it — which are not always the ones drawn. from depends on
+// to: it consumes the API, or depends on the component or resource.
 type relationship struct {
-	src catalog.Entity
-	dst catalog.Entity
-	ref *catalog.LabelRef
+	from catalog.Entity
+	to   catalog.Entity
+	ref  *catalog.LabelRef
+}
+
+func newRelationship(focal, other catalog.Entity, ref *catalog.LabelRef, dir DependencyDir) relationship {
+	from, to := orient(focal, other, dir)
+	return relationship{from: from, to: to, ref: ref}
 }
 
 // extSysPartDep is one arrow between the focal entity and a neighboring one.
@@ -185,6 +201,11 @@ type extSysPartDep struct {
 	target    catalog.Entity
 	direction DependencyDir
 	rels      []relationship
+}
+
+// ends returns what the arrow is drawn between, in the direction it points.
+func (e extSysPartDep) ends() (from, to catalog.Entity) {
+	return orient(e.source, e.target, e.direction)
 }
 
 // key identifies the arrow: everything between the same two boxes, pointing the
@@ -267,7 +288,7 @@ func (r *render) collectSystemExternal(system *catalog.System, opts *SystemViewO
 		dep := &extSysPartDep{
 			source: endpoint(src), target: endpoint(dst), direction: dir,
 		}
-		rel := relationship{src: src, dst: dst, ref: ref}
+		rel := newRelationship(src, dst, ref, dir)
 		if existing, ok := arrows[dep.key()]; ok {
 			existing.rels = append(existing.rels, rel)
 			return true

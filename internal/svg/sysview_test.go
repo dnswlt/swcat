@@ -2,7 +2,7 @@ package svg
 
 import (
 	"context"
-	"strconv"
+	"slices"
 	"strings"
 	"testing"
 
@@ -221,12 +221,10 @@ func TestLabelsOnlyWhereTheirEntitiesAreDrawn(t *testing.T) {
 					"but the entities it describes are not drawn",
 					detail, e.From, e.To, e.Label)
 			}
-			// A count of what it covers is not a claim about what it is.
+			// Neither do the label's attributes.
 			for _, a := range e.TooltipAttrs {
-				if a.Key != "relationships" {
-					t.Errorf("detail=%v: arrow %s -> %s carries %q: %q",
-						detail, e.From, e.To, a.Key, a.Value)
-				}
+				t.Errorf("detail=%v: arrow %s -> %s carries %q: %q",
+					detail, e.From, e.To, a.Key, a.Value)
 			}
 		}
 	}
@@ -251,10 +249,66 @@ func TestSingleRelationshipKeepsItsLabel(t *testing.T) {
 	t.Error("no arrow kept its label")
 }
 
-// Every arrow whose relationships are not drawn reports how many it stands for,
-// one included: an arrow that said nothing could not be told apart from one that
-// is the relationship it draws.
-func TestCollapsedArrowsAlwaysSayHowMany(t *testing.T) {
+// An arrow whose relationships are not drawn names the APIs they use, so that
+// collapsing parts into their system does not lose which interfaces are
+// involved.
+func TestCollapsedArrowsNameTheirAPIs(t *testing.T) {
+	r := flightsRepo(t)
+	sys := r.System(&catalog.Ref{Name: "flights-tickets"})
+	renderer := NewRenderer(r, nil, DefaultConfig())
+
+	res, err := renderer.SystemExternalGraph(context.Background(), sys,
+		NewSystemViewOptions(nil, DetailSystems))
+	if err != nil {
+		t.Fatalf("SystemExternalGraph failed: %v", err)
+	}
+	got := map[string][]string{}
+	for _, e := range res.Metadata.Edges {
+		got[e.Title] = sectionItems(e.Sections)
+	}
+	want := map[string][]string{
+		"flights-tickets → iam-system":       {"APIs: user-management-api"},
+		"flights-search → flights-tickets":   {"APIs: flights-availability-api"},
+		"flights-frontend → flights-tickets": {"APIs: flights-purchase-api"},
+	}
+	for title, items := range want {
+		if !slices.Equal(got[title], items) {
+			t.Errorf("%s lists %v, want %v", title, got[title], items)
+		}
+	}
+}
+
+// A domain arrow stands for every system pair between two domains, and lists
+// the APIs of all of them, each once and by name.
+func TestDomainArrowsNameTheirAPIs(t *testing.T) {
+	r := flightsRepo(t)
+	dom := r.Domain(&catalog.Ref{Name: "flights"})
+	renderer := NewRenderer(r, nil, DefaultConfig())
+
+	res, err := renderer.DomainExternalGraph(context.Background(), dom,
+		NewDomainViewOptions(nil, DetailDomains))
+	if err != nil {
+		t.Fatalf("DomainExternalGraph failed: %v", err)
+	}
+	var got []string
+	for _, e := range res.Metadata.Edges {
+		if e.Title == "flights-tickets → external/ticket-vendors" {
+			got = sectionItems(e.Sections)
+		}
+	}
+	want := []string{
+		"APIs: external/vendor-alpha-api",
+		"APIs: external/vendor-beta-api",
+		"APIs: external/vendor-gamma-api",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// What the diagram already draws is not listed again: an arrow that ends at an
+// API box does not name that API in its tooltip.
+func TestDrawnEndsAreNotListed(t *testing.T) {
 	r := flightsRepo(t)
 	sys := r.System(&catalog.Ref{Name: "flights-tickets"})
 	renderer := NewRenderer(r, nil, DefaultConfig())
@@ -264,25 +318,83 @@ func TestCollapsedArrowsAlwaysSayHowMany(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SystemExternalGraph failed: %v", err)
 	}
-
-	ones, more := 0, 0
 	for _, e := range res.Metadata.Edges {
-		if len(e.TooltipAttrs) != 1 || e.TooltipAttrs[0].Key != "relationships" {
-			t.Fatalf("arrow %s -> %s reports %v, want a relationship count",
-				e.From, e.To, e.TooltipAttrs)
-		}
-		n, err := strconv.Atoi(e.TooltipAttrs[0].Value)
-		if err != nil || n < 1 {
-			t.Errorf("arrow %s -> %s reports %q relationships", e.From, e.To, e.TooltipAttrs[0].Value)
-		}
-		if n == 1 {
-			ones++
-		} else {
-			more++
+		for _, sec := range e.Sections {
+			for _, item := range sec.Items {
+				if item.Ref == e.From || item.Ref == e.To {
+					t.Errorf("arrow %s -> %s lists its own end %s", e.From, e.To, item.Ref)
+				}
+			}
 		}
 	}
-	if ones == 0 || more == 0 {
-		t.Errorf("expected both kinds of arrow at this level, got %d single and %d collapsed",
-			ones, more)
+}
+
+// sectionItems flattens tooltip sections into "Title: label" strings.
+func sectionItems(sections []dot.TooltipSection) []string {
+	var out []string
+	for _, sec := range sections {
+		for _, item := range sec.Items {
+			out = append(out, sec.Title+": "+item.Label)
+		}
+	}
+	return out
+}
+
+// Two systems that depend on each other are connected by an arrow in each
+// direction, and each arrow lists what is used in its own direction only:
+// APIs, then components, then resources, each entity once however many parts
+// depend on it. Incoming dependencies list the focal side's entities.
+func TestMutualDependencyHasAnArrowPerDirection(t *testing.T) {
+	renderer, r := externalRenderer(t, "../../testdata/mutual")
+	aUses := []string{"APIs: b-api", "Components: b-store", "Resources: b-db"}
+	bUses := []string{"APIs: a-api", "Components: a-cache", "Resources: a-db"}
+
+	views := []struct {
+		name   string
+		render func() (*Result, error)
+		want   map[string][]string
+	}{
+		{
+			name: "system a, detail=systems",
+			render: func() (*Result, error) {
+				return renderer.SystemExternalGraph(context.Background(),
+					r.System(&catalog.Ref{Name: "a"}), NewSystemViewOptions(nil, DetailSystems))
+			},
+			want: map[string][]string{"system:a -> system:b": aUses, "system:b -> system:a": bUses},
+		},
+		{
+			name: "domain left, detail=domains",
+			render: func() (*Result, error) {
+				return renderer.DomainExternalGraph(context.Background(),
+					r.Domain(&catalog.Ref{Name: "left"}), NewDomainViewOptions(nil, DetailDomains))
+			},
+			want: map[string][]string{"system:a -> domain:right": aUses, "domain:right -> system:a": bUses},
+		},
+		{
+			name: "domain left, detail=systems",
+			render: func() (*Result, error) {
+				return renderer.DomainExternalGraph(context.Background(),
+					r.Domain(&catalog.Ref{Name: "left"}), NewDomainViewOptions(nil, DetailSystems))
+			},
+			want: map[string][]string{"system:a -> system:b": aUses, "system:b -> system:a": bUses},
+		},
+	}
+	for _, v := range views {
+		res, err := v.render()
+		if err != nil {
+			t.Fatalf("%s: rendering failed: %v", v.name, err)
+		}
+		got := map[string][]string{}
+		for _, e := range res.Metadata.Edges {
+			got[e.From+" -> "+e.To] = sectionItems(e.Sections)
+		}
+		if len(got) != len(v.want) {
+			t.Errorf("%s: got arrows %v, want %v", v.name, got, v.want)
+		}
+		for arrow, items := range v.want {
+			if !slices.Equal(got[arrow], items) {
+				t.Errorf("%s: %s lists %v, want %v", v.name, arrow, got[arrow], items)
+			}
+		}
 	}
 }

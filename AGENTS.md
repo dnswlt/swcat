@@ -89,9 +89,15 @@ of which each view offers the part that makes sense for it: a domain view
 (default `apis`). Entities a level omits are represented by whatever contains
 them, and their edges attach to that container's frame.
 
-Two boxes are connected by **one** arrow, whatever number of relationships it
-stands for: several arrows between the same pair would be indistinguishable once
-the entities that told them apart are no longer drawn.
+Two boxes are connected by **one** arrow per direction, whatever number of
+relationships it stands for: several arrows between the same pair would be
+indistinguishable once the entities that told them apart are no longer drawn.
+Pairs that depend on each other get an arrow each way, never one arrow for
+both: it would point one way while standing for the other. Its tooltip lists the
+APIs (and other entities) those relationships use, which can be any number. The
+hover tooltip follows the cursor and cannot be entered, so it cuts the list
+short; pinning the edge (a click) opens a second, scrollable tooltip with all of
+them, linked.
 
 ## Conventions
 

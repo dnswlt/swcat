@@ -1,0 +1,146 @@
+# Two systems in different domains that depend on each other, through APIs,
+# components and resources, in both directions. Two components of system a
+# consume the same API of system b.
+---
+apiVersion: swcat/v1alpha1
+kind: Group
+metadata:
+  name: team
+spec:
+  type: team
+  profile:
+    displayName: Team
+---
+apiVersion: swcat/v1alpha1
+kind: Domain
+metadata:
+  name: left
+spec:
+  owner: team
+---
+apiVersion: swcat/v1alpha1
+kind: Domain
+metadata:
+  name: right
+spec:
+  owner: team
+---
+apiVersion: swcat/v1alpha1
+kind: System
+metadata:
+  name: a
+spec:
+  owner: team
+  domain: left
+---
+apiVersion: swcat/v1alpha1
+kind: System
+metadata:
+  name: b
+spec:
+  owner: team
+  domain: right
+---
+apiVersion: swcat/v1alpha1
+kind: Component
+metadata:
+  name: a-service
+spec:
+  type: service
+  lifecycle: production
+  owner: team
+  system: a
+  providesApis:
+    - a-api
+  consumesApis:
+    - b-api
+  dependsOn:
+    - component:b-store
+    - resource:b-db
+---
+apiVersion: swcat/v1alpha1
+kind: Component
+metadata:
+  name: b-service
+spec:
+  type: service
+  lifecycle: production
+  owner: team
+  system: b
+  providesApis:
+    - b-api
+  consumesApis:
+    - a-api
+  dependsOn:
+    - component:a-cache
+    - resource:a-db
+---
+apiVersion: swcat/v1alpha1
+kind: API
+metadata:
+  name: a-api
+spec:
+  type: grpc
+  lifecycle: production
+  owner: team
+  system: a
+---
+apiVersion: swcat/v1alpha1
+kind: API
+metadata:
+  name: b-api
+spec:
+  type: grpc
+  lifecycle: production
+  owner: team
+  system: b
+---
+apiVersion: swcat/v1alpha1
+kind: Component
+metadata:
+  name: a-worker
+spec:
+  type: service
+  lifecycle: production
+  owner: team
+  system: a
+  consumesApis:
+    - b-api
+---
+apiVersion: swcat/v1alpha1
+kind: Component
+metadata:
+  name: a-cache
+spec:
+  type: service
+  lifecycle: production
+  owner: team
+  system: a
+---
+apiVersion: swcat/v1alpha1
+kind: Component
+metadata:
+  name: b-store
+spec:
+  type: service
+  lifecycle: production
+  owner: team
+  system: b
+---
+apiVersion: swcat/v1alpha1
+kind: Resource
+metadata:
+  name: a-db
+spec:
+  type: database
+  owner: team
+  system: a
+---
+apiVersion: swcat/v1alpha1
+kind: Resource
+metadata:
+  name: b-db
+spec:
+  type: database
+  owner: team
+  system: b

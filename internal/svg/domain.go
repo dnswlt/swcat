@@ -29,10 +29,14 @@ func NewDomainViewOptions(selectedDomains []*catalog.Ref, detail DetailLevel) *D
 	}
 }
 
-// systemNeighbor is a system another system exchanges data with.
+// systemNeighbor is a system another system exchanges data with, in one
+// direction. Two systems that depend on each other are neighbors twice.
 type systemNeighbor struct {
 	system    *catalog.System
 	direction DependencyDir
+	// rels are the relationships between the parts of the two systems that
+	// make them neighbors in this direction.
+	rels []relationship
 }
 
 // systemNeighbors returns the systems that the given system exchanges data
@@ -40,10 +44,17 @@ type systemNeighbor struct {
 // components, APIs and resources and lifts what it finds to the level of
 // systems. The result is sorted, so that a diagram comes out the same on every
 // render.
+//
+// The directions are kept apart: a single arrow for a pair that depends both
+// ways would point one way while standing for relationships in the other.
 func (r *render) systemNeighbors(s *catalog.System) []systemNeighbor {
-	out := map[*catalog.System]DependencyDir{}
-	add := func(ref *catalog.Ref, dir DependencyDir) {
-		sp, ok := r.repo.Entity(ref).(catalog.SystemPart)
+	type key struct {
+		system *catalog.System
+		dir    DependencyDir
+	}
+	out := map[key]*systemNeighbor{}
+	add := func(part catalog.Entity, ref *catalog.LabelRef, dir DependencyDir) {
+		sp, ok := r.repo.Entity(ref.Ref).(catalog.SystemPart)
 		if !ok {
 			return
 		}
@@ -51,47 +62,51 @@ func (r *render) systemNeighbors(s *catalog.System) []systemNeighbor {
 		if other == nil || other.GetRef().Equal(s.GetRef()) {
 			return
 		}
-		// A pair related in both directions is recorded once, as outgoing: the
-		// layout picks a side for it anyway.
-		if prev, seen := out[other]; !seen || prev == dir {
-			out[other] = dir
-		} else {
-			out[other] = DirOutgoing
+		rel := newRelationship(part, sp, ref, dir)
+		k := key{other, dir}
+		if n, seen := out[k]; seen {
+			n.rels = append(n.rels, rel)
+			return
 		}
+		out[k] = &systemNeighbor{system: other, direction: dir, rels: []relationship{rel}}
 	}
 	for _, cRef := range s.GetComponents() {
 		c := r.repo.Component(cRef)
 		for _, ref := range c.Spec.DependsOn {
-			add(ref.Ref, DirOutgoing)
+			add(c, ref, DirOutgoing)
 		}
 		for _, ref := range c.Spec.ConsumesAPIs {
-			add(ref.Ref, DirOutgoing)
+			add(c, ref, DirOutgoing)
 		}
 		for _, ref := range c.GetDependents() {
-			add(ref.Ref, DirIncoming)
+			add(c, ref, DirIncoming)
 		}
 	}
 	for _, aRef := range s.GetAPIs() {
-		for _, ref := range r.repo.API(aRef).GetConsumers() {
-			add(ref.Ref, DirIncoming)
+		a := r.repo.API(aRef)
+		for _, ref := range a.GetConsumers() {
+			add(a, ref, DirIncoming)
 		}
 	}
 	for _, rRef := range s.GetResources() {
 		res := r.repo.Resource(rRef)
 		for _, ref := range res.Spec.DependsOn {
-			add(ref.Ref, DirOutgoing)
+			add(res, ref, DirOutgoing)
 		}
 		for _, ref := range res.GetDependents() {
-			add(ref.Ref, DirIncoming)
+			add(res, ref, DirIncoming)
 		}
 	}
 
 	neighbors := make([]systemNeighbor, 0, len(out))
-	for sys, dir := range out {
-		neighbors = append(neighbors, systemNeighbor{system: sys, direction: dir})
+	for _, n := range out {
+		neighbors = append(neighbors, *n)
 	}
 	slices.SortFunc(neighbors, func(a, b systemNeighbor) int {
-		return strings.Compare(a.system.GetQName(), b.system.GetQName())
+		if c := strings.Compare(a.system.GetQName(), b.system.GetQName()); c != 0 {
+			return c
+		}
+		return int(a.direction) - int(b.direction)
 	})
 	return neighbors
 }
@@ -146,14 +161,13 @@ func (r *render) collectDomainExternal(domain *catalog.Domain, opts *DomainViewO
 				target = container
 			}
 			dep := &extSysPartDep{source: s, target: target, direction: dir}
-			rel := relationship{src: s, dst: other}
 			if existing, ok := arrows[dep.key()]; ok {
 				// Same two boxes: at the domains level every system of a
 				// neighboring domain is behind one arrow.
-				existing.rels = append(existing.rels, rel)
+				existing.rels = append(existing.rels, n.rels...)
 				continue
 			}
-			dep.rels = []relationship{rel}
+			dep.rels = slices.Clone(n.rels)
 			arrows[dep.key()] = dep
 
 			key := container.GetRef().String()

@@ -6,7 +6,10 @@
 // the entity ref as their id and a "clickable-node" class, edges are grouped in
 // "svg-edge-N" — which is what lets this work against either of them.
 import { claim } from './dom.js';
-import { createTooltip, hideTooltip, showTooltip, tooltipVisible, updateTooltipPosition } from './tooltip.js';
+import {
+    createTooltip, hidePinnedTooltip, hideTooltip, inPinnedTooltip, showPinnedTooltip, showTooltip,
+    tooltipVisible, updateTooltipPosition,
+} from './tooltip.js';
 
 /** Metadata for the elements of the current diagram, keyed by element id. */
 let meta = emptyMeta();
@@ -100,23 +103,27 @@ function onClickNode(node, shiftKey) {
 
 // Id of the edge kept highlighted by a click, or null if none is pinned. The
 // highlight itself is the .pinned CSS class; this only records which edge
-// carries it, so it can be taken off again.
+// carries it, so it can be taken off again. A pinned edge also keeps its
+// tooltip open, in full: the hover tooltip has to cut long lists short.
 let pinnedEdgeId = null;
 
 function clearPinnedEdge() {
+    hidePinnedTooltip();
     if (!pinnedEdgeId) return;
     document.getElementById(pinnedEdgeId)?.classList.remove('pinned');
     pinnedEdgeId = null;
 }
 
 // Pins the given edge, or unpins it if it was already pinned. Only one edge is
-// pinned at a time.
-function togglePinnedEdge(edge) {
+// pinned at a time. event is the click, where the pinned tooltip opens.
+function togglePinnedEdge(edge, event) {
     const wasPinned = edge.id === pinnedEdgeId;
     clearPinnedEdge();
     if (!wasPinned && edge.id) {
         edge.classList.add('pinned');
         pinnedEdgeId = edge.id;
+        hideTooltip();
+        showPinnedTooltip(meta.edges[edge.id], event, meta.routes.entities);
     }
 }
 
@@ -126,7 +133,7 @@ function togglePinnedEdge(edge) {
 function initEdgePinning() {
     if (!claim(document.body, 'edgePinningInit')) return;
     document.addEventListener('click', (event) => {
-        if (!event.target.closest('#relationships-svg')) {
+        if (!event.target.closest('#relationships-svg') && !inPinnedTooltip(event.target)) {
             clearPinnedEdge();
         }
     });
@@ -151,7 +158,7 @@ function addDiagramListeners() {
         }
         const edge = e.target.closest('g.edge');
         if (edge) {
-            togglePinnedEdge(edge);
+            togglePinnedEdge(edge, e);
             return;
         }
         // A click on the diagram background drops the pin.
@@ -163,7 +170,10 @@ function addDiagramListeners() {
         // hovering the line is how an edge is read.
         const edge = event.target.closest('g.edge');
         if (edge) {
-            showTooltip(meta.edges[edge.id], event);
+            // A pinned edge already shows its tooltip, in full.
+            if (edge.id !== pinnedEdgeId) {
+                showTooltip(meta.edges[edge.id], event);
+            }
             return;
         }
         const node = event.target.closest('.clickable-node');
@@ -199,5 +209,6 @@ export function initDiagram() {
 
 /** Forgets the pinned edge, whose element is gone after a swap. */
 export function resetPinnedEdge() {
+    hidePinnedTooltip();
     pinnedEdgeId = null;
 }

@@ -17,6 +17,7 @@ import (
 
 	"github.com/dnswlt/swcat/internal/catalog"
 	"github.com/dnswlt/swcat/internal/comments"
+	"github.com/dnswlt/swcat/internal/dot"
 	"github.com/dnswlt/swcat/internal/lint"
 	"github.com/dnswlt/swcat/internal/plugins"
 	"github.com/dnswlt/swcat/internal/repo"
@@ -1407,5 +1408,84 @@ func TestCommentStoreFailureIsNotAQueryError(t *testing.T) {
 		if rr.Code != http.StatusOK || strings.Contains(rr.Body.String(), "Invalid query") {
 			t.Fatalf("%s: status %d, body %q; want 200 without a query error", path, rr.Code, rr.Body.String())
 		}
+	}
+}
+
+// relationshipsMeta extracts the diagram's JSON sidecar from a page.
+func relationshipsMeta(t *testing.T, html string) svgMetadata {
+	t.Helper()
+	const open = `id="relationships-svg-meta"`
+	i := strings.Index(html, open)
+	if i < 0 {
+		t.Fatal("page has no relationships-svg-meta")
+	}
+	start := i + strings.Index(html[i:], ">") + 1
+	end := start + strings.Index(html[start:], "</script>")
+	var meta svgMetadata
+	if err := json.Unmarshal([]byte(html[start:end]), &meta); err != nil {
+		t.Fatalf("cannot parse sidecar: %v", err)
+	}
+	return meta
+}
+
+// Tooltips list entities the diagram does not draw, and link them: the sidecar
+// carries a route for each of them as for the drawn nodes.
+func TestTooltipEntitiesHaveRoutes(t *testing.T) {
+	s := newTestServer(t, store.NewDiskStore("../../testdata/mutual"))
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet,
+		"/ui/systems/a?view=external&detail=systems", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rr.Code, rr.Body.String())
+	}
+	meta := relationshipsMeta(t, rr.Body.String())
+
+	want := map[string]string{
+		"api:b-api":         "/ui/apis/b-api",
+		"component:b-store": "/ui/components/b-store",
+		"resource:b-db":     "/ui/resources/b-db",
+	}
+	listed := map[string]bool{}
+	for _, e := range meta.Edges {
+		for _, sec := range e.Sections {
+			for _, item := range sec.Items {
+				listed[item.Ref] = true
+				if _, drawn := meta.Nodes[item.Ref]; drawn {
+					t.Errorf("%s is drawn, yet listed in a tooltip", item.Ref)
+				}
+			}
+		}
+	}
+	for ref, u := range want {
+		if !listed[ref] {
+			t.Errorf("%s is not listed in any tooltip", ref)
+		}
+		if got := meta.Routes.Entities[ref]; got != u {
+			t.Errorf("route for %s = %q, want %q", ref, got, u)
+		}
+	}
+}
+
+// Viewing a git ref, the links in tooltips stay within that ref.
+func TestTooltipRoutesKeepTheGitRef(t *testing.T) {
+	meta := &dot.SVGGraphMetadata{
+		Nodes: map[string]*dot.NodeInfo{"system:a": {}},
+		Edges: map[string]*dot.EdgeInfo{"svg-edge-0": {
+			Sections: []dot.TooltipSection{{Title: "APIs", Items: []dot.TooltipItem{{Ref: "api:b-api", Label: "b-api"}}}},
+		}},
+	}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r = r.WithContext(context.WithValue(r.Context(), ctxRef, "feature/x"))
+
+	js, err := (&Server{}).svgMetadataJSON(r, meta)
+	if err != nil {
+		t.Fatalf("svgMetadataJSON: %v", err)
+	}
+	var got svgMetadata
+	if err := json.Unmarshal([]byte(js), &got); err != nil {
+		t.Fatalf("cannot parse: %v", err)
+	}
+	if u := got.Routes.Entities["api:b-api"]; u != "/ui/ref/feature/x/-/apis/b-api" {
+		t.Errorf("route = %q, want it within the ref", u)
 	}
 }
