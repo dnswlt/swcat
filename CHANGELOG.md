@@ -7,6 +7,27 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and swcat follows
 
 ## [Unreleased]
 
+## [0.18.3] - 2026-11-15
+
+### Added
+
+- Component pages have an "Expand APIs" control (None, Provided, Consumed,
+  All) that shows the consumers or providers of several APIs at once.
+  Shift-clicking an API still expands or collapses just that one. Both update
+  the diagram without reloading the page.
+
+### Changed
+
+- A component diagram with expanded APIs uses `compactEdgeMinLen` instead of
+  `normalEdgeMinLen`, which keeps it considerably narrower.
+
+### Fixed
+
+- Clicking diagram controls in quick succession could leave the URL showing a
+  different view than the diagram.
+- Going Back or Forward after a diagram update left a diagram that no longer
+  responded to hovering and clicks.
+
 ## [0.18.2] - 2026-11-14
 
 ### Changed
@@ -117,7 +138,8 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and swcat follows
   the importer.
 - Diagrams with system boundaries lay out the same way on every render.
 
-[Unreleased]: https://github.com/dnswlt/swcat/compare/v0.18.2...HEAD
+[Unreleased]: https://github.com/dnswlt/swcat/compare/v0.18.3...HEAD
+[0.18.3]: https://github.com/dnswlt/swcat/compare/v0.18.2...v0.18.3
 [0.18.2]: https://github.com/dnswlt/swcat/compare/v0.18.1...v0.18.2
 [0.18.1]: https://github.com/dnswlt/swcat/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/dnswlt/swcat/compare/v0.17.0...v0.18.0
