@@ -1,0 +1,7 @@
+# Tells buf (and editor tooling built on it, such as the buf language server)
+# that the proto sources are rooted at proto/, so imports like
+# "swcat/catalog/v1/catalog.proto" resolve. Code generation does not use this
+# file: the Makefile runs protoc with the same root (-I=proto).
+version: v2
+modules:
+  - path: proto
