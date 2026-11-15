@@ -10,5 +10,9 @@
 <!-- Tailwind -->
 <link rel="stylesheet" href='{{ asset "main.css" }}' />
 
+<!-- Swaps that push the URL stay, but Back/Forward loads the page normally
+     instead of restoring it from htmx's snapshot cache: restored snapshots are
+     copies of the saved HTML, without any of the listeners the page wired up. -->
+<meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true}'>
 <script src="/static/js/htmx-2.0.6.min.js"></script>
 <script src="/static/js/path-params-2.0.1.min.js"></script>

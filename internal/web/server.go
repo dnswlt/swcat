@@ -589,6 +589,63 @@ type detailOption struct {
 	Active bool
 }
 
+// expandOption is one step of the control that picks which APIs of a component
+// are expanded, i.e. shown with their consumers or providers.
+type expandOption struct {
+	Name   string
+	Href   string
+	Active bool
+}
+
+// expandOptions offers the sets of APIs a component page can expand at once:
+// none, the provided ones, the consumed ones, or all of them. Each option
+// replaces the e= list, so shift-clicking a single API still adjusts it from
+// there. "Provided" and "Consumed" are left out for a component that has no API
+// on that side, where they would do what "None" does; "All" is always offered.
+// An option is active if exactly its APIs are expanded, which can make two of
+// them active at once: "Consumed" and "All" for a component that provides no
+// API, or that consumes every API it provides.
+func expandOptions(baseURL string, provided, consumed, expanded []*catalog.Ref) []expandOption {
+	if len(provided) == 0 && len(consumed) == 0 {
+		return nil
+	}
+	set := func(refs ...[]*catalog.Ref) map[string]bool {
+		m := map[string]bool{}
+		for _, rs := range refs {
+			for _, r := range rs {
+				m[r.String()] = true
+			}
+		}
+		return m
+	}
+	all := set(provided, consumed)
+	// Expanded refs that are not APIs of this component change nothing.
+	current := map[string]bool{}
+	for ref := range set(expanded) {
+		if all[ref] {
+			current[ref] = true
+		}
+	}
+	option := func(name string, apis map[string]bool) expandOption {
+		refs := slices.Sorted(maps.Keys(apis))
+		vals := url.Values{"e": refs}
+		href := baseURL
+		if len(refs) > 0 {
+			href += "?" + vals.Encode()
+		}
+		return expandOption{Name: name, Href: href, Active: maps.Equal(apis, current)}
+	}
+
+	opts := []expandOption{option("None", nil)}
+	if len(provided) > 0 {
+		opts = append(opts, option("Provided", set(provided)))
+	}
+	if len(consumed) > 0 {
+		opts = append(opts, option("Consumed", set(consumed)))
+	}
+	return append(opts, option("All", all))
+}
+
 // svgTab is one of the internal/external tabs above a relationship view.
 type svgTab struct {
 	Active bool
@@ -836,6 +893,22 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 		}
 		data.storeSVG(cacheKey, svgResult)
 	}
+	componentURL, err := toURLWithContext(r.Context(), component)
+	if err != nil {
+		http.Error(w, "Failed to build component URL", http.StatusInternalServerError)
+		log.Printf("Failed to build component URL: %v", err)
+		return
+	}
+	apiRefs := func(refs []*catalog.LabelRef) []*catalog.Ref {
+		out := make([]*catalog.Ref, len(refs))
+		for i, r := range refs {
+			out[i] = r.Ref
+		}
+		return out
+	}
+	params["ExpandOptions"] = expandOptions(componentURL,
+		apiRefs(component.Spec.ProvidesAPIs), apiRefs(component.Spec.ConsumesAPIs), expandedAPIs)
+
 	params["SVG"] = template.HTML(svgResult.SVG)
 	params["SVGMetadataJSON"], err = s.svgMetadataJSON(r, svgResult.Metadata)
 	if err != nil {
@@ -862,6 +935,13 @@ func (s *Server) serveComponent(w http.ResponseWriter, r *http.Request, componen
 	params["ObservedEndpoints"] = observedEndpointsSections(component, data.repo)
 
 	s.setCustomContent(component, &data.config.UI, params)
+
+	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Target") == "svg-wrapper" {
+		// Only replace the SVG div. Trigger an svgUpdated event so the frontend can re-scan the SVG metadata JSON.
+		w.Header().Set("HX-Trigger-After-Swap", "svgUpdated")
+		s.serveHTMLPage(w, r, "relationships_svg.html", params)
+		return
+	}
 
 	s.serveHTMLPage(w, r, "component_detail.html", params)
 }

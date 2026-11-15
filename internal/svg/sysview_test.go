@@ -398,3 +398,28 @@ func TestMutualDependencyHasAnArrowPerDirection(t *testing.T) {
 		}
 	}
 }
+
+// A component with expanded APIs is drawn with the compact edge length; the
+// plain view, and a view whose e= names none of its APIs, keep the normal one.
+func TestComponentEdgeLengthFollowsExpansion(t *testing.T) {
+	_, r := externalRenderer(t, "../../testdata/mutual")
+	comp := r.Component(&catalog.Ref{Name: "a-service"})
+	cfg := DefaultConfig()
+	cfg.NormalEdgeMinLen, cfg.CompactEdgeMinLen = 3, 1
+	rd := &render{Renderer: NewRenderer(r, nil, cfg), kind: DiagramComponent, focalEntity: comp}
+
+	for _, tc := range []struct {
+		name     string
+		expanded []*catalog.Ref
+		want     string
+	}{
+		{"plain", nil, `minlen="3"`},
+		{"expanded", []*catalog.Ref{{Kind: catalog.KindAPI, Name: "b-api"}}, `minlen="1"`},
+		{"unrelated ref", []*catalog.Ref{{Kind: catalog.KindAPI, Name: "elsewhere"}}, `minlen="3"`},
+	} {
+		src := rd.generateComponentDotSource(comp, &ComponentViewOptions{ExpandedAPIs: tc.expanded}).DotSource
+		if !strings.Contains(src, tc.want) {
+			t.Errorf("%s: dot source lacks %s:\n%s", tc.name, tc.want, src)
+		}
+	}
+}

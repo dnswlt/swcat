@@ -494,15 +494,21 @@ type ComponentViewOptions struct {
 }
 
 func (r *render) generateComponentDotSource(component *catalog.Component, opts *ComponentViewOptions) *dot.DotSource {
-	dw := dot.New(dot.WriterConfig{EdgeMinLen: r.config.NormalEdgeMinLen})
-	dw.Start()
-
 	expandedAPIs := map[string]bool{}
 	if opts != nil {
 		for _, ref := range opts.ExpandedAPIs {
 			expandedAPIs[ref.String()] = true
 		}
 	}
+
+	// Expanded APIs add a column on either side, and edges as long as in the
+	// plain view would spread them over far more width than they need.
+	minLen := r.config.NormalEdgeMinLen
+	if expandsAny(expandedAPIs, component.Spec.ProvidesAPIs, component.Spec.ConsumesAPIs) {
+		minLen = r.config.CompactEdgeMinLen
+	}
+	dw := dot.New(dot.WriterConfig{EdgeMinLen: minLen})
+	dw.Start()
 
 	// Component
 	dw.AddNode(r.entityNode(component))
@@ -585,6 +591,18 @@ func (r *render) generateComponentDotSource(component *catalog.Component, opts *
 
 	dw.End()
 	return dw.Result()
+}
+
+// expandsAny reports whether any of the given API refs is expanded.
+func expandsAny(expanded map[string]bool, apiRefs ...[]*catalog.LabelRef) bool {
+	for _, refs := range apiRefs {
+		for _, a := range refs {
+			if expanded[a.Ref.String()] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ComponentGraph generates an SVG for the given component.

@@ -63,19 +63,34 @@ function searchRelatedEntities(entityRef) {
     }
 }
 
-// Toggles entityRef in the e= query param list of the current URL and navigates.
-// Used on the component detail page to expand/collapse API consumers/providers.
-function toggleExpandedEntity(entityRef) {
-    const url = new URL(window.location.href);
+/**
+ * Returns the URL with entityRef added to its e= list, or removed if it is
+ * there already. The component page expands the APIs in that list.
+ */
+export function toggleExpanded(href, entityRef) {
+    const url = new URL(href);
     const already = url.searchParams.getAll('e');
     url.searchParams.delete('e');
-    if (already.includes(entityRef)) {
-        already.filter(e => e !== entityRef).forEach(e => url.searchParams.append('e', e));
-    } else {
-        already.concat(entityRef).forEach(e => url.searchParams.append('e', e));
+    const next = already.includes(entityRef)
+        ? already.filter(e => e !== entityRef)
+        : already.concat(entityRef);
+    next.forEach(e => url.searchParams.append('e', e));
+    url.hash = '';
+    return url;
+}
+
+// Expands or collapses one API on the component page. Only the diagram is
+// replaced; the URL is pushed (hx-push-url on #svg-wrapper, which the request
+// inherits through node), so it stays the single source of truth.
+function toggleExpandedEntity(node, entityRef) {
+    const url = toggleExpanded(window.location.href, entityRef);
+    if (!document.getElementById('svg-wrapper')) {
+        window.location.href = url.toString();
+        return;
     }
-    url.hash = 'relationships-svg';
-    window.location.href = url.toString();
+    htmx.ajax('GET', url.pathname + url.search, {
+        source: node, target: '#svg-wrapper', swap: 'outerHTML',
+    });
 }
 
 // Handles clicks on diagram nodes: shift-click searches for related entities
@@ -86,7 +101,7 @@ function onClickNode(node, shiftKey) {
 
     if (shiftKey) {
         if (document.body.dataset.page === 'component' && id.startsWith('api:')) {
-            toggleExpandedEntity(id);
+            toggleExpandedEntity(node, id);
             return;
         }
         searchRelatedEntities(id);
@@ -207,8 +222,12 @@ export function initDiagram() {
     initEdgePinning();
 }
 
-/** Forgets the pinned edge, whose element is gone after a swap. */
+/**
+ * Forgets what belonged to the replaced diagram: the pinned edge, and the
+ * tooltips of elements that are gone after a swap.
+ */
 export function resetPinnedEdge() {
+    hideTooltip();
     hidePinnedTooltip();
     pinnedEdgeId = null;
 }

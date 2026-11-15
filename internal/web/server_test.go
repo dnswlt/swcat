@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -1487,5 +1489,130 @@ func TestTooltipRoutesKeepTheGitRef(t *testing.T) {
 	}
 	if u := got.Routes.Entities["api:b-api"]; u != "/ui/ref/feature/x/-/apis/b-api" {
 		t.Errorf("route = %q, want it within the ref", u)
+	}
+}
+
+func TestExpandOptions(t *testing.T) {
+	refs := func(names ...string) []*catalog.Ref {
+		var out []*catalog.Ref
+		for _, n := range names {
+			out = append(out, &catalog.Ref{Kind: catalog.KindAPI, Name: n})
+		}
+		return out
+	}
+	type opt struct {
+		name, href string
+		active     bool
+	}
+	tests := []struct {
+		name                         string
+		provided, consumed, expanded []*catalog.Ref
+		want                         []opt
+	}{
+		{
+			name:     "both directions, nothing expanded",
+			provided: refs("p"), consumed: refs("c2", "c1"),
+			want: []opt{
+				{"None", "/ui/components/x", true},
+				{"Provided", "/ui/components/x?e=api%3Ap", false},
+				{"Consumed", "/ui/components/x?e=api%3Ac1&e=api%3Ac2", false},
+				{"All", "/ui/components/x?e=api%3Ac1&e=api%3Ac2&e=api%3Ap", false},
+			},
+		},
+		{
+			// Order does not matter, and refs that are not the component's
+			// APIs are ignored.
+			name:     "exactly the consumed ones",
+			provided: refs("p"), consumed: refs("c1", "c2"), expanded: refs("c2", "other", "c1"),
+			want: []opt{
+				{"None", "/ui/components/x", false},
+				{"Provided", "/ui/components/x?e=api%3Ap", false},
+				{"Consumed", "/ui/components/x?e=api%3Ac1&e=api%3Ac2", true},
+				{"All", "/ui/components/x?e=api%3Ac1&e=api%3Ac2&e=api%3Ap", false},
+			},
+		},
+		{
+			name:     "a set no option stands for",
+			provided: refs("p"), consumed: refs("c1", "c2"), expanded: refs("c1"),
+			want: []opt{
+				{"None", "/ui/components/x", false},
+				{"Provided", "/ui/components/x?e=api%3Ap", false},
+				{"Consumed", "/ui/components/x?e=api%3Ac1&e=api%3Ac2", false},
+				{"All", "/ui/components/x?e=api%3Ac1&e=api%3Ac2&e=api%3Ap", false},
+			},
+		},
+		{
+			// "Provided" would do what "None" does; "All" stays, and is the
+			// same as "Consumed".
+			name:     "one direction only",
+			consumed: refs("c1"), expanded: refs("c1"),
+			want: []opt{
+				{"None", "/ui/components/x", false},
+				{"Consumed", "/ui/components/x?e=api%3Ac1", true},
+				{"All", "/ui/components/x?e=api%3Ac1", true},
+			},
+		},
+		{
+			// A component that consumes the API it provides: all of its APIs
+			// are consumed ones, so "Consumed" and "All" are both true.
+			name:     "provided APIs are consumed too",
+			provided: refs("p"), consumed: refs("c1", "p"), expanded: refs("c1", "p"),
+			want: []opt{
+				{"None", "/ui/components/x", false},
+				{"Provided", "/ui/components/x?e=api%3Ap", false},
+				{"Consumed", "/ui/components/x?e=api%3Ac1&e=api%3Ap", true},
+				{"All", "/ui/components/x?e=api%3Ac1&e=api%3Ap", true},
+			},
+		},
+		{
+			name: "no APIs",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var got []opt
+			for _, o := range expandOptions("/ui/components/x", tc.provided, tc.consumed, tc.expanded) {
+				got = append(got, opt{o.Name, o.Href, o.Active})
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("got  %v\nwant %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// An htmx request for the diagram gets the diagram only, with the event that
+// makes the frontend wire it up; the full page has the control as well.
+func TestComponentDiagramSwap(t *testing.T) {
+	s := newTestServer(t, store.NewDiskStore("../../testdata/mutual"))
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/components/a-service?e=api:b-api", nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "svg-wrapper")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if got := rr.Header().Get("HX-Trigger-After-Swap"); got != "svgUpdated" {
+		t.Errorf("HX-Trigger-After-Swap = %q, want svgUpdated", got)
+	}
+	if strings.Contains(body, "<html") {
+		t.Error("got the full page, want the diagram only")
+	}
+	if !strings.Contains(body, `id="svg-wrapper"`) || !strings.Contains(body, "Expand APIs") {
+		t.Error("diagram or Expand control missing")
+	}
+	// b-api is the only API a-service consumes, so "Consumed" is active.
+	active := regexp.MustCompile(`href="([^"]*)"\s+aria-pressed="true"`).FindAllStringSubmatch(body, -1)
+	if len(active) != 1 || active[0][1] != "/ui/components/a-service?e=api%3Ab-api" {
+		t.Errorf("active options = %v, want only Consumed", active)
+	}
+
+	rr = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/ui/components/a-service", nil))
+	if body := rr.Body.String(); !strings.Contains(body, "<html") || !strings.Contains(body, "Expand APIs") {
+		t.Error("full page lacks the Expand control")
 	}
 }

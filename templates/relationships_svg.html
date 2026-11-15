@@ -1,8 +1,13 @@
 {{ if .SVG }}
-<div id="svg-wrapper" class="space-y-4">
+<!-- Inherited by everything that reloads the diagram, including requests
+     diagram.js makes on behalf of a clicked node: hx-push-url keeps the URL in
+     step, and hx-sync lets a new request abort the one in flight, so that the
+     last click wins and a stale response can neither show nor push its URL. -->
+<div id="svg-wrapper" class="space-y-4" hx-push-url="true" hx-sync="closest #svg-wrapper:replace">
+    {{ if or .SVGTabs .DetailOptions .ExpandOptions }}
     <!-- Tabs to select the internal or external view, plus the view options
          that apply to the whole diagram, right-aligned in the same row. -->
-    <div id="svg-tabs" class="flex items-center gap-4 border-b">
+    <div id="svg-tabs" class="flex items-center gap-4{{ if .SVGTabs }} border-b{{ end }}">
         {{ range .SVGTabs }}
         {{ if .Active }}
         <a role="button" 
@@ -45,7 +50,31 @@
             </div>
         </div>
         {{ end }}
+
+        {{ if .ExpandOptions }}
+        <!-- Which APIs of a component are shown with their consumers or
+             providers. Each option replaces the set; shift-clicking an API in
+             the diagram adds or removes just that one. -->
+        <div class="ml-auto mb-1 flex items-center gap-2 text-sm text-gray-500">
+            Expand APIs
+            <div class="inline-flex rounded-full bg-gray-100 p-0.5" role="group">
+                {{ range $.ExpandOptions }}
+                <a role="button"
+                   href="{{ .Href }}"
+                   aria-pressed="{{ if .Active }}true{{ else }}false{{ end }}"
+                   hx-get="{{ .Href }}"
+                   hx-target="#svg-wrapper"
+                   hx-swap="outerHTML"
+                   hx-push-url="true"
+                   class="px-2.5 py-0.5 rounded-full cursor-pointer transition-colors {{ if .Active }}bg-white text-gray-900 shadow-sm{{ else }}hover:text-gray-700{{ end }}">
+                    {{ .Name }}
+                </a>
+                {{ end }}
+            </div>
+        </div>
+        {{ end }}
     </div>
+    {{ end }}
 
     {{ if .ExternalChips }}
     <!-- Neighbors: systems on a system page, domains on a domain page.
@@ -71,8 +100,15 @@
     {{ end }}
 
     <!-- SVG and its metadata JSON. -->
-    <div id="relationships-svg">
+    <div id="relationships-svg" class="relative group">
         {{ .SVG }}
+        {{ if .GraphURL }}
+        <a href="{{ .GraphURL }}"
+            class="absolute bottom-0 right-0 p-2 text-gray-400 hover:text-gray-800 transition-colors"
+            title="Open in Graph Builder">
+            {{ .GraphIcon }}
+        </a>
+        {{ end }}
     </div>
     <script type="application/json" id="relationships-svg-meta">
         {{ .SVGMetadataJSON }}

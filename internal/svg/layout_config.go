@@ -26,9 +26,10 @@ type Config struct {
 	// Include the API version in labelled references if specified and if no
 	// explicit label is specified.
 	ShowVersionAsLabel bool `yaml:"showVersionAsLabel"`
-	// Minimum edge length (graphviz minlen) for standard graph views. Default: 1.
+	// Minimum edge length (graphviz minlen) for standard graph views. Default: 3.
 	NormalEdgeMinLen int `yaml:"normalEdgeMinLen"`
-	// Minimum edge length (graphviz minlen) for dense graph views (system internal, ad-hoc). Default: 3.
+	// Minimum edge length (graphviz minlen) for dense graph views (system
+	// internal, ad-hoc, a component with expanded APIs). Default: 1.
 	CompactEdgeMinLen int `yaml:"compactEdgeMinLen"`
 }
 
